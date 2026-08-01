@@ -574,6 +574,37 @@ function toPullRequestHeadRemoteInfo(pr: {
   };
 }
 
+interface RemoteBranchAtHead {
+  readonly branch: string;
+  readonly upstreamRef: string;
+}
+
+function parseRemoteBranchesAtHead(stdout: string): ReadonlyArray<RemoteBranchAtHead> {
+  const seen = new Set<string>();
+  const branches: RemoteBranchAtHead[] = [];
+
+  for (const line of stdout.split(/\r?\n/)) {
+    const upstreamRef = line.trim();
+    const separatorIndex = upstreamRef.indexOf("/");
+    if (
+      separatorIndex <= 0 ||
+      separatorIndex === upstreamRef.length - 1 ||
+      upstreamRef.endsWith("/HEAD") ||
+      seen.has(upstreamRef)
+    ) {
+      continue;
+    }
+
+    seen.add(upstreamRef);
+    branches.push({
+      branch: upstreamRef.slice(separatorIndex + 1),
+      upstreamRef,
+    });
+  }
+
+  return branches;
+}
+
 export const make = Effect.gen(function* () {
   const gitCore = yield* GitVcsDriver.GitVcsDriver;
   const sourceControlProviders = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
@@ -1019,6 +1050,29 @@ export const make = Effect.gen(function* () {
       ),
     );
   });
+  const lookupDetachedStatusPr = Effect.fn("lookupDetachedStatusPr")(function* (cwd: string) {
+    const candidates = yield* gitCore
+      .execute({
+        operation: "GitManager.lookupDetachedStatusPr.remoteBranchesAtHead",
+        cwd,
+        args: ["for-each-ref", "--points-at=HEAD", "--format=%(refname:short)", "refs/remotes"],
+      })
+      .pipe(
+        Effect.map((result) => parseRemoteBranchesAtHead(result.stdout)),
+        Effect.orElseSucceed(() => []),
+      );
+
+    for (const candidate of candidates) {
+      const pr = yield* lookupStatusPr(cwd, {
+        branch: candidate.branch,
+        upstreamRef: candidate.upstreamRef,
+        isDefaultBranch: false,
+      });
+      if (pr !== null) return pr;
+    }
+
+    return null;
+  });
   const readRemoteStatus = Effect.fn("readRemoteStatus")(function* (
     cwd: string,
     options?: GitVcsDriver.GitRemoteStatusOptions,
@@ -1037,7 +1091,7 @@ export const make = Effect.gen(function* () {
             upstreamRef: details.upstreamRef,
             isDefaultBranch: details.isDefaultBranch,
           })
-        : null;
+        : yield* lookupDetachedStatusPr(cwd);
 
     return {
       hasUpstream: details.hasUpstream,

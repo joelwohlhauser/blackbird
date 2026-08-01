@@ -1,4 +1,4 @@
-import type { LocalApi, ScopedThreadRef } from "@t3tools/contracts";
+import type { ExternalLinkOpenMode, LocalApi, ScopedThreadRef } from "@t3tools/contracts";
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import { isPreviewableUrl } from "@t3tools/shared/preview";
 import * as Schema from "effect/Schema";
@@ -39,6 +39,7 @@ interface OpenTerminalLinkInPreviewInput<E> {
   readonly openPreview: OpenPreviewMutation<E>;
   readonly localApi: LocalApi;
   readonly fallbackToBrowser: () => void;
+  readonly mode?: ExternalLinkOpenMode;
 }
 
 export async function openTerminalLinkInPreview<E>(
@@ -61,23 +62,29 @@ export async function openTerminalLinkInPreview<E>(
   };
 
   let choice: "open-in-preview" | "open-in-browser" | null;
-  try {
-    choice = await input.localApi.contextMenu.show(
-      [
-        { id: "open-in-preview", label: "Open in preview" },
-        { id: "open-in-browser", label: "Open in browser" },
-      ],
-      input.position,
-    );
-  } catch (cause) {
-    console.error(
-      new TerminalLinkContextMenuShowError({
-        ...errorContext,
-        cause,
-      }),
-    );
-    input.fallbackToBrowser();
-    return;
+  if (input.mode === "preview") {
+    choice = "open-in-preview";
+  } else if (input.mode === "external") {
+    choice = "open-in-browser";
+  } else {
+    try {
+      choice = await input.localApi.contextMenu.show(
+        [
+          { id: "open-in-preview", label: "Open in right panel" },
+          { id: "open-in-browser", label: "Open in default browser" },
+        ],
+        input.position,
+      );
+    } catch (cause) {
+      console.error(
+        new TerminalLinkContextMenuShowError({
+          ...errorContext,
+          cause,
+        }),
+      );
+      input.fallbackToBrowser();
+      return;
+    }
   }
 
   if (choice === "open-in-preview") {

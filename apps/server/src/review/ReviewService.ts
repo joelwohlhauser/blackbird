@@ -3,6 +3,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import {
@@ -14,6 +15,7 @@ import {
 } from "@t3tools/contracts";
 
 import * as ServerConfig from "../config.ts";
+import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 
@@ -30,6 +32,7 @@ export const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const vcsRegistry = yield* VcsDriverRegistry.VcsDriverRegistry;
   const git = yield* GitVcsDriver.GitVcsDriver;
 
@@ -70,10 +73,25 @@ export const make = Effect.gen(function* () {
       return;
     }
 
+    const findRegisteredProject = (workspaceRoot: string) =>
+      projectionSnapshotQuery
+        .getActiveProjectByWorkspaceRoot(workspaceRoot)
+        .pipe(Effect.orElseSucceed(() => Option.none()));
+    const registeredProject = yield* findRegisteredProject(cwd).pipe(
+      Effect.flatMap((project) =>
+        Option.isSome(project) || candidate === cwd
+          ? Effect.succeed(project)
+          : findRegisteredProject(candidate),
+      ),
+    );
+    if (Option.isSome(registeredProject)) {
+      return;
+    }
+
     return yield* new VcsRepositoryDetectionError({
       operation: "ReviewService.getDiffPreview",
       cwd,
-      detail: "Review diff preview cwd must stay within the configured workspace root.",
+      detail: "Review diff preview cwd must stay within a configured or registered workspace root.",
     });
   });
 

@@ -209,6 +209,28 @@ export const ChangedFilesTree = memo(function ChangedFilesTree(props: {
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
 }) {
   const { files, allDirectoriesExpanded, onOpenTurnDiff, resolvedTheme, turnId } = props;
+  const handleOpenFile = useCallback(
+    (filePath: string) => onOpenTurnDiff(turnId, filePath),
+    [onOpenTurnDiff, turnId],
+  );
+
+  return (
+    <FileChangesTree
+      files={files}
+      allDirectoriesExpanded={allDirectoriesExpanded}
+      resolvedTheme={resolvedTheme}
+      onOpenFile={handleOpenFile}
+    />
+  );
+});
+
+export const FileChangesTree = memo(function FileChangesTree(props: {
+  files: ReadonlyArray<TurnDiffFileChange>;
+  allDirectoriesExpanded: boolean;
+  resolvedTheme: "light" | "dark";
+  onOpenFile: (filePath: string) => void;
+}) {
+  const { files, allDirectoriesExpanded, onOpenFile, resolvedTheme } = props;
   const treeNodes = useMemo(() => buildTurnDiffTree(files), [files]);
   const directoryPathsKey = useMemo(
     () => collectDirectoryPaths(treeNodes).join("\u0000"),
@@ -293,7 +315,7 @@ export const ChangedFilesTree = memo(function ChangedFilesTree(props: {
         type="button"
         className="group flex w-full items-center gap-1.5 rounded-xl py-1 pr-3 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
         style={{ paddingLeft: `${leftPadding}px` }}
-        onClick={() => onOpenTurnDiff(turnId, node.path)}
+        onClick={() => onOpenFile(node.path)}
       >
         {hasDirectoryNodes || depth > 0 ? (
           <span aria-hidden="true" className="size-3.5 shrink-0" />

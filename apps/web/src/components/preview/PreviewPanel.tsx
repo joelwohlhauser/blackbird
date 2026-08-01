@@ -13,9 +13,19 @@ interface Props {
   tabId?: string | null;
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
+  showChrome?: boolean;
+  layoutVersion?: string | number;
 }
 
-export function PreviewPanel({ mode, threadRef, tabId, configuredUrls, visible }: Props) {
+export function PreviewPanel({
+  mode,
+  threadRef,
+  tabId,
+  configuredUrls,
+  visible,
+  showChrome,
+  layoutVersion,
+}: Props) {
   if (!isPreviewSupportedInRuntime()) {
     return (
       <PreviewPanelShell mode={mode}>
@@ -35,6 +45,8 @@ export function PreviewPanel({ mode, threadRef, tabId, configuredUrls, visible }
         {...(tabId !== undefined ? { tabId } : {})}
         configuredUrls={configuredUrls}
         visible={visible}
+        {...(showChrome !== undefined ? { showChrome } : {})}
+        {...(layoutVersion !== undefined ? { layoutVersion } : {})}
       />
     </PreviewPanelShell>
   );

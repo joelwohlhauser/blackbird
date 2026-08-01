@@ -14,12 +14,24 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { resolveStorage } from "./lib/storage";
 
-export const RIGHT_PANEL_KINDS = ["plan", "diff", "files", "file", "preview", "terminal"] as const;
+export const RIGHT_PANEL_KINDS = [
+  "plan",
+  "diff",
+  "files",
+  "file",
+  "file-diff",
+  "preview",
+  "terminal",
+  "linear",
+  "github-pr",
+] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
 export type RightPanelSurface =
   | { id: `browser:${string}`; kind: "preview"; resourceId: string }
   | { id: "browser:new"; kind: "preview"; resourceId: null }
+  | { id: "linear"; kind: "linear"; resourceId: string }
+  | { id: "github-pr"; kind: "github-pr"; resourceId: string }
   | {
       id: `terminal:${string}`;
       kind: "terminal";
@@ -31,6 +43,13 @@ export type RightPanelSurface =
   | { id: "diff"; kind: "diff" }
   | { id: "files"; kind: "files" }
   | {
+      id: `file-diff:${string}`;
+      kind: "file-diff";
+      relativePath: string;
+      scope: "unstaged" | "branch";
+      baseRef: string | null;
+    }
+  | {
       id: `file:${string}`;
       kind: "file";
       relativePath: string;
@@ -40,7 +59,7 @@ export type RightPanelSurface =
   | { id: "plan"; kind: "plan" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 7;
+const RIGHT_PANEL_STORAGE_VERSION = 9;
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -50,9 +69,21 @@ export interface ThreadRightPanelState {
 
 interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
-  open: (ref: ScopedThreadRef, kind: Exclude<RightPanelKind, "file" | "terminal">) => void;
+  workspaceNavigatorOpenByThreadKey: Record<string, true>;
+  open: (
+    ref: ScopedThreadRef,
+    kind: Exclude<RightPanelKind, "file" | "file-diff" | "terminal" | "linear" | "github-pr">,
+  ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
+  openLinear: (ref: ScopedThreadRef, tabId: string) => void;
+  openGitHubPullRequest: (ref: ScopedThreadRef, tabId: string) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
+  openDiffFile: (
+    ref: ScopedThreadRef,
+    scope: "unstaged" | "branch",
+    relativePath: string,
+    baseRef?: string | null,
+  ) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   splitTerminal: (
     ref: ScopedThreadRef,
@@ -72,7 +103,11 @@ interface RightPanelStoreState {
   show: (ref: ScopedThreadRef) => void;
   close: (ref: ScopedThreadRef) => void;
   toggleVisibility: (ref: ScopedThreadRef) => void;
-  toggle: (ref: ScopedThreadRef, kind: Exclude<RightPanelKind, "file" | "terminal">) => void;
+  toggleWorkspaceNavigator: (ref: ScopedThreadRef) => void;
+  toggle: (
+    ref: ScopedThreadRef,
+    kind: Exclude<RightPanelKind, "file" | "file-diff" | "terminal" | "linear" | "github-pr">,
+  ) => void;
   removeThread: (ref: ScopedThreadRef) => void;
 }
 
@@ -83,7 +118,10 @@ const EMPTY_THREAD_STATE: ThreadRightPanelState = {
 };
 
 const singletonSurface = (
-  kind: Exclude<RightPanelKind, "file" | "preview" | "terminal">,
+  kind: Exclude<
+    RightPanelKind,
+    "file" | "file-diff" | "preview" | "terminal" | "linear" | "github-pr"
+  >,
 ): RightPanelSurface => {
   switch (kind) {
     case "diff":
@@ -110,6 +148,26 @@ const fileSurface = (
   relativePath,
   revealLine,
   revealRequestId,
+});
+
+export function rightPanelFileDiffSurfaceId(
+  scope: "unstaged" | "branch",
+  relativePath: string,
+  baseRef: string | null = null,
+): `file-diff:${string}` {
+  return `file-diff:${scope}:${encodeURIComponent(baseRef ?? "")}:${encodeURIComponent(relativePath)}`;
+}
+
+const fileDiffSurface = (
+  scope: "unstaged" | "branch",
+  relativePath: string,
+  baseRef: string | null,
+): RightPanelSurface => ({
+  id: rightPanelFileDiffSurfaceId(scope, relativePath, baseRef),
+  kind: "file-diff",
+  relativePath,
+  scope,
+  baseRef,
 });
 
 const terminalSurface = (terminalId: string): RightPanelSurface => ({
@@ -155,9 +213,10 @@ function normalizeRevealLine(line: number | undefined): number | null {
 
 export function migratePersistedRightPanelState(persistedState: unknown): {
   byThreadKey: Record<string, ThreadRightPanelState>;
+  workspaceNavigatorOpenByThreadKey: Record<string, true>;
 } {
   if (!persistedState || typeof persistedState !== "object") {
-    return { byThreadKey: {} };
+    return { byThreadKey: {}, workspaceNavigatorOpenByThreadKey: {} };
   }
   const byThreadKey =
     "byThreadKey" in persistedState &&
@@ -232,13 +291,24 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
           ),
         )
       : {};
-  return { byThreadKey };
+  const workspaceNavigatorOpenByThreadKey =
+    "workspaceNavigatorOpenByThreadKey" in persistedState &&
+    persistedState.workspaceNavigatorOpenByThreadKey &&
+    typeof persistedState.workspaceNavigatorOpenByThreadKey === "object"
+      ? Object.fromEntries(
+          Object.entries(
+            persistedState.workspaceNavigatorOpenByThreadKey as Record<string, unknown>,
+          ).flatMap(([threadKey, isOpen]) => (isOpen === true ? [[threadKey, true as const]] : [])),
+        )
+      : {};
+  return { byThreadKey, workspaceNavigatorOpenByThreadKey };
 }
 
 export const useRightPanelStore = create<RightPanelStoreState>()(
   persist(
     (set) => ({
       byThreadKey: {},
+      workspaceNavigatorOpenByThreadKey: {},
       open: (ref, kind) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
@@ -257,6 +327,38 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               ? current.surfaces.filter((entry) => entry.id !== "browser:new")
               : current.surfaces;
             return upsertSurface({ ...current, surfaces: withoutPlaceholder }, surface);
+          }),
+        })),
+      openLinear: (ref, tabId) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            const surface: RightPanelSurface = {
+              id: "linear",
+              kind: "linear",
+              resourceId: tabId,
+            };
+            const surfaces = current.surfaces.filter(
+              (entry) =>
+                entry.id !== surface.id &&
+                !(entry.kind === "preview" && entry.resourceId === tabId),
+            );
+            return upsertSurface({ ...current, surfaces }, surface);
+          }),
+        })),
+      openGitHubPullRequest: (ref, tabId) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            const surface: RightPanelSurface = {
+              id: "github-pr",
+              kind: "github-pr",
+              resourceId: tabId,
+            };
+            const surfaces = current.surfaces.filter(
+              (entry) =>
+                entry.id !== surface.id &&
+                !(entry.kind === "preview" && entry.resourceId === tabId),
+            );
+            return upsertSurface({ ...current, surfaces }, surface);
           }),
         })),
       openFile: (ref, relativePath, line) =>
@@ -285,6 +387,19 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                 : [...withoutStandaloneExplorer, surface],
             };
           }),
+        })),
+      openDiffFile: (ref, scope, relativePath, baseRef) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
+            upsertSurface(
+              current,
+              fileDiffSurface(
+                scope,
+                relativePath,
+                scope === "branch" ? baseRef?.trim() || null : null,
+              ),
+            ),
+          ),
         })),
       openTerminal: (ref, terminalId) =>
         set((state) => ({
@@ -380,7 +495,11 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             if (index < 0) return current;
             const surfaces = current.surfaces.filter((surface) => surface.id !== surfaceId);
             if (current.activeSurfaceId !== surfaceId) {
-              return { ...current, isOpen: surfaces.length > 0 && current.isOpen, surfaces };
+              return {
+                ...current,
+                isOpen: surfaces.length > 0 && current.isOpen,
+                surfaces,
+              };
             }
             const fallback = surfaces[Math.min(index, surfaces.length - 1)] ?? null;
             return {
@@ -425,23 +544,46 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
             current.surfaces.length === 0
               ? current
-              : { ...current, isOpen: false, surfaces: [], activeSurfaceId: null },
+              : {
+                  ...current,
+                  isOpen: false,
+                  surfaces: [],
+                  activeSurfaceId: null,
+                },
           ),
         })),
       reconcileBrowserSurfaces: (ref, tabIds) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
             const validIds = new Set(tabIds.map((tabId) => `browser:${tabId}`));
-            const nonBrowser = current.surfaces.filter((surface) => surface.kind !== "preview");
+            const validTabIds = new Set(tabIds);
+            const dedicatedBrowserTabIds = new Set(
+              current.surfaces.flatMap((surface) =>
+                (surface.kind === "linear" || surface.kind === "github-pr") &&
+                validTabIds.has(surface.resourceId)
+                  ? [surface.resourceId]
+                  : [],
+              ),
+            );
+            const nonBrowser = current.surfaces.filter(
+              (surface) =>
+                surface.kind !== "preview" &&
+                ((surface.kind !== "linear" && surface.kind !== "github-pr") ||
+                  validTabIds.has(surface.resourceId)),
+            );
             const existingBrowser = current.surfaces.filter(
               (surface): surface is Extract<RightPanelSurface, { kind: "preview" }> =>
                 surface.kind === "preview" &&
                 surface.id !== "browser:new" &&
-                validIds.has(surface.id),
+                surface.resourceId !== null &&
+                validIds.has(surface.id) &&
+                !dedicatedBrowserTabIds.has(surface.resourceId),
             );
             const knownIds = new Set(existingBrowser.map((surface) => surface.id));
             const added = tabIds
-              .filter((tabId) => !knownIds.has(`browser:${tabId}`))
+              .filter(
+                (tabId) => !knownIds.has(`browser:${tabId}`) && !dedicatedBrowserTabIds.has(tabId),
+              )
               .map((tabId) => browserSurface(tabId));
             const surfaces = [...nonBrowser, ...existingBrowser, ...added];
             const activeStillExists = surfaces.some(
@@ -462,7 +604,8 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
             if (workspaceAvailable) return current;
             const surfaces = current.surfaces.filter(
-              (surface) => surface.kind !== "files" && surface.kind !== "file",
+              (surface) =>
+                surface.kind !== "files" && surface.kind !== "file" && surface.kind !== "file-diff",
             );
             if (surfaces.length === current.surfaces.length) return current;
             const activeStillExists = surfaces.some(
@@ -497,6 +640,20 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             isOpen: !current.isOpen,
           })),
         })),
+      toggleWorkspaceNavigator: (ref) =>
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          if (state.workspaceNavigatorOpenByThreadKey[threadKey]) {
+            const { [threadKey]: _removed, ...rest } = state.workspaceNavigatorOpenByThreadKey;
+            return { workspaceNavigatorOpenByThreadKey: rest };
+          }
+          return {
+            workspaceNavigatorOpenByThreadKey: {
+              ...state.workspaceNavigatorOpenByThreadKey,
+              [threadKey]: true,
+            },
+          };
+        }),
       toggle: (ref, kind) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
@@ -516,9 +673,14 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
       removeThread: (ref) =>
         set((state) => {
           const threadKey = scopedThreadKey(ref);
-          if (!(threadKey in state.byThreadKey)) return state;
-          const { [threadKey]: _removed, ...rest } = state.byThreadKey;
-          return { byThreadKey: rest };
+          const { [threadKey]: _removedPanel, ...restPanels } = state.byThreadKey;
+          const { [threadKey]: _removedNavigator, ...restNavigators } =
+            state.workspaceNavigatorOpenByThreadKey;
+          if (_removedPanel === undefined && _removedNavigator === undefined) return state;
+          return {
+            byThreadKey: restPanels,
+            workspaceNavigatorOpenByThreadKey: restNavigators,
+          };
         }),
     }),
     {
@@ -527,7 +689,10 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
       storage: createJSONStorage(() =>
         resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined),
       ),
-      partialize: (state) => ({ byThreadKey: state.byThreadKey }),
+      partialize: (state) => ({
+        byThreadKey: state.byThreadKey,
+        workspaceNavigatorOpenByThreadKey: state.workspaceNavigatorOpenByThreadKey,
+      }),
       migrate: migratePersistedRightPanelState,
     },
   ),
@@ -539,6 +704,13 @@ export function selectThreadRightPanelState(
 ): ThreadRightPanelState {
   if (!ref) return EMPTY_THREAD_STATE;
   return byThreadKey[scopedThreadKey(ref)] ?? EMPTY_THREAD_STATE;
+}
+
+export function selectWorkspaceNavigatorOpen(
+  workspaceNavigatorOpenByThreadKey: Record<string, true>,
+  ref: ScopedThreadRef | null | undefined,
+): boolean {
+  return ref ? workspaceNavigatorOpenByThreadKey[scopedThreadKey(ref)] === true : false;
 }
 
 export function selectActiveRightPanel(

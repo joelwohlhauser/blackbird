@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   closePictureInPicture: vi.fn(async (_tabId: string): Promise<void> => undefined),
   pictureInPicture: false,
   showEmptyState: false,
+  chromeRenderCount: 0,
+  browserSurfaceLayoutVersion: undefined as string | number | undefined,
 }));
 
 vi.mock("~/state/session", () => ({
@@ -160,6 +162,7 @@ vi.mock("./PreviewChromeRow", () => ({
       props: { onNativePictureInPicture?: () => void };
     };
   }) => {
+    mocks.chromeRenderCount += 1;
     mocks.submittedUrl = props.onSubmit;
     mocks.togglePictureInPicture = props.onPictureInPicture ?? null;
     mocks.toggleNativePictureInPicture =
@@ -184,7 +187,12 @@ vi.mock("./PreviewMoreMenu", () => ({
 vi.mock("./PreviewUnreachable", () => ({ PreviewUnreachable: () => null }));
 vi.mock("./ZoomIndicator", () => ({ ZoomIndicator: () => null }));
 vi.mock("./AgentBrowserCursor", () => ({ AgentBrowserCursor: () => null }));
-vi.mock("~/browser/BrowserSurfaceSlot", () => ({ BrowserSurfaceSlot: () => null }));
+vi.mock("~/browser/BrowserSurfaceSlot", () => ({
+  BrowserSurfaceSlot: (props: { layoutVersion?: string | number }) => {
+    mocks.browserSurfaceLayoutVersion = props.layoutVersion;
+    return null;
+  },
+}));
 vi.mock("./useLoadingProgress", () => ({ useLoadingProgress: () => 0 }));
 vi.mock("./usePreviewSession", () => ({ usePreviewSession: vi.fn() }));
 
@@ -215,6 +223,8 @@ describe("PreviewView navigation", () => {
     mocks.closePictureInPicture.mockClear();
     mocks.pictureInPicture = false;
     mocks.showEmptyState = false;
+    mocks.chromeRenderCount = 0;
+    mocks.browserSurfaceLayoutVersion = undefined;
   });
 
   it.each([
@@ -326,5 +336,26 @@ describe("PreviewView navigation", () => {
     await vi.waitFor(() =>
       expect(mocks.closePictureInPicture).toHaveBeenCalledWith(TEST_RUNTIME_TAB_ID),
     );
+  });
+
+  it("can render a browser surface without browser chrome", () => {
+    renderToStaticMarkup(
+      <PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" visible showChrome={false} />,
+    );
+
+    expect(mocks.chromeRenderCount).toBe(0);
+  });
+
+  it("forwards parent layout changes to the browser surface slot", () => {
+    renderToStaticMarkup(
+      <PreviewView
+        threadRef={TEST_THREAD_REF}
+        tabId="tab-1"
+        visible
+        layoutVersion="workspace-navigator-open"
+      />,
+    );
+
+    expect(mocks.browserSurfaceLayoutVersion).toBe("workspace-navigator-open");
   });
 });

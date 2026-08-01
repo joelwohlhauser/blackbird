@@ -389,27 +389,27 @@ export function resolveThreadRowClassName(input: {
   if (input.isSelected && input.isActive) {
     return cn(
       baseClassName,
-      "bg-sidebar-row-active text-sidebar-foreground font-medium hover:bg-sidebar-row-active hover:text-sidebar-foreground",
+      "bg-sidebar-row-active text-sidebar-foreground/85 font-normal hover:bg-sidebar-row-active hover:text-sidebar-foreground",
     );
   }
 
   if (input.isSelected) {
     return cn(
       baseClassName,
-      "bg-sidebar-row-selected text-sidebar-foreground hover:bg-sidebar-row-active hover:text-sidebar-foreground",
+      "bg-sidebar-row-selected text-sidebar-foreground/85 font-normal hover:bg-sidebar-row-active hover:text-sidebar-foreground",
     );
   }
 
   if (input.isActive) {
     return cn(
       baseClassName,
-      "bg-sidebar-row-active text-sidebar-foreground font-medium hover:bg-sidebar-row-active hover:text-sidebar-foreground",
+      "bg-sidebar-row-active text-sidebar-foreground/85 font-normal hover:bg-sidebar-row-active hover:text-sidebar-foreground",
     );
   }
 
   return cn(
     baseClassName,
-    "text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+    "text-sidebar-foreground/85 font-normal hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
   );
 }
 

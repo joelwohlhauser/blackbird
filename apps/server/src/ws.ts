@@ -907,6 +907,7 @@ const makeWsRpcLayer = (
 
             if (bootstrap?.prepareWorktree) {
               let worktreeBaseRef = bootstrap.prepareWorktree.baseBranch;
+              let worktreeBaseRefName = bootstrap.prepareWorktree.baseBranch;
               if (bootstrap.prepareWorktree.startFromOrigin) {
                 yield* gitWorkflow.fetchRemote({
                   cwd: bootstrap.prepareWorktree.projectCwd,
@@ -918,12 +919,15 @@ const makeWsRpcLayer = (
                   fallbackRemoteName: "origin",
                 });
                 worktreeBaseRef = resolvedRemoteBase.commitSha;
+                if (!bootstrap.prepareWorktree.branch) {
+                  worktreeBaseRefName = resolvedRemoteBase.remoteRefName;
+                }
               }
               const worktree = yield* gitWorkflow.createWorktree({
                 cwd: bootstrap.prepareWorktree.projectCwd,
                 refName: worktreeBaseRef,
                 newRefName: bootstrap.prepareWorktree.branch,
-                baseRefName: bootstrap.prepareWorktree.baseBranch,
+                baseRefName: worktreeBaseRefName,
                 path: null,
               });
               targetWorktreePath = worktree.worktree.path;

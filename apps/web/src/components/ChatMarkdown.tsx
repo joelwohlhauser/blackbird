@@ -42,6 +42,7 @@ import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
 import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import {
+  openExternalWebLink,
   resolveExternalWebLinkHost,
   showExternalLinkContextMenu,
 } from "./chat/externalLinkContextMenu";
@@ -1464,9 +1465,36 @@ function ChatMarkdown({
               rel={isSameDocumentLink ? undefined : "noopener noreferrer"}
               onClick={(event) => {
                 onClick?.(event);
+                if (event.defaultPrevented) return;
                 if (isSameDocumentLink && href) {
                   handleMarkdownFragmentClick(event, href);
+                  return;
                 }
+                if (!href || !faviconHost) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const api = readLocalApi();
+                if (!api) return;
+                void openExternalWebLink({
+                  mode: getClientSettings().externalLinkOpenMode,
+                  canOpenInPreview,
+                  href,
+                  position: { x: event.clientX, y: event.clientY },
+                  showContextMenu: (items, position) => api.contextMenu.show(items, position),
+                  openInPreview: async (target) => {
+                    const result = await openExternalLinkInPreview(target);
+                    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+                      reportMarkdownActionFailure(
+                        { operation: "open-link-in-preview", target },
+                        result.cause,
+                      );
+                    }
+                  },
+                  openExternal: (target) => api.shell.openExternal(target),
+                  reportFailure: (operation, cause) => {
+                    reportMarkdownActionFailure({ operation, target: href }, cause);
+                  },
+                });
               }}
               onContextMenu={(event) => {
                 if (!canOpenInPreview || !href || !faviconHost) return;
@@ -1597,7 +1625,7 @@ function ChatMarkdown({
   return (
     <div
       className={cn(
-        "chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/80",
+        "chat-markdown w-full min-w-0 text-sm leading-relaxed text-chat-content-foreground",
         className,
       )}
       onCopy={handleCopy}

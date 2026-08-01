@@ -285,6 +285,36 @@ it("parses GitHub auth JSON from stdout when stderr has warnings", () => {
   );
 });
 
+it("uses the gh auth command supported by legacy GitHub CLI versions", () => {
+  assert.deepStrictEqual(GitHubSourceControlProvider.discovery.authArgs, ["auth", "status"]);
+});
+
+it("accepts authenticated GitHub accounts from plain-text stderr output", () => {
+  const auth = GitHubSourceControlProvider.discovery.parseAuth(
+    processResult("", {
+      stderr: [
+        "github.com",
+        "  ✓ Logged in to github.com account remote-example-2 (keyring)",
+        "  - Active account: true",
+        "  - Git operations protocol: https",
+      ].join("\n"),
+    }),
+  );
+
+  assert.deepStrictEqual(
+    {
+      status: auth.status,
+      account: auth.account,
+      host: auth.host,
+    },
+    {
+      status: "authenticated",
+      account: Option.some("remote-example-2"),
+      host: Option.some("github.com"),
+    },
+  );
+});
+
 it("parses GitHub auth status accounts by host and active state", () => {
   assert.deepStrictEqual(
     parseGitHubAuthStatus(

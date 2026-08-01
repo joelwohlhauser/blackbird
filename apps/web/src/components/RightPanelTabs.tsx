@@ -3,6 +3,7 @@ import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import { ClipboardList, FileDiff, Files, Globe2, Plus, TerminalSquare, X } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
+  type ElementType,
   type ReactElement,
   type ReactNode,
   useCallback,
@@ -24,6 +25,7 @@ import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
+import { GitHubIcon, LinearIcon } from "./Icons";
 
 interface RightPanelTabsProps {
   mode: PreviewPanelMode;
@@ -41,18 +43,23 @@ interface RightPanelTabsProps {
   onCloseAllSurfaces: () => void;
   onCopyFilePath: (relativePath: string) => void;
   onAddBrowser: () => void;
+  onAddLinear: () => void;
+  onAddGitHubPullRequest: () => void;
   onAddTerminal: () => void;
   onAddDiff: () => void;
-  onAddFiles: () => void;
   browserAvailable: boolean;
+  linearAvailable: boolean;
+  githubPullRequestDetected: boolean;
+  githubPullRequestAvailable: boolean;
   diffAvailable: boolean;
-  filesAvailable: boolean;
+  reserveLayoutControls?: boolean;
   children: ReactNode;
 }
 
 const SURFACE_DISABLED_REASONS = {
   browser: "Browser previews are only available in the T3 Code desktop app.",
-  files: "Files are only available when a project is open.",
+  linear: "Linear is only available in the Blackboard desktop app.",
+  githubPullRequest: "GitHub PRs are only available in the Blackboard desktop app.",
   diff: "Diff is only available for server threads in Git repositories.",
 } as const;
 
@@ -88,14 +95,24 @@ function SurfaceMenuItem(props: {
 
 function RightPanelEmptyState(props: {
   onAddBrowser: () => void;
+  onAddLinear: () => void;
+  onAddGitHubPullRequest: () => void;
   onAddTerminal: () => void;
   onAddDiff: () => void;
-  onAddFiles: () => void;
   browserAvailable: boolean;
+  linearAvailable: boolean;
+  githubPullRequestDetected: boolean;
+  githubPullRequestAvailable: boolean;
   diffAvailable: boolean;
-  filesAvailable: boolean;
 }) {
-  const actions = [
+  const actions: Array<{
+    label: string;
+    description: string;
+    icon: ElementType<{ className?: string }>;
+    available: boolean;
+    disabledReason: string;
+    onClick: () => void;
+  }> = [
     {
       label: "Browser",
       description: "Open a local app or URL.",
@@ -109,16 +126,8 @@ function RightPanelEmptyState(props: {
       description: "Start a shell in this workspace.",
       icon: TerminalSquare,
       available: true,
-      disabledReason: null,
+      disabledReason: "",
       onClick: props.onAddTerminal,
-    },
-    {
-      label: "Files",
-      description: "Browse and read workspace files.",
-      icon: Files,
-      available: props.filesAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.files,
-      onClick: props.onAddFiles,
     },
     {
       label: "Diff",
@@ -128,7 +137,25 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_DISABLED_REASONS.diff,
       onClick: props.onAddDiff,
     },
-  ] as const;
+    {
+      label: "Linear",
+      description: "Open the issue for this branch.",
+      icon: LinearIcon,
+      available: props.linearAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.linear,
+      onClick: props.onAddLinear,
+    },
+  ];
+  if (props.githubPullRequestDetected) {
+    actions.push({
+      label: "GitHub PR",
+      description: "View this branch's pull request on GitHub.",
+      icon: GitHubIcon,
+      available: props.githubPullRequestAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.githubPullRequest,
+      onClick: props.onAddGitHubPullRequest,
+    });
+  }
 
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center p-6">
@@ -186,7 +213,7 @@ function RightPanelEmptyState(props: {
   );
 }
 
-function surfaceTitle(
+export function surfaceTitle(
   surface: RightPanelSurface,
   sessions: Readonly<Record<string, PreviewSessionSnapshot>>,
   terminalLabelsById: ReadonlyMap<string, string>,
@@ -198,6 +225,14 @@ function surfaceTitle(
       return "Files";
     case "file":
       return surface.relativePath.slice(surface.relativePath.lastIndexOf("/") + 1);
+    case "file-diff": {
+      const filename = surface.relativePath.slice(surface.relativePath.lastIndexOf("/") + 1);
+      return `${filename} (${surface.scope === "unstaged" ? "Working Tree" : "Pull Request"})`;
+    }
+    case "linear":
+      return "Issue";
+    case "github-pr":
+      return "PR";
     case "terminal":
       return (
         terminalLabelsById.get(surface.activeTerminalId) ??
@@ -249,11 +284,16 @@ function SurfaceIcon({
       const url = !snapshot || snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
       return <PreviewFavicon url={url} />;
     }
+    case "linear":
+      return <LinearIcon className="size-3.5 shrink-0" />;
+    case "github-pr":
+      return <GitHubIcon className="size-3.5 shrink-0" />;
     case "diff":
       return <FileDiff className="size-3.5 shrink-0" />;
     case "files":
       return <Files className="size-3.5 shrink-0" />;
     case "file":
+    case "file-diff":
       return (
         <PierreEntryIcon
           pathValue={surface.relativePath}
@@ -286,7 +326,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       if (surfaceIndex < 0) return;
 
       const items: ContextMenuItem<TabContextMenuAction>[] = [];
-      if (surface.kind === "file") {
+      if (surface.kind === "file" || surface.kind === "file-diff") {
         items.push({ id: "copy-path", label: "Copy path" });
       }
       items.push(
@@ -308,10 +348,15 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         },
       );
 
-      const action = await api.contextMenu.show(items, { x: event.clientX, y: event.clientY });
+      const action = await api.contextMenu.show(items, {
+        x: event.clientX,
+        y: event.clientY,
+      });
       switch (action) {
         case "copy-path":
-          if (surface.kind === "file") props.onCopyFilePath(surface.relativePath);
+          if (surface.kind === "file" || surface.kind === "file-diff") {
+            props.onCopyFilePath(surface.relativePath);
+          }
           break;
         case "close":
           props.onCloseSurface(surface);
@@ -359,8 +404,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         className={cn(
           "workspace-topbar gap-1 pl-2",
           !ownsDesktopTitleBar && "[--workspace-topbar-height:--spacing(11)]",
-          props.mode === "inline" ? "pr-28" : "pr-3",
-          ownsDesktopTitleBar && "wco:pr-[calc(var(--workspace-native-controls-inset)+6rem)]",
+          props.mode === "inline" && props.reserveLayoutControls !== false ? "pr-36" : "pr-3",
+          ownsDesktopTitleBar && "wco:pr-[calc(var(--workspace-native-controls-inset)+9rem)]",
           props.mode === "inline" && props.maximized && COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
         )}
         data-right-panel-tabbar
@@ -369,7 +414,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           ref={tabListRef}
           hideScrollbars
           scrollFade
-          className={cn("min-w-0 flex-1 rounded-none", ownsDesktopTitleBar && "drag-region")}
+          className={cn(
+            "h-full w-fit min-w-0 max-w-full flex-[0_1_auto] rounded-none",
+            ownsDesktopTitleBar && "drag-region",
+          )}
           data-right-panel-tab-list
         >
           <div className="flex h-full w-max min-w-full items-center gap-1">
@@ -385,7 +433,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   onAuxClick={(event) => handleTabAuxClick(event, surface)}
                   onContextMenu={(event) => void handleTabContextMenu(event, surface)}
                   className={cn(
-                    "group flex h-7 min-w-25 max-w-44 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm",
+                    "group flex h-7 min-w-25 max-w-44 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm",
                     active
                       ? "bg-accent text-foreground"
                       : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -396,7 +444,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                       render={
                         <button
                           type="button"
-                          className="flex min-w-0 flex-1 items-center gap-1.5"
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5"
                           onClick={() => props.onActivate(surface)}
                         >
                           <SurfaceIcon
@@ -413,7 +461,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   <button
                     type="button"
                     className={cn(
-                      "relative flex size-4 shrink-0 items-center justify-center rounded hover:bg-muted focus:opacity-100",
+                      "relative flex size-4 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-muted focus:opacity-100",
                       pending ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                     )}
                     aria-label={`Close ${title}`}
@@ -434,60 +482,71 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                 </div>
               );
             })}
-            {props.surfaces.length > 0 ? (
-              <Menu>
-                <MenuTrigger
-                  className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label="Add panel surface"
-                >
-                  <Plus className="size-4" />
-                </MenuTrigger>
-                <MenuPopup align="start" side="bottom" sideOffset={6} className="min-w-44">
-                  <SurfaceMenuItem
-                    available={props.browserAvailable}
-                    disabledReason={SURFACE_DISABLED_REASONS.browser}
-                    onClick={props.onAddBrowser}
-                  >
-                    <Globe2 />
-                    Browser
-                  </SurfaceMenuItem>
-                  <SurfaceMenuItem available onClick={props.onAddTerminal}>
-                    <TerminalSquare />
-                    Terminal
-                  </SurfaceMenuItem>
-                  <SurfaceMenuItem
-                    available={props.filesAvailable}
-                    disabledReason={SURFACE_DISABLED_REASONS.files}
-                    onClick={props.onAddFiles}
-                  >
-                    <Files />
-                    Files
-                  </SurfaceMenuItem>
-                  <SurfaceMenuItem
-                    available={props.diffAvailable}
-                    disabledReason={SURFACE_DISABLED_REASONS.diff}
-                    onClick={props.onAddDiff}
-                  >
-                    <FileDiff />
-                    Diff
-                  </SurfaceMenuItem>
-                </MenuPopup>
-              </Menu>
-            ) : null}
           </div>
         </ScrollArea>
+        <Menu>
+          <MenuTrigger
+            className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label="Add panel surface"
+          >
+            <Plus className="size-4" />
+          </MenuTrigger>
+          <MenuPopup align="end" side="bottom" sideOffset={6} className="min-w-44">
+            <SurfaceMenuItem
+              available={props.browserAvailable}
+              disabledReason={SURFACE_DISABLED_REASONS.browser}
+              onClick={props.onAddBrowser}
+            >
+              <Globe2 />
+              Browser
+            </SurfaceMenuItem>
+            <SurfaceMenuItem available onClick={props.onAddTerminal}>
+              <TerminalSquare />
+              Terminal
+            </SurfaceMenuItem>
+            <SurfaceMenuItem
+              available={props.diffAvailable}
+              disabledReason={SURFACE_DISABLED_REASONS.diff}
+              onClick={props.onAddDiff}
+            >
+              <FileDiff />
+              Diff
+            </SurfaceMenuItem>
+            <SurfaceMenuItem
+              available={props.linearAvailable}
+              disabledReason={SURFACE_DISABLED_REASONS.linear}
+              onClick={props.onAddLinear}
+            >
+              <LinearIcon />
+              Linear
+            </SurfaceMenuItem>
+            {props.githubPullRequestDetected ? (
+              <SurfaceMenuItem
+                available={props.githubPullRequestAvailable}
+                disabledReason={SURFACE_DISABLED_REASONS.githubPullRequest}
+                onClick={props.onAddGitHubPullRequest}
+              >
+                <GitHubIcon />
+                GitHub PR
+              </SurfaceMenuItem>
+            ) : null}
+          </MenuPopup>
+        </Menu>
         {props.layoutControls}
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         {props.activeSurfaceId === null ? (
           <RightPanelEmptyState
             onAddBrowser={props.onAddBrowser}
+            onAddLinear={props.onAddLinear}
+            onAddGitHubPullRequest={props.onAddGitHubPullRequest}
             onAddTerminal={props.onAddTerminal}
             onAddDiff={props.onAddDiff}
-            onAddFiles={props.onAddFiles}
             browserAvailable={props.browserAvailable}
+            linearAvailable={props.linearAvailable}
+            githubPullRequestDetected={props.githubPullRequestDetected}
+            githubPullRequestAvailable={props.githubPullRequestAvailable}
             diffAvailable={props.diffAvailable}
-            filesAvailable={props.filesAvailable}
           />
         ) : (
           props.children

@@ -31,6 +31,7 @@ import {
 } from "react";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
+import { getClientSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import {
@@ -585,6 +586,7 @@ export function TerminalViewport({
             openPreview,
             localApi,
             fallbackToBrowser,
+            mode: getClientSettings().externalLinkOpenMode,
           });
           return;
         }

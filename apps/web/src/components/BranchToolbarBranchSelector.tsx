@@ -42,6 +42,8 @@ import {
   resolveBranchToolbarValue,
   resolveDraftEnvModeAfterBranchChange,
   resolveEffectiveEnvMode,
+  isNewWorktreeEnvMode,
+  type EnvMode,
   shouldIncludeBranchPickerItem,
 } from "./BranchToolbar.logic";
 import {
@@ -70,7 +72,7 @@ interface BranchToolbarBranchSelectorProps {
   threadId: ThreadId;
   draftId?: DraftId;
   envLocked: boolean;
-  effectiveEnvModeOverride?: "local" | "worktree";
+  effectiveEnvModeOverride?: EnvMode;
   activeThreadBranchOverride?: string | null;
   onActiveThreadBranchOverrideChange?: (refName: string | null) => void;
   startFromOrigin: boolean;
@@ -254,7 +256,7 @@ export function BranchToolbarBranchSelector({
   const normalizedDeferredBranchQuery = deferredTrimmedBranchQuery.toLowerCase();
   const prReference = parsePullRequestReference(trimmedBranchQuery);
   const isSelectingWorktreeBase =
-    effectiveEnvMode === "worktree" && !envLocked && !activeWorktreePath;
+    isNewWorktreeEnvMode(effectiveEnvMode) && !envLocked && !activeWorktreePath;
   const checkoutPullRequestItemValue =
     prReference && onCheckoutPullRequestRequest ? `__checkout_pull_request__:${prReference}` : null;
   const canCreateBranch = !isSelectingWorktreeBase && trimmedBranchQuery.length > 0;
@@ -487,7 +489,7 @@ export function BranchToolbarBranchSelector({
 
   useEffect(() => {
     if (
-      effectiveEnvMode !== "worktree" ||
+      !isNewWorktreeEnvMode(effectiveEnvMode) ||
       activeWorktreePath ||
       activeThreadBranch ||
       !worktreeBaseBranchCandidate
@@ -756,6 +758,9 @@ export function BranchToolbarBranchSelector({
       </div>
       <ComboboxPopup align="end" side="top" className="flex w-80 flex-col">
         <div className="shrink-0 px-3 pt-2.5">
+          {isSelectingWorktreeBase ? (
+            <div className="mb-1.5 text-xs font-medium text-foreground/90">Base branch</div>
+          ) : null}
           <div className="relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">
             <SearchIcon
               aria-hidden="true"
@@ -764,7 +769,7 @@ export function BranchToolbarBranchSelector({
             <ComboboxInput
               className="[&_input]:h-6.5 [&_input]:ps-5 [&_input]:font-sans [&_input]:leading-6.5"
               inputClassName="rounded-none bg-transparent text-sm"
-              placeholder="Search refs..."
+              placeholder={isSelectingWorktreeBase ? "Search base branches..." : "Search refs..."}
               showTrigger={false}
               size="sm"
               unstyled
@@ -774,7 +779,9 @@ export function BranchToolbarBranchSelector({
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ComboboxEmpty>No refs found.</ComboboxEmpty>
+          <ComboboxEmpty>
+            {isSelectingWorktreeBase ? "No base branches found." : "No refs found."}
+          </ComboboxEmpty>
           <div className="relative min-h-0 w-full max-h-56 flex-1 overflow-hidden">
             <ComboboxListVirtualized className="size-full min-w-0 p-0">
               <LegendList<string>

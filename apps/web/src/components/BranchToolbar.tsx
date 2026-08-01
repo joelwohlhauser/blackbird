@@ -16,6 +16,7 @@ import { useProject, useThread, useThreadShellsForProjectRefs } from "../state/e
 import { useIsMobile } from "../hooks/useMediaQuery";
 import {
   type EnvMode,
+  isNewWorktreeEnvMode,
   type EnvironmentOption,
   resolveCurrentWorkspaceLabel,
   resolveEnvModeLabel,
@@ -29,6 +30,7 @@ import { BranchToolbarBranchSelector } from "./BranchToolbarBranchSelector";
 import { BranchToolbarEnvironmentSelector } from "./BranchToolbarEnvironmentSelector";
 import { BranchToolbarEnvModeSelector } from "./BranchToolbarEnvModeSelector";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 import {
   Menu,
   MenuGroup,
@@ -51,6 +53,11 @@ interface BranchToolbarProps {
   onActiveThreadBranchOverrideChange?: (branch: string | null) => void;
   startFromOrigin: boolean;
   onStartFromOriginChange: (startFromOrigin: boolean) => void;
+  newBranchName: string;
+  onNewBranchNameChange: (newBranchName: string) => void;
+  onDeleteWorktreeRequest?: () => void;
+  deleteWorktreeDisabled?: boolean;
+  deleteWorktreePending?: boolean;
   envLocked: boolean;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest?: () => void;
@@ -94,13 +101,15 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
   const WorkspaceIcon =
     effectiveEnvMode === "worktree"
       ? FolderGit2Icon
-      : activeWorktreePath
+      : effectiveEnvMode === "worktree-existing"
         ? FolderGitIcon
-        : FolderIcon;
+        : activeWorktreePath
+          ? FolderGitIcon
+          : FolderIcon;
   const workspaceLabel = envModeLocked
     ? resolveLockedWorkspaceLabel(activeWorktreePath)
-    : effectiveEnvMode === "worktree"
-      ? resolveEnvModeLabel("worktree")
+    : isNewWorktreeEnvMode(effectiveEnvMode)
+      ? resolveEnvModeLabel(effectiveEnvMode)
       : resolveCurrentWorkspaceLabel(activeWorktreePath);
   const isLocked = envLocked || envModeLocked;
   const EnvironmentIcon = activeEnvironment?.isPrimary ? MonitorIcon : CloudIcon;
@@ -193,6 +202,12 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
                 </span>
               </span>
             </MenuRadioItem>
+            <MenuRadioItem disabled={envModeLocked} value="worktree-existing">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <FolderGitIcon className="size-3" />
+                <span className="min-w-0 truncate">{resolveEnvModeLabel("worktree-existing")}</span>
+              </span>
+            </MenuRadioItem>
             <MenuRadioItem disabled={envModeLocked} value="worktree">
               <span className="flex min-w-0 items-center gap-1.5">
                 <FolderGit2Icon className="size-3" />
@@ -224,6 +239,11 @@ export const BranchToolbar = memo(function BranchToolbar({
   onActiveThreadBranchOverrideChange,
   startFromOrigin,
   onStartFromOriginChange,
+  newBranchName,
+  onNewBranchNameChange,
+  onDeleteWorktreeRequest,
+  deleteWorktreeDisabled = false,
+  deleteWorktreePending = false,
   envLocked,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
@@ -300,26 +320,67 @@ export const BranchToolbar = memo(function BranchToolbar({
     canPickEnvironment: showEnvironmentPicker,
   });
   const isMobile = useIsMobile();
+  const showNewBranchNameInput = effectiveEnvMode === "worktree" && activeWorktreePath === null;
+  const newBranchNameInput = showNewBranchNameInput ? (
+    <Input
+      aria-label="New branch name"
+      autoCapitalize="none"
+      autoComplete="off"
+      autoCorrect="off"
+      spellCheck={false}
+      size="sm"
+      disabled={envModeLocked}
+      value={newBranchName}
+      placeholder="New branch name"
+      className="h-7 w-0 min-w-0 flex-1 rounded-md border-transparent bg-transparent px-1 text-xs text-foreground/75 shadow-none before:hidden hover:bg-foreground/3 has-focus-visible:border-border/40 has-focus-visible:bg-foreground/3 has-focus-visible:ring-0"
+      onChange={(event) => onNewBranchNameChange(event.target.value)}
+      onBlur={() => onNewBranchNameChange(newBranchName.trim())}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        onNewBranchNameChange(newBranchName.trim());
+        onComposerFocusRequest?.();
+      }}
+    />
+  ) : null;
 
   if (!hasActiveThread || !activeProject) return null;
 
   return (
-    <div className="chat-composer-context-strip -mt-4 mx-auto flex w-[calc(100%-2.75rem)] max-w-[calc(48rem-2.75rem)] items-center gap-2 px-1 pt-5 pb-1">
+    <div className="chat-composer-context-strip -mt-4 mx-auto flex h-[3.25rem] w-[calc(100%-2.75rem)] max-w-[calc(48rem-2.75rem)] items-center gap-2 px-1 pt-5 pb-1">
       {isMobile ? (
-        <MobileRunContextSelector
-          envLocked={envLocked}
-          envModeLocked={envModeLocked}
-          environmentId={environmentId}
-          availableEnvironments={availableEnvironments}
-          showEnvironmentPicker={showEnvironmentPicker}
-          showEnvironmentIndicator={showEnvironmentIndicator}
-          onEnvironmentChange={onEnvironmentChange}
-          effectiveEnvMode={effectiveEnvMode}
-          activeWorktreePath={activeWorktreePath}
-          onEnvModeChange={onEnvModeChange}
-          previousWorktreeLabel={previousWorktreeLabel}
-          onUsePreviousWorktree={onUsePreviousWorktree}
-        />
+        <>
+          <MobileRunContextSelector
+            envLocked={envLocked}
+            envModeLocked={envModeLocked}
+            environmentId={environmentId}
+            availableEnvironments={availableEnvironments}
+            showEnvironmentPicker={showEnvironmentPicker}
+            showEnvironmentIndicator={showEnvironmentIndicator}
+            onEnvironmentChange={onEnvironmentChange}
+            effectiveEnvMode={effectiveEnvMode}
+            activeWorktreePath={activeWorktreePath}
+            onEnvModeChange={onEnvModeChange}
+            previousWorktreeLabel={previousWorktreeLabel}
+            onUsePreviousWorktree={onUsePreviousWorktree}
+          />
+          {activeWorktreePath !== null && onDeleteWorktreeRequest ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              disabled={deleteWorktreeDisabled || deleteWorktreePending}
+              className="h-6 shrink-0 px-1.5 text-[11px] font-medium text-muted-foreground/55 hover:bg-destructive/8 hover:text-destructive"
+              onClick={onDeleteWorktreeRequest}
+            >
+              {deleteWorktreePending ? "Deleting…" : "Delete it"}
+            </Button>
+          ) : null}
+          {showNewBranchNameInput ? (
+            <span className="mr-1 shrink-0 text-xs text-muted-foreground/60">called</span>
+          ) : null}
+          {newBranchNameInput}
+        </>
       ) : (
         <div className="flex min-w-0 flex-1 items-center gap-1">
           {showEnvironmentIndicator && availableEnvironments && (
@@ -341,6 +402,22 @@ export const BranchToolbar = memo(function BranchToolbar({
             previousWorktreeLabel={previousWorktreeLabel}
             onUsePreviousWorktree={onUsePreviousWorktree}
           />
+          {activeWorktreePath !== null && onDeleteWorktreeRequest ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              disabled={deleteWorktreeDisabled || deleteWorktreePending}
+              className="h-6 shrink-0 px-1.5 text-[11px] font-medium text-muted-foreground/55 hover:bg-destructive/8 hover:text-destructive"
+              onClick={onDeleteWorktreeRequest}
+            >
+              {deleteWorktreePending ? "Deleting…" : "Delete it"}
+            </Button>
+          ) : null}
+          {showNewBranchNameInput ? (
+            <span className="mr-1 shrink-0 text-xs text-muted-foreground/60">called</span>
+          ) : null}
+          {newBranchNameInput}
         </div>
       )}
 

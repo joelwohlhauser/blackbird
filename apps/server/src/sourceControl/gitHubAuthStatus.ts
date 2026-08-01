@@ -17,6 +17,10 @@ const decodeGitHubAuthStatusJson = Schema.decodeUnknownOption(
   Schema.fromJsonString(GitHubAuthStatusSchema),
 );
 
+const loggedInAccountPattern = /Logged in to\s+(\S+)\s+account\s+(\S+)/i;
+const failedAccountPattern = /Failed to log in to\s+(\S+)\s+account\s+(\S+)/i;
+const activeAccountPattern = /Active account:\s*(true|false)/i;
+
 export interface GitHubAuthStatusAccount {
   readonly host: string;
   readonly account: string;
@@ -35,9 +39,51 @@ function nonEmptyString(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function parsePlainTextGitHubAuthStatus(text: string): GitHubAuthStatus {
+  const accounts: Array<GitHubAuthStatusAccount> = [];
+  let currentAccountIndex: number | null = null;
+
+  for (const line of text.split(/\r?\n/)) {
+    const loggedInMatch = loggedInAccountPattern.exec(line);
+    const failedMatch = failedAccountPattern.exec(line);
+    const accountMatch = loggedInMatch ?? failedMatch;
+    if (accountMatch) {
+      const host = nonEmptyString(accountMatch[1] ?? "");
+      const account = nonEmptyString(accountMatch[2] ?? "");
+      if (host === null || account === null) continue;
+
+      accounts.push({
+        host: host.toLowerCase(),
+        account,
+        authenticated: loggedInMatch !== null,
+        active: false,
+        error: null,
+      });
+      currentAccountIndex = accounts.length - 1;
+      continue;
+    }
+
+    const activeMatch = activeAccountPattern.exec(line);
+    if (activeMatch && currentAccountIndex !== null) {
+      const currentAccount = accounts[currentAccountIndex];
+      if (currentAccount) {
+        accounts[currentAccountIndex] = {
+          ...currentAccount,
+          active: activeMatch[1]?.toLowerCase() === "true",
+        };
+      }
+    }
+  }
+
+  return {
+    parsed: accounts.length > 0,
+    accounts,
+  };
+}
+
 export function parseGitHubAuthStatus(text: string): GitHubAuthStatus {
   return Option.match(decodeGitHubAuthStatusJson(text), {
-    onNone: () => ({ parsed: false, accounts: [] }),
+    onNone: () => parsePlainTextGitHubAuthStatus(text),
     onSome: (status) =>
       ({
         parsed: true,

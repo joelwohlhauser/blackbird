@@ -27,6 +27,19 @@ T3 Code works with the platforms your team already uses:
 - Use the **Publish Repository** action to create a new hosted repository (GitHub, GitLab, Bitbucket, or Azure DevOps), add it as your origin remote, and push, in one flow
 - If the local repository has no commits yet, publishing creates the remote and wires it up but does not push. Make a commit, then push normally.
 
+### Work in Isolated Worktrees
+
+Choose **New worktree** for a new thread, then use the **Base branch** picker to select the local or
+remote branch the worktree should start from. New worktrees use this layout by default:
+
+```text
+~/Repositories/.worktrees/<repository>/<branch>
+```
+
+The worktree location is configurable in **Settings → General**. Blackboard can also link or copy
+the repository's `.env` files into matching locations in the worktree and run `pnpm install` in the
+background. Both behaviors can be changed or disabled in the same settings section.
+
 ### Manage Code Reviews Without Context Switching
 
 **Create pull requests while you work**

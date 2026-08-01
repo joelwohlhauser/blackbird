@@ -71,6 +71,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "open-web-links",
+    title: "Open web links",
+    to: "/settings/general",
+  },
+  {
     id: "hide-whitespace-changes",
     title: "Hide whitespace changes",
     to: "/settings/general",
@@ -102,6 +107,21 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "new-threads",
   },
   {
+    id: "worktree-location",
+    title: "Worktree location",
+    to: "/settings/general",
+  },
+  {
+    id: "worktree-environment-files",
+    title: "Worktree environment files",
+    to: "/settings/general",
+  },
+  {
+    id: "worktree-dependencies",
+    title: "Install worktree dependencies",
+    to: "/settings/general",
+  },
+  {
     id: "add-project-starts-in",
     title: "Add project starts in",
     to: "/settings/general",
@@ -119,6 +139,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "text-generation-model",
     title: "Text generation model",
+    to: "/settings/general",
+  },
+  {
+    id: "linear-organization",
+    title: "Linear organization",
     to: "/settings/general",
   },
   {

@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
-import { buildPatchCacheKey, getDiffLineStat, getRenderablePatch } from "./diffRendering";
+import {
+  buildPatchCacheKey,
+  getDiffLineStat,
+  getRenderablePatch,
+  resolveDiffThemeName,
+} from "./diffRendering";
+
+describe("resolveDiffThemeName", () => {
+  it("uses VS Code Dark+ syntax colors for dark code surfaces", () => {
+    expect(resolveDiffThemeName("dark")).toBe("dark-plus");
+    expect(resolveDiffThemeName("light")).toBe("pierre-light");
+  });
+});
 
 describe("buildPatchCacheKey", () => {
   it("returns a stable cache key for identical content", () => {
@@ -109,6 +121,9 @@ describe("getDiffLineStat", () => {
     expect(parsed?.kind).toBe("files");
     if (parsed?.kind !== "files") return;
 
-    expect(getDiffLineStat(parsed.files)).toEqual({ additions: 3, deletions: 2 });
+    expect(getDiffLineStat(parsed.files)).toEqual({
+      additions: 3,
+      deletions: 2,
+    });
   });
 });

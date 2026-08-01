@@ -140,7 +140,11 @@ import {
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
 import { getTriggerDisplayModelLabel } from "./chat/providerIconUtils";
-import { deriveProviderInstanceEntries, type ProviderInstanceEntry } from "../providerInstances";
+import {
+  deriveProviderInstanceEntries,
+  resolveDefaultProviderModelSelection,
+  type ProviderInstanceEntry,
+} from "../providerInstances";
 import { primaryServerProvidersAtom } from "../state/server";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { stackedThreadToast, toastManager } from "./ui/toast";
@@ -162,6 +166,12 @@ import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrom
 import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { useComposerDraftStore } from "../composerDraftStore";
+import {
+  isQuickChatsProject,
+  QUICK_CHATS_PROJECT_ID,
+  QUICK_CHATS_PROJECT_TITLE,
+  QUICK_CHATS_WORKSPACE_ROOT,
+} from "../quickChats";
 
 // Settled-tail paging: recent history is the common lookup; the deep tail
 // stays behind an explicit Show more.
@@ -693,18 +703,12 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
   // a useful hierarchy nor a reliable hover cue. Status now lives in the row
   // content; surface is reserved for interaction (hover, multi-select, route).
   const rowSurfaceClassName = cn(
-    "group/v2-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none",
+    "group/v2-row relative w-full cursor-pointer overflow-hidden rounded-md text-left text-sidebar-foreground/85 outline-none select-none",
     props.isActive
-      ? "bg-sidebar-row-active text-sidebar-foreground"
+      ? "bg-sidebar-row-active"
       : isSelected
-        ? "bg-sidebar-row-selected text-sidebar-foreground"
-        : shouldRecede
-          ? "text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-          : "bg-transparent text-sidebar-foreground hover:bg-sidebar-row-hover",
-    isInFlight &&
-      !props.isActive &&
-      !isSelected &&
-      "opacity-70 transition-opacity hover:opacity-100",
+        ? "bg-sidebar-row-selected"
+        : "bg-transparent hover:bg-sidebar-row-hover",
   );
 
   const title = isRenaming ? (
@@ -723,27 +727,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
   ) : (
     <span
       className={cn(
-        "min-w-0 flex-1 text-sm transition-opacity motion-reduce:transition-none",
-        shouldRecede ? "font-normal" : "font-medium",
-        variant === "card"
-          ? cn(
-              "truncate",
-              isUnread || isWoke
-                ? "text-foreground"
-                : shouldRecede
-                  ? "text-muted-foreground/80"
-                  : status === "failed"
-                    ? "text-foreground/95"
-                    : "text-foreground/90",
-            )
-          : cn(
-              "truncate group-hover/v2-row:text-foreground",
-              props.isActive || isWoke
-                ? "text-foreground"
-                : isUnread
-                  ? "text-muted-foreground"
-                  : "text-muted-foreground/70",
-            ),
+        "min-w-0 flex-1 truncate text-sm font-normal text-sidebar-foreground/85 transition-opacity motion-reduce:transition-none",
         isRegeneratingTitle && "opacity-[0.55]",
       )}
     >
@@ -1132,10 +1116,10 @@ const SidebarV2SearchResultRow = memo(function SidebarV2SearchResultRow(props: {
               onMouseMove={props.onHighlight}
               onClick={props.onSelect}
               className={cn(
-                "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-sm outline-none",
+                "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-sm font-normal text-sidebar-foreground/85 outline-none",
                 props.isHighlighted || props.isRouteActive
-                  ? "bg-sidebar-row-active text-sidebar-foreground"
-                  : "text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+                  ? "bg-sidebar-row-active"
+                  : "hover:bg-sidebar-row-hover",
               )}
             />
           }
@@ -1185,6 +1169,9 @@ export default function SidebarV2() {
     reportFailure: false,
   });
   const deleteProject = useAtomCommand(projectEnvironment.delete, {
+    reportFailure: false,
+  });
+  const createProject = useAtomCommand(projectEnvironment.create, {
     reportFailure: false,
   });
   const updateProject = useAtomCommand(projectEnvironment.update, {
@@ -1239,6 +1226,21 @@ export default function SidebarV2() {
   );
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const quickChatsProject = useMemo(
+    () =>
+      primaryEnvironmentId === null
+        ? null
+        : (projects.find(
+            (project) =>
+              project.environmentId === primaryEnvironmentId &&
+              project.id === QUICK_CHATS_PROJECT_ID,
+          ) ?? null),
+    [primaryEnvironmentId, projects],
+  );
+  const regularProjects = useMemo(
+    () => projects.filter((project) => !isQuickChatsProject(project)),
+    [projects],
+  );
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
@@ -1274,7 +1276,7 @@ export default function SidebarV2() {
   const orderedProjects = useMemo(
     () =>
       orderItemsByPreferredIds({
-        items: projects,
+        items: regularProjects,
         preferredIds: projectOrder,
         getId: getProjectOrderKey,
         getPreferenceIds: (project) => [
@@ -1282,12 +1284,12 @@ export default function SidebarV2() {
           legacyProjectCwdPreferenceKey(project.workspaceRoot),
         ],
       }),
-    [projectOrder, projects],
+    [projectOrder, regularProjects],
   );
   const unsortedProjectGroups = useMemo(
     () =>
       buildSidebarProjectSnapshots({
-        projects: sidebarProjectSortOrder === "manual" ? orderedProjects : projects,
+        projects: sidebarProjectSortOrder === "manual" ? orderedProjects : regularProjects,
         settings: projectGroupingSettings,
         primaryEnvironmentId,
         resolveEnvironmentLabel: (environmentId) => environmentLabelById.get(environmentId) ?? null,
@@ -1297,7 +1299,7 @@ export default function SidebarV2() {
       orderedProjects,
       primaryEnvironmentId,
       projectGroupingSettings,
-      projects,
+      regularProjects,
       sidebarProjectSortOrder,
     ],
   );
@@ -1325,17 +1327,22 @@ export default function SidebarV2() {
       ),
     [projects],
   );
-  const projectDisplayNameByKey = useMemo(
-    () =>
-      new Map(
-        projectGroups.flatMap((group) =>
-          group.memberProjects.map(
-            (project) => [`${project.environmentId}:${project.id}`, group.displayName] as const,
-          ),
+  const projectDisplayNameByKey = useMemo(() => {
+    const names = new Map(
+      projectGroups.flatMap((group) =>
+        group.memberProjects.map(
+          (project) => [`${project.environmentId}:${project.id}`, group.displayName] as const,
         ),
       ),
-    [projectGroups],
-  );
+    );
+    if (quickChatsProject) {
+      names.set(
+        `${quickChatsProject.environmentId}:${quickChatsProject.id}`,
+        QUICK_CHATS_PROJECT_TITLE,
+      );
+    }
+    return names;
+  }, [projectGroups, quickChatsProject]);
 
   // now is quantized to the minute so effectiveSettled memoization doesn't
   // churn on every render; auto-settle thresholds are day-granular anyway.
@@ -1557,7 +1564,14 @@ export default function SidebarV2() {
   // merging, no optimistic holds. Archived threads remain hidden here —
   // archive keeps its original "remove from sidebar" meaning.
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
-  const { activeThreads, snoozedThreads, settledThreads, snoozeNow } = useMemo(() => {
+  const {
+    quickChatThreads,
+    quickChatSectionByKey,
+    activeThreads,
+    snoozedThreads,
+    settledThreads,
+    snoozeNow,
+  } = useMemo(() => {
     const now = `${nowMinute}:00.000Z`;
     // Snooze classification uses a REAL clock, not the quantized minute:
     // wake times are second-precise and a woken thread must not linger on
@@ -1568,13 +1582,21 @@ export default function SidebarV2() {
     const visible = threads.filter(
       (thread) =>
         thread.archivedAt === null &&
+        thread.projectId !== QUICK_CHATS_PROJECT_ID &&
         (scopedProjectKeys === null ||
           scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
+    );
+    const quickChats = threads.filter(
+      (thread) =>
+        thread.archivedAt === null &&
+        thread.environmentId === primaryEnvironmentId &&
+        thread.projectId === QUICK_CHATS_PROJECT_ID,
     );
     const active: EnvironmentThreadShell[] = [];
     const snoozed: EnvironmentThreadShell[] = [];
     const settled: EnvironmentThreadShell[] = [];
-    for (const thread of visible) {
+    const quickChatSections = new Map<string, "active" | "snoozed" | "settled">();
+    const classifyThread = (thread: EnvironmentThreadShell): "active" | "snoozed" | "settled" => {
       // Threads on servers without the settlement capability (old server,
       // or descriptor not loaded yet) never classify as settled: the user
       // could neither un-settle nor pin them, so auto-settling them would
@@ -1589,17 +1611,31 @@ export default function SidebarV2() {
       // belongs to the shelf even if it would also auto-settle (the shelf's
       // wake time is a stronger statement about when it matters again).
       if (supportsSnooze && effectiveSnoozed(thread, { now: preciseNow })) {
-        snoozed.push(thread);
-      } else if (
+        return "snoozed";
+      }
+      if (
         supportsSettlement &&
         effectiveSettled(thread, { now, autoSettleAfterDays, changeRequestState })
       ) {
-        settled.push(thread);
-      } else {
-        active.push(thread);
+        return "settled";
       }
+      return "active";
+    };
+    for (const thread of visible) {
+      const section = classifyThread(thread);
+      if (section === "snoozed") snoozed.push(thread);
+      else if (section === "settled") settled.push(thread);
+      else active.push(thread);
+    }
+    for (const thread of quickChats) {
+      quickChatSections.set(
+        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        classifyThread(thread),
+      );
     }
     return {
+      quickChatThreads: sortThreadsForSidebarV2(quickChats),
+      quickChatSectionByKey: quickChatSections,
       activeThreads: sortThreadsForSidebarV2(active),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozedThreads: snoozed.toSorted(
@@ -1614,6 +1650,7 @@ export default function SidebarV2() {
     autoSettleAfterDays,
     changeRequestStateByKey,
     nowMinute,
+    primaryEnvironmentId,
     scopedProjectKeys,
     serverConfigs,
     snoozeWakeTick,
@@ -1625,8 +1662,8 @@ export default function SidebarV2() {
   const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0);
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
   const searchableThreads = useMemo(
-    () => [...activeThreads, ...snoozedThreads, ...settledThreads],
-    [activeThreads, settledThreads, snoozedThreads],
+    () => [...quickChatThreads, ...activeThreads, ...snoozedThreads, ...settledThreads],
+    [activeThreads, quickChatThreads, settledThreads, snoozedThreads],
   );
   const threadSearchResults = useMemo(
     () => searchSidebarThreadsByTitle(searchableThreads, threadSearchQuery),
@@ -1647,15 +1684,18 @@ export default function SidebarV2() {
       ?.scrollIntoView({ block: "nearest" });
   }, [activeSearchResultIndex, isSearchingThreads, threadSearchResultOrderKey]);
 
-  // Arm a timeout for the earliest upcoming wake so the shelf empties the
-  // moment a snooze expires instead of on the next minute tick. Sorted
-  // soonest-first, so entry 0 is the boundary.
+  // Arm a timeout for the earliest upcoming wake so both the project shelf
+  // and Quick chats update the moment a snooze expires.
   useEffect(() => {
-    const nextWakeAtMs =
-      snoozedThreads.length > 0 && snoozedThreads[0]?.snoozedUntil != null
-        ? Date.parse(snoozedThreads[0].snoozedUntil)
-        : Number.NaN;
-    if (Number.isNaN(nextWakeAtMs)) return;
+    const nextWakeAtMs = [...quickChatThreads, ...snoozedThreads].reduce((earliest, thread) => {
+      const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+      const isSnoozed =
+        snoozedThreads.includes(thread) || quickChatSectionByKey.get(threadKey) === "snoozed";
+      if (!isSnoozed || thread.snoozedUntil == null) return earliest;
+      const wakeAt = Date.parse(thread.snoozedUntil);
+      return Number.isNaN(wakeAt) ? earliest : Math.min(earliest, wakeAt);
+    }, Number.POSITIVE_INFINITY);
+    if (!Number.isFinite(nextWakeAtMs)) return;
     // setTimeout delays are signed 32-bit: anything larger overflows and
     // fires immediately, turning a far-future wake (event-condition snoozes
     // synced from elsewhere) into a tight re-arm loop. Clamped, the timer
@@ -1663,7 +1703,7 @@ export default function SidebarV2() {
     const delayMs = Math.min(Math.max(0, nextWakeAtMs - Date.now()) + 50, 2_147_483_647);
     const id = window.setTimeout(() => bumpSnoozeWakeTick((tick) => tick + 1), delayMs);
     return () => window.clearTimeout(id);
-  }, [snoozedThreads]);
+  }, [quickChatSectionByKey, quickChatThreads, snoozedThreads]);
 
   // The settled tail renders in pages: history shouldn't dominate the
   // sidebar, and the common lookups are recent. Expansion resets when the
@@ -1715,6 +1755,8 @@ export default function SidebarV2() {
   // shortcuts or multi-select), matching the settled tail's paging model.
   const [snoozedShelfExpanded, setSnoozedShelfExpanded] = useState(false);
   const toggleSnoozedShelf = useCallback(() => setSnoozedShelfExpanded((value) => !value), []);
+  const [quickChatsExpanded, setQuickChatsExpanded] = useState(true);
+  const [projectsExpanded, setProjectsExpanded] = useState(true);
   const visibleSnoozedThreads = useMemo(() => {
     if (snoozedShelfExpanded) return snoozedThreads;
     // The open thread must never vanish behind the collapsed shelf: a
@@ -1730,8 +1772,20 @@ export default function SidebarV2() {
   }, [routeThreadKey, snoozedShelfExpanded, snoozedThreads]);
 
   const orderedThreads = useMemo(
-    () => [...activeThreads, ...visibleSnoozedThreads, ...renderedSettledThreads],
-    [activeThreads, visibleSnoozedThreads, renderedSettledThreads],
+    () => [
+      ...(quickChatsExpanded ? quickChatThreads : []),
+      ...(projectsExpanded ? activeThreads : []),
+      ...(projectsExpanded ? visibleSnoozedThreads : []),
+      ...(projectsExpanded ? renderedSettledThreads : []),
+    ],
+    [
+      activeThreads,
+      projectsExpanded,
+      quickChatsExpanded,
+      quickChatThreads,
+      renderedSettledThreads,
+      visibleSnoozedThreads,
+    ],
   );
   const orderedThreadKeys = useMemo(
     () =>
@@ -2555,6 +2609,72 @@ export default function SidebarV2() {
     autoAnimate(node, { duration: 150, easing: "ease-out" });
   }, []);
 
+  const [quickChatPending, setQuickChatPending] = useState(false);
+  const handleNewQuickChatClick = useCallback(async () => {
+    if (primaryEnvironmentId === null || quickChatPending) return;
+    if (isMobile) setOpenMobile(false);
+    setQuickChatPending(true);
+    try {
+      if (quickChatsProject === null) {
+        const createResult = await createProject({
+          environmentId: primaryEnvironmentId,
+          input: {
+            projectId: QUICK_CHATS_PROJECT_ID,
+            title: QUICK_CHATS_PROJECT_TITLE,
+            workspaceRoot: QUICK_CHATS_WORKSPACE_ROOT,
+            defaultModelSelection: resolveDefaultProviderModelSelection(serverProviders, null),
+          },
+        });
+        if (createResult._tag === "Failure") {
+          if (!isAtomCommandInterrupted(createResult)) {
+            const error = squashAtomCommandFailure(createResult);
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Failed to start a quick chat",
+                description: error instanceof Error ? error.message : "An error occurred.",
+              }),
+            );
+          }
+          return;
+        }
+      }
+
+      const navigationResult = await settlePromise(() =>
+        newThreadContext.handleNewThread(
+          scopeProjectRef(primaryEnvironmentId, QUICK_CHATS_PROJECT_ID),
+          {
+            branch: null,
+            worktreePath: null,
+            envMode: "local",
+            startFromOrigin: false,
+          },
+        ),
+      );
+      if (navigationResult._tag === "Failure") {
+        const error = squashAtomCommandFailure(navigationResult);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to start a quick chat",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    } finally {
+      setQuickChatPending(false);
+    }
+  }, [
+    createProject,
+    isMobile,
+    newThreadContext,
+    primaryEnvironmentId,
+    quickChatPending,
+    quickChatsProject,
+    serverProviders,
+    setOpenMobile,
+  ]);
+
   // New thread defaults to the project you're in (active thread's project,
   // falling back to the top project) — same resolution the command palette
   // uses. The command palette already offers a "New thread in..." submenu
@@ -2582,7 +2702,10 @@ export default function SidebarV2() {
     shortcutLabelForCommand(keybindings, "chat.new");
   return (
     <>
-      <SidebarChromeHeader isElectron={isElectron} />
+      <SidebarChromeHeader
+        isElectron={isElectron}
+        onBrandClick={() => void handleNewQuickChatClick()}
+      />
       <SidebarContent
         className="gap-0"
         fixedHeader={
@@ -2905,15 +3028,96 @@ export default function SidebarV2() {
                       />
                     );
                   };
-                  const items: ReactNode[] = activeThreads.map((thread) =>
-                    renderThreadRow(thread, "active"),
+                  const items: ReactNode[] = [
+                    <li key="quick-chats-header" data-thread-selection-safe className="list-none">
+                      <div className="mb-1 flex h-8 items-center gap-2 px-2.5 text-sidebar-muted-foreground">
+                        <button
+                          type="button"
+                          aria-expanded={quickChatsExpanded}
+                          data-testid="sidebar-v2-quick-chats-section-toggle"
+                          onClick={() => setQuickChatsExpanded((expanded) => !expanded)}
+                          className="flex min-w-0 cursor-pointer items-center gap-2 hover:text-sidebar-foreground"
+                        >
+                          <ChevronDownIcon
+                            aria-hidden
+                            className={cn(
+                              "size-3.5 shrink-0 opacity-70 transition-transform",
+                              !quickChatsExpanded && "-rotate-90",
+                            )}
+                          />
+                          <MessageSquareIcon aria-hidden className="size-3.5 shrink-0 opacity-70" />
+                          <span className="truncate text-xs font-medium">
+                            {QUICK_CHATS_PROJECT_TITLE}
+                          </span>
+                        </button>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <button
+                                type="button"
+                                aria-label="New quick chat"
+                                aria-busy={quickChatPending || undefined}
+                                disabled={primaryEnvironmentId === null || quickChatPending}
+                                onClick={() => void handleNewQuickChatClick()}
+                                className="ml-auto inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground/70 transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground disabled:cursor-default disabled:opacity-40"
+                              />
+                            }
+                          >
+                            <PlusIcon className="size-3.5" />
+                          </TooltipTrigger>
+                          <TooltipPopup side="right">
+                            New quick chat in your home folder
+                          </TooltipPopup>
+                        </Tooltip>
+                      </div>
+                    </li>,
+                  ];
+                  if (quickChatsExpanded) {
+                    for (const thread of quickChatThreads) {
+                      const threadKey = scopedThreadKey(
+                        scopeThreadRef(thread.environmentId, thread.id),
+                      );
+                      items.push(
+                        renderThreadRow(thread, quickChatSectionByKey.get(threadKey) ?? "active"),
+                      );
+                    }
+                  }
+                  items.push(
+                    <li
+                      key="project-chats-header"
+                      data-thread-selection-safe
+                      className="mt-2 list-none"
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={projectsExpanded}
+                        data-testid="sidebar-v2-projects-section-toggle"
+                        onClick={() => setProjectsExpanded((expanded) => !expanded)}
+                        className="mb-1 flex h-7 w-full cursor-pointer items-center gap-2 px-2.5 text-left text-sidebar-muted-foreground/70 hover:text-sidebar-foreground"
+                      >
+                        <ChevronDownIcon
+                          aria-hidden
+                          className={cn(
+                            "size-3.5 shrink-0 opacity-70 transition-transform",
+                            !projectsExpanded && "-rotate-90",
+                          )}
+                        />
+                        <FolderIcon aria-hidden className="size-3.5 shrink-0 opacity-70" />
+                        <span className="text-xs font-medium">Projects</span>
+                      </button>
+                    </li>,
                   );
+                  if (projectsExpanded) {
+                    for (const thread of activeThreads) {
+                      items.push(renderThreadRow(thread, "active"));
+                    }
+                  }
                   // Snoozed shelf: between the inbox and Settled — out of the
                   // way, never gone. The header always renders while anything
                   // is snoozed (the count is the whole footprint when
                   // collapsed); rows only when expanded. Vanishes entirely at
                   // count 0.
-                  if (snoozedThreads.length > 0) {
+                  if (projectsExpanded && snoozedThreads.length > 0) {
                     items.push(
                       <li
                         key="snoozed-shelf-header"
@@ -2947,7 +3151,7 @@ export default function SidebarV2() {
                       items.push(renderThreadRow(thread, "snoozed"));
                     }
                   }
-                  if (settledThreads.length > 0) {
+                  if (projectsExpanded && settledThreads.length > 0) {
                     items.push(
                       <li
                         key="settled-shelf-header"
@@ -2978,12 +3182,14 @@ export default function SidebarV2() {
                       </li>,
                     );
                   }
-                  for (const thread of renderedSettledThreads) {
-                    items.push(renderThreadRow(thread, "settled"));
+                  if (projectsExpanded) {
+                    for (const thread of renderedSettledThreads) {
+                      items.push(renderThreadRow(thread, "settled"));
+                    }
                   }
                   return items;
                 })()}
-                {settledShelfExpanded && hiddenSettledCount > 0 ? (
+                {projectsExpanded && settledShelfExpanded && hiddenSettledCount > 0 ? (
                   <li className="list-none">
                     <button
                       type="button"
@@ -2999,9 +3205,10 @@ export default function SidebarV2() {
             </TooltipProvider>
           ) : null}
           {!isSearchingThreads &&
+          projectsExpanded &&
           activeThreads.length + snoozedThreads.length + settledThreads.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
-              {projects.length === 0 ? (
+              {regularProjects.length === 0 ? (
                 <>
                   <span>No projects yet</span>
                   <button

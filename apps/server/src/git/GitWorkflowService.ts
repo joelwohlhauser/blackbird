@@ -29,6 +29,7 @@ import {
 } from "@t3tools/contracts";
 
 import * as GitManager from "./GitManager.ts";
+import * as WorktreeLifecycle from "./WorktreeLifecycle.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 
@@ -134,6 +135,7 @@ export const make = Effect.gen(function* () {
   const registry = yield* VcsDriverRegistry.VcsDriverRegistry;
   const git = yield* GitVcsDriver.GitVcsDriver;
   const gitManager = yield* GitManager.GitManager;
+  const worktreeLifecycle = yield* WorktreeLifecycle.WorktreeLifecycle;
 
   const ensureGit = Effect.fn("GitWorkflowService.ensureGit")(function* (
     operation: string,
@@ -249,6 +251,19 @@ export const make = Effect.gen(function* () {
     (input: Input) =>
       ensureGit(operation, input.cwd).pipe(Effect.andThen(run(input)));
 
+  const createWorktree = Effect.fn("GitWorkflowService.createWorktree")(function* (
+    input: VcsCreateWorktreeInput,
+  ) {
+    yield* ensureGitCommand("GitWorkflowService.createWorktree", input.cwd);
+    const resolvedInput = yield* worktreeLifecycle.resolveCreateInput(input);
+    const result = yield* git.createWorktree(resolvedInput);
+    yield* worktreeLifecycle.prepareCreatedWorktree({
+      projectCwd: input.cwd,
+      worktreePath: result.worktree.path,
+    });
+    return result;
+  });
+
   return GitWorkflowService.of({
     status: (input) =>
       detectGitRepositoryForStatus("GitWorkflowService.status", input.cwd).pipe(
@@ -295,10 +310,7 @@ export const make = Effect.gen(function* () {
           isGitRepository ? git.listRefs(input) : Effect.succeed(nonRepositoryListRefs()),
         ),
       ),
-    createWorktree: (input) =>
-      ensureGitCommand("GitWorkflowService.createWorktree", input.cwd).pipe(
-        Effect.andThen(git.createWorktree(input)),
-      ),
+    createWorktree,
     fetchRemote: (input) =>
       ensureGitCommand("GitWorkflowService.fetchRemote", input.cwd).pipe(
         Effect.andThen(git.fetchRemote(input)),

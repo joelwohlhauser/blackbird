@@ -113,6 +113,10 @@ function expandHomePath(input: string, path: Path.Path): string {
   return input;
 }
 
+function isRootDotEnvFileName(name: string): boolean {
+  return name === ".env" || name.startsWith(".env.");
+}
+
 const resolveBrowseTarget = Effect.fn("WorkspaceEntries.resolveBrowseTarget")(function* (
   input: FilesystemBrowseInput,
   path: Path.Path,
@@ -275,7 +279,7 @@ export const make = Effect.gen(function* () {
   const list: WorkspaceEntries["Service"]["list"] = Effect.fn("WorkspaceEntries.list")(
     function* (input) {
       const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
-      return yield* Effect.gen(function* () {
+      const indexedResult = yield* Effect.gen(function* () {
         const searchIndex = yield* WorkspaceSearchIndex.WorkspaceSearchIndex;
         return yield* searchIndex.list();
       }).pipe(
@@ -285,6 +289,35 @@ export const make = Effect.gen(function* () {
           ),
         ),
       );
+
+      // The search index intentionally respects .gitignore so fuzzy search
+      // does not crawl dependency/build directories. File explorers still
+      // need to surface root dotenv files, which are commonly ignored and may
+      // be symlinks or named pipes supplied by a local secret manager.
+      const rootDotEnvEntries = yield* Effect.tryPromise(() =>
+        NodeFSP.readdir(normalizedCwd, { withFileTypes: true }),
+      ).pipe(
+        Effect.map((entries) =>
+          entries
+            .filter((entry) => isRootDotEnvFileName(entry.name) && !entry.isDirectory())
+            .map((entry) => ({ path: entry.name, kind: "file" as const })),
+        ),
+        Effect.orElseSucceed(() => []),
+      );
+      if (rootDotEnvEntries.length === 0) return indexedResult;
+
+      const entriesByPath = new Map(
+        indexedResult.entries.map((entry) => [entry.path, entry] as const),
+      );
+      for (const entry of rootDotEnvEntries) {
+        entriesByPath.set(entry.path, entry);
+      }
+      return {
+        ...indexedResult,
+        entries: [...entriesByPath.values()].toSorted((left, right) =>
+          left.path.localeCompare(right.path),
+        ),
+      };
     },
   );
 

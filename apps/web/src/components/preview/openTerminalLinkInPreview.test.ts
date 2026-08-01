@@ -39,6 +39,50 @@ afterEach(() => {
 });
 
 describe("openTerminalLinkInPreview", () => {
+  it("opens directly in the preview when that preference is selected", async () => {
+    const fallbackToBrowser = vi.fn();
+    const showContextMenu = vi.fn();
+    const openPreview = vi.fn(async () => AsyncResult.success(snapshot));
+
+    await openTerminalLinkInPreview({
+      url: "http://localhost:3000/docs",
+      position: { x: 12, y: 34 },
+      threadRef,
+      openPreview,
+      localApi: {
+        contextMenu: { show: showContextMenu },
+      } as unknown as LocalApi,
+      fallbackToBrowser,
+      mode: "preview",
+    });
+
+    expect(showContextMenu).not.toHaveBeenCalled();
+    expect(openPreview).toHaveBeenCalledOnce();
+    expect(fallbackToBrowser).not.toHaveBeenCalled();
+  });
+
+  it("opens directly in the default browser when that preference is selected", async () => {
+    const fallbackToBrowser = vi.fn();
+    const showContextMenu = vi.fn();
+    const openPreview = vi.fn(async () => AsyncResult.success(snapshot));
+
+    await openTerminalLinkInPreview({
+      url: "http://localhost:3000/docs",
+      position: { x: 12, y: 34 },
+      threadRef,
+      openPreview,
+      localApi: {
+        contextMenu: { show: showContextMenu },
+      } as unknown as LocalApi,
+      fallbackToBrowser,
+      mode: "external",
+    });
+
+    expect(showContextMenu).not.toHaveBeenCalled();
+    expect(openPreview).not.toHaveBeenCalled();
+    expect(fallbackToBrowser).toHaveBeenCalledOnce();
+  });
+
   it("preserves context-menu failures with terminal link context before falling back", async () => {
     const cause = new Error("menu unavailable");
     const fallbackToBrowser = vi.fn();

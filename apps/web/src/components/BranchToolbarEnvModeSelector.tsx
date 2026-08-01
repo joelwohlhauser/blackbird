@@ -40,6 +40,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   const envModeItems = useMemo(
     () => [
       { value: "local", label: resolveCurrentWorkspaceLabel(activeWorktreePath) },
+      { value: "worktree-existing", label: resolveEnvModeLabel("worktree-existing") },
       { value: "worktree", label: resolveEnvModeLabel("worktree") },
       ...(showPreviousWorktree && previousWorktreeLabel
         ? [{ value: PREVIOUS_WORKTREE_SELECT_VALUE, label: previousWorktreeLabel }]
@@ -87,6 +88,8 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       >
         {effectiveEnvMode === "worktree" ? (
           <FolderGit2Icon className="size-3" />
+        ) : effectiveEnvMode === "worktree-existing" ? (
+          <FolderGitIcon className="size-3" />
         ) : activeWorktreePath ? (
           <FolderGitIcon className="size-3" />
         ) : (
@@ -105,6 +108,12 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
                 <FolderIcon className="size-3" />
               )}
               {resolveCurrentWorkspaceLabel(activeWorktreePath)}
+            </span>
+          </SelectItem>
+          <SelectItem value="worktree-existing">
+            <span className="inline-flex items-center gap-1.5">
+              <FolderGitIcon className="size-3" />
+              {resolveEnvModeLabel("worktree-existing")}
             </span>
           </SelectItem>
           <SelectItem value="worktree">

@@ -61,6 +61,10 @@ export const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
 export const EnvironmentIdentificationMode = Schema.Literals(["artwork", "pill", "none"]);
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
+export const DEFAULT_LINEAR_ORGANIZATION_SLUG = "acme";
+export const ExternalLinkOpenMode = Schema.Literals(["ask", "preview", "external"]);
+export type ExternalLinkOpenMode = typeof ExternalLinkOpenMode.Type;
+export const DEFAULT_EXTERNAL_LINK_OPEN_MODE: ExternalLinkOpenMode = "ask";
 
 export const ClientSettingsSchema = Schema.Struct({
   autoOpenPlanSidebar: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
@@ -75,6 +79,12 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   glassOpacity: GlassOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_GLASS_OPACITY)),
+  ),
+  externalLinkOpenMode: ExternalLinkOpenMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_EXTERNAL_LINK_OPEN_MODE)),
+  ),
+  linearOrganizationSlug: TrimmedNonEmptyString.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_LINEAR_ORGANIZATION_SLUG)),
   ),
   // Model favorites. Historically keyed by provider kind, now
   // widened to `ProviderInstanceId` so users can favorite a specific model
@@ -467,6 +477,9 @@ export const BackgroundActivitySettings = Schema.Struct({
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
 export type BackgroundActivitySettings = typeof BackgroundActivitySettings.Type;
 
+export const WorktreeEnvFileMode = Schema.Literals(["link", "copy", "off"]);
+export type WorktreeEnvFileMode = typeof WorktreeEnvFileMode.Type;
+
 export const ServerSettings = Schema.Struct({
   enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   enableProviderUpdateChecks: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -490,6 +503,15 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("local" as const satisfies ThreadEnvMode)),
   ),
   newWorktreesStartFromOrigin: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(true)),
+  ),
+  worktreesRoot: TrimmedNonEmptyString.pipe(
+    Schema.withDecodingDefault(Effect.succeed("~/Repositories/.worktrees")),
+  ),
+  worktreeEnvFileMode: WorktreeEnvFileMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed("link" as const satisfies WorktreeEnvFileMode)),
+  ),
+  installWorktreeDependencies: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
   addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -640,6 +662,9 @@ export const ServerSettingsPatch = Schema.Struct({
   backgroundActivityProfile: Schema.optionalKey(BackgroundActivityProfile),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
+  worktreesRoot: Schema.optionalKey(TrimmedNonEmptyString),
+  worktreeEnvFileMode: Schema.optionalKey(WorktreeEnvFileMode),
+  installWorktreeDependencies: Schema.optionalKey(Schema.Boolean),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   sourceControlWritingStyle: Schema.optionalKey(
@@ -679,7 +704,9 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
+  externalLinkOpenMode: Schema.optionalKey(ExternalLinkOpenMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
+  linearOrganizationSlug: Schema.optionalKey(TrimmedNonEmptyString),
   favorites: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({

@@ -68,6 +68,7 @@ import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { useProjects, useThreadShells } from "../state/entities";
 import { useThreadSearch } from "../state/queries";
+import { isQuickChatsProject } from "../quickChats";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
 import {
   appendBrowsePathSegment,
@@ -325,7 +326,7 @@ function buildAddProjectRemoteSourceReadiness(
       readiness[source] = { ready: false, hint: provider.installHint };
       continue;
     }
-    if (provider.auth.status === "unauthenticated") {
+    if (provider.auth.status !== "authenticated") {
       readiness[source] = {
         ready: false,
         hint:
@@ -553,6 +554,10 @@ function OpenCommandPaletteDialog(props: {
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
   const projects = useProjects();
+  const regularProjects = useMemo(
+    () => projects.filter((project) => !isQuickChatsProject(project)),
+    [projects],
+  );
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -609,7 +614,7 @@ function OpenCommandPaletteDialog(props: {
   const orderedProjects = useMemo(
     () =>
       orderItemsByPreferredIds({
-        items: projects,
+        items: regularProjects,
         preferredIds: projectOrder,
         getId: getProjectOrderKey,
         getPreferenceIds: (project) => [
@@ -617,12 +622,13 @@ function OpenCommandPaletteDialog(props: {
           legacyProjectCwdPreferenceKey(project.workspaceRoot),
         ],
       }),
-    [projectOrder, projects],
+    [projectOrder, regularProjects],
   );
   const unsortedProjectGroups = useMemo(
     () =>
       buildSidebarProjectSnapshots({
-        projects: clientSettings.sidebarProjectSortOrder === "manual" ? orderedProjects : projects,
+        projects:
+          clientSettings.sidebarProjectSortOrder === "manual" ? orderedProjects : regularProjects,
         settings: projectGroupingSettings,
         primaryEnvironmentId,
         resolveEnvironmentLabel: (environmentId) => environmentLabelById.get(environmentId) ?? null,
@@ -633,7 +639,7 @@ function OpenCommandPaletteDialog(props: {
       orderedProjects,
       primaryEnvironmentId,
       projectGroupingSettings,
-      projects,
+      regularProjects,
     ],
   );
   const projectGroups = useMemo(
@@ -1109,11 +1115,6 @@ function OpenCommandPaletteDialog(props: {
     [pushPaletteView],
   );
 
-  const openSourceControlSettings = useCallback(() => {
-    setOpen(false);
-    void navigate({ to: "/settings/source-control" });
-  }, [navigate, setOpen]);
-
   const buildAddProjectSourceGroups = useCallback(
     (
       environmentId: EnvironmentId,
@@ -1136,7 +1137,9 @@ function OpenCommandPaletteDialog(props: {
 
       const orderedSources: ReadonlyArray<AddProjectRemoteSource> = [
         "url",
-        ...sortAddProjectProviderSources(readinessBySource),
+        ...sortAddProjectProviderSources(readinessBySource).filter(
+          (source) => readinessBySource[source].ready,
+        ),
       ];
 
       for (const source of orderedSources) {
@@ -1146,48 +1149,6 @@ function OpenCommandPaletteDialog(props: {
           source === "url"
             ? "Clone from a remote URL"
             : `Clone ${label} ${remoteProjectSourcePathHint(source)}`;
-        const readiness = readinessBySource[source];
-        const disabledHint = readiness.hint;
-
-        const titleTrailingContent = readiness.ready ? undefined : (
-          <span className="ml-auto">
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    className="h-5 rounded-[.25rem] px-1.5 text-[10px] text-warning-foreground"
-                    onClick={() => {
-                      openSourceControlSettings();
-                    }}
-                  >
-                    Setup Required
-                  </Button>
-                }
-              />
-              <TooltipPopup align="end" side="left">
-                {disabledHint ?? "Open Settings -> Source Control to configure this provider."}
-              </TooltipPopup>
-            </Tooltip>
-          </span>
-        );
-
-        if (!readiness.ready) {
-          sourceItems.push({
-            kind: "action",
-            value: `action:add-project:${environmentId}:${source}:not-ready`,
-            searchTerms: ["clone", "remote", "repository", "repo", "git", label, "setup required"],
-            title,
-            description,
-            disabled: true,
-            icon: remoteProjectSourceIcon(source, ITEM_ICON_CLASS),
-            ...(titleTrailingContent ? { titleTrailingContent } : {}),
-            run: async () => {},
-          });
-          continue;
-        }
-
         sourceItems.push({
           kind: "action",
           value: `action:add-project:${environmentId}:${source}`,
@@ -1195,7 +1156,6 @@ function OpenCommandPaletteDialog(props: {
           title,
           description,
           icon: remoteProjectSourceIcon(source, ITEM_ICON_CLASS),
-          ...(titleTrailingContent ? { titleTrailingContent } : {}),
           keepOpen: true,
           run: async () => {
             startAddProjectClone(environmentId, source);
@@ -1205,7 +1165,7 @@ function OpenCommandPaletteDialog(props: {
 
       return [{ value: `sources:${environmentId}`, label: "Sources", items: sourceItems }];
     },
-    [openSourceControlSettings, startAddProjectBrowse, startAddProjectClone],
+    [startAddProjectBrowse, startAddProjectClone],
   );
 
   const startAddProjectSourceSelection = useCallback(

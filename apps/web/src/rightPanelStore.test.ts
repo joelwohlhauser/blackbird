@@ -7,6 +7,7 @@ import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
+  selectWorkspaceNavigatorOpen,
   useRightPanelStore,
 } from "./rightPanelStore";
 
@@ -14,7 +15,10 @@ const refA = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-A"))
 const refB = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-B"));
 
 beforeEach(() => {
-  useRightPanelStore.setState({ byThreadKey: {} });
+  useRightPanelStore.setState({
+    byThreadKey: {},
+    workspaceNavigatorOpenByThreadKey: {},
+  });
 });
 
 describe("rightPanelStore", () => {
@@ -39,6 +43,7 @@ describe("rightPanelStore", () => {
           surfaces: [{ id: "browser:tab-a", kind: "preview", resourceId: "tab-a" }],
         },
       },
+      workspaceNavigatorOpenByThreadKey: {},
     });
   });
 
@@ -69,6 +74,7 @@ describe("rightPanelStore", () => {
           ],
         },
       },
+      workspaceNavigatorOpenByThreadKey: {},
     });
   });
 
@@ -79,7 +85,13 @@ describe("rightPanelStore", () => {
           "env-1:thread-A": {
             isOpen: true,
             activeSurfaceId: "file:src/index.ts",
-            surfaces: [{ id: "file:src/index.ts", kind: "file", relativePath: "src/index.ts" }],
+            surfaces: [
+              {
+                id: "file:src/index.ts",
+                kind: "file",
+                relativePath: "src/index.ts",
+              },
+            ],
           },
         },
       }),
@@ -99,6 +111,7 @@ describe("rightPanelStore", () => {
           ],
         },
       },
+      workspaceNavigatorOpenByThreadKey: {},
     });
   });
 
@@ -170,6 +183,36 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("reopens a closed panel when opening a file surface", () => {
+    useRightPanelStore.getState().openFile(refA, "src/index.ts");
+    useRightPanelStore.getState().close(refA);
+
+    useRightPanelStore.getState().openFile(refA, "README.md");
+    useRightPanelStore.getState().show(refA);
+
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA),
+    ).toMatchObject({
+      isOpen: true,
+      activeSurfaceId: "file:README.md",
+    });
+  });
+
+  it("reopens a closed panel when opening a file diff surface", () => {
+    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/App.tsx");
+    useRightPanelStore.getState().close(refA);
+
+    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/routes.ts");
+    useRightPanelStore.getState().show(refA);
+
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA),
+    ).toMatchObject({
+      isOpen: true,
+      activeSurfaceId: "file-diff:unstaged::src%2Froutes.ts",
+    });
+  });
+
   it("updates line reveal requests when reopening a file surface", () => {
     useRightPanelStore.getState().openFile(refA, "src/index.ts", 42);
     useRightPanelStore.getState().openFile(refA, "src/index.ts", 87);
@@ -200,6 +243,41 @@ describe("rightPanelStore", () => {
           relativePath: "src/index.ts",
           revealLine: null,
           revealRequestId: 3,
+        },
+      ],
+    });
+  });
+
+  it("opens one reusable diff surface per file and comparison scope", () => {
+    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/App.tsx");
+    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/App.tsx");
+    useRightPanelStore.getState().openDiffFile(refA, "branch", "src/App.tsx", " origin/main ");
+    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/routes.ts");
+
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "file-diff:unstaged::src%2Froutes.ts",
+      surfaces: [
+        {
+          id: "file-diff:unstaged::src%2FApp.tsx",
+          kind: "file-diff",
+          relativePath: "src/App.tsx",
+          scope: "unstaged",
+          baseRef: null,
+        },
+        {
+          id: "file-diff:branch:origin%2Fmain:src%2FApp.tsx",
+          kind: "file-diff",
+          relativePath: "src/App.tsx",
+          scope: "branch",
+          baseRef: "origin/main",
+        },
+        {
+          id: "file-diff:unstaged::src%2Froutes.ts",
+          kind: "file-diff",
+          relativePath: "src/routes.ts",
+          scope: "unstaged",
+          baseRef: null,
         },
       ],
     });
@@ -250,6 +328,39 @@ describe("rightPanelStore", () => {
     expect(useRightPanelStore.getState().byThreadKey).toEqual({});
   });
 
+  it("tracks workspace navigator visibility independently for each thread", () => {
+    useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
+
+    expect(
+      selectWorkspaceNavigatorOpen(
+        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
+        refA,
+      ),
+    ).toBe(true);
+    expect(
+      selectWorkspaceNavigatorOpen(
+        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
+        refB,
+      ),
+    ).toBe(false);
+
+    useRightPanelStore.getState().toggleWorkspaceNavigator(refB);
+    useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
+
+    expect(
+      selectWorkspaceNavigatorOpen(
+        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
+        refA,
+      ),
+    ).toBe(false);
+    expect(
+      selectWorkspaceNavigatorOpen(
+        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
+        refB,
+      ),
+    ).toBe(true);
+  });
+
   it("toggle hides the panel without discarding the active surface", () => {
     useRightPanelStore.getState().toggle(refA, "diff");
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("diff");
@@ -270,8 +381,15 @@ describe("rightPanelStore", () => {
 
   it("removeThread clears persisted state", () => {
     useRightPanelStore.getState().open(refA, "plan");
+    useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
     useRightPanelStore.getState().removeThread(refA);
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBeNull();
+    expect(
+      selectWorkspaceNavigatorOpen(
+        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
+        refA,
+      ),
+    ).toBe(false);
   });
 
   it("close on never-opened thread is a no-op", () => {
@@ -289,6 +407,28 @@ describe("rightPanelStore", () => {
       id: "browser:tab-b",
       kind: "preview",
       resourceId: "tab-b",
+    });
+  });
+
+  it("tracks Linear as a singleton backed by a browser session", () => {
+    useRightPanelStore.getState().openBrowser(refA, "linear-tab");
+    useRightPanelStore.getState().openLinear(refA, "linear-tab");
+
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "linear",
+      surfaces: [{ id: "linear", kind: "linear", resourceId: "linear-tab" }],
+    });
+  });
+
+  it("tracks a GitHub PR as a singleton backed by a browser session", () => {
+    useRightPanelStore.getState().openBrowser(refA, "github-pr-tab");
+    useRightPanelStore.getState().openGitHubPullRequest(refA, "github-pr-tab");
+
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "github-pr",
+      surfaces: [{ id: "github-pr", kind: "github-pr", resourceId: "github-pr-tab" }],
     });
   });
 
@@ -445,5 +585,29 @@ describe("rightPanelStore", () => {
         (surface) => surface.id,
       ),
     ).toEqual(["terminal:term-1", "browser:tab-b", "browser:tab-c"]);
+  });
+
+  it("does not duplicate a Linear browser session as a Browser surface", () => {
+    useRightPanelStore.getState().openLinear(refA, "linear-tab");
+    useRightPanelStore.getState().reconcileBrowserSurfaces(refA, ["linear-tab", "browser-tab"]);
+
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces,
+    ).toEqual([
+      { id: "linear", kind: "linear", resourceId: "linear-tab" },
+      { id: "browser:browser-tab", kind: "preview", resourceId: "browser-tab" },
+    ]);
+  });
+
+  it("does not duplicate a GitHub PR browser session as a Browser surface", () => {
+    useRightPanelStore.getState().openGitHubPullRequest(refA, "github-pr-tab");
+    useRightPanelStore.getState().reconcileBrowserSurfaces(refA, ["github-pr-tab", "browser-tab"]);
+
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces,
+    ).toEqual([
+      { id: "github-pr", kind: "github-pr", resourceId: "github-pr-tab" },
+      { id: "browser:browser-tab", kind: "preview", resourceId: "browser-tab" },
+    ]);
   });
 });

@@ -718,6 +718,48 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("status detects a PR from a remote branch in a detached worktree", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/existing-remote-pr"]);
+      const remoteDir = yield* createBareRemote();
+      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+      yield* runGit(repoDir, ["push", "-u", "origin", "feature/existing-remote-pr"]);
+      yield* runGit(repoDir, ["checkout", "--detach", "origin/feature/existing-remote-pr"]);
+
+      const { manager, ghCalls } = yield* makeManager({
+        ghScenario: {
+          prListByHeadSelector: {
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            "feature/existing-remote-pr": JSON.stringify([
+              {
+                number: 787,
+                title: "Existing remote branch PR",
+                url: "https://github.com/example-org/example-app/pull/787",
+                baseRefName: "main",
+                headRefName: "feature/existing-remote-pr",
+              },
+            ]),
+          },
+        },
+      });
+
+      const status = yield* manager.status({ cwd: repoDir });
+
+      expect(status.refName).toBeNull();
+      expect(status.pr).toEqual({
+        number: 787,
+        title: "Existing remote branch PR",
+        url: "https://github.com/example-org/example-app/pull/787",
+        baseRef: "main",
+        headRef: "feature/existing-remote-pr",
+        state: "open",
+      });
+      expect(ghCalls.some((call) => call.includes("--head feature/existing-remote-pr"))).toBe(true);
+    }),
+  );
+
   it.effect("status trims PR metadata returned by gh before publishing it", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");

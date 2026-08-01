@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { resolveExternalWebLinkHost, showExternalLinkContextMenu } from "./externalLinkContextMenu";
+import {
+  openExternalWebLink,
+  resolveExternalWebLinkHost,
+  showExternalLinkContextMenu,
+} from "./externalLinkContextMenu";
 
 function createHarness(selection: "open-in-preview" | "open-external" | "copy-link" | null) {
   const showContextMenu = vi.fn().mockResolvedValue(selection);
@@ -19,6 +23,60 @@ function createHarness(selection: "open-in-preview" | "open-external" | "copy-li
 }
 
 describe("external chat link context menu", () => {
+  it("asks where to open a normal click by default", async () => {
+    const harness = createHarness("open-in-preview");
+
+    await openExternalWebLink({
+      mode: "ask",
+      canOpenInPreview: true,
+      href: "https://example.com/docs",
+      position: { x: 12, y: 24 },
+      ...harness,
+    });
+
+    expect(harness.showContextMenu).toHaveBeenCalledWith(
+      [
+        { id: "open-in-preview", label: "Open in right panel" },
+        { id: "open-external", label: "Open in default browser" },
+      ],
+      { x: 12, y: 24 },
+    );
+    expect(harness.openInPreview).toHaveBeenCalledWith("https://example.com/docs");
+  });
+
+  it.each([
+    ["preview" as const, "openInPreview" as const],
+    ["external" as const, "openExternal" as const],
+  ])("routes the %s preference without asking", async (mode, expectedCallback) => {
+    const harness = createHarness(null);
+
+    await openExternalWebLink({
+      mode,
+      canOpenInPreview: true,
+      href: "https://example.com/docs",
+      position: { x: 1, y: 2 },
+      ...harness,
+    });
+
+    expect(harness.showContextMenu).not.toHaveBeenCalled();
+    expect(harness[expectedCallback]).toHaveBeenCalledWith("https://example.com/docs");
+  });
+
+  it("falls back to the default browser when the integrated browser is unavailable", async () => {
+    const harness = createHarness(null);
+
+    await openExternalWebLink({
+      mode: "preview",
+      canOpenInPreview: false,
+      href: "https://example.com/docs",
+      position: { x: 1, y: 2 },
+      ...harness,
+    });
+
+    expect(harness.openExternal).toHaveBeenCalledWith("https://example.com/docs");
+    expect(harness.openInPreview).not.toHaveBeenCalled();
+  });
+
   it("offers both open actions and Copy Link", async () => {
     const harness = createHarness(null);
 

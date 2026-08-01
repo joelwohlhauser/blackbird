@@ -1,9 +1,4 @@
-import type {
-  EditorId,
-  EnvironmentId,
-  ResolvedKeybindingsConfig,
-  ScopedThreadRef,
-} from "@t3tools/contracts";
+import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
 import { VirtualizedFile, type SelectedLineRange } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/editor";
@@ -12,17 +7,16 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronRight, Code2, Eye, FolderTree, Globe2, LoaderCircle } from "lucide-react";
+import { ChevronRight, Code2, Eye, Globe2, LoaderCircle } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import { useAssetUrlState } from "~/assets/assetUrls";
 import ChatMarkdown from "~/components/ChatMarkdown";
-import { OpenInPicker } from "~/components/chat/OpenInPicker";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
-import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { cn } from "~/lib/utils";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
@@ -34,7 +28,7 @@ import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { buildFileReviewComment } from "~/reviewCommentContext";
 import { assetEnvironment } from "~/state/assets";
-import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
+import { useEnvironmentHttpBaseUrl } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -71,19 +65,61 @@ interface FilePreviewPanelProps {
   relativePath: string | null;
   threadRef: ScopedThreadRef;
   composerDraftTarget: ScopedThreadRef | DraftId;
-  keybindings: ResolvedKeybindingsConfig;
-  availableEditors: ReadonlyArray<EditorId>;
   revealLine: number | null;
   revealRequestId: number;
   onOpenFile: (relativePath: string) => void;
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
 
-const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
 const FILE_SAVE_DEBOUNCE_MS = 500;
 const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
-const FILE_LINK_REVEAL_UNSAFE_CSS = `
+const FILE_INDENT_GUIDES_ATTRIBUTE = "data-file-indent-guides";
+const FILE_PREVIEW_UNSAFE_CSS = `
+  :host {
+    --diffs-light-bg: var(--background);
+    --diffs-dark-bg: var(--background);
+    --diffs-bg: var(--background);
+    --diffs-dark: #d4d4d4;
+    --diffs-fg-number-override: #858585;
+    --diffs-bg-hover-override: #2a2d2e;
+    --diffs-bg-selection-override: #264f78;
+    --diffs-bg-selection-number-override: #264f78;
+    --diffs-font-family: Menlo, Monaco, "Courier New", monospace;
+    --diffs-font-size: var(--code-font-size);
+    --diffs-line-height: 17px;
+    --diffs-font-features: normal;
+    --diffs-gap-block: 4px;
+    --diffs-tab-size: 2;
+  }
+
+  [data-column-number] {
+    padding-left: 2ch;
+    padding-right: 2ch;
+  }
+
+  [data-line] {
+    padding-left: 1ch;
+    padding-right: 1ch;
+  }
+
+  [${FILE_INDENT_GUIDES_ATTRIBUTE}][data-line]::before {
+    background-image: repeating-linear-gradient(
+      to right,
+      #404040 0,
+      #404040 1px,
+      transparent 1px,
+      transparent 2ch
+    );
+    content: "";
+    height: 100%;
+    left: 1ch;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    width: var(--blackboard-indent-guide-width);
+  }
+
   [${FILE_LINK_REVEAL_ATTRIBUTE}][data-line] {
     background-color: light-dark(
       color-mix(
@@ -116,6 +152,62 @@ const FILE_LINK_REVEAL_UNSAFE_CSS = `
   }
 `;
 type FilePostRender = NonNullable<FileOptions<unknown>["onPostRender"]>;
+
+function getIndentColumns(line: string): number {
+  let columns = 0;
+  for (const character of line) {
+    if (character === " ") {
+      columns += 1;
+    } else if (character === "\t") {
+      columns += 2 - (columns % 2);
+    } else {
+      break;
+    }
+  }
+  return columns;
+}
+
+function resolveIndentGuideColumns(contents: string): number[] {
+  const lines = contents.split(/\r?\n/);
+  const columns = lines.map((line) => (line.trim().length === 0 ? null : getIndentColumns(line)));
+
+  let previous = 0;
+  const previousColumns = columns.map((value) => {
+    if (value !== null) previous = value;
+    return previous;
+  });
+
+  let next = 0;
+  const nextColumns = columns.map(() => 0);
+  for (let index = columns.length - 1; index >= 0; index -= 1) {
+    const value = columns[index];
+    if (value !== null && value !== undefined) next = value;
+    nextColumns[index] = next;
+  }
+
+  return columns.map(
+    (value, index) =>
+      Math.floor((value ?? Math.min(previousColumns[index] ?? 0, nextColumns[index] ?? 0)) / 2) * 2,
+  );
+}
+
+function updateFileIndentGuides(fileContainer: HTMLElement, contents: string): void {
+  const root = fileContainer.shadowRoot ?? fileContainer;
+  const indentColumns = resolveIndentGuideColumns(contents);
+
+  for (const lineElement of root.querySelectorAll<HTMLElement>("[data-line]")) {
+    const lineNumber = Number(lineElement.dataset.line);
+    const columns = indentColumns[lineNumber - 1] ?? 0;
+    if (columns < 2) {
+      lineElement.removeAttribute(FILE_INDENT_GUIDES_ATTRIBUTE);
+      lineElement.style.removeProperty("--blackboard-indent-guide-width");
+      continue;
+    }
+
+    lineElement.setAttribute(FILE_INDENT_GUIDES_ATTRIBUTE, "");
+    lineElement.style.setProperty("--blackboard-indent-guide-width", `${columns}ch`);
+  }
+}
 
 function WorkspaceImagePreview(props: {
   readonly environmentId: EnvironmentId;
@@ -238,6 +330,7 @@ function useFileLineReveal(
       }
 
       const contents = instance.file?.contents;
+      if (contents !== undefined) updateFileIndentGuides(fileContainer, contents);
       const targetLine =
         revealLine === null || contents === undefined ? null : clampFileLine(contents, revealLine);
       updateFileLinkReveal(fileContainer, targetLine);
@@ -310,8 +403,12 @@ function useFileLineReveal(
           window.removeEventListener("keydown", cancelGuard, true);
           if (state.cancelGuard === cancelGuard) state.cancelGuard = null;
         };
-        scrollContainer.addEventListener("wheel", cancelGuard, { passive: true });
-        scrollContainer.addEventListener("touchstart", cancelGuard, { passive: true });
+        scrollContainer.addEventListener("wheel", cancelGuard, {
+          passive: true,
+        });
+        scrollContainer.addEventListener("touchstart", cancelGuard, {
+          passive: true,
+        });
         // Pierre stops gutter pointer events from bubbling. Listen in capture
         // so starting a comment cancels the reveal guard before the row expands.
         scrollContainer.addEventListener("pointerdown", cancelGuard, {
@@ -580,7 +677,9 @@ function EditableFileSurface({
         index === existingIndex
           ? {
               ...annotation,
-              metadata: { entries: [...annotation.metadata.entries, draftEntry] },
+              metadata: {
+                entries: [...annotation.metadata.entries, draftEntry],
+              },
             }
           : annotation,
       );
@@ -660,7 +759,7 @@ function EditableFileSurface({
               overflow: wordWrap ? "wrap" : "scroll",
               theme: resolveDiffThemeName(resolvedTheme),
               themeType: resolvedTheme,
-              unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
+              unsafeCSS: FILE_PREVIEW_UNSAFE_CSS,
               onPostRender: handlePostRender,
             }}
             selectedLines={selectedRange}
@@ -735,15 +834,6 @@ function RenderedMarkdownSurface({
   );
 }
 
-function initialExplorerOpen(): boolean {
-  try {
-    return getLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, Schema.Boolean) ?? true;
-  } catch (error) {
-    console.error(error);
-    return true;
-  }
-}
-
 export default function FilePreviewPanel({
   environmentId,
   cwd,
@@ -751,8 +841,6 @@ export default function FilePreviewPanel({
   relativePath,
   threadRef,
   composerDraftTarget,
-  keybindings,
-  availableEditors,
   revealLine,
   revealRequestId,
   onOpenFile,
@@ -760,7 +848,6 @@ export default function FilePreviewPanel({
 }: FilePreviewPanelProps) {
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
   const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
     reportFailure: false,
@@ -770,7 +857,6 @@ export default function FilePreviewPanel({
   });
   const isImage = relativePath !== null && isWorkspaceImagePreviewPath(relativePath);
   const file = useProjectFileQuery(environmentId, cwd, relativePath, !isImage);
-  const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   // Reading markdown rendered is a preference, not a property of one file. Keeping
   // it on the panel meant a thread switch dropped it and forced source back.
   const [renderMarkdownPreferred, setRenderMarkdownPreferred] = useLocalStorage(
@@ -781,9 +867,10 @@ export default function FilePreviewPanel({
   // Paired with the path on purpose: each file surface counts its reveals from
   // one, so a bare id would let a dismissed reveal on one file swallow the first
   // reveal on the next.
-  const [handledReveal, setHandledReveal] = useState<{ path: string; requestId: number } | null>(
-    null,
-  );
+  const [handledReveal, setHandledReveal] = useState<{
+    path: string;
+    requestId: number;
+  } | null>(null);
   const breadcrumbRef = useRef<HTMLDivElement>(null);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
   // A reveal still wins over the preference: the line only exists in the source.
@@ -807,18 +894,6 @@ export default function FilePreviewPanel({
     );
     currentCrumb?.scrollIntoView({ block: "nearest", inline: "end" });
   }, [relativePath]);
-
-  const toggleExplorer = () => {
-    setExplorerOpen((current) => {
-      const next = !current;
-      try {
-        setLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, next, Schema.Boolean);
-      } catch (error) {
-        console.error(error);
-      }
-      return next;
-    });
-  };
 
   const handleOpenInBrowser = useCallback(() => {
     if (!absolutePath || !environmentHttpBaseUrl) return;
@@ -880,16 +955,6 @@ export default function FilePreviewPanel({
               ))}
             </div>
           </ScrollArea>
-          {absolutePath && environmentId === primaryEnvironmentId ? (
-            <OpenInPicker
-              environmentId={environmentId}
-              keybindings={keybindings}
-              availableEditors={availableEditors}
-              openInCwd={absolutePath}
-              compact
-              enableShortcut={false}
-            />
-          ) : null}
           {isMarkdown ? (
             <Tooltip>
               <TooltipTrigger
@@ -937,25 +1002,6 @@ export default function FilePreviewPanel({
               <TooltipPopup>Open file in preview browser</TooltipPopup>
             </Tooltip>
           ) : null}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Toggle
-                  className="shrink-0"
-                  pressed={explorerOpen}
-                  onPressedChange={toggleExplorer}
-                  aria-label={explorerOpen ? "Hide file explorer" : "Show file explorer"}
-                  variant="ghost"
-                  size="sm"
-                >
-                  <FolderTree className="size-3.5" />
-                </Toggle>
-              }
-            />
-            <TooltipPopup>
-              {explorerOpen ? "Hide file explorer" : "Show file explorer"}
-            </TooltipPopup>
-          </Tooltip>
         </div>
       ) : null}
       {relativePath && file.data?.truncated ? (
@@ -1016,7 +1062,7 @@ export default function FilePreviewPanel({
                     overflow: wordWrap ? "wrap" : "scroll",
                     theme: resolveDiffThemeName(resolvedTheme),
                     themeType: resolvedTheme,
-                    unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
+                    unsafeCSS: FILE_PREVIEW_UNSAFE_CSS,
                     onPostRender: onFilePostRender,
                   }}
                   className="min-h-full"
@@ -1039,15 +1085,8 @@ export default function FilePreviewPanel({
             )
           ) : null}
         </div>
-        {explorerOpen || relativePath === null ? (
-          <aside
-            className={cn(
-              "flex min-h-0 shrink-0 bg-background",
-              relativePath
-                ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
-                : "min-w-0 flex-1",
-            )}
-          >
+        {relativePath === null ? (
+          <aside className="flex min-h-0 min-w-0 flex-1 shrink-0 bg-background">
             <FileBrowserPanel
               key={`${environmentId}:${cwd}`}
               environmentId={environmentId}

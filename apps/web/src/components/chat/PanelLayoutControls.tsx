@@ -1,4 +1,10 @@
-import { Maximize2Icon, Minimize2Icon, PanelBottomIcon, PanelRightIcon } from "lucide-react";
+import {
+  Maximize2Icon,
+  Minimize2Icon,
+  PanelBottomIcon,
+  PanelRightDashedIcon,
+  PanelRightIcon,
+} from "lucide-react";
 import { memo } from "react";
 
 import { Toggle } from "../ui/toggle";
@@ -11,8 +17,11 @@ interface PanelLayoutControlsProps {
   rightPanelAvailable: boolean;
   rightPanelOpen: boolean;
   rightPanelShortcutLabel: string | null;
+  workspaceNavigatorAvailable: boolean;
+  workspaceNavigatorOpen: boolean;
   onToggleTerminal: () => void;
   onToggleRightPanel: () => void;
+  onToggleWorkspaceNavigator: () => void;
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
@@ -22,8 +31,11 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   rightPanelAvailable,
   rightPanelOpen,
   rightPanelShortcutLabel,
+  workspaceNavigatorAvailable,
+  workspaceNavigatorOpen,
   onToggleTerminal,
   onToggleRightPanel,
+  onToggleWorkspaceNavigator,
 }: PanelLayoutControlsProps) {
   return (
     <div
@@ -72,6 +84,28 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
           {rightPanelAvailable
             ? `Toggle right panel${rightPanelShortcutLabel ? ` (${rightPanelShortcutLabel})` : ""}`
             : "Right panel is unavailable"}
+        </TooltipPopup>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Toggle
+              className="shrink-0 [-webkit-app-region:no-drag]"
+              pressed={workspaceNavigatorOpen}
+              onPressedChange={onToggleWorkspaceNavigator}
+              aria-label="Toggle workspace navigator"
+              variant="ghost"
+              size="sm"
+              disabled={!workspaceNavigatorAvailable}
+            >
+              <PanelRightDashedIcon className="size-3.5" />
+            </Toggle>
+          }
+        />
+        <TooltipPopup side="bottom">
+          {workspaceNavigatorAvailable
+            ? "Toggle Files, Changes, and PR sidebar"
+            : "Workspace navigator is unavailable"}
         </TooltipPopup>
       </Tooltip>
     </div>

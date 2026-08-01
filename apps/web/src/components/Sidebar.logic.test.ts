@@ -980,13 +980,19 @@ describe("resolveThreadRowClassName", () => {
   it("uses the active sidebar surface when a thread is both selected and active", () => {
     const className = resolveThreadRowClassName({ isActive: true, isSelected: true });
     expect(className).toContain("bg-sidebar-row-active");
-    expect(className).toContain("text-sidebar-foreground");
+    expect(className).toContain("text-sidebar-foreground/85");
+    expect(className).toContain("font-normal");
+    expect(className).not.toContain("font-medium");
+    expect(className).not.toContain("font-semibold");
     expect(className).not.toContain("bg-primary");
   });
 
   it("uses selected hover colors for selected threads", () => {
     const className = resolveThreadRowClassName({ isActive: false, isSelected: true });
     expect(className).toContain("bg-sidebar-row-selected");
+    expect(className).toContain("text-sidebar-foreground/85");
+    expect(className).toContain("font-normal");
+    expect(className).not.toContain("font-medium");
     expect(className).toContain("hover:bg-sidebar-row-active");
     expect(className).not.toContain("bg-primary");
   });
@@ -994,7 +1000,20 @@ describe("resolveThreadRowClassName", () => {
   it("uses the active sidebar surface for active-only threads", () => {
     const className = resolveThreadRowClassName({ isActive: true, isSelected: false });
     expect(className).toContain("bg-sidebar-row-active");
+    expect(className).toContain("text-sidebar-foreground/85");
+    expect(className).toContain("font-normal");
+    expect(className).not.toContain("font-medium");
+    expect(className).not.toContain("font-semibold");
     expect(className).toContain("hover:bg-sidebar-row-active");
+  });
+
+  it("uses the same softened regular-weight title treatment for inactive threads", () => {
+    const className = resolveThreadRowClassName({ isActive: false, isSelected: false });
+    expect(className).toContain("text-sidebar-foreground/85");
+    expect(className).toContain("font-normal");
+    expect(className).not.toContain("font-medium");
+    expect(className).not.toContain("text-sidebar-muted-foreground");
+    expect(className).not.toContain("font-semibold");
   });
 });
 

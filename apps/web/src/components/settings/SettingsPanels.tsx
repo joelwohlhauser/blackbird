@@ -578,6 +578,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
         ? ["Time format"]
         : []),
+      ...(settings.externalLinkOpenMode !== DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode
+        ? ["Open web links"]
+        : []),
       ...(settings.sidebarThreadPreviewCount !== DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount
         ? ["Visible threads"]
         : []),
@@ -607,6 +610,16 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin
         ? ["New worktrees start from origin"]
         : []),
+      ...(settings.worktreesRoot !== DEFAULT_UNIFIED_SETTINGS.worktreesRoot
+        ? ["Worktree location"]
+        : []),
+      ...(settings.worktreeEnvFileMode !== DEFAULT_UNIFIED_SETTINGS.worktreeEnvFileMode
+        ? ["Worktree environment files"]
+        : []),
+      ...(settings.installWorktreeDependencies !==
+      DEFAULT_UNIFIED_SETTINGS.installWorktreeDependencies
+        ? ["Install worktree dependencies"]
+        : []),
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
         ? ["Add project base directory"]
         : []),
@@ -626,9 +639,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmThreadDelete,
       settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
+      settings.installWorktreeDependencies,
       settings.newWorktreesStartFromOrigin,
+      settings.worktreeEnvFileMode,
+      settings.worktreesRoot,
       settings.diffIgnoreWhitespace,
       settings.environmentIdentificationMode,
+      settings.externalLinkOpenMode,
       settings.glassOpacity,
       settings.enableAssistantStreaming,
       settings.enableProviderUpdateChecks,
@@ -653,6 +670,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     setTheme("system");
     updateSettings({
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
+      externalLinkOpenMode: DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
@@ -668,6 +686,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       providerHealthRefreshInterval: DEFAULT_UNIFIED_SETTINGS.providerHealthRefreshInterval,
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
       newWorktreesStartFromOrigin: DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
+      worktreesRoot: DEFAULT_UNIFIED_SETTINGS.worktreesRoot,
+      worktreeEnvFileMode: DEFAULT_UNIFIED_SETTINGS.worktreeEnvFileMode,
+      installWorktreeDependencies: DEFAULT_UNIFIED_SETTINGS.installWorktreeDependencies,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
@@ -1249,6 +1270,54 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
+          {...searchableSetting("open-web-links")}
+          description="Choose where links from chats and terminals open."
+          resetAction={
+            settings.externalLinkOpenMode !== DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode ? (
+              <SettingResetButton
+                label="web link behavior"
+                onClick={() =>
+                  updateSettings({
+                    externalLinkOpenMode: DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.externalLinkOpenMode}
+              onValueChange={(value) => {
+                if (value === "ask" || value === "preview" || value === "external") {
+                  updateSettings({ externalLinkOpenMode: value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-48" aria-label="Open web links">
+                <SelectValue>
+                  {settings.externalLinkOpenMode === "ask"
+                    ? "Ask every time"
+                    : settings.externalLinkOpenMode === "preview"
+                      ? "Right panel"
+                      : "Default browser"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="ask">
+                  Ask every time
+                </SelectItem>
+                <SelectItem hideIndicator value="preview">
+                  Right panel
+                </SelectItem>
+                <SelectItem hideIndicator value="external">
+                  Default browser
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
           {...searchableSetting("hide-whitespace-changes")}
           description="Set whether the diff panel ignores whitespace-only edits by default."
           resetAction={
@@ -1466,7 +1535,7 @@ export function GeneralSettingsPanel() {
             >
               <SelectTrigger className="w-full sm:w-44" aria-label="Default thread mode">
                 <SelectValue>
-                  {settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
+                  {settings.defaultThreadEnvMode === "worktree" ? "New worktree & branch" : "Local"}
                 </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -1474,7 +1543,7 @@ export function GeneralSettingsPanel() {
                   Local
                 </SelectItem>
                 <SelectItem hideIndicator value="worktree">
-                  New worktree
+                  New worktree & branch
                 </SelectItem>
               </SelectPopup>
             </Select>
@@ -1511,6 +1580,107 @@ export function GeneralSettingsPanel() {
             }
           />
         ) : null}
+
+        <SettingsRow
+          {...searchableSetting("worktree-location")}
+          description="New worktrees use a repo/branch folder layout inside this directory. A leading ~ resolves on the environment host."
+          resetAction={
+            settings.worktreesRoot !== DEFAULT_UNIFIED_SETTINGS.worktreesRoot ? (
+              <SettingResetButton
+                label="worktree location"
+                onClick={() =>
+                  updateSettings({ worktreesRoot: DEFAULT_UNIFIED_SETTINGS.worktreesRoot })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              className="w-full sm:w-72"
+              value={settings.worktreesRoot}
+              onCommit={(next) => updateSettings({ worktreesRoot: next })}
+              placeholder="~/Repositories/.worktrees"
+              spellCheck={false}
+              aria-label="Worktree location"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("worktree-environment-files")}
+          description="Link or copy .env files from the repository into matching locations in each new worktree."
+          resetAction={
+            settings.worktreeEnvFileMode !== DEFAULT_UNIFIED_SETTINGS.worktreeEnvFileMode ? (
+              <SettingResetButton
+                label="worktree environment files"
+                onClick={() =>
+                  updateSettings({
+                    worktreeEnvFileMode: DEFAULT_UNIFIED_SETTINGS.worktreeEnvFileMode,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.worktreeEnvFileMode}
+              onValueChange={(value) => {
+                if (value === "link" || value === "copy" || value === "off") {
+                  updateSettings({ worktreeEnvFileMode: value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-44" aria-label="Worktree environment files">
+                <SelectValue>
+                  {settings.worktreeEnvFileMode === "link"
+                    ? "Link"
+                    : settings.worktreeEnvFileMode === "copy"
+                      ? "Copy"
+                      : "Off"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="link">
+                  Link
+                </SelectItem>
+                <SelectItem hideIndicator value="copy">
+                  Copy
+                </SelectItem>
+                <SelectItem hideIndicator value="off">
+                  Off
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("worktree-dependencies")}
+          description="Run pnpm install in the background after creating a worktree."
+          resetAction={
+            settings.installWorktreeDependencies !==
+            DEFAULT_UNIFIED_SETTINGS.installWorktreeDependencies ? (
+              <SettingResetButton
+                label="install worktree dependencies"
+                onClick={() =>
+                  updateSettings({
+                    installWorktreeDependencies:
+                      DEFAULT_UNIFIED_SETTINGS.installWorktreeDependencies,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.installWorktreeDependencies}
+              onCheckedChange={(checked) =>
+                updateSettings({ installWorktreeDependencies: Boolean(checked) })
+              }
+              aria-label="Install dependencies in new worktrees"
+            />
+          }
+        />
 
         <SettingsRow
           {...searchableSetting("add-project-starts-in")}
@@ -1663,6 +1833,40 @@ export function GeneralSettingsPanel() {
                 }}
               />
             </div>
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Linear">
+        <SettingsRow
+          {...searchableSetting("linear-organization")}
+          description="Organization slug used to open Linear issues from the right panel."
+          resetAction={
+            settings.linearOrganizationSlug !== DEFAULT_UNIFIED_SETTINGS.linearOrganizationSlug ? (
+              <SettingResetButton
+                label="Linear organization"
+                onClick={() =>
+                  updateSettings({
+                    linearOrganizationSlug: DEFAULT_UNIFIED_SETTINGS.linearOrganizationSlug,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <DraftInput
+              className="w-full sm:w-56"
+              value={settings.linearOrganizationSlug}
+              onCommit={(next) => {
+                const organizationSlug = next.trim().toLowerCase();
+                if (organizationSlug.length > 0) {
+                  updateSettings({ linearOrganizationSlug: organizationSlug });
+                }
+              }}
+              placeholder="acme"
+              spellCheck={false}
+              aria-label="Linear organization slug"
+            />
           }
         />
       </SettingsSection>

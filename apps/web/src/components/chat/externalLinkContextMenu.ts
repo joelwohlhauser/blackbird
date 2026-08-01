@@ -1,6 +1,7 @@
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type { ContextMenuItem, ExternalLinkOpenMode } from "@t3tools/contracts";
 
 export type ExternalLinkContextMenuAction = "open-in-preview" | "open-external" | "copy-link";
+type ExternalLinkOpenAction = Exclude<ExternalLinkContextMenuAction, "copy-link">;
 
 export type ExternalLinkContextMenuFailureOperation =
   | "show-link-context-menu"
@@ -20,6 +21,11 @@ const EXTERNAL_LINK_CONTEXT_MENU_ITEMS = [
   { id: "copy-link", label: "Copy Link" },
 ] as const satisfies readonly ContextMenuItem<ExternalLinkContextMenuAction>[];
 
+const EXTERNAL_LINK_OPEN_MENU_ITEMS = [
+  { id: "open-in-preview", label: "Open in right panel" },
+  { id: "open-external", label: "Open in default browser" },
+] as const satisfies readonly ContextMenuItem<ExternalLinkOpenAction>[];
+
 interface ShowExternalLinkContextMenuOptions {
   readonly href: string;
   readonly position: { readonly x: number; readonly y: number };
@@ -36,6 +42,18 @@ interface ShowExternalLinkContextMenuOptions {
   ) => void;
 }
 
+interface OpenExternalWebLinkOptions extends Omit<
+  ShowExternalLinkContextMenuOptions,
+  "copyLink" | "showContextMenu"
+> {
+  readonly mode: ExternalLinkOpenMode;
+  readonly canOpenInPreview: boolean;
+  readonly showContextMenu: (
+    items: readonly ContextMenuItem<ExternalLinkOpenAction>[],
+    position: { readonly x: number; readonly y: number },
+  ) => Promise<ExternalLinkOpenAction | null>;
+}
+
 export function resolveExternalWebLinkHost(href: string | undefined): string | null {
   if (!href) return null;
   try {
@@ -44,6 +62,42 @@ export function resolveExternalWebLinkHost(href: string | undefined): string | n
     return url.hostname || null;
   } catch {
     return null;
+  }
+}
+
+export async function openExternalWebLink({
+  mode,
+  canOpenInPreview,
+  href,
+  position,
+  showContextMenu,
+  openInPreview,
+  openExternal,
+  reportFailure,
+}: OpenExternalWebLinkOptions): Promise<void> {
+  let action: ExternalLinkOpenAction | null;
+
+  if (!canOpenInPreview || mode === "external") {
+    action = "open-external";
+  } else if (mode === "preview") {
+    action = "open-in-preview";
+  } else {
+    try {
+      action = await showContextMenu(EXTERNAL_LINK_OPEN_MENU_ITEMS, position);
+    } catch (cause) {
+      reportFailure("show-link-context-menu", cause);
+      return;
+    }
+  }
+
+  try {
+    if (action === "open-in-preview") {
+      await openInPreview(href);
+    } else if (action === "open-external") {
+      await openExternal(href);
+    }
+  } catch (cause) {
+    if (action) reportFailure(FAILURE_OPERATION_BY_ACTION[action], cause);
   }
 }
 

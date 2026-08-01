@@ -13,7 +13,7 @@ export interface EnvironmentOption {
   isPrimary: boolean;
 }
 
-export const EnvMode = Schema.Literals(["local", "worktree"]);
+export const EnvMode = Schema.Literals(["local", "worktree-existing", "worktree"]);
 export type EnvMode = typeof EnvMode.Type;
 
 const GENERIC_LOCAL_ENVIRONMENT_LABELS = new Set(["local", "local environment"]);
@@ -55,7 +55,53 @@ export function shouldShowEnvironmentIndicator(input: {
 }
 
 export function resolveEnvModeLabel(mode: EnvMode): string {
-  return mode === "worktree" ? "New worktree" : "Current checkout";
+  if (mode === "worktree-existing") return "New worktree";
+  return mode === "worktree" ? "New worktree & branch" : "Current checkout";
+}
+
+export function isNewWorktreeEnvMode(mode: EnvMode): boolean {
+  return mode !== "local";
+}
+
+export function createsNewWorktreeBranch(mode: EnvMode): boolean {
+  return mode === "worktree";
+}
+
+export function validateNewWorktreeBranchName(value: string): string | null {
+  const branchName = value.trim();
+  if (branchName.length === 0) {
+    return "Enter a new branch name before creating the worktree.";
+  }
+  const hasInvalidComponent = branchName
+    .split("/")
+    .some(
+      (component) =>
+        component.length === 0 || component.startsWith(".") || component.endsWith(".lock"),
+    );
+  if (
+    branchName === "@" ||
+    branchName.startsWith("-") ||
+    branchName.endsWith(".") ||
+    branchName.includes("..") ||
+    branchName.includes("@{") ||
+    /[\s\u0000-\u001f\u007f~^:?*[\\]/.test(branchName) ||
+    hasInvalidComponent
+  ) {
+    return "Enter a valid Git branch name.";
+  }
+  return null;
+}
+
+export function worktreeDeletionConfirmationMessage(input: {
+  branch: string | null;
+  path: string;
+  hasUncommittedChanges: boolean;
+}): string | null {
+  if (!input.hasUncommittedChanges) return null;
+  return [
+    `Delete the worktree for ${input.branch ?? input.path}?`,
+    "This worktree has uncommitted changes. Those changes will be permanently discarded.",
+  ].join("\n");
 }
 
 export function resolveCurrentWorkspaceLabel(activeWorktreePath: string | null): string {
@@ -123,7 +169,9 @@ export function resolveEffectiveEnvMode(input: {
     if (activeWorktreePath) {
       return "local";
     }
-    return draftThreadEnvMode === "worktree" ? "worktree" : "local";
+    return draftThreadEnvMode && isNewWorktreeEnvMode(draftThreadEnvMode)
+      ? draftThreadEnvMode
+      : "local";
   }
   return activeWorktreePath ? "worktree" : "local";
 }
@@ -137,8 +185,8 @@ export function resolveDraftEnvModeAfterBranchChange(input: {
   if (nextWorktreePath) {
     return "worktree";
   }
-  if (effectiveEnvMode === "worktree" && !currentWorktreePath) {
-    return "worktree";
+  if (isNewWorktreeEnvMode(effectiveEnvMode) && !currentWorktreePath) {
+    return effectiveEnvMode;
   }
   return "local";
 }
@@ -150,7 +198,7 @@ export function resolveBranchToolbarValue(input: {
   currentGitBranch: string | null;
 }): string | null {
   const { envMode, activeWorktreePath, activeThreadBranch, currentGitBranch } = input;
-  if (envMode === "worktree" && !activeWorktreePath) {
+  if (isNewWorktreeEnvMode(envMode) && !activeWorktreePath) {
     return activeThreadBranch ?? currentGitBranch;
   }
   return currentGitBranch ?? activeThreadBranch;
@@ -173,7 +221,7 @@ export function resolveBranchTriggerLabel(input: {
   if (!resolvedActiveBranch) {
     return "Select ref";
   }
-  if (effectiveEnvMode === "worktree" && !activeWorktreePath) {
+  if (isNewWorktreeEnvMode(effectiveEnvMode) && !activeWorktreePath) {
     const baseRef =
       startFromOrigin && resolvedActiveBranchIsRemote === false
         ? `origin/${resolvedActiveBranch}`

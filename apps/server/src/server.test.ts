@@ -109,6 +109,7 @@ import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsDriverRegistry from "./vcs/VcsDriverRegistry.ts";
 import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
+import * as WorktreeLifecycle from "./git/WorktreeLifecycle.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
@@ -524,6 +525,12 @@ const buildAppUnderTest = (options?: {
       Layer.provideMerge(vcsDriverRegistryLayer),
       Layer.provideMerge(gitVcsDriverLayer),
       Layer.provideMerge(gitManagerLayer),
+      Layer.provide(
+        Layer.mock(WorktreeLifecycle.WorktreeLifecycle)({
+          resolveCreateInput: Effect.succeed,
+          prepareCreatedWorktree: () => Effect.void,
+        }),
+      ),
     );
     const vcsProvisioningLayer = VcsProvisioningService.layer.pipe(
       Layer.provide(vcsDriverRegistryLayer),

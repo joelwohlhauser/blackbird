@@ -6,8 +6,14 @@ import { VcsRepositoryDetectionError } from "@t3tools/contracts";
 
 import * as GitManager from "./GitManager.ts";
 import * as GitWorkflowService from "./GitWorkflowService.ts";
+import * as WorktreeLifecycle from "./WorktreeLifecycle.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
+
+const WorktreeLifecycleTestLayer = Layer.mock(WorktreeLifecycle.WorktreeLifecycle)({
+  resolveCreateInput: Effect.succeed,
+  prepareCreatedWorktree: () => Effect.void,
+});
 
 function makeLayer(input: {
   readonly detect: VcsDriverRegistry.VcsDriverRegistry["Service"]["detect"];
@@ -20,10 +26,58 @@ function makeLayer(input: {
     ),
     Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
     Layer.provide(Layer.mock(GitManager.GitManager)({})),
+    Layer.provide(WorktreeLifecycleTestLayer),
   );
 }
 
 describe("GitWorkflowService", () => {
+  it.effect("applies the shared worktree lifecycle around Git creation", () => {
+    const createWorktree = vi.fn((input) =>
+      Effect.succeed({
+        worktree: {
+          path: input.path ?? "/unexpected",
+          refName: input.newRefName ?? input.refName,
+        },
+      }),
+    );
+    const prepareCreatedWorktree = vi.fn(() => Effect.void);
+    const testLayer = GitWorkflowService.layer.pipe(
+      Layer.provide(
+        Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
+          resolve: () => Effect.succeed({ kind: "git" } as VcsDriverRegistry.VcsDriverHandle),
+        }),
+      ),
+      Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({ createWorktree })),
+      Layer.provide(Layer.mock(GitManager.GitManager)({})),
+      Layer.provide(
+        Layer.mock(WorktreeLifecycle.WorktreeLifecycle)({
+          resolveCreateInput: (input) => Effect.succeed({ ...input, path: "/configured/worktree" }),
+          prepareCreatedWorktree,
+        }),
+      ),
+    );
+
+    return Effect.gen(function* () {
+      const workflow = yield* GitWorkflowService.GitWorkflowService;
+      const result = yield* workflow.createWorktree({
+        cwd: "/repo",
+        refName: "develop",
+        newRefName: "feature/configurable-base",
+        baseRefName: "develop",
+        path: null,
+      });
+
+      expect(createWorktree).toHaveBeenCalledWith(
+        expect.objectContaining({ path: "/configured/worktree", refName: "develop" }),
+      );
+      expect(prepareCreatedWorktree).toHaveBeenCalledWith({
+        projectCwd: "/repo",
+        worktreePath: "/configured/worktree",
+      });
+      expect(result.worktree.refName).toBe("feature/configurable-base");
+    }).pipe(Effect.provide(testLayer));
+  });
+
   it.effect("returns an empty local status when no VCS repository is detected", () =>
     Effect.gen(function* () {
       const workflow = yield* GitWorkflowService.GitWorkflowService;
@@ -100,6 +154,7 @@ describe("GitWorkflowService", () => {
           status,
         }),
       ),
+      Layer.provide(WorktreeLifecycleTestLayer),
     );
 
     return Effect.gen(function* () {

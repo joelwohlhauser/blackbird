@@ -3,7 +3,7 @@ import type { FileDiffMetadata } from "@pierre/diffs/types";
 
 export const DIFF_THEME_NAMES = {
   light: "pierre-light",
-  dark: "pierre-dark",
+  dark: "dark-plus",
 } as const;
 
 export type DiffThemeName = (typeof DIFF_THEME_NAMES)[keyof typeof DIFF_THEME_NAMES];

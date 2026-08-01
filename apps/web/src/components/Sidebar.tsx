@@ -74,8 +74,9 @@ import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { isElectron } from "../env";
 import { useOpenPrLink } from "../lib/openPullRequestLink";
+import { useArchivedThreadSnapshots } from "../lib/archivedThreadsState";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { isMacPlatform } from "../lib/utils";
+import { cn, isMacPlatform } from "../lib/utils";
 import {
   readThreadShell,
   useProject,
@@ -191,7 +192,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { CommandDialogTrigger } from "./ui/command";
 import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
-import { primaryServerKeybindingsAtom } from "../state/server";
+import { primaryServerKeybindingsAtom, primaryServerProvidersAtom } from "../state/server";
 import {
   derivePhysicalProjectKey,
   deriveProjectGroupingOverrideKey,
@@ -205,6 +206,13 @@ import {
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
+import { resolveDefaultProviderModelSelection } from "../providerInstances";
+import {
+  isQuickChatsProject,
+  QUICK_CHATS_PROJECT_ID,
+  QUICK_CHATS_PROJECT_TITLE,
+  QUICK_CHATS_WORKSPACE_ROOT,
+} from "../quickChats";
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -714,7 +722,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
               <TooltipTrigger
                 render={
                   <span
-                    className="min-w-0 flex-1 truncate text-sm"
+                    className="min-w-0 flex-1 truncate text-sm font-normal text-sidebar-foreground/85"
                     data-testid={`thread-title-${thread.id}`}
                   >
                     {thread.title}
@@ -1054,6 +1062,8 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
 
 interface SidebarProjectItemProps {
   project: SidebarProjectSnapshot;
+  hideProjectHeader?: boolean;
+  forceExpanded?: boolean;
   isThreadListExpanded: boolean;
   activeRouteThreadKey: string | null;
   newThreadShortcutLabel: string | null;
@@ -1074,6 +1084,8 @@ interface SidebarProjectItemProps {
 const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjectItemProps) {
   const {
     project,
+    hideProjectHeader = false,
+    forceExpanded = false,
     isThreadListExpanded,
     activeRouteThreadKey,
     newThreadShortcutLabel,
@@ -1164,6 +1176,16 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   });
   const openPrLink = useOpenPrLink();
   const sidebarThreads = useThreadShellsForProjectRefs(project.memberProjectRefs);
+  const archivedEnvironmentIds = useMemo(
+    () => [...new Set(project.memberProjects.map((member) => member.environmentId))],
+    [project.memberProjects],
+  );
+  const {
+    snapshots: archivedThreadSnapshots,
+    error: archivedThreadsError,
+    isLoading: archivedThreadsLoading,
+    refresh: refreshArchivedThreads,
+  } = useArchivedThreadSnapshots(archivedEnvironmentIds);
   const sidebarThreadByKey = useMemo(
     () =>
       new Map(
@@ -1181,9 +1203,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   sidebarThreadByKeyRef.current = sidebarThreadByKey;
   const projectThreads = sidebarThreads;
   const projectPreferenceKeys = useMemo(() => projectExpansionPreferenceKeys(project), [project]);
-  const projectExpanded = useUiStateStore((state) =>
+  const storedProjectExpanded = useUiStateStore((state) =>
     resolveProjectExpanded(state.projectExpandedById, projectPreferenceKeys),
   );
+  const projectExpanded = forceExpanded || storedProjectExpanded;
   const threadLastVisitedAts = useUiStateStore(
     useShallow((state) =>
       projectThreads.map(
@@ -1234,6 +1257,21 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     }
     return counts;
   }, [memberProjectByScopedKey, project.memberProjects, projectThreads]);
+  const memberArchivedThreadCountByPhysicalKey = useMemo(() => {
+    const counts = new Map<string, number>(
+      project.memberProjects.map((member) => [member.physicalProjectKey, 0] as const),
+    );
+    for (const { environmentId: snapshotEnvironmentId, snapshot } of archivedThreadSnapshots) {
+      for (const thread of snapshot.threads) {
+        const member = memberProjectByScopedKey.get(
+          scopedProjectKey(scopeProjectRef(snapshotEnvironmentId, thread.projectId)),
+        );
+        if (!member) continue;
+        counts.set(member.physicalProjectKey, (counts.get(member.physicalProjectKey) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [archivedThreadSnapshots, memberProjectByScopedKey, project.memberProjects]);
 
   const { projectStatus, visibleProjectThreads, orderedProjectThreadKeys } = useMemo(() => {
     const lastVisitedAtByThreadKey = new Map(
@@ -1456,16 +1494,45 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       }
 
       const memberProjectRef = scopeProjectRef(member.environmentId, member.id);
-      const memberThreadCount = memberThreadCountByPhysicalKey.get(member.physicalProjectKey) ?? 0;
+      if (archivedThreadsLoading) {
+        refreshArchivedThreads();
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: "Checking archived chats",
+            description: "Wait a moment, then remove the project again.",
+          }),
+        );
+        return;
+      }
+      if (archivedThreadsError) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Could not check archived chats",
+            description: "The project was not removed. Try again after archived chats load.",
+          }),
+        );
+        return;
+      }
+
+      const memberVisibleThreadCount =
+        memberThreadCountByPhysicalKey.get(member.physicalProjectKey) ?? 0;
+      const memberArchivedThreadCount =
+        memberArchivedThreadCountByPhysicalKey.get(member.physicalProjectKey) ?? 0;
+      const memberThreadCount = memberVisibleThreadCount + memberArchivedThreadCount;
       if (memberThreadCount > 0) {
         const warningToastId = toastManager.add(
           stackedThreadToast({
             type: "warning",
             title: "Project is not empty",
-            description: "Delete all threads in this project before removing it.",
+            description:
+              memberArchivedThreadCount > 0 && memberVisibleThreadCount === 0
+                ? `This project contains ${memberArchivedThreadCount} archived chat${memberArchivedThreadCount === 1 ? "" : "s"}. The folder and its files will not be deleted.`
+                : `Delete its ${memberThreadCount} chat${memberThreadCount === 1 ? "" : "s"} before removing it. The folder and its files will not be deleted.`,
             actionVariant: "destructive",
             actionProps: {
-              children: "Delete anyway",
+              children: "Delete chats & remove",
               onClick: () => {
                 void (async () => {
                   toastManager.close(warningToastId);
@@ -1480,18 +1547,25 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                       thread.environmentId === memberProjectRef.environmentId &&
                       thread.projectId === memberProjectRef.projectId,
                   );
+                  const latestThreadCount = latestProjectThreads.length + memberArchivedThreadCount;
                   const confirmed = await api.dialogs.confirm(
-                    latestProjectThreads.length > 0
+                    latestThreadCount > 0
                       ? [
-                          `Remove project "${member.title}" and delete its ${latestProjectThreads.length} thread${
-                            latestProjectThreads.length === 1 ? "" : "s"
+                          `Remove project "${member.title}" and permanently delete its ${latestThreadCount} chat${
+                            latestThreadCount === 1 ? "" : "s"
                           }?`,
                           `Path: ${member.workspaceRoot}`,
                           ...(member.environmentLabel
                             ? [`Environment: ${member.environmentLabel}`]
                             : []),
-                          "This permanently clears conversation history for those threads.",
+                          ...(memberArchivedThreadCount > 0
+                            ? [
+                                `${memberArchivedThreadCount} archived chat${memberArchivedThreadCount === 1 ? " is" : "s are"} included.`,
+                              ]
+                            : []),
+                          "This permanently clears that Blackboard conversation history.",
                           "This removes only this project entry.",
+                          "The folder and all files inside it will not be deleted.",
                           "This action cannot be undone.",
                         ].join("\n")
                       : [
@@ -1501,6 +1575,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                             ? [`Environment: ${member.environmentLabel}`]
                             : []),
                           "This removes only this project entry.",
+                          "The folder and all files inside it will not be deleted.",
                         ].join("\n"),
                   );
                   if (!confirmed) {
@@ -1549,6 +1624,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         `Path: ${member.workspaceRoot}`,
         ...(member.environmentLabel ? [`Environment: ${member.environmentLabel}`] : []),
         "This removes only this project entry.",
+        "The folder and all files inside it will not be deleted.",
       ].join("\n");
       const confirmed = await api.dialogs.confirm(message);
       if (!confirmed) {
@@ -1573,7 +1649,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         );
       }
     },
-    [memberThreadCountByPhysicalKey, removeProject],
+    [
+      archivedThreadsError,
+      archivedThreadsLoading,
+      memberArchivedThreadCountByPhysicalKey,
+      memberThreadCountByPhysicalKey,
+      refreshArchivedThreads,
+      removeProject,
+    ],
   );
 
   const handleProjectButtonContextMenu = useCallback(
@@ -2215,110 +2298,112 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
   return (
     <>
-      <div className="group/project-header relative">
-        <SidebarMenuButton
-          ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
-          className={`pr-8 group-hover/project-header:bg-sidebar-row-hover group-hover/project-header:text-sidebar-foreground max-sm:pr-14 ${
-            isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : ""
-          }`}
-          {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
-          {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.listeners : {})}
-          onPointerDownCapture={handleProjectButtonPointerDownCapture}
-          onClick={handleProjectButtonClick}
-          onKeyDown={handleProjectButtonKeyDown}
-          onContextMenu={handleProjectButtonContextMenu}
-        >
-          {!projectExpanded && projectStatus ? (
+      {!hideProjectHeader ? (
+        <div className="group/project-header relative">
+          <SidebarMenuButton
+            ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
+            className={`pr-8 group-hover/project-header:bg-sidebar-row-hover group-hover/project-header:text-sidebar-foreground max-sm:pr-14 ${
+              isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : ""
+            }`}
+            {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
+            {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.listeners : {})}
+            onPointerDownCapture={handleProjectButtonPointerDownCapture}
+            onClick={handleProjectButtonClick}
+            onKeyDown={handleProjectButtonKeyDown}
+            onContextMenu={handleProjectButtonContextMenu}
+          >
+            {!projectExpanded && projectStatus ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      aria-label={projectStatus.label}
+                      className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
+                    />
+                  }
+                >
+                  <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
+                    <span
+                      className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
+                        projectStatus.pulse ? "animate-status-pulse" : ""
+                      }`}
+                    />
+                  </span>
+                  <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
+                </TooltipTrigger>
+                <TooltipPopup side="top">{projectStatus.label}</TooltipPopup>
+              </Tooltip>
+            ) : (
+              <ChevronRightIcon
+                className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
+                  projectExpanded ? "rotate-90" : ""
+                }`}
+              />
+            )}
+            <ProjectFavicon environmentId={project.environmentId} cwd={project.workspaceRoot} />
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate text-sm font-medium text-sidebar-foreground/85">
+                {project.displayName}
+              </span>
+              {project.groupedProjectCount > 1 ? (
+                <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                  {project.groupedProjectCount} projects
+                </span>
+              ) : null}
+            </span>
+          </SidebarMenuButton>
+          {/* Environment badge – visible by default, crossfades with the
+            "new thread" button on hover using the same pointer-events +
+            opacity pattern as the thread row archive/timestamp swap. */}
+          {project.environmentPresence === "remote-only" && (
             <Tooltip>
               <TooltipTrigger
                 render={
                   <span
-                    aria-label={projectStatus.label}
-                    className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
+                    aria-label={
+                      project.allRemoteMembersAreDesktopLocal
+                        ? "Local sandbox project"
+                        : "Remote project"
+                    }
+                    className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-7 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
                   />
                 }
               >
-                <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
-                  <span
-                    className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
-                      projectStatus.pulse ? "animate-status-pulse" : ""
-                    }`}
-                  />
-                </span>
-                <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
+                {project.allRemoteMembersAreDesktopLocal ? (
+                  <ContainerIcon className="size-3" />
+                ) : (
+                  <CloudIcon className="size-3" />
+                )}
               </TooltipTrigger>
-              <TooltipPopup side="top">{projectStatus.label}</TooltipPopup>
+              <TooltipPopup side="top">
+                {project.allRemoteMembersAreDesktopLocal
+                  ? `Local sandbox: ${project.remoteEnvironmentLabels.join(", ")}`
+                  : `Remote environment: ${project.remoteEnvironmentLabels.join(", ")}`}
+              </TooltipPopup>
             </Tooltip>
-          ) : (
-            <ChevronRightIcon
-              className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                projectExpanded ? "rotate-90" : ""
-              }`}
-            />
           )}
-          <ProjectFavicon environmentId={project.environmentId} cwd={project.workspaceRoot} />
-          <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-sm font-medium text-sidebar-foreground/90">
-              {project.displayName}
-            </span>
-            {project.groupedProjectCount > 1 ? (
-              <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                {project.groupedProjectCount} projects
-              </span>
-            ) : null}
-          </span>
-        </SidebarMenuButton>
-        {/* Environment badge – visible by default, crossfades with the
-            "new thread" button on hover using the same pointer-events +
-            opacity pattern as the thread row archive/timestamp swap. */}
-        {project.environmentPresence === "remote-only" && (
           <Tooltip>
             <TooltipTrigger
               render={
-                <span
-                  aria-label={
-                    project.allRemoteMembersAreDesktopLocal
-                      ? "Local sandbox project"
-                      : "Remote project"
-                  }
-                  className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-7 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
-                />
+                <div className="pointer-events-none absolute top-[calc(50%+1px)] right-0.5 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
+                  <button
+                    type="button"
+                    aria-label={`Create new thread in ${project.displayName}`}
+                    data-testid="new-thread-button"
+                    className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                    onClick={handleCreateThreadClick}
+                  >
+                    <SquarePenIcon className="size-3.5" />
+                  </button>
+                </div>
               }
-            >
-              {project.allRemoteMembersAreDesktopLocal ? (
-                <ContainerIcon className="size-3" />
-              ) : (
-                <CloudIcon className="size-3" />
-              )}
-            </TooltipTrigger>
+            />
             <TooltipPopup side="top">
-              {project.allRemoteMembersAreDesktopLocal
-                ? `Local sandbox: ${project.remoteEnvironmentLabels.join(", ")}`
-                : `Remote environment: ${project.remoteEnvironmentLabels.join(", ")}`}
+              {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
             </TooltipPopup>
           </Tooltip>
-        )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <div className="pointer-events-none absolute top-[calc(50%+1px)] right-0.5 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
-                <button
-                  type="button"
-                  aria-label={`Create new thread in ${project.displayName}`}
-                  data-testid="new-thread-button"
-                  className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
-                  onClick={handleCreateThreadClick}
-                >
-                  <SquarePenIcon className="size-3.5" />
-                </button>
-              </div>
-            }
-          />
-          <TooltipPopup side="top">
-            {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
-          </TooltipPopup>
-        </Tooltip>
-      </div>
+        </div>
+      ) : null}
 
       <SidebarProjectThreadList
         projectKey={project.projectKey}
@@ -2744,6 +2829,10 @@ interface SidebarProjectsContentProps {
   handleNewThread: ReturnType<typeof useNewThreadHandler>;
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
   deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
+  canCreateQuickChat: boolean;
+  quickChatPending: boolean;
+  handleNewQuickChat: () => void;
+  quickChatsProject: SidebarProjectSnapshot | null;
   sortedProjects: readonly SidebarProjectSnapshot[];
   expandedThreadListsByProject: ReadonlySet<string>;
   activeRouteProjectKey: string | null;
@@ -2784,6 +2873,10 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     handleNewThread,
     archiveThread,
     deleteThread,
+    canCreateQuickChat,
+    quickChatPending,
+    handleNewQuickChat,
+    quickChatsProject,
     sortedProjects,
     expandedThreadListsByProject,
     activeRouteProjectKey,
@@ -2819,6 +2912,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     },
     [updateSettings],
   );
+  const [quickChatsExpanded, setQuickChatsExpanded] = useState(true);
+  const [projectsExpanded, setProjectsExpanded] = useState(true);
 
   return (
     <SidebarContent
@@ -2872,9 +2967,93 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       ) : null}
       <LocalSecondaryStatus />
+      <SidebarGroup aria-label="Quick chats" className="px-2 pt-2 pb-1">
+        <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
+          <button
+            type="button"
+            aria-expanded={quickChatsExpanded}
+            data-testid="sidebar-quick-chats-section-toggle"
+            className="flex min-w-0 cursor-pointer items-center gap-1 text-sidebar-muted-foreground/80 hover:text-sidebar-foreground"
+            onClick={() => setQuickChatsExpanded((expanded) => !expanded)}
+          >
+            <ChevronRightIcon
+              aria-hidden
+              className={cn(
+                "size-3 shrink-0 transition-transform",
+                quickChatsExpanded && "rotate-90",
+              )}
+            />
+            <span className="truncate text-xs font-medium">{QUICK_CHATS_PROJECT_TITLE}</span>
+          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="New quick chat"
+                  aria-busy={quickChatPending || undefined}
+                  disabled={!canCreateQuickChat || quickChatPending}
+                  className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40"
+                  onClick={handleNewQuickChat}
+                />
+              }
+            >
+              <SquarePenIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipPopup side="right">New quick chat in your home folder</TooltipPopup>
+          </Tooltip>
+        </div>
+        {quickChatsExpanded ? (
+          quickChatsProject ? (
+            <SidebarMenu>
+              <SidebarProjectListRow
+                project={quickChatsProject}
+                hideProjectHeader
+                forceExpanded
+                isThreadListExpanded={expandedThreadListsByProject.has(
+                  quickChatsProject.projectKey,
+                )}
+                activeRouteThreadKey={
+                  activeRouteProjectKey === quickChatsProject.projectKey ? routeThreadKey : null
+                }
+                newThreadShortcutLabel={newThreadShortcutLabel}
+                handleNewThread={handleNewThread}
+                archiveThread={archiveThread}
+                deleteThread={deleteThread}
+                threadJumpLabelByKey={threadJumpLabelByKey}
+                attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                expandThreadListForProject={expandThreadListForProject}
+                collapseThreadListForProject={collapseThreadListForProject}
+                dragInProgressRef={dragInProgressRef}
+                suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
+                isManualProjectSorting={false}
+                dragHandleProps={null}
+              />
+            </SidebarMenu>
+          ) : (
+            <div className="px-2 py-1 text-xs text-sidebar-muted-foreground/60">No threads yet</div>
+          )
+        ) : null}
+      </SidebarGroup>
       <SidebarGroup className="px-2 py-2">
         <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
-          <span className="text-xs font-medium text-sidebar-muted-foreground/80">Projects</span>
+          <button
+            type="button"
+            aria-expanded={projectsExpanded}
+            data-testid="sidebar-projects-section-toggle"
+            className="flex min-w-0 cursor-pointer items-center gap-1 text-sidebar-muted-foreground/80 hover:text-sidebar-foreground"
+            onClick={() => setProjectsExpanded((expanded) => !expanded)}
+          >
+            <ChevronRightIcon
+              aria-hidden
+              className={cn(
+                "size-3 shrink-0 transition-transform",
+                projectsExpanded && "rotate-90",
+              )}
+            />
+            <span className="truncate text-xs font-medium">Projects</span>
+          </button>
           <div className="flex items-center gap-1">
             <ProjectSortMenu
               projectSortOrder={projectSortOrder}
@@ -2903,7 +3082,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </div>
         </div>
 
-        {isManualProjectSorting ? (
+        {projectsExpanded && isManualProjectSorting ? (
           <DndContext
             sensors={projectDnDSensors}
             collisionDetection={projectCollisionDetection}
@@ -2948,7 +3127,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               </SortableContext>
             </SidebarMenu>
           </DndContext>
-        ) : (
+        ) : projectsExpanded ? (
           <SidebarMenu ref={attachProjectListAutoAnimateRef}>
             {sortedProjects.map((project) => (
               <SidebarProjectListRow
@@ -2974,9 +3153,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               />
             ))}
           </SidebarMenu>
-        )}
+        ) : null}
 
-        {projectsLength === 0 && (
+        {projectsExpanded && projectsLength === 0 && (
           <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
             No projects yet
           </div>
@@ -3001,6 +3180,9 @@ export default function Sidebar() {
   const sidebarThreadPreviewCount = useClientSettings((s) => s.sidebarThreadPreviewCount);
   const updateSettings = useUpdateClientSettings();
   const handleNewThread = useNewThreadHandler();
+  const createProject = useAtomCommand(projectEnvironment.create, {
+    reportFailure: false,
+  });
   const { archiveThread, deleteThread } = useThreadActions();
   const { isMobile, setOpenMobile } = useSidebar();
   const routeTarget = useParams({
@@ -3021,6 +3203,7 @@ export default function Sidebar() {
       : false,
   );
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const serverProviders = useAtomValue(primaryServerProvidersAtom);
   const openAddProjectCommandPalette = useCallback(
     () => openCommandPalette({ open: "add-project" }),
     [],
@@ -3108,6 +3291,82 @@ export default function Sidebar() {
     () => new Map(sidebarProjects.map((project) => [project.projectKey, project] as const)),
     [sidebarProjects],
   );
+  const quickChatsProject = useMemo(
+    () =>
+      sidebarProjects.find((project) =>
+        project.memberProjects.some((member) => isQuickChatsProject(member)),
+      ) ?? null,
+    [sidebarProjects],
+  );
+  const regularSidebarProjects = useMemo(
+    () =>
+      sidebarProjects.filter(
+        (project) => !project.memberProjects.some((member) => isQuickChatsProject(member)),
+      ),
+    [sidebarProjects],
+  );
+  const [quickChatPending, setQuickChatPending] = useState(false);
+  const handleNewQuickChat = useCallback(async () => {
+    if (primaryEnvironmentId === null || quickChatPending) return;
+    if (isMobile) setOpenMobile(false);
+    setQuickChatPending(true);
+    try {
+      if (quickChatsProject === null) {
+        const createResult = await createProject({
+          environmentId: primaryEnvironmentId,
+          input: {
+            projectId: QUICK_CHATS_PROJECT_ID,
+            title: QUICK_CHATS_PROJECT_TITLE,
+            workspaceRoot: QUICK_CHATS_WORKSPACE_ROOT,
+            defaultModelSelection: resolveDefaultProviderModelSelection(serverProviders, null),
+          },
+        });
+        if (createResult._tag === "Failure") {
+          if (!isAtomCommandInterrupted(createResult)) {
+            const error = squashAtomCommandFailure(createResult);
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Failed to start a quick chat",
+                description: error instanceof Error ? error.message : "An error occurred.",
+              }),
+            );
+          }
+          return;
+        }
+      }
+
+      const navigationResult = await settlePromise(() =>
+        handleNewThread(scopeProjectRef(primaryEnvironmentId, QUICK_CHATS_PROJECT_ID), {
+          branch: null,
+          worktreePath: null,
+          envMode: "local",
+          startFromOrigin: false,
+        }),
+      );
+      if (navigationResult._tag === "Failure") {
+        const error = squashAtomCommandFailure(navigationResult);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to start a quick chat",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    } finally {
+      setQuickChatPending(false);
+    }
+  }, [
+    createProject,
+    handleNewThread,
+    isMobile,
+    primaryEnvironmentId,
+    quickChatPending,
+    quickChatsProject,
+    serverProviders,
+    setOpenMobile,
+  ]);
   const sidebarThreadByKey = useMemo(
     () =>
       new Map(
@@ -3214,8 +3473,10 @@ export default function Sidebar() {
       dragInProgressRef.current = false;
       const { active, over } = event;
       if (!over || active.id === over.id) return;
-      const activeProject = sidebarProjects.find((project) => project.projectKey === active.id);
-      const overProject = sidebarProjects.find((project) => project.projectKey === over.id);
+      const activeProject = regularSidebarProjects.find(
+        (project) => project.projectKey === active.id,
+      );
+      const overProject = regularSidebarProjects.find((project) => project.projectKey === over.id);
       if (!activeProject || !overProject) return;
       const activeMemberKeys = activeProject.memberProjects.map(
         (member) => member.physicalProjectKey,
@@ -3223,7 +3484,7 @@ export default function Sidebar() {
       const overMemberKeys = overProject.memberProjects.map((member) => member.physicalProjectKey);
       reorderProjects(orderedProjects.map(getProjectOrderKey), activeMemberKeys, overMemberKeys);
     },
-    [orderedProjects, sidebarProjectSortOrder, reorderProjects, sidebarProjects],
+    [orderedProjects, regularSidebarProjects, sidebarProjectSortOrder, reorderProjects],
   );
 
   const handleProjectDragStart = useCallback(
@@ -3264,7 +3525,7 @@ export default function Sidebar() {
     [sidebarThreads],
   );
   const sortedProjects = useMemo(() => {
-    const sortableProjects = sidebarProjects.map((project) => ({
+    const sortableProjects = regularSidebarProjects.map((project) => ({
       ...project,
       id: project.projectKey,
     }));
@@ -3291,13 +3552,17 @@ export default function Sidebar() {
     physicalToLogicalKey,
     projectPhysicalKeyByScopedRef,
     sidebarProjectByKey,
-    sidebarProjects,
+    regularSidebarProjects,
     visibleThreads,
   ]);
+  const displayedProjects = useMemo(
+    () => (quickChatsProject ? [quickChatsProject, ...sortedProjects] : sortedProjects),
+    [quickChatsProject, sortedProjects],
+  );
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";
   const visibleSidebarThreadKeys = useMemo(
     () =>
-      sortedProjects.flatMap((project) => {
+      displayedProjects.flatMap((project) => {
         const projectThreads = sortThreads(
           (threadsByProjectKey.get(project.projectKey) ?? []).filter(
             (thread) => thread.archivedAt === null,
@@ -3338,7 +3603,7 @@ export default function Sidebar() {
       expandedThreadListsByProject,
       projectExpandedById,
       routeThreadKey,
-      sortedProjects,
+      displayedProjects,
       threadsByProjectKey,
     ],
   );
@@ -3588,7 +3853,7 @@ export default function Sidebar() {
       {prewarmedSidebarThreadRefs.map((threadRef) => (
         <SidebarThreadDetailPrewarmer key={scopedThreadKey(threadRef)} threadRef={threadRef} />
       ))}
-      <SidebarChromeHeader isElectron={isElectron} />
+      <SidebarChromeHeader isElectron={isElectron} onBrandClick={() => void handleNewQuickChat()} />
 
       {isOnSettings ? (
         <SettingsSidebarNav pathname={pathname} />
@@ -3614,6 +3879,10 @@ export default function Sidebar() {
             handleNewThread={handleNewThread}
             archiveThread={archiveThread}
             deleteThread={deleteThread}
+            canCreateQuickChat={primaryEnvironmentId !== null}
+            quickChatPending={quickChatPending}
+            handleNewQuickChat={() => void handleNewQuickChat()}
+            quickChatsProject={quickChatsProject}
             sortedProjects={sortedProjects}
             expandedThreadListsByProject={expandedThreadListsByProject}
             activeRouteProjectKey={activeRouteProjectKey}
@@ -3628,7 +3897,7 @@ export default function Sidebar() {
             suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
             suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
-            projectsLength={projects.length}
+            projectsLength={regularSidebarProjects.length}
           />
           <SidebarChromeFooter />
         </>

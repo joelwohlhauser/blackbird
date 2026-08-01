@@ -5,17 +5,13 @@ import type {
 import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
-import { RotateCw } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 
-import { Button } from "~/components/ui/button";
 import { InputGroup, InputGroupInput } from "~/components/ui/input-group";
 import { toastManager } from "~/components/ui/toast";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useComposerHandleContext } from "~/composerHandleContext";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { useTheme } from "~/hooks/useTheme";
-import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
 
@@ -47,27 +43,6 @@ const TREE_UNSAFE_CSS = `
 
 function treePath(entry: ProjectEntry): string {
   return entry.kind === "directory" ? `${entry.path}/` : entry.path;
-}
-
-function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Refresh workspace files"
-            onClick={props.onRefresh}
-          />
-        }
-      >
-        <RotateCw className={cn(props.isPending && "animate-spin")} />
-      </TooltipTrigger>
-      <TooltipPopup>{props.isPending ? "Refreshing…" : "Refresh files"}</TooltipPopup>
-    </Tooltip>
-  );
 }
 
 function FileSearchField(props: {
@@ -351,7 +326,6 @@ export default function FileBrowserPanel({
       data-file-browser-panel={`${environmentId}:${cwd}`}
     >
       <div className="surface-subheader gap-1 px-2" data-surface-subheader>
-        <RefreshFilesButton isPending={entriesQuery.isPending} onRefresh={entriesQuery.refresh} />
         <FileSearchField
           name="project-files-search"
           ariaLabel={`Search ${projectName} files`}

@@ -2,13 +2,16 @@ import { EnvironmentId, type VcsRef } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import {
   dedupeRemoteBranchesWithLocalMatches,
+  createsNewWorktreeBranch,
   deriveLocalBranchNameFromRemoteRef,
+  isNewWorktreeEnvMode,
   resolveEnvironmentOptionLabel,
   resolveBranchSelectionTarget,
   resolveCurrentWorkspaceLabel,
   resolveDraftEnvModeAfterBranchChange,
   resolveEffectiveEnvMode,
   resolveEnvModeLabel,
+  worktreeDeletionConfirmationMessage,
   resolveBranchTriggerLabel,
   resolveBranchToolbarPrBranch,
   resolveBranchToolbarValue,
@@ -18,7 +21,35 @@ import {
   resolvePreviousWorktreeSeed,
   shouldIncludeBranchPickerItem,
   shouldShowEnvironmentIndicator,
+  validateNewWorktreeBranchName,
 } from "./BranchToolbar.logic";
+
+describe("worktreeDeletionConfirmationMessage", () => {
+  it("does not request confirmation for a clean worktree", () => {
+    expect(
+      worktreeDeletionConfirmationMessage({
+        branch: "feature/clean",
+        path: "/repo/.worktrees/feature-clean",
+        hasUncommittedChanges: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("warns that uncommitted changes will be discarded", () => {
+    expect(
+      worktreeDeletionConfirmationMessage({
+        branch: "feature/dirty",
+        path: "/repo/.worktrees/feature-dirty",
+        hasUncommittedChanges: true,
+      }),
+    ).toBe(
+      [
+        "Delete the worktree for feature/dirty?",
+        "This worktree has uncommitted changes. Those changes will be permanently discarded.",
+      ].join("\n"),
+    );
+  });
+});
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
 const remoteEnvironmentId = EnvironmentId.make("environment-remote");
@@ -97,6 +128,25 @@ describe("resolvePreviousWorktreeSeed", () => {
   });
 });
 
+describe("validateNewWorktreeBranchName", () => {
+  it("accepts namespaced Git branch names", () => {
+    expect(validateNewWorktreeBranchName("feature/treehouse-flow")).toBeNull();
+  });
+
+  it("requires a branch name", () => {
+    expect(validateNewWorktreeBranchName("   ")).toBe(
+      "Enter a new branch name before creating the worktree.",
+    );
+  });
+
+  it.each(["-feature", "feature..next", "feature name", "feature/.hidden", "feature/x.lock"])(
+    "rejects the invalid Git branch name %s",
+    (branchName) => {
+      expect(validateNewWorktreeBranchName(branchName)).toBe("Enter a valid Git branch name.");
+    },
+  );
+});
+
 describe("resolvePreviousWorktreeLabel", () => {
   it("includes the branch when known", () => {
     expect(resolvePreviousWorktreeLabel({ branch: "t3/fix-thing", worktreePath: "/wt" })).toBe(
@@ -127,6 +177,16 @@ describe("resolveDraftEnvModeAfterBranchChange", () => {
         effectiveEnvMode: "worktree",
       }),
     ).toBe("worktree");
+  });
+
+  it("keeps existing-branch worktree mode when selecting its ref", () => {
+    expect(
+      resolveDraftEnvModeAfterBranchChange({
+        nextWorktreePath: null,
+        currentWorktreePath: null,
+        effectiveEnvMode: "worktree-existing",
+      }),
+    ).toBe("worktree-existing");
   });
 
   it("uses worktree mode when selecting a ref already attached to a worktree", () => {
@@ -441,12 +501,31 @@ describe("resolveEffectiveEnvMode", () => {
       }),
     ).toBe("worktree");
   });
+
+  it("keeps explicit existing-branch worktree mode for draft threads without a path", () => {
+    expect(
+      resolveEffectiveEnvMode({
+        activeWorktreePath: null,
+        hasServerThread: false,
+        draftThreadEnvMode: "worktree-existing",
+      }),
+    ).toBe("worktree-existing");
+  });
 });
 
 describe("resolveEnvModeLabel", () => {
   it("uses explicit workspace labels", () => {
     expect(resolveEnvModeLabel("local")).toBe("Current checkout");
-    expect(resolveEnvModeLabel("worktree")).toBe("New worktree");
+    expect(resolveEnvModeLabel("worktree-existing")).toBe("New worktree");
+    expect(resolveEnvModeLabel("worktree")).toBe("New worktree & branch");
+  });
+
+  it("distinguishes worktree creation from new branch creation", () => {
+    expect(isNewWorktreeEnvMode("local")).toBe(false);
+    expect(isNewWorktreeEnvMode("worktree-existing")).toBe(true);
+    expect(isNewWorktreeEnvMode("worktree")).toBe(true);
+    expect(createsNewWorktreeBranch("worktree-existing")).toBe(false);
+    expect(createsNewWorktreeBranch("worktree")).toBe(true);
   });
 });
 

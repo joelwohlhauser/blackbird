@@ -33,13 +33,15 @@ export function DiffPanelShell(props: {
           : "w-full",
       )}
     >
-      {shouldUseDragRegion ? (
-        <div className={getDiffPanelHeaderRowClassName(props.mode)}>{props.header}</div>
-      ) : (
-        <div className={getDiffPanelHeaderRowClassName(props.mode)} data-surface-subheader>
-          {props.header}
-        </div>
-      )}
+      {props.header !== null && props.header !== undefined ? (
+        shouldUseDragRegion ? (
+          <div className={getDiffPanelHeaderRowClassName(props.mode)}>{props.header}</div>
+        ) : (
+          <div className={getDiffPanelHeaderRowClassName(props.mode)} data-surface-subheader>
+            {props.header}
+          </div>
+        )
+      ) : null}
       {props.children}
     </div>
   );

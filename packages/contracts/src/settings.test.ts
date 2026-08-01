@@ -67,6 +67,35 @@ describe("ClientSettings environment identification", () => {
   });
 });
 
+describe("ClientSettings external links", () => {
+  it("asks where to open web links by default", () => {
+    expect(decodeClientSettings({}).externalLinkOpenMode).toBe("ask");
+  });
+
+  it.each(["ask", "preview", "external"] as const)("accepts the %s mode", (mode) => {
+    expect(decodeClientSettingsPatch({ externalLinkOpenMode: mode }).externalLinkOpenMode).toBe(
+      mode,
+    );
+  });
+
+  it("rejects unsupported link modes", () => {
+    expect(() => decodeClientSettingsPatch({ externalLinkOpenMode: "new-tab" })).toThrow();
+  });
+});
+
+describe("ClientSettings Linear integration", () => {
+  it("defaults the organization slug to acme", () => {
+    expect(decodeClientSettings({}).linearOrganizationSlug).toBe("acme");
+  });
+
+  it("trims organization slug updates", () => {
+    expect(
+      decodeClientSettingsPatch({ linearOrganizationSlug: "  another-workspace  " })
+        .linearOrganizationSlug,
+    ).toBe("another-workspace");
+  });
+});
+
 describe("ClientSettings sidebar v2", () => {
   it("defaults the beta off with a three-day auto-settle threshold", () => {
     const settings = decodeClientSettings({});
@@ -168,14 +197,29 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
 });
 
 describe("ServerSettings worktree defaults", () => {
-  it("defaults start-from-origin on for legacy configs", () => {
-    expect(decodeServerSettings({}).newWorktreesStartFromOrigin).toBe(true);
+  it("defaults Treehouse-style worktree behavior for legacy configs", () => {
+    expect(decodeServerSettings({})).toMatchObject({
+      newWorktreesStartFromOrigin: true,
+      worktreesRoot: "~/Repositories/.worktrees",
+      worktreeEnvFileMode: "link",
+      installWorktreeDependencies: true,
+    });
   });
 
-  it("accepts start-from-origin updates", () => {
+  it("accepts worktree behavior updates", () => {
     expect(
-      decodeServerSettingsPatch({ newWorktreesStartFromOrigin: false }).newWorktreesStartFromOrigin,
-    ).toBe(false);
+      decodeServerSettingsPatch({
+        newWorktreesStartFromOrigin: false,
+        worktreesRoot: "  /tmp/worktrees  ",
+        worktreeEnvFileMode: "copy",
+        installWorktreeDependencies: false,
+      }),
+    ).toMatchObject({
+      newWorktreesStartFromOrigin: false,
+      worktreesRoot: "/tmp/worktrees",
+      worktreeEnvFileMode: "copy",
+      installWorktreeDependencies: false,
+    });
   });
 });
 

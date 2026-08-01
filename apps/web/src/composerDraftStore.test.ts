@@ -1050,6 +1050,44 @@ describe("composerDraftStore project draft thread mapping", () => {
     expect(useComposerDraftStore.getState().getDraftThread(draftId)?.startFromOrigin).toBe(false);
   });
 
+  it("stores the existing-branch worktree mode with the draft thread", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      branch: "origin/feature/existing",
+      envMode: "worktree-existing",
+      startFromOrigin: true,
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)).toMatchObject({
+      branch: "origin/feature/existing",
+      envMode: "worktree-existing",
+      startFromOrigin: true,
+    });
+  });
+
+  it("stores the new worktree branch name separately from its base branch", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      branch: "main",
+      newBranchName: "feature/treehouse-flow",
+      envMode: "worktree",
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)).toMatchObject({
+      branch: "main",
+      newBranchName: "feature/treehouse-flow",
+    });
+
+    store.setDraftThreadContext(draftId, { newBranchName: "fix/explicit-name" });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)).toMatchObject({
+      branch: "main",
+      newBranchName: "fix/explicit-name",
+    });
+  });
+
   it("preserves existing branch and worktree when setProjectDraftThreadId receives undefined", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, {

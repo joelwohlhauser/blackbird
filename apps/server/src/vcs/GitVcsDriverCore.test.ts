@@ -74,7 +74,9 @@ const writeTextFile = (
     const fileSystem = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;
     const filePath = pathService.join(cwd, relativePath);
-    yield* fileSystem.makeDirectory(pathService.dirname(filePath), { recursive: true });
+    yield* fileSystem.makeDirectory(pathService.dirname(filePath), {
+      recursive: true,
+    });
     yield* fileSystem.writeFileString(filePath, contents);
   });
 
@@ -115,7 +117,10 @@ const initRepoWithCommit = (
   });
 
 it.effect("uses stable diagnostics for every parsed non-repository command", () => {
-  const commands: Array<{ readonly args: ReadonlyArray<string>; readonly lcAll?: string }> = [];
+  const commands: Array<{
+    readonly args: ReadonlyArray<string>;
+    readonly lcAll?: string;
+  }> = [];
   const spawner = ChildProcessSpawner.make((command) =>
     Effect.sync(() => {
       if (!ChildProcess.isStandardCommand(command)) {
@@ -803,6 +808,83 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         );
       }),
     );
+
+    it.effect("returns full-file worktree and branch diffs for a selected path", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* writeTextFile(cwd, "selected.ts", "first\nsecond\nthird\n");
+        yield* writeTextFile(cwd, "other.ts", "other\n");
+        yield* git(cwd, ["add", "selected.ts", "other.ts"]);
+        yield* git(cwd, ["commit", "-m", "add fixtures"]);
+        yield* git(cwd, ["checkout", "-b", "feature/selected-diff"]);
+        yield* writeTextFile(cwd, "selected.ts", "first\nbranch change\nthird\n");
+        yield* writeTextFile(cwd, "other.ts", "branch other\n");
+        yield* git(cwd, ["add", "selected.ts", "other.ts"]);
+        yield* git(cwd, ["commit", "-m", "branch changes"]);
+        yield* writeTextFile(cwd, "selected.ts", "first\nworking change\nthird\n");
+        yield* writeTextFile(cwd, "other.ts", "working other\n");
+
+        const preview = yield* driver.getReviewDiffPreview({
+          cwd,
+          baseRef: initialBranch,
+          filePath: "selected.ts",
+        });
+        const workingTree = preview.sources.find((source) => source.kind === "working-tree");
+        const branchRange = preview.sources.find((source) => source.kind === "branch-range");
+
+        assert.include(workingTree?.diff ?? "", "working change");
+        assert.include(workingTree?.diff ?? "", "first");
+        assert.notInclude(workingTree?.diff ?? "", "other.ts");
+        assert.include(branchRange?.diff ?? "", "branch change");
+        assert.include(branchRange?.diff ?? "", "first");
+        assert.notInclude(branchRange?.diff ?? "", "other.ts");
+      }),
+    );
+
+    it.effect("returns branch diffs for a detached worktree when a base ref is provided", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* git(cwd, ["checkout", "-b", "feature/detached-review"]);
+        yield* writeTextFile(cwd, "detached.ts", "export const detached = true;\n");
+        yield* git(cwd, ["add", "detached.ts"]);
+        yield* git(cwd, ["commit", "-m", "add detached review fixture"]);
+        yield* git(cwd, ["checkout", "--detach", "HEAD"]);
+
+        const preview = yield* driver.getReviewDiffPreview({
+          cwd,
+          baseRef: initialBranch,
+        });
+        const branchRange = preview.sources.find((source) => source.kind === "branch-range");
+
+        assert.strictEqual(branchRange?.headRef, "HEAD");
+        assert.include(branchRange?.diff ?? "", "detached.ts");
+        assert.include(branchRange?.diff ?? "", "export const detached = true;");
+      }),
+    );
+
+    it.effect("returns a full-file diff for a selected untracked path", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* writeTextFile(cwd, "selected.txt", "first\nsecond\nthird\n");
+        yield* writeTextFile(cwd, "other.txt", "other\n");
+
+        const preview = yield* driver.getReviewDiffPreview({
+          cwd,
+          filePath: "selected.txt",
+        });
+        const workingTree = preview.sources.find((source) => source.kind === "working-tree");
+
+        assert.include(workingTree?.diff ?? "", "selected.txt");
+        assert.include(workingTree?.diff ?? "", "first");
+        assert.notInclude(workingTree?.diff ?? "", "other.txt");
+      }),
+    );
   });
 
   describe("repository status", () => {
@@ -1107,7 +1189,10 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
           false,
         );
 
-        const complete = yield* driver.listRefs({ cwd, includeMatchingRemoteRefs: true });
+        const complete = yield* driver.listRefs({
+          cwd,
+          includeMatchingRemoteRefs: true,
+        });
         assert.equal(
           complete.refs.some((ref) => ref.name === initialBranch),
           true,
@@ -1156,7 +1241,10 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         const driver = yield* GitVcsDriver.GitVcsDriver;
 
         yield* driver.createRef({ cwd, refName: "feature/original" });
-        const switchRef = yield* driver.switchRef({ cwd, refName: "feature/original" });
+        const switchRef = yield* driver.switchRef({
+          cwd,
+          refName: "feature/original",
+        });
         assert.equal(switchRef.refName, "feature/original");
 
         const renamed = yield* driver.renameBranch({
@@ -1349,6 +1437,62 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
   });
 
   describe("remote operations", () => {
+    it.effect("creates a tracking worktree for a remote-only branch", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const remote = yield* makeTmpDir("git-remote-");
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        yield* git(remote, ["init", "--bare"]);
+        yield* git(cwd, ["remote", "add", "origin", remote]);
+        yield* git(cwd, ["push", "-u", "origin", initialBranch]);
+        yield* git(cwd, ["checkout", "-b", "feature/existing-remote"]);
+        yield* writeTextFile(cwd, "remote-branch.txt", "remote branch\n");
+        yield* git(cwd, ["add", "remote-branch.txt"]);
+        yield* git(cwd, ["commit", "-m", "remote branch"]);
+        yield* git(cwd, ["push", "origin", "feature/existing-remote"]);
+        yield* git(cwd, ["checkout", initialBranch]);
+        yield* git(cwd, ["branch", "-D", "feature/existing-remote"]);
+
+        const pathService = yield* Path.Path;
+        const remoteHead = yield* git(cwd, ["rev-parse", "origin/feature/existing-remote"]);
+        const detachedWorktreePath = pathService.join(
+          yield* makeTmpDir("git-fetched-existing-worktrees-"),
+          "feature-existing-remote",
+        );
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        const detached = yield* driver.createWorktree({
+          cwd,
+          path: detachedWorktreePath,
+          refName: remoteHead,
+          baseRefName: "origin/feature/existing-remote",
+        });
+
+        assert.equal(detached.worktree.refName, "origin/feature/existing-remote");
+        assert.equal(yield* git(detachedWorktreePath, ["branch", "--show-current"]), "");
+        assert.equal(yield* git(detachedWorktreePath, ["rev-parse", "HEAD"]), remoteHead);
+
+        const worktreePath = pathService.join(
+          yield* makeTmpDir("git-existing-remote-worktrees-"),
+          "feature-existing-remote",
+        );
+        const created = yield* driver.createWorktree({
+          cwd,
+          path: worktreePath,
+          refName: "origin/feature/existing-remote",
+        });
+
+        assert.equal(created.worktree.refName, "feature/existing-remote");
+        assert.equal(
+          yield* git(worktreePath, ["branch", "--show-current"]),
+          "feature/existing-remote",
+        );
+        assert.equal(
+          yield* git(worktreePath, ["rev-parse", "--abbrev-ref", "@{upstream}"]),
+          "origin/feature/existing-remote",
+        );
+      }),
+    );
+
     it.effect("creates a worktree from the latest fetched remote commit", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
@@ -1510,7 +1654,9 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         yield* git(cwd, ["remote", "add", "origin", originRemote]);
         yield* git(cwd, ["remote", "add", "origin-1", publishRemote]);
 
-        const pushed = yield* driver.pushCurrentBranch(cwd, null, { remoteName: "origin-1" });
+        const pushed = yield* driver.pushCurrentBranch(cwd, null, {
+          remoteName: "origin-1",
+        });
 
         assert.deepInclude(pushed, {
           status: "pushed",

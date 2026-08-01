@@ -7,7 +7,12 @@ import { selectThreadDiffPanelSelection, useDiffPanelStore } from "./diffPanelSt
 const THREAD_REF = scopeThreadRef(EnvironmentId.make("environment-1"), ThreadId.make("thread-1"));
 
 describe("diffPanelStore", () => {
-  beforeEach(() => useDiffPanelStore.setState({ byThreadKey: {}, branchBaseRefByThreadKey: {} }));
+  beforeEach(() =>
+    useDiffPanelStore.setState({
+      byThreadKey: {},
+      branchBaseRefByThreadKey: {},
+    }),
+  );
 
   it("defaults each thread to branch changes when the working tree is clean", () => {
     expect(
@@ -51,7 +56,40 @@ describe("diffPanelStore", () => {
 
     expect(
       selectThreadDiffPanelSelection(useDiffPanelStore.getState().byThreadKey, THREAD_REF),
-    ).toEqual({ kind: "turn", turnId, filePath: "src/app.ts", revealRequestId: 2 });
+    ).toEqual({
+      kind: "turn",
+      turnId,
+      filePath: "src/app.ts",
+      revealRequestId: 2,
+    });
+  });
+
+  it("opens a working-tree file and increments repeat reveal requests", () => {
+    useDiffPanelStore.getState().selectGitFile(THREAD_REF, "unstaged", " src/app.ts ");
+    useDiffPanelStore.getState().selectGitFile(THREAD_REF, "unstaged", "src/app.ts");
+
+    expect(
+      selectThreadDiffPanelSelection(useDiffPanelStore.getState().byThreadKey, THREAD_REF),
+    ).toEqual({
+      kind: "unstaged",
+      filePath: "src/app.ts",
+      revealRequestId: 2,
+    });
+  });
+
+  it("opens a branch file against the requested pull-request base", () => {
+    useDiffPanelStore
+      .getState()
+      .selectGitFile(THREAD_REF, "branch", "src/app.ts", " origin/develop ");
+
+    expect(
+      selectThreadDiffPanelSelection(useDiffPanelStore.getState().byThreadKey, THREAD_REF),
+    ).toEqual({
+      kind: "branch",
+      baseRef: "origin/develop",
+      filePath: "src/app.ts",
+      revealRequestId: 1,
+    });
   });
 
   it("restores the selected branch base after visiting another scope", () => {

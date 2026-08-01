@@ -6,9 +6,19 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { resolveStorage } from "./lib/storage";
 
 export type DiffPanelSelection =
-  | { kind: "branch"; baseRef: string | null }
-  | { kind: "unstaged" }
-  | { kind: "turn"; turnId: TurnId; filePath: string | null; revealRequestId: number };
+  | {
+      kind: "branch";
+      baseRef: string | null;
+      filePath?: string | null;
+      revealRequestId?: number;
+    }
+  | { kind: "unstaged"; filePath?: string | null; revealRequestId?: number }
+  | {
+      kind: "turn";
+      turnId: TurnId;
+      filePath: string | null;
+      revealRequestId: number;
+    };
 
 const DEFAULT_SELECTION: DiffPanelSelection = { kind: "branch", baseRef: null };
 const DEFAULT_WORKING_TREE_SELECTION: DiffPanelSelection = { kind: "unstaged" };
@@ -17,6 +27,12 @@ interface DiffPanelStoreState {
   byThreadKey: Record<string, DiffPanelSelection>;
   branchBaseRefByThreadKey: Record<string, string | null>;
   selectGitScope: (ref: ScopedThreadRef, scope: "branch" | "unstaged") => void;
+  selectGitFile: (
+    ref: ScopedThreadRef,
+    scope: "branch" | "unstaged",
+    filePath: string,
+    baseRef?: string | null,
+  ) => void;
   selectBranchBaseRef: (ref: ScopedThreadRef, baseRef: string | null) => void;
   selectTurn: (ref: ScopedThreadRef, turnId: TurnId, filePath?: string) => void;
   reconcileTurnSelection: (ref: ScopedThreadRef, availableTurnIds: ReadonlyArray<TurnId>) => void;
@@ -51,7 +67,45 @@ export const useDiffPanelStore = create<DiffPanelStoreState>()(
             },
             branchBaseRefByThreadKey:
               previous?.kind === "branch"
-                ? { ...state.branchBaseRefByThreadKey, [threadKey]: previous.baseRef }
+                ? {
+                    ...state.branchBaseRefByThreadKey,
+                    [threadKey]: previous.baseRef,
+                  }
+                : state.branchBaseRefByThreadKey,
+          };
+        }),
+      selectGitFile: (ref, scope, filePath, baseRef) =>
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          const previous = state.byThreadKey[threadKey];
+          const previousBaseRef =
+            previous?.kind === "branch"
+              ? previous.baseRef
+              : (state.branchBaseRefByThreadKey[threadKey] ?? null);
+          const selectedBaseRef =
+            scope === "branch" && baseRef !== undefined
+              ? normalizeBaseRef(baseRef)
+              : previousBaseRef;
+          const selection = {
+            kind: scope,
+            filePath: filePath.trim() || null,
+            revealRequestId: (previous?.revealRequestId ?? 0) + 1,
+          } as const;
+
+          return {
+            byThreadKey: {
+              ...state.byThreadKey,
+              [threadKey]:
+                scope === "branch"
+                  ? { ...selection, kind: "branch", baseRef: selectedBaseRef }
+                  : { ...selection, kind: "unstaged" },
+            },
+            branchBaseRefByThreadKey:
+              scope === "branch"
+                ? {
+                    ...state.branchBaseRefByThreadKey,
+                    [threadKey]: selectedBaseRef,
+                  }
                 : state.branchBaseRefByThreadKey,
           };
         }),

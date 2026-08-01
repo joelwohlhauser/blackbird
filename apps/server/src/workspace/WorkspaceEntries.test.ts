@@ -121,6 +121,26 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceEntries", (it) => {
         expect(result.truncated).toBe(false);
       }),
     );
+
+    it.effect("includes root dotenv files that are excluded by gitignore", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTempDir({ prefix: "t3code-workspace-dotenv-", git: true });
+        yield* writeTextFile(cwd, ".gitignore", ".env\n.env.*\nignored.txt\nnode_modules/\n");
+        yield* writeTextFile(cwd, ".env", "SECRET=value");
+        yield* writeTextFile(cwd, ".env.local", "LOCAL_SECRET=value");
+        yield* writeTextFile(cwd, "ignored.txt", "ignore me");
+        yield* writeTextFile(cwd, "node_modules/pkg/index.js", "export {};");
+
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const result = yield* workspaceEntries.list({ cwd });
+        const paths = result.entries.map((entry) => entry.path);
+
+        expect(paths).toContain(".env");
+        expect(paths).toContain(".env.local");
+        expect(paths).not.toContain("ignored.txt");
+        expect(paths.some((entryPath) => entryPath.startsWith("node_modules"))).toBe(false);
+      }),
+    );
   });
 
   describe("search", () => {
