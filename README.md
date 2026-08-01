@@ -1,4 +1,16 @@
-# T3 Code
+# Blackboard
+
+Blackboard is a private, personal IDE built on top of [T3 Code](https://github.com/pingdotgg/t3code). The `upstream` Git remote tracks T3 Code, while `origin` tracks this Blackboard repository.
+
+To bring in future T3 Code updates:
+
+```bash
+git fetch upstream
+git merge upstream/main
+git push origin main
+```
+
+## About the upstream project
 
 T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
 
