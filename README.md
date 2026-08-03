@@ -9,5 +9,3 @@ git fetch upstream
 git merge upstream/main
 git push origin main
 ```
-
-## "Wait, what are you selling me?"
