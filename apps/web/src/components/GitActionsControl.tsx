@@ -1704,7 +1704,7 @@ export default function GitActionsControl({
                   <Button
                     aria-disabled="true"
                     className={cn(
-                      "cursor-not-allowed rounded-e-none border-e-0 opacity-64 before:rounded-e-none",
+                      "cursor-not-allowed rounded-e-none border-e-0 ps-[8.5px] opacity-64 before:rounded-e-none",
                       placement === "changes" && "flex-1",
                     )}
                     size="xs"
@@ -1732,7 +1732,7 @@ export default function GitActionsControl({
             </Popover>
           ) : (
             <Button
-              className={cn(placement === "changes" && "flex-1")}
+              className={cn("ps-[8.5px]", placement === "changes" && "flex-1")}
               variant={repositoryButtonVariant}
               size="xs"
               disabled={isGitActionRunning || quickAction.disabled}
