@@ -1273,39 +1273,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     return counts;
   }, [archivedThreadSnapshots, memberProjectByScopedKey, project.memberProjects]);
 
-  const { projectStatus, visibleProjectThreads, orderedProjectThreadKeys } = useMemo(() => {
-    const lastVisitedAtByThreadKey = new Map(
-      projectThreads.map((thread, index) => [
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        threadLastVisitedAts[index] ?? null,
-      ]),
-    );
-    const resolveProjectThreadStatus = (thread: SidebarThreadSummary) => {
-      const lastVisitedAt = lastVisitedAtByThreadKey.get(
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      );
-      return resolveThreadStatusPill({
-        thread: {
-          ...thread,
-          ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
-        },
-      });
-    };
+  const { visibleProjectThreads, orderedProjectThreadKeys } = useMemo(() => {
     const visibleProjectThreads = sortThreads(
       projectThreads.filter((thread) => thread.archivedAt === null),
       threadSortOrder,
-    );
-    const projectStatus = resolveProjectStatusIndicator(
-      visibleProjectThreads.map((thread) => resolveProjectThreadStatus(thread)),
     );
     return {
       orderedProjectThreadKeys: visibleProjectThreads.map((thread) =>
         scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
       ),
-      projectStatus,
       visibleProjectThreads,
     };
-  }, [projectThreads, threadLastVisitedAts, threadSortOrder]);
+  }, [projectThreads, threadSortOrder]);
   const pinnedCollapsedThread = useMemo(() => {
     const activeThreadKey = activeRouteThreadKey ?? undefined;
     if (!activeThreadKey || projectExpanded) {
@@ -1563,7 +1542,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                                 `${memberArchivedThreadCount} archived chat${memberArchivedThreadCount === 1 ? " is" : "s are"} included.`,
                               ]
                             : []),
-                          "This permanently clears that Blackboard conversation history.",
+                          "This permanently clears that Blackbird conversation history.",
                           "This removes only this project entry.",
                           "The folder and all files inside it will not be deleted.",
                           "This action cannot be undone.",
@@ -2312,34 +2291,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             onKeyDown={handleProjectButtonKeyDown}
             onContextMenu={handleProjectButtonContextMenu}
           >
-            {!projectExpanded && projectStatus ? (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span
-                      aria-label={projectStatus.label}
-                      className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
-                    />
-                  }
-                >
-                  <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
-                    <span
-                      className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
-                        projectStatus.pulse ? "animate-status-pulse" : ""
-                      }`}
-                    />
-                  </span>
-                  <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
-                </TooltipTrigger>
-                <TooltipPopup side="top">{projectStatus.label}</TooltipPopup>
-              </Tooltip>
-            ) : (
-              <ChevronRightIcon
-                className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                  projectExpanded ? "rotate-90" : ""
-                }`}
-              />
-            )}
             <ProjectFavicon environmentId={project.environmentId} cwd={project.workspaceRoot} />
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <span className="truncate text-sm font-medium text-sidebar-foreground/85">
@@ -3298,6 +3249,13 @@ export default function Sidebar() {
       ) ?? null,
     [sidebarProjects],
   );
+  const quickChatsProjectId = useMemo(
+    () =>
+      quickChatsProject?.memberProjects.find(
+        (member) => member.environmentId === primaryEnvironmentId && isQuickChatsProject(member),
+      )?.id ?? null,
+    [primaryEnvironmentId, quickChatsProject],
+  );
   const regularSidebarProjects = useMemo(
     () =>
       sidebarProjects.filter(
@@ -3311,7 +3269,7 @@ export default function Sidebar() {
     if (isMobile) setOpenMobile(false);
     setQuickChatPending(true);
     try {
-      if (quickChatsProject === null) {
+      if (quickChatsProjectId === null) {
         const createResult = await createProject({
           environmentId: primaryEnvironmentId,
           input: {
@@ -3337,12 +3295,15 @@ export default function Sidebar() {
       }
 
       const navigationResult = await settlePromise(() =>
-        handleNewThread(scopeProjectRef(primaryEnvironmentId, QUICK_CHATS_PROJECT_ID), {
-          branch: null,
-          worktreePath: null,
-          envMode: "local",
-          startFromOrigin: false,
-        }),
+        handleNewThread(
+          scopeProjectRef(primaryEnvironmentId, quickChatsProjectId ?? QUICK_CHATS_PROJECT_ID),
+          {
+            branch: null,
+            worktreePath: null,
+            envMode: "local",
+            startFromOrigin: false,
+          },
+        ),
       );
       if (navigationResult._tag === "Failure") {
         const error = squashAtomCommandFailure(navigationResult);
@@ -3363,7 +3324,7 @@ export default function Sidebar() {
     isMobile,
     primaryEnvironmentId,
     quickChatPending,
-    quickChatsProject,
+    quickChatsProjectId,
     serverProviders,
     setOpenMobile,
   ]);

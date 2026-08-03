@@ -5,11 +5,13 @@ import {
   createsNewWorktreeBranch,
   deriveLocalBranchNameFromRemoteRef,
   isNewWorktreeEnvMode,
+  reusesExistingWorktree,
   resolveEnvironmentOptionLabel,
   resolveBranchSelectionTarget,
   resolveCurrentWorkspaceLabel,
   resolveDraftEnvModeAfterBranchChange,
   resolveEffectiveEnvMode,
+  resolveExistingWorktreeOptions,
   resolveEnvModeLabel,
   worktreeDeletionConfirmationMessage,
   resolveBranchTriggerLabel,
@@ -197,6 +199,63 @@ describe("resolveDraftEnvModeAfterBranchChange", () => {
         effectiveEnvMode: "local",
       }),
     ).toBe("worktree");
+  });
+
+  it("preserves existing-worktree mode when its worktree is selected", () => {
+    expect(
+      resolveDraftEnvModeAfterBranchChange({
+        nextWorktreePath: "/repo/.worktrees/feature-a",
+        currentWorktreePath: null,
+        effectiveEnvMode: "worktree-reuse",
+      }),
+    ).toBe("worktree-reuse");
+  });
+});
+
+describe("resolveExistingWorktreeOptions", () => {
+  it("lists linked worktrees while excluding the project checkout and remote refs", () => {
+    const refs: VcsRef[] = [
+      {
+        name: "main",
+        current: true,
+        isDefault: true,
+        worktreePath: "/repo",
+      },
+      {
+        name: "feature/beta",
+        current: false,
+        isDefault: false,
+        worktreePath: "/repo/.worktrees/beta",
+      },
+      {
+        name: "feature/alpha",
+        current: false,
+        isDefault: false,
+        worktreePath: "/repo/.worktrees/alpha",
+      },
+      {
+        name: "origin/feature/alpha",
+        current: false,
+        isDefault: false,
+        isRemote: true,
+        worktreePath: "/repo/.worktrees/alpha",
+      },
+    ];
+
+    expect(resolveExistingWorktreeOptions(refs, "/repo/")).toEqual([
+      {
+        branch: "feature/alpha",
+        label: "feature/alpha",
+        path: "/repo/.worktrees/alpha",
+        value: "/repo/.worktrees/alpha",
+      },
+      {
+        branch: "feature/beta",
+        label: "feature/beta",
+        path: "/repo/.worktrees/beta",
+        value: "/repo/.worktrees/beta",
+      },
+    ]);
   });
 });
 
@@ -511,21 +570,42 @@ describe("resolveEffectiveEnvMode", () => {
       }),
     ).toBe("worktree-existing");
   });
+
+  it("keeps existing-worktree mode before and after a worktree is selected", () => {
+    expect(
+      resolveEffectiveEnvMode({
+        activeWorktreePath: null,
+        hasServerThread: false,
+        draftThreadEnvMode: "worktree-reuse",
+      }),
+    ).toBe("worktree-reuse");
+    expect(
+      resolveEffectiveEnvMode({
+        activeWorktreePath: "/repo/.worktrees/feature-a",
+        hasServerThread: false,
+        draftThreadEnvMode: "worktree-reuse",
+      }),
+    ).toBe("worktree-reuse");
+  });
 });
 
 describe("resolveEnvModeLabel", () => {
   it("uses explicit workspace labels", () => {
     expect(resolveEnvModeLabel("local")).toBe("Current checkout");
+    expect(resolveEnvModeLabel("worktree-reuse")).toBe("Existing worktree");
     expect(resolveEnvModeLabel("worktree-existing")).toBe("New worktree");
     expect(resolveEnvModeLabel("worktree")).toBe("New worktree & branch");
   });
 
   it("distinguishes worktree creation from new branch creation", () => {
     expect(isNewWorktreeEnvMode("local")).toBe(false);
+    expect(isNewWorktreeEnvMode("worktree-reuse")).toBe(false);
     expect(isNewWorktreeEnvMode("worktree-existing")).toBe(true);
     expect(isNewWorktreeEnvMode("worktree")).toBe(true);
     expect(createsNewWorktreeBranch("worktree-existing")).toBe(false);
     expect(createsNewWorktreeBranch("worktree")).toBe(true);
+    expect(reusesExistingWorktree("worktree-reuse")).toBe(true);
+    expect(reusesExistingWorktree("worktree")).toBe(false);
   });
 });
 

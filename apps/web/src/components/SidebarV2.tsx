@@ -1232,8 +1232,7 @@ export default function SidebarV2() {
         ? null
         : (projects.find(
             (project) =>
-              project.environmentId === primaryEnvironmentId &&
-              project.id === QUICK_CHATS_PROJECT_ID,
+              project.environmentId === primaryEnvironmentId && isQuickChatsProject(project),
           ) ?? null),
     [primaryEnvironmentId, projects],
   );
@@ -1582,7 +1581,7 @@ export default function SidebarV2() {
     const visible = threads.filter(
       (thread) =>
         thread.archivedAt === null &&
-        thread.projectId !== QUICK_CHATS_PROJECT_ID &&
+        !isQuickChatsProject({ id: thread.projectId }) &&
         (scopedProjectKeys === null ||
           scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
     );
@@ -1590,7 +1589,7 @@ export default function SidebarV2() {
       (thread) =>
         thread.archivedAt === null &&
         thread.environmentId === primaryEnvironmentId &&
-        thread.projectId === QUICK_CHATS_PROJECT_ID,
+        isQuickChatsProject({ id: thread.projectId }),
     );
     const active: EnvironmentThreadShell[] = [];
     const snoozed: EnvironmentThreadShell[] = [];
@@ -2642,7 +2641,7 @@ export default function SidebarV2() {
 
       const navigationResult = await settlePromise(() =>
         newThreadContext.handleNewThread(
-          scopeProjectRef(primaryEnvironmentId, QUICK_CHATS_PROJECT_ID),
+          scopeProjectRef(primaryEnvironmentId, quickChatsProject?.id ?? QUICK_CHATS_PROJECT_ID),
           {
             branch: null,
             worktreePath: null,

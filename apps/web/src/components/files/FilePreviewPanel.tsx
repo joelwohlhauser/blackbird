@@ -117,7 +117,7 @@ const FILE_PREVIEW_UNSAFE_CSS = `
     pointer-events: none;
     position: absolute;
     top: 0;
-    width: var(--blackboard-indent-guide-width);
+    width: var(--blackbird-indent-guide-width);
   }
 
   [${FILE_LINK_REVEAL_ATTRIBUTE}][data-line] {
@@ -200,12 +200,12 @@ function updateFileIndentGuides(fileContainer: HTMLElement, contents: string): v
     const columns = indentColumns[lineNumber - 1] ?? 0;
     if (columns < 2) {
       lineElement.removeAttribute(FILE_INDENT_GUIDES_ATTRIBUTE);
-      lineElement.style.removeProperty("--blackboard-indent-guide-width");
+      lineElement.style.removeProperty("--blackbird-indent-guide-width");
       continue;
     }
 
     lineElement.setAttribute(FILE_INDENT_GUIDES_ATTRIBUTE, "");
-    lineElement.style.setProperty("--blackboard-indent-guide-width", `${columns}ch`);
+    lineElement.style.setProperty("--blackbird-indent-guide-width", `${columns}ch`);
   }
 }
 

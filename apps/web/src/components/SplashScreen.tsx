@@ -3,9 +3,9 @@ export function SplashScreen() {
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div
         className="flex size-24 items-center justify-center"
-        aria-label="Blackboard splash screen"
+        aria-label="Blackbird splash screen"
       >
-        <img alt="Blackboard" className="size-16 object-contain" src="/apple-touch-icon.png" />
+        <img alt="Blackbird" className="size-16 object-contain" src="/apple-touch-icon.png" />
       </div>
     </div>
   );

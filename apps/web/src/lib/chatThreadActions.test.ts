@@ -38,6 +38,12 @@ describe("chatThreadActions", () => {
     ).toBe(true);
     expect(
       resolveNewDraftStartFromOrigin({
+        envMode: "worktree-reuse",
+        newWorktreesStartFromOrigin: true,
+      }),
+    ).toBe(false);
+    expect(
+      resolveNewDraftStartFromOrigin({
         envMode: "local",
         newWorktreesStartFromOrigin: true,
       }),

@@ -139,7 +139,7 @@ export const WorkspaceChangeTree = memo(function WorkspaceChangeTree(props: {
     if (!shadowRoot) return;
 
     const style = document.createElement("style");
-    style.dataset.blackboardChangeStats = "";
+    style.dataset.blackbirdChangeStats = "";
     style.textContent = decorationCss;
     shadowRoot.append(style);
 

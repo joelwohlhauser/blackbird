@@ -1066,6 +1066,24 @@ describe("composerDraftStore project draft thread mapping", () => {
     });
   });
 
+  it("stores an existing worktree selection with the draft thread", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      branch: "feature/existing-worktree",
+      worktreePath: "/tmp/existing-worktree",
+      envMode: "worktree-reuse",
+      startFromOrigin: false,
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThread(draftId)).toMatchObject({
+      branch: "feature/existing-worktree",
+      worktreePath: "/tmp/existing-worktree",
+      envMode: "worktree-reuse",
+      startFromOrigin: false,
+    });
+  });
+
   it("stores the new worktree branch name separately from its base branch", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, {

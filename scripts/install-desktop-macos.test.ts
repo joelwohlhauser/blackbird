@@ -4,13 +4,20 @@ import {
   findInstalledDesktopProcessIds,
   findSingleDmg,
   resolveInstalledAppPath,
+  resolveLegacyInstalledAppPaths,
 } from "./install-desktop-macos.js";
 
 describe("macOS desktop installer", () => {
   it("targets the packaged product name in the configured Applications directory", () => {
-    expect(resolveInstalledAppPath("/Applications", "Blackboard (Alpha)")).toBe(
-      "/Applications/Blackboard (Alpha).app",
+    expect(resolveInstalledAppPath("/Applications", "Blackbird (Alpha)")).toBe(
+      "/Applications/Blackbird (Alpha).app",
     );
+  });
+
+  it("finds the legacy Blackboard installation that should be removed after deployment", () => {
+    expect(resolveLegacyInstalledAppPaths("/Applications")).toEqual([
+      "/Applications/Blackboard (Alpha).app",
+    ]);
   });
 
   it("selects the only DMG and ignores update metadata", () => {
@@ -27,15 +34,15 @@ describe("macOS desktop installer", () => {
   });
 
   it("finds only the main process belonging to the installed app", () => {
-    const appPath = "/Applications/Blackboard (Alpha).app";
+    const appPath = "/Applications/Blackbird (Alpha).app";
     const processList = [
-      "  101 /Applications/Blackboard (Alpha).app/Contents/MacOS/Blackboard (Alpha)",
-      "  102 /Applications/Blackboard (Alpha).app/Contents/MacOS/Blackboard (Alpha) --hidden",
-      "  103 /Applications/Blackboard (Alpha).app/Contents/Frameworks/Blackboard (Alpha) Helper.app/Contents/MacOS/Blackboard (Alpha) Helper",
-      "  104 /private/tmp/Blackboard (Alpha).app/Contents/MacOS/Blackboard (Alpha)",
+      "  101 /Applications/Blackbird (Alpha).app/Contents/MacOS/Blackbird (Alpha)",
+      "  102 /Applications/Blackbird (Alpha).app/Contents/MacOS/Blackbird (Alpha) --hidden",
+      "  103 /Applications/Blackbird (Alpha).app/Contents/Frameworks/Blackbird (Alpha) Helper.app/Contents/MacOS/Blackbird (Alpha) Helper",
+      "  104 /private/tmp/Blackbird (Alpha).app/Contents/MacOS/Blackbird (Alpha)",
     ].join("\n");
 
-    expect(findInstalledDesktopProcessIds(processList, appPath, "Blackboard (Alpha)")).toEqual([
+    expect(findInstalledDesktopProcessIds(processList, appPath, "Blackbird (Alpha)")).toEqual([
       101, 102,
     ]);
   });

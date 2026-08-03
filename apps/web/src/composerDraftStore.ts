@@ -58,7 +58,12 @@ const isReviewCommentContext = Schema.is(ReviewCommentContextSchema);
 
 export const COMPOSER_DRAFT_STORAGE_KEY = "t3code:composer-drafts:v1";
 const COMPOSER_DRAFT_STORAGE_VERSION = 8;
-const DraftThreadEnvModeSchema = Schema.Literals(["local", "worktree-existing", "worktree"]);
+const DraftThreadEnvModeSchema = Schema.Literals([
+  "local",
+  "worktree-reuse",
+  "worktree-existing",
+  "worktree",
+]);
 export type DraftThreadEnvMode = typeof DraftThreadEnvModeSchema.Type;
 
 export const DraftId = Schema.String.pipe(Schema.brand("DraftId"));
@@ -1195,7 +1200,12 @@ function normalizeDraftThreadEnvMode(
   value: unknown,
   fallbackWorktreePath: string | null,
 ): DraftThreadEnvMode {
-  if (value === "local" || value === "worktree-existing" || value === "worktree") {
+  if (
+    value === "local" ||
+    value === "worktree-reuse" ||
+    value === "worktree-existing" ||
+    value === "worktree"
+  ) {
     return value;
   }
   return fallbackWorktreePath ? "worktree" : "local";

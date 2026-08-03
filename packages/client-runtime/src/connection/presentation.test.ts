@@ -2,14 +2,20 @@ import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
 
-import { BearerConnectionProfile, type ConnectionCatalogEntry } from "./catalog.ts";
+import {
+  BearerConnectionProfile,
+  type ConnectionCatalogEntry,
+  SshConnectionProfile,
+} from "./catalog.ts";
 import {
   BearerConnectionTarget,
   ConnectionTransientError,
+  SshConnectionTarget,
   type SupervisorConnectionState,
 } from "./model.ts";
 import {
   connectionCatalogDisplayUrl,
+  connectionCatalogLabel,
   connectionPhaseMessage,
   connectionStatusText,
   connectionStatusTitle,
@@ -53,6 +59,32 @@ function supervisorState(overrides: Partial<SupervisorConnectionState>): Supervi
 describe("connection presentation", () => {
   it("preserves profile display information without exposing credentials", () => {
     expect(connectionCatalogDisplayUrl(ENTRY)).toBe("https://environment.example.test");
+  });
+
+  it("presents SSH environments using the local SSH alias", () => {
+    const target = new SshConnectionTarget({
+      environmentId: EnvironmentId.make("environment-ssh"),
+      label: "dev-server",
+      connectionId: "ssh:environment-ssh",
+    });
+    const entry: ConnectionCatalogEntry = {
+      target,
+      profile: Option.some(
+        new SshConnectionProfile({
+          connectionId: target.connectionId,
+          environmentId: target.environmentId,
+          label: target.label,
+          target: {
+            alias: "remote",
+            hostname: "192.0.2.10",
+            username: "root",
+            port: 22,
+          },
+        }),
+      ),
+    };
+
+    expect(connectionCatalogLabel(entry)).toBe("remote");
   });
 
   it("distinguishes initial connection, reconnect, and retry errors", () => {

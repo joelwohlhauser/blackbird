@@ -88,7 +88,7 @@ function SidebarBrand({ onBackdrop, onClick }: { onBackdrop: boolean; onClick: (
           onBackdrop ? "text-white/70" : "text-muted-foreground",
         )}
       >
-        Blackboard
+        Blackbird
       </span>
     </button>
   );

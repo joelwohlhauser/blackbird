@@ -526,7 +526,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       // contend with the queued-message feedback on the tap frame.
       armAgentAwarenessLiveActivityForLocalWork({
         threadTitle: props.selectedThread.title,
-        projectTitle: props.environmentLabel ?? "Blackboard",
+        projectTitle: props.environmentLabel ?? "Blackbird",
       });
     } finally {
       inFlightThreadIdsRef.current.delete(threadKey);

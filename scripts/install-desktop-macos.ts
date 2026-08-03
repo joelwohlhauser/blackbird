@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const APP_QUIT_TIMEOUT_MS = 15_000;
 const APP_QUIT_POLL_INTERVAL_MS = 250;
+const LEGACY_DESKTOP_PRODUCT_NAMES = ["Blackboard (Alpha)"] as const;
 
 async function run(command: string, args: readonly string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -113,6 +114,12 @@ export function resolveInstalledAppPath(applicationsDir: string, productName: st
   return path.join(path.resolve(applicationsDir), `${productName}.app`);
 }
 
+export function resolveLegacyInstalledAppPaths(applicationsDir: string): readonly string[] {
+  return LEGACY_DESKTOP_PRODUCT_NAMES.map((legacyProductName) =>
+    resolveInstalledAppPath(applicationsDir, legacyProductName),
+  );
+}
+
 export function findSingleDmg(entries: readonly string[]): string {
   const images = entries.filter((entry) => entry.toLowerCase().endsWith(".dmg"));
   if (images.length !== 1) {
@@ -134,11 +141,17 @@ async function installDesktopApp(): Promise<void> {
     throw new Error("apps/desktop/package.json must define productName.");
   }
 
-  const applicationsDir = process.env.BLACKBOARD_APPLICATIONS_DIR?.trim() || "/Applications";
+  const applicationsDir = process.env.BLACKBIRD_APPLICATIONS_DIR?.trim() || "/Applications";
   const destination = resolveInstalledAppPath(applicationsDir, productName);
   await quitInstalledDesktopApp(destination, productName);
+  for (const legacyProductName of LEGACY_DESKTOP_PRODUCT_NAMES) {
+    await quitInstalledDesktopApp(
+      resolveInstalledAppPath(applicationsDir, legacyProductName),
+      legacyProductName,
+    );
+  }
 
-  const workDir = await mkdtemp(path.join(tmpdir(), "blackboard-desktop-install-"));
+  const workDir = await mkdtemp(path.join(tmpdir(), "blackbird-desktop-install-"));
   const artifactsDir = path.join(workDir, "artifacts");
   const mountDir = path.join(workDir, "mounted-dmg");
   const stagedApp = path.join(applicationsDir, `.${productName}.app.installing-${process.pid}`);
@@ -186,6 +199,12 @@ async function installDesktopApp(): Promise<void> {
     if (previousMoved) {
       await rm(previousApp, { recursive: true, force: true });
       previousMoved = false;
+    }
+
+    for (const legacyAppPath of resolveLegacyInstalledAppPaths(applicationsDir)) {
+      if (legacyAppPath === destination || !(await exists(legacyAppPath))) continue;
+      await rm(legacyAppPath, { recursive: true, force: true });
+      console.log(`[desktop-install] Removed legacy installation ${legacyAppPath}`);
     }
 
     console.log(`[desktop-install] Installed ${destination}`);

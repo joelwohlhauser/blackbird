@@ -76,7 +76,7 @@ export class DesktopEnvironment extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-const APP_BASE_NAME = "Blackboard";
+const APP_BASE_NAME = "Blackbird";
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;

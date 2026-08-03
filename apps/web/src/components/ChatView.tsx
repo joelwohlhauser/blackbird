@@ -241,6 +241,7 @@ import {
   createsNewWorktreeBranch,
   isNewWorktreeEnvMode,
   resolveEffectiveEnvMode,
+  reusesExistingWorktree,
   resolveLocalCheckoutBranchMismatch,
   validateNewWorktreeBranchName,
   worktreeDeletionConfirmationMessage,
@@ -5009,6 +5010,10 @@ function ChatViewContent(props: ChatViewProps) {
     }
     const threadIdForSend = activeThread.id;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
+    if (isFirstMessage && reusesExistingWorktree(sendEnvMode) && !activeThread.worktreePath) {
+      setThreadError(threadIdForSend, "Select an existing worktree before sending.");
+      return;
+    }
     const baseBranchForWorktree =
       isFirstMessage && isNewWorktreeEnvMode(sendEnvMode) && !activeThread.worktreePath
         ? activeThreadBranch
@@ -5927,7 +5932,7 @@ function ChatViewContent(props: ChatViewProps) {
             envMode: mode,
             newWorktreesStartFromOrigin: primaryServerSettings.newWorktreesStartFromOrigin,
           }),
-          ...(isNewWorktreeEnvMode(mode) && draftThread?.worktreePath
+          ...(mode !== draftThread?.envMode && draftThread?.worktreePath
             ? { worktreePath: null }
             : {}),
         });
@@ -5938,6 +5943,7 @@ function ChatViewContent(props: ChatViewProps) {
       canOverrideServerThreadEnvMode,
       composerDraftTarget,
       draftThread?.worktreePath,
+      draftThread?.envMode,
       isLocalDraftThread,
       primaryServerSettings.newWorktreesStartFromOrigin,
       setPendingServerThreadEnvMode,

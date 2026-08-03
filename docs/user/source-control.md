@@ -36,7 +36,7 @@ remote branch the worktree should start from. New worktrees use this layout by d
 ~/Repositories/.worktrees/<repository>/<branch>
 ```
 
-The worktree location is configurable in **Settings → General**. Blackboard can also link or copy
+The worktree location is configurable in **Settings → General**. Blackbird can also link or copy
 the repository's `.env` files into matching locations in the worktree and run `pnpm install` in the
 background. Both behaviors can be changed or disabled in the same settings section.
 

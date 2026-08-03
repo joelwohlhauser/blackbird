@@ -49,7 +49,7 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("nightly");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Nightly");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("Blackboard (Nightly)");
+    expect(branding.APP_DISPLAY_NAME).toBe("Blackbird (Nightly)");
   });
 
   it("does not label the latest hosted app channel", async () => {
@@ -60,7 +60,7 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("latest");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Latest");
     expect(branding.APP_STAGE_LABEL).toBe("Latest");
-    expect(branding.APP_DISPLAY_NAME).toBe("Blackboard");
+    expect(branding.APP_DISPLAY_NAME).toBe("Blackbird");
   });
 
   it("ignores unknown hosted app channels", async () => {

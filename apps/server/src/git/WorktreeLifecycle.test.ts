@@ -33,20 +33,20 @@ describe("resolveConfiguredWorktreePath", () => {
     expect(
       WorktreeLifecycle.resolveConfiguredWorktreePath({
         worktreesRoot: "/tmp/.worktrees",
-        repositoryCwd: "/Users/example/Repositories/blackboard",
+        repositoryCwd: "/Users/example/Repositories/blackbird",
         branchName: "feature/base-branch",
       }),
-    ).toBe("/tmp/.worktrees/blackboard/feature/base-branch");
+    ).toBe("/tmp/.worktrees/blackbird/feature/base-branch");
   });
 
   it("keeps generated paths inside the configured root", () => {
     expect(
       WorktreeLifecycle.resolveConfiguredWorktreePath({
         worktreesRoot: "/tmp/.worktrees",
-        repositoryCwd: "/Users/example/Repositories/blackboard",
+        repositoryCwd: "/Users/example/Repositories/blackbird",
         branchName: "../escape",
       }),
-    ).toBe("/tmp/.worktrees/blackboard/-/escape");
+    ).toBe("/tmp/.worktrees/blackbird/-/escape");
   });
 });
 
@@ -56,7 +56,7 @@ it.layer(TestLayer)("WorktreeLifecycle", (it) => {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const lifecycle = yield* WorktreeLifecycle.WorktreeLifecycle;
-      const sandbox = yield* fileSystem.makeTempDirectoryScoped({ prefix: "blackboard-worktree-" });
+      const sandbox = yield* fileSystem.makeTempDirectoryScoped({ prefix: "blackbird-worktree-" });
       const projectCwd = path.join(sandbox, "repo");
       const worktreePath = path.join(sandbox, "worktree");
       const rootEnv = path.join(projectCwd, ".env");

@@ -57,7 +57,7 @@ export function renderBootServiceUnit(plan: BootServicePlan): string {
   // The user manager has no reliable network-online target; server networking retries itself.
   return [
     "[Unit]",
-    "Description=Blackboard server",
+    "Description=Blackbird server",
     "StartLimitIntervalSec=300",
     "StartLimitBurst=5",
     "",

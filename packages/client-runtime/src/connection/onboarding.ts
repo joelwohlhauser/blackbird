@@ -216,7 +216,11 @@ export const prepareSshRegistration = Effect.fn(
   const gateway = yield* ClientCapabilities.SshEnvironmentGateway;
   const provisioned = yield* gateway.provision(input.target);
   const connectionId = `ssh:${provisioned.environmentId}`;
-  const label = input.label?.trim() || provisioned.label || provisioned.bootstrap.target.alias;
+  const label =
+    input.label?.trim() ||
+    input.target.alias.trim() ||
+    provisioned.label ||
+    provisioned.bootstrap.target.alias;
 
   return new SshConnectionRegistration({
     target: new SshConnectionTarget({

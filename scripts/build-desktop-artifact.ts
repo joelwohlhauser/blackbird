@@ -17,6 +17,7 @@ import {
   type WebAssetBrand,
 } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
+import { encodePngIcns } from "./lib/icon-export.ts";
 import { loadRepoEnv } from "./lib/public-config.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
@@ -1283,10 +1284,22 @@ function generateMacIconSet(
       );
     }
 
-    yield* runCommand(ChildProcess.make({})`iconutil -c icns ${iconsetDir} -o ${targetIcns}`, {
-      label: "iconutil icns",
-      verbose,
-    });
+    const icnsRenditions = [
+      { size: 16, fileName: "icon_16x16.png" },
+      { size: 32, fileName: "icon_32x32.png" },
+      { size: 64, fileName: "icon_32x32@2x.png" },
+      { size: 128, fileName: "icon_128x128.png" },
+      { size: 256, fileName: "icon_256x256.png" },
+      { size: 512, fileName: "icon_512x512.png" },
+      { size: 1024, fileName: "icon_512x512@2x.png" },
+    ] as const;
+    const images = yield* Effect.forEach(icnsRenditions, (rendition) =>
+      Effect.gen(function* () {
+        const contents = yield* fs.readFile(path.join(iconsetDir, rendition.fileName));
+        return { size: rendition.size, contents: Buffer.from(contents) };
+      }),
+    );
+    yield* fs.writeFile(targetIcns, encodePngIcns(images));
   });
 }
 
@@ -1517,8 +1530,8 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "Blackboard (Nightly)"
-    : (desktopPackageJson.productName ?? "Blackboard");
+    ? "Blackbird (Nightly)"
+    : (desktopPackageJson.productName ?? "Blackbird");
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (

@@ -106,6 +106,18 @@ export function connectionCatalogDisplayUrl(entry: ConnectionCatalogEntry): stri
   }
 }
 
+export function connectionCatalogLabel(entry: ConnectionCatalogEntry): string {
+  if (
+    entry.target._tag === "SshConnectionTarget" &&
+    Option.isSome(entry.profile) &&
+    entry.profile.value._tag === "SshConnectionProfile"
+  ) {
+    const alias = entry.profile.value.target.alias.trim();
+    if (alias.length > 0) return alias;
+  }
+  return entry.target.label;
+}
+
 export function connectionPhaseMessage(
   phase: EnvironmentConnectionPhase,
   label: string,

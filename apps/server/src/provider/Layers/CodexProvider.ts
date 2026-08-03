@@ -304,7 +304,7 @@ export function buildCodexInitializeParams(): CodexSchema.V1InitializeParams {
   return {
     clientInfo: {
       name: "t3code_desktop",
-      title: "Blackboard Desktop",
+      title: "Blackbird Desktop",
       version: packageJson.version,
     },
     capabilities: {
@@ -366,7 +366,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
   const initialize = yield* client.request("initialize", {
     clientInfo: {
       name: "t3code_desktop",
-      title: "Blackboard Desktop",
+      title: "Blackbird Desktop",
       version: "0.1.0",
     },
     capabilities: {

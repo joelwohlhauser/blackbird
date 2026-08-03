@@ -342,8 +342,14 @@ describe("resolveSendEnvMode", () => {
     expect(resolveSendEnvMode({ requestedEnvMode: "worktree-existing", isGitRepo: true })).toBe(
       "worktree-existing",
     );
+    expect(resolveSendEnvMode({ requestedEnvMode: "worktree-reuse", isGitRepo: true })).toBe(
+      "worktree-reuse",
+    );
     expect(resolveSendEnvMode({ requestedEnvMode: "worktree", isGitRepo: false })).toBe("local");
     expect(resolveSendEnvMode({ requestedEnvMode: "worktree-existing", isGitRepo: false })).toBe(
+      "local",
+    );
+    expect(resolveSendEnvMode({ requestedEnvMode: "worktree-reuse", isGitRepo: false })).toBe(
       "local",
     );
   });

@@ -1309,6 +1309,26 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("filters listed refs to branches attached to worktrees", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        const worktreesRoot = yield* makeTmpDir("git-vcs-driver-worktrees-");
+        const pathService = yield* Path.Path;
+        const worktreePath = pathService.join(worktreesRoot, "linked");
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* git(cwd, ["branch", "feature/not-linked"]);
+        yield* git(cwd, ["worktree", "add", "-b", "feature/linked", worktreePath]);
+
+        const refs = yield* driver.listRefs({ cwd, worktreeOnly: true, refresh: true });
+
+        assert.isTrue(refs.refs.some((ref) => ref.name === "feature/linked"));
+        assert.isFalse(refs.refs.some((ref) => ref.name === "feature/not-linked"));
+        assert.isTrue(refs.refs.every((ref) => ref.worktreePath !== null));
+      }),
+    );
+
     it.effect("creates and removes a worktree for a new refName", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

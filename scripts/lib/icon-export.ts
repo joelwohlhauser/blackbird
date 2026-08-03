@@ -7,6 +7,16 @@ export interface PngIconImage {
   readonly contents: Buffer;
 }
 
+const ICNS_TYPES_BY_SIZE = new Map<number, string>([
+  [16, "icp4"],
+  [32, "icp5"],
+  [64, "icp6"],
+  [128, "ic07"],
+  [256, "ic08"],
+  [512, "ic09"],
+  [1024, "ic10"],
+]);
+
 export function readPngDimensions(contents: Buffer): {
   readonly width: number;
   readonly height: number;
@@ -69,4 +79,37 @@ export function encodePngIco(images: ReadonlyArray<PngIconImage>): Buffer {
   });
 
   return Buffer.concat([header, ...images.map((image) => image.contents)]);
+}
+
+/** Encodes PNG renditions directly into a modern, multi-resolution ICNS file. */
+export function encodePngIcns(images: ReadonlyArray<PngIconImage>): Buffer {
+  if (images.length === 0) {
+    throw new Error("An ICNS file requires at least one PNG rendition.");
+  }
+
+  const seenSizes = new Set<number>();
+  const chunks = images.map((image) => {
+    const type = ICNS_TYPES_BY_SIZE.get(image.size);
+    if (type === undefined) {
+      throw new Error(`Unsupported ICNS rendition size: ${image.size}.`);
+    }
+    if (seenSizes.has(image.size)) {
+      throw new Error(`ICNS rendition size ${image.size} was provided more than once.`);
+    }
+    if (image.contents.length === 0) {
+      throw new Error(`ICNS rendition ${image.size}x${image.size} is empty.`);
+    }
+    seenSizes.add(image.size);
+
+    const chunk = Buffer.alloc(8 + image.contents.length);
+    chunk.write(type, 0, 4, "ascii");
+    chunk.writeUInt32BE(chunk.length, 4);
+    image.contents.copy(chunk, 8);
+    return chunk;
+  });
+
+  const header = Buffer.alloc(8);
+  header.write("icns", 0, 4, "ascii");
+  header.writeUInt32BE(8 + chunks.reduce((total, chunk) => total + chunk.length, 0), 4);
+  return Buffer.concat([header, ...chunks]);
 }

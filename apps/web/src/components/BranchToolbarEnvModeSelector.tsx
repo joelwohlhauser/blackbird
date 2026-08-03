@@ -24,6 +24,7 @@ interface BranchToolbarEnvModeSelectorProps {
   effectiveEnvMode: EnvMode;
   activeWorktreePath: string | null;
   onEnvModeChange: (mode: EnvMode) => void;
+  canReuseExistingWorktree: boolean;
   previousWorktreeLabel?: string | null;
   onUsePreviousWorktree?: () => void;
 }
@@ -33,6 +34,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   effectiveEnvMode,
   activeWorktreePath,
   onEnvModeChange,
+  canReuseExistingWorktree,
   previousWorktreeLabel,
   onUsePreviousWorktree,
 }: BranchToolbarEnvModeSelectorProps) {
@@ -40,13 +42,16 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   const envModeItems = useMemo(
     () => [
       { value: "local", label: resolveCurrentWorkspaceLabel(activeWorktreePath) },
+      ...(canReuseExistingWorktree
+        ? [{ value: "worktree-reuse", label: resolveEnvModeLabel("worktree-reuse") }]
+        : []),
       { value: "worktree-existing", label: resolveEnvModeLabel("worktree-existing") },
       { value: "worktree", label: resolveEnvModeLabel("worktree") },
       ...(showPreviousWorktree && previousWorktreeLabel
         ? [{ value: PREVIOUS_WORKTREE_SELECT_VALUE, label: previousWorktreeLabel }]
         : []),
     ],
-    [activeWorktreePath, previousWorktreeLabel, showPreviousWorktree],
+    [activeWorktreePath, canReuseExistingWorktree, previousWorktreeLabel, showPreviousWorktree],
   );
 
   if (envLocked) {
@@ -88,7 +93,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       >
         {effectiveEnvMode === "worktree" ? (
           <FolderGit2Icon className="size-3" />
-        ) : effectiveEnvMode === "worktree-existing" ? (
+        ) : effectiveEnvMode === "worktree-existing" || effectiveEnvMode === "worktree-reuse" ? (
           <FolderGitIcon className="size-3" />
         ) : activeWorktreePath ? (
           <FolderGitIcon className="size-3" />
@@ -110,6 +115,14 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
               {resolveCurrentWorkspaceLabel(activeWorktreePath)}
             </span>
           </SelectItem>
+          {canReuseExistingWorktree ? (
+            <SelectItem value="worktree-reuse">
+              <span className="inline-flex items-center gap-1.5">
+                <FolderGitIcon className="size-3" />
+                {resolveEnvModeLabel("worktree-reuse")}
+              </span>
+            </SelectItem>
+          ) : null}
           <SelectItem value="worktree-existing">
             <span className="inline-flex items-center gap-1.5">
               <FolderGitIcon className="size-3" />

@@ -242,12 +242,12 @@ describe("connection onboarding", () => {
         _tag: "SshConnectionRegistration",
         target: {
           environmentId: "environment-ssh",
-          label: "Remote development box",
+          label: "devbox",
           connectionId: "ssh:environment-ssh",
         },
         profile: {
           environmentId: "environment-ssh",
-          label: "Remote development box",
+          label: "devbox",
           connectionId: "ssh:environment-ssh",
           target,
         },

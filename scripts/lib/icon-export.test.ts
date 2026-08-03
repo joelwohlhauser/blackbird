@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import { encodePngIco, readPngDimensions } from "./icon-export.ts";
+import { encodePngIcns, encodePngIco, readPngDimensions } from "./icon-export.ts";
 
 const pngHeader = (width: number, height: number) => {
   const contents = Buffer.alloc(24);
@@ -42,6 +42,27 @@ describe("icon export", () => {
           { size: 32, contents: pngHeader(32, 32) },
         ]),
       /provided more than once/,
+    );
+  });
+
+  it("encodes PNG renditions into an ICNS container", () => {
+    const small = pngHeader(16, 16);
+    const large = pngHeader(1024, 1024);
+    const icns = encodePngIcns([
+      { size: 16, contents: small },
+      { size: 1024, contents: large },
+    ]);
+
+    assert.equal(icns.toString("ascii", 0, 4), "icns");
+    assert.equal(icns.readUInt32BE(4), icns.length);
+    assert.equal(icns.toString("ascii", 8, 12), "icp4");
+    assert.equal(icns.toString("ascii", 16 + small.length, 20 + small.length), "ic10");
+  });
+
+  it("rejects unsupported ICNS rendition sizes", () => {
+    assert.throws(
+      () => encodePngIcns([{ size: 48, contents: pngHeader(48, 48) }]),
+      /Unsupported ICNS rendition size/,
     );
   });
 });

@@ -13,7 +13,12 @@ export interface EnvironmentOption {
   isPrimary: boolean;
 }
 
-export const EnvMode = Schema.Literals(["local", "worktree-existing", "worktree"]);
+export const EnvMode = Schema.Literals([
+  "local",
+  "worktree-reuse",
+  "worktree-existing",
+  "worktree",
+]);
 export type EnvMode = typeof EnvMode.Type;
 
 const GENERIC_LOCAL_ENVIRONMENT_LABELS = new Set(["local", "local environment"]);
@@ -55,16 +60,48 @@ export function shouldShowEnvironmentIndicator(input: {
 }
 
 export function resolveEnvModeLabel(mode: EnvMode): string {
+  if (mode === "worktree-reuse") return "Existing worktree";
   if (mode === "worktree-existing") return "New worktree";
   return mode === "worktree" ? "New worktree & branch" : "Current checkout";
 }
 
 export function isNewWorktreeEnvMode(mode: EnvMode): boolean {
-  return mode !== "local";
+  return mode === "worktree-existing" || mode === "worktree";
 }
 
 export function createsNewWorktreeBranch(mode: EnvMode): boolean {
   return mode === "worktree";
+}
+
+export function reusesExistingWorktree(mode: EnvMode): boolean {
+  return mode === "worktree-reuse";
+}
+
+export interface ExistingWorktreeOption {
+  branch: string;
+  label: string;
+  path: string;
+  value: string;
+}
+
+export function resolveExistingWorktreeOptions(
+  refs: ReadonlyArray<VcsRef>,
+  projectCwd: string,
+): ExistingWorktreeOption[] {
+  const normalizedProjectCwd = projectCwd.replace(/[\\/]+$/u, "");
+  const byPath = new Map<string, ExistingWorktreeOption>();
+  for (const ref of refs) {
+    if (ref.isRemote || !ref.worktreePath) continue;
+    const normalizedPath = ref.worktreePath.replace(/[\\/]+$/u, "");
+    if (normalizedPath === normalizedProjectCwd || byPath.has(normalizedPath)) continue;
+    byPath.set(normalizedPath, {
+      branch: ref.name,
+      label: ref.name,
+      path: ref.worktreePath,
+      value: ref.worktreePath,
+    });
+  }
+  return [...byPath.values()].toSorted((left, right) => left.branch.localeCompare(right.branch));
 }
 
 export function validateNewWorktreeBranchName(value: string): string | null {
@@ -166,12 +203,13 @@ export function resolveEffectiveEnvMode(input: {
 }): EnvMode {
   const { activeWorktreePath, hasServerThread, draftThreadEnvMode } = input;
   if (!hasServerThread) {
+    if (draftThreadEnvMode === "worktree-reuse" && activeWorktreePath) {
+      return "worktree-reuse";
+    }
     if (activeWorktreePath) {
       return "local";
     }
-    return draftThreadEnvMode && isNewWorktreeEnvMode(draftThreadEnvMode)
-      ? draftThreadEnvMode
-      : "local";
+    return draftThreadEnvMode && draftThreadEnvMode !== "local" ? draftThreadEnvMode : "local";
   }
   return activeWorktreePath ? "worktree" : "local";
 }
@@ -183,7 +221,7 @@ export function resolveDraftEnvModeAfterBranchChange(input: {
 }): EnvMode {
   const { nextWorktreePath, currentWorktreePath, effectiveEnvMode } = input;
   if (nextWorktreePath) {
-    return "worktree";
+    return effectiveEnvMode === "worktree-reuse" ? "worktree-reuse" : "worktree";
   }
   if (isNewWorktreeEnvMode(effectiveEnvMode) && !currentWorktreePath) {
     return effectiveEnvMode;

@@ -27,7 +27,7 @@ const TABS: ReadonlyArray<{ id: WorkspaceNavigatorTab; label: string }> = [
   { id: "pr", label: "PR" },
 ];
 
-const WORKSPACE_NAVIGATOR_WIDTH_STORAGE_KEY = "blackboard:workspace-navigator-width:v1";
+const WORKSPACE_NAVIGATOR_WIDTH_STORAGE_KEY = "blackbird:workspace-navigator-width:v1";
 const WORKSPACE_NAVIGATOR_DEFAULT_WIDTH = 292;
 const WORKSPACE_NAVIGATOR_MIN_WIDTH = 220;
 const WORKSPACE_NAVIGATOR_MAX_WIDTH = 640;

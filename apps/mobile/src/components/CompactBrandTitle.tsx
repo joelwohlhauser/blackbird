@@ -42,7 +42,7 @@ export function CompactBrandTitle(
   return (
     <View
       aria-level={1}
-      accessibilityLabel="Blackboard, Threads"
+      accessibilityLabel="Blackbird, Threads"
       accessible
       role="heading"
       style={{
@@ -61,7 +61,7 @@ export function CompactBrandTitle(
           letterSpacing: -0.5,
         }}
       >
-        Blackboard
+        Blackbird
       </Text>
       <View
         style={{
