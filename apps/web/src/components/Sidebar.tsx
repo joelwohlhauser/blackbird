@@ -312,6 +312,7 @@ function buildThreadJumpLabelMap(input: {
 interface SidebarThreadRowProps {
   thread: SidebarThreadSummary;
   projectCwd: string | null;
+  alignWithProjectLabel: boolean;
   orderedProjectThreadKeys: readonly string[];
   isActive: boolean;
   jumpLabel: string | null;
@@ -349,6 +350,7 @@ interface SidebarThreadRowProps {
 
 export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
   const {
+    alignWithProjectLabel,
     orderedProjectThreadKeys,
     isActive,
     jumpLabel,
@@ -676,10 +678,14 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
         size="sm"
         isActive={isActive}
         data-testid={`thread-row-${thread.id}`}
-        className={`${resolveThreadRowClassName({
-          isActive,
-          isSelected,
-        })} relative isolate`}
+        className={cn(
+          resolveThreadRowClassName({
+            isActive,
+            isSelected,
+          }),
+          "relative isolate",
+          alignWithProjectLabel && "pl-6 pr-2",
+        )}
         onClick={handleRowClick}
         onDoubleClick={handleRowDoubleClick}
         onKeyDown={handleRowKeyDown}
@@ -886,6 +892,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
 
 interface SidebarProjectThreadListProps {
   projectKey: string;
+  alignWithProjectLabel: boolean;
   projectExpanded: boolean;
   hasOverflowingThreads: boolean;
   hiddenThreadStatus: ThreadStatusPill | null;
@@ -936,6 +943,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
   props: SidebarProjectThreadListProps,
 ) {
   const {
+    alignWithProjectLabel,
     projectKey,
     projectExpanded,
     hasOverflowingThreads,
@@ -983,7 +991,10 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
         <SidebarMenuSubItem className="w-full" data-thread-selection-safe>
           <div
             data-thread-selection-safe
-            className="flex h-8 w-full translate-x-0 items-center px-2 text-left text-xs text-sidebar-muted-foreground/75"
+            className={cn(
+              "flex h-8 w-full translate-x-0 items-center pr-2 text-left text-xs text-sidebar-muted-foreground/75",
+              alignWithProjectLabel ? "pl-6" : "pl-2",
+            )}
           >
             <span>No threads yet</span>
           </div>
@@ -997,6 +1008,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
               key={threadKey}
               thread={thread}
               projectCwd={projectCwd}
+              alignWithProjectLabel={alignWithProjectLabel}
               orderedProjectThreadKeys={orderedProjectThreadKeys}
               isActive={activeRouteThreadKey === threadKey}
               jumpLabel={threadJumpLabelByKey.get(threadKey) ?? null}
@@ -1029,7 +1041,10 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             render={showMoreButtonRender}
             data-thread-selection-safe
             size="sm"
-            className="h-8 w-full translate-x-0 justify-start px-2 text-left text-xs text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+            className={cn(
+              "h-8 w-full translate-x-0 justify-start pr-2 text-left text-xs text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+              alignWithProjectLabel ? "pl-6" : "pl-2",
+            )}
             onClick={() => {
               expandThreadListForProject(projectKey);
             }}
@@ -1047,7 +1062,10 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             render={showLessButtonRender}
             data-thread-selection-safe
             size="sm"
-            className="h-8 w-full translate-x-0 justify-start px-2 text-left text-xs text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+            className={cn(
+              "h-8 w-full translate-x-0 justify-start pr-2 text-left text-xs text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+              alignWithProjectLabel ? "pl-6" : "pl-2",
+            )}
             onClick={() => {
               collapseThreadListForProject(projectKey);
             }}
@@ -2358,6 +2376,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
       <SidebarProjectThreadList
         projectKey={project.projectKey}
+        alignWithProjectLabel={!hideProjectHeader}
         projectExpanded={projectExpanded}
         hasOverflowingThreads={hasOverflowingThreads}
         hiddenThreadStatus={hiddenThreadStatus}
