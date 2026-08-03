@@ -103,7 +103,7 @@ import {
   resolveActiveThreadRouteRef,
   resolveThreadRouteTarget,
 } from "../threadRoutes";
-import { formatRelativeTimeLabel, parseTimestampDate } from "../timestampFormat";
+import { parseTimestampDate } from "../timestampFormat";
 import type { SidebarThreadSummary } from "../types";
 import { cn } from "~/lib/utils";
 import {
@@ -114,7 +114,6 @@ import {
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   resolveAdjacentThreadId,
-  resolveSettledTimestamp,
   resolveSidebarV2Status,
   searchSidebarThreadsByTitle,
   resolveWorkingStartedAt,
@@ -182,24 +181,6 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   repository_path: "Group by repository path",
   separate: "Keep separate",
 };
-
-function compactSidebarTimeLabel(label: string): string {
-  if (label === "just now") return "now";
-  return label.endsWith(" ago") ? label.slice(0, -4) : label;
-}
-
-function threadTimeLabel(thread: SidebarThreadSummary): string {
-  const timestamp = thread.latestUserMessageAt ?? thread.updatedAt;
-  return compactSidebarTimeLabel(formatRelativeTimeLabel(timestamp));
-}
-
-// Settled rows read "how long ago did this wrap up", matching their sort
-// key: both go through resolveSettledTimestamp so label and order can't
-// disagree.
-function settledTimeLabel(thread: SidebarThreadSummary): string {
-  const timestamp = resolveSettledTimestamp(thread);
-  return timestamp === null ? "" : compactSidebarTimeLabel(formatRelativeTimeLabel(timestamp));
-}
 
 // Floats at the row's right edge, vertically centered, while the jump
 // modifier is held. An overlay pill instead of an inline slot: the hint
@@ -832,13 +813,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                     <AlarmClockIcon aria-hidden className="size-3" />
                     Woke
                   </span>
-                ) : (
-                  <span className="text-xs">
-                    {variantAction === "unsettle"
-                      ? settledTimeLabel(thread)
-                      : threadTimeLabel(thread)}
-                  </span>
-                )}
+                ) : null}
               </span>
               {variantAction === "unsnooze" ? (
                 !props.snoozeSupported ? null : (
@@ -959,9 +934,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                         </span>
                       ) : null}
                     </span>
-                  ) : (
-                    threadTimeLabel(thread)
-                  )}
+                  ) : null}
                 </span>
                 {props.settlementSupported || showSnoozeButton ? (
                   <span
@@ -1136,9 +1109,6 @@ const SidebarV2SearchResultRow = memo(function SidebarV2SearchResultRow(props: {
             fallbackIcon={MessageSquareIcon}
           />
           <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-          <span className="shrink-0 text-xs text-muted-foreground/55 tabular-nums">
-            {threadTimeLabel(thread)}
-          </span>
         </TooltipTrigger>
         <SidebarV2ThreadTooltip
           thread={thread}

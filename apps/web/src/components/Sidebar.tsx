@@ -122,7 +122,6 @@ import {
   resolveThreadRouteTarget,
 } from "../threadRoutes";
 import { stackedThreadToast, toastManager } from "./ui/toast";
-import { formatRelativeTimeLabel } from "../timestampFormat";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { Kbd } from "./ui/kbd";
 import {
@@ -926,19 +925,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
                     </TooltipTrigger>
                     <TooltipPopup side="top">{jumpLabel}</TooltipPopup>
                   </Tooltip>
-                ) : (
-                  <span
-                    className={`text-[10px] tabular-nums ${
-                      isHighlighted
-                        ? "text-foreground/72 dark:text-foreground/82"
-                        : "text-muted-foreground/40"
-                    }`}
-                  >
-                    {formatRelativeTimeLabel(
-                      thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
-                    )}
-                  </span>
-                )}
+                ) : null}
               </span>
             </span>
           </div>

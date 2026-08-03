@@ -143,13 +143,6 @@ async function installDesktopApp(): Promise<void> {
 
   const applicationsDir = process.env.BLACKBIRD_APPLICATIONS_DIR?.trim() || "/Applications";
   const destination = resolveInstalledAppPath(applicationsDir, productName);
-  await quitInstalledDesktopApp(destination, productName);
-  for (const legacyProductName of LEGACY_DESKTOP_PRODUCT_NAMES) {
-    await quitInstalledDesktopApp(
-      resolveInstalledAppPath(applicationsDir, legacyProductName),
-      legacyProductName,
-    );
-  }
 
   const workDir = await mkdtemp(path.join(tmpdir(), "blackbird-desktop-install-"));
   const artifactsDir = path.join(workDir, "artifacts");
@@ -190,6 +183,17 @@ async function installDesktopApp(): Promise<void> {
     await run("hdiutil", ["detach", mountDir]);
     mounted = false;
 
+    // Keep the currently installed app available throughout the expensive build
+    // and staging work. Only close it once the replacement is ready for the
+    // atomic swap below.
+    await quitInstalledDesktopApp(destination, productName);
+    for (const legacyProductName of LEGACY_DESKTOP_PRODUCT_NAMES) {
+      await quitInstalledDesktopApp(
+        resolveInstalledAppPath(applicationsDir, legacyProductName),
+        legacyProductName,
+      );
+    }
+
     if (await exists(destination)) {
       await rm(previousApp, { recursive: true, force: true });
       await rename(destination, previousApp);
@@ -208,6 +212,8 @@ async function installDesktopApp(): Promise<void> {
     }
 
     console.log(`[desktop-install] Installed ${destination}`);
+    console.log(`[desktop-install] Starting ${productName}...`);
+    await run("open", [destination]);
   } catch (error) {
     if (previousMoved && !(await exists(destination)) && (await exists(previousApp))) {
       try {

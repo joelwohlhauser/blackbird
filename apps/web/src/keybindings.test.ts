@@ -175,6 +175,18 @@ const DEFAULT_BINDINGS = compile([
     command: "chat.switcher",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
+  {
+    shortcut: {
+      key: "tab",
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: true,
+      altKey: true,
+      modKey: false,
+    },
+    command: "chat.switcher",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
   { shortcut: modShortcut("o"), command: "editor.openFavorite" },
   { shortcut: modShortcut("[", { shiftKey: true }), command: "thread.previous" },
   { shortcut: modShortcut("]", { shiftKey: true }), command: "thread.next" },
@@ -554,12 +566,23 @@ describe("chat/editor shortcuts", () => {
     );
   });
 
-  it("matches Option-Tab for the chat switcher", () => {
+  it("matches Option-Tab in both directions for the chat switcher", () => {
     assert.strictEqual(
       resolveShortcutCommand(event({ key: "Tab", altKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
         context: { terminalFocus: false },
       }),
+      "chat.switcher",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "Tab", altKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        {
+          platform: "MacIntel",
+          context: { terminalFocus: false },
+        },
+      ),
       "chat.switcher",
     );
   });

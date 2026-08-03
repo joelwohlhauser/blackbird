@@ -1,5 +1,32 @@
 export type ChatSwitcherDirection = "next" | "previous";
 
+export type ChatSwitcherShortcutCommand =
+  | "chat.switcher"
+  | "rightPanel.nextTab"
+  | "rightPanel.previousTab";
+
+export function chatSwitcherDirectionForShortcut(
+  command: ChatSwitcherShortcutCommand,
+  shiftKey: boolean,
+): ChatSwitcherDirection {
+  return command === "rightPanel.previousTab" || (command === "chat.switcher" && shiftKey)
+    ? "previous"
+    : "next";
+}
+
+export function activeChatSwitcherDirection(input: {
+  readonly modifier: "alt" | "control";
+  readonly key: string;
+  readonly altKey: boolean;
+  readonly ctrlKey: boolean;
+  readonly shiftKey: boolean;
+}): ChatSwitcherDirection | null {
+  if (input.key.toLowerCase() !== "tab") return null;
+  if (input.modifier === "alt" && !input.altKey) return null;
+  if (input.modifier === "control" && !input.ctrlKey) return null;
+  return input.shiftKey ? "previous" : "next";
+}
+
 export interface ChatSwitcherOrderableItem {
   readonly key: string;
   readonly updatedAt: string;

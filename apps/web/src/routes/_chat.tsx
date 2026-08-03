@@ -5,7 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import {
+  activeChatSwitcherDirection,
   adjacentChatSwitcherIndex,
+  chatSwitcherDirectionForShortcut,
   initialChatSwitcherIndex,
   orderChatSwitcherItems,
   type ChatSwitcherDirection,
@@ -186,6 +188,22 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
+      if (chatSwitcher !== null) {
+        const activeSwitcherDirection = activeChatSwitcherDirection({
+          modifier: chatSwitcher.modifier,
+          key: event.key,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          shiftKey: event.shiftKey,
+        });
+        if (activeSwitcherDirection !== null) {
+          openOrAdvanceChatSwitcher(chatSwitcher.modifier, activeSwitcherDirection);
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+      }
+
       if (event.key === "Escape" && chatSwitcher !== null) {
         event.preventDefault();
         event.stopPropagation();
@@ -224,8 +242,10 @@ function ChatRouteGlobalShortcuts() {
         command === "rightPanel.previousTab"
       ) {
         const modifier: ChatSwitcherModifier = event.altKey ? "alt" : "control";
-        const direction: ChatSwitcherDirection =
-          command === "rightPanel.previousTab" ? "previous" : "next";
+        const direction: ChatSwitcherDirection = chatSwitcherDirectionForShortcut(
+          command,
+          event.shiftKey,
+        );
         if (!openOrAdvanceChatSwitcher(modifier, direction)) return;
         event.preventDefault();
         event.stopPropagation();
