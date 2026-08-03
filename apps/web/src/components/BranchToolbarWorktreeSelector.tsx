@@ -4,7 +4,11 @@ import { memo, useMemo } from "react";
 
 import { useEnvironmentQuery } from "../state/query";
 import { vcsEnvironment } from "../state/vcs";
-import { type ExistingWorktreeOption, resolveExistingWorktreeOptions } from "./BranchToolbar.logic";
+import {
+  type ExistingWorktreeOption,
+  resolveExistingWorktreeOptions,
+  resolveExistingWorktreeSelectorState,
+} from "./BranchToolbar.logic";
 import {
   Select,
   SelectGroup,
@@ -51,11 +55,12 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
   const selectedPath = worktrees.some((worktree) => worktree.path === activeWorktreePath)
     ? activeWorktreePath
     : null;
-  const placeholder = worktreesQuery.isPending
-    ? "Loading worktrees…"
-    : worktrees.length > 0
-      ? "Select worktree"
-      : "No existing worktrees";
+  const selectorState = resolveExistingWorktreeSelectorState({
+    hasData: worktreesQuery.data !== null,
+    isPending: worktreesQuery.isPending,
+    error: worktreesQuery.error,
+    worktreeCount: worktrees.length,
+  });
 
   return (
     <Select
@@ -66,7 +71,7 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
         if (worktree) onWorktreeChange(worktree);
       }}
       items={worktrees}
-      disabled={disabled || worktreesQuery.isPending || worktrees.length === 0}
+      disabled={disabled || selectorState.isInitialLoadPending || worktrees.length === 0}
     >
       <SelectTrigger
         variant="ghost"
@@ -75,7 +80,7 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
         aria-label="Existing worktree"
       >
         <FolderGitIcon className="size-3" />
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={selectorState.placeholder} />
       </SelectTrigger>
       <SelectPopup side="top" className="min-w-72">
         <SelectGroup>

@@ -12,6 +12,7 @@ import {
   resolveDraftEnvModeAfterBranchChange,
   resolveEffectiveEnvMode,
   resolveExistingWorktreeOptions,
+  resolveExistingWorktreeSelectorState,
   resolveEnvModeLabel,
   worktreeDeletionConfirmationMessage,
   resolveBranchTriggerLabel,
@@ -256,6 +257,36 @@ describe("resolveExistingWorktreeOptions", () => {
         value: "/repo/.worktrees/beta",
       },
     ]);
+  });
+});
+
+describe("resolveExistingWorktreeSelectorState", () => {
+  it("stops showing the initial loader once a live query has returned worktrees", () => {
+    expect(
+      resolveExistingWorktreeSelectorState({
+        hasData: true,
+        isPending: true,
+        error: null,
+        worktreeCount: 2,
+      }),
+    ).toEqual({
+      isInitialLoadPending: false,
+      placeholder: "Select worktree",
+    });
+  });
+
+  it("shows an error instead of an endless loader when the initial query fails", () => {
+    expect(
+      resolveExistingWorktreeSelectorState({
+        hasData: false,
+        isPending: false,
+        error: "Git refs unavailable",
+        worktreeCount: 0,
+      }),
+    ).toEqual({
+      isInitialLoadPending: false,
+      placeholder: "Could not load worktrees",
+    });
   });
 });
 

@@ -104,6 +104,27 @@ export function resolveExistingWorktreeOptions(
   return [...byPath.values()].toSorted((left, right) => left.branch.localeCompare(right.branch));
 }
 
+export function resolveExistingWorktreeSelectorState(input: {
+  hasData: boolean;
+  isPending: boolean;
+  error: string | null;
+  worktreeCount: number;
+}): {
+  isInitialLoadPending: boolean;
+  placeholder: string;
+} {
+  const isInitialLoadPending = input.isPending && !input.hasData;
+  const placeholder =
+    input.worktreeCount > 0
+      ? "Select worktree"
+      : isInitialLoadPending
+        ? "Loading worktrees…"
+        : input.error
+          ? "Could not load worktrees"
+          : "No existing worktrees";
+  return { isInitialLoadPending, placeholder };
+}
+
 export function validateNewWorktreeBranchName(value: string): string | null {
   const branchName = value.trim();
   if (branchName.length === 0) {
