@@ -265,4 +265,68 @@ it.layer(TestLayer, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
       }),
     );
   });
+
+  describe("createEntry", () => {
+    it.effect("creates empty files and directories and refreshes workspace entries", () =>
+      Effect.gen(function* () {
+        const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        const directory = yield* workspaceFileSystem.createEntry({
+          cwd,
+          relativePath: "src/generated",
+          kind: "directory",
+        });
+        const file = yield* workspaceFileSystem.createEntry({
+          cwd,
+          relativePath: "src/generated/index.ts",
+          kind: "file",
+        });
+
+        expect(directory).toEqual({ relativePath: "src/generated", kind: "directory" });
+        expect(file).toEqual({ relativePath: "src/generated/index.ts", kind: "file" });
+        expect((yield* fileSystem.stat(path.join(cwd, "src/generated"))).type).toBe("Directory");
+        expect(yield* fileSystem.readFileString(path.join(cwd, "src/generated/index.ts"))).toBe("");
+        expect((yield* workspaceEntries.list({ cwd })).entries).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ path: "src/generated", kind: "directory" }),
+            expect.objectContaining({ path: "src/generated/index.ts", kind: "file" }),
+          ]),
+        );
+      }),
+    );
+
+    it.effect("does not replace existing entries", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "existing.ts", "keep me\n");
+
+        const error = yield* workspaceFileSystem
+          .createEntry({ cwd, relativePath: "existing.ts", kind: "file" })
+          .pipe(Effect.flip);
+
+        expect(error).toMatchObject({
+          _tag: "WorkspaceFileSystemOperationError",
+          operation: "open",
+        });
+      }),
+    );
+
+    it.effect("rejects entries outside the workspace root", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+
+        const error = yield* workspaceFileSystem
+          .createEntry({ cwd, relativePath: "../escape", kind: "directory" })
+          .pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(WorkspacePaths.WorkspacePathOutsideRootError);
+      }),
+    );
+  });
 });

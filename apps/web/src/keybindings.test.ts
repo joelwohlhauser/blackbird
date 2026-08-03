@@ -89,6 +89,34 @@ const DEFAULT_BINDINGS = compile([
   { shortcut: modShortcut("j"), command: "terminal.toggle" },
   { shortcut: modShortcut("b", { altKey: true }), command: "rightPanel.toggle" },
   {
+    shortcut: {
+      key: "tab",
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: false,
+      altKey: false,
+      modKey: false,
+    },
+    command: "rightPanel.nextTab",
+  },
+  {
+    shortcut: {
+      key: "tab",
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
+      modKey: false,
+    },
+    command: "rightPanel.previousTab",
+  },
+  { shortcut: modShortcut("b", { shiftKey: true }), command: "workspaceNavigator.toggle" },
+  { shortcut: modShortcut("g", { shiftKey: true }), command: "workspaceNavigator.changes" },
+  {
+    shortcut: modShortcut("h", { shiftKey: true }),
+    command: "workspaceNavigator.pullRequest",
+  },
+  {
     shortcut: modShortcut("d"),
     command: "terminal.split",
     whenAst: whenIdentifier("terminalFocus"),
@@ -135,6 +163,18 @@ const DEFAULT_BINDINGS = compile([
   },
   { shortcut: modShortcut("o", { shiftKey: true }), command: "chat.new" },
   { shortcut: modShortcut("n", { shiftKey: true }), command: "chat.newLocal" },
+  {
+    shortcut: {
+      key: "tab",
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: true,
+      modKey: false,
+    },
+    command: "chat.switcher",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
   { shortcut: modShortcut("o"), command: "editor.openFavorite" },
   { shortcut: modShortcut("[", { shiftKey: true }), command: "thread.previous" },
   { shortcut: modShortcut("]", { shiftKey: true }), command: "thread.next" },
@@ -334,6 +374,18 @@ describe("shortcutLabelForCommand", () => {
       "⌥⌘B",
     );
     assert.strictEqual(
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "workspaceNavigator.toggle", "MacIntel"),
+      "⇧⌘B",
+    );
+    assert.strictEqual(
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "workspaceNavigator.changes", "MacIntel"),
+      "⇧⌘G",
+    );
+    assert.strictEqual(
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "workspaceNavigator.pullRequest", "MacIntel"),
+      "⇧⌘H",
+    );
+    assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "commandPalette.toggle", "MacIntel"),
       "⌘K",
     );
@@ -499,6 +551,30 @@ describe("chat/editor shortcuts", () => {
       isChatNewLocalShortcut(event({ key: "n", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
       }),
+    );
+  });
+
+  it("matches Option-Tab for the chat switcher", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "Tab", altKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+      "chat.switcher",
+    );
+  });
+
+  it("matches Control-Tab in both directions for right-panel tabs", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "Tab", ctrlKey: true }), DEFAULT_BINDINGS),
+      "rightPanel.nextTab",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "Tab", ctrlKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+      ),
+      "rightPanel.previousTab",
     );
   });
 
@@ -687,6 +763,39 @@ describe("resolveShortcutCommand", () => {
         { platform: "MacIntel" },
       ),
       "rightPanel.toggle",
+    );
+  });
+
+  it("matches Command-Shift-B for the workspace navigator", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "b", code: "KeyB", metaKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        { platform: "MacIntel" },
+      ),
+      "workspaceNavigator.toggle",
+    );
+  });
+
+  it("matches Command-Shift-G for workspace changes", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "g", code: "KeyG", metaKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        { platform: "MacIntel" },
+      ),
+      "workspaceNavigator.changes",
+    );
+  });
+
+  it("matches Command-Shift-H for the pull request", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "h", code: "KeyH", metaKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        { platform: "MacIntel" },
+      ),
+      "workspaceNavigator.pullRequest",
     );
   });
 });

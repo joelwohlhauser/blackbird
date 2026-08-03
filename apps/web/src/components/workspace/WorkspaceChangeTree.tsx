@@ -99,7 +99,9 @@ export const WorkspaceChangeTree = memo(function WorkspaceChangeTree(props: {
 
   const { model } = useFileTree({
     density: "compact",
-    flattenEmptyDirectories: true,
+    // Keep every directory level explicit. Compacting a single-child directory chain into one
+    // row makes the root-level files that follow it look as though they belong to that chain.
+    flattenEmptyDirectories: false,
     initialExpansion: "open",
     icons: T3_PIERRE_ICONS,
     onSelectionChange: (selectedPaths) => {

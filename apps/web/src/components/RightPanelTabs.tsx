@@ -3,6 +3,7 @@ import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import { ClipboardList, FileDiff, Files, Globe2, Plus, TerminalSquare, X } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
+  type WheelEvent as ReactWheelEvent,
   type ElementType,
   type ReactElement,
   type ReactNode,
@@ -64,6 +65,17 @@ const SURFACE_DISABLED_REASONS = {
 } as const;
 
 type TabContextMenuAction = "copy-path" | "close" | "close-others" | "close-to-right" | "close-all";
+
+export function rightPanelTabWheelDelta(
+  event: Pick<WheelEvent, "deltaMode" | "deltaX" | "deltaY">,
+  pageWidth: number,
+): number {
+  const dominantDelta =
+    Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+  if (event.deltaMode === 1) return dominantDelta * 24;
+  if (event.deltaMode === 2) return dominantDelta * pageWidth;
+  return dominantDelta;
+}
 
 function DisabledReasonTooltip(props: { reason: string; trigger: ReactElement }) {
   return (
@@ -389,6 +401,25 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     },
     [props],
   );
+  const handleTabListWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    const viewport = event.currentTarget.querySelector<HTMLElement>(
+      "[data-slot='scroll-area-viewport']",
+    );
+    if (!viewport) return;
+
+    const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    if (maxScrollLeft === 0) return;
+
+    const delta = rightPanelTabWheelDelta(event, viewport.clientWidth);
+    if (delta === 0) return;
+
+    const nextScrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + delta));
+    if (nextScrollLeft === viewport.scrollLeft) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    viewport.scrollLeft = nextScrollLeft;
+  }, []);
 
   useEffect(() => {
     const activeTab = tabListRef.current?.querySelector<HTMLElement>("[data-active-tab='true']");
@@ -419,6 +450,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             ownsDesktopTitleBar && "drag-region",
           )}
           data-right-panel-tab-list
+          onWheel={handleTabListWheel}
         >
           <div className="flex h-full w-max min-w-full items-center gap-1">
             {props.surfaces.map((surface) => {

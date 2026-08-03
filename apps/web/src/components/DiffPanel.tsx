@@ -48,6 +48,7 @@ import { formatShortTimestamp } from "../timestampFormat";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/AnnotatableCodeView";
+import { DiffOverviewRuler } from "./diffs/DiffOverviewRulerView";
 import { Button } from "./ui/button";
 import { ToggleGroup, Toggle } from "./ui/toggle-group";
 import { Switch } from "./ui/switch";
@@ -960,7 +961,7 @@ export default function DiffPanel({
               )
             ) : renderablePatch.kind === "files" ? (
               <div
-                className="min-h-0 flex-1"
+                className="diff-overview-frame relative min-h-0 flex-1 overflow-hidden bg-background"
                 onClickCapture={(event) => {
                   const composedPath = event.nativeEvent.composedPath?.() ?? [];
                   const title = composedPath.find(
@@ -974,7 +975,7 @@ export default function DiffPanel({
                 <AnnotatableCodeView
                   viewerRef={codeViewRef}
                   key={collapseScopeKey ?? reviewSectionId}
-                  className="diff-render-surface h-full min-h-0 overflow-auto bg-background"
+                  className="diff-render-surface diff-overview-scroll h-full min-h-0 overflow-auto bg-background"
                   files={codeViewFiles}
                   sectionId={reviewSectionId}
                   sectionTitle={reviewSectionTitle}
@@ -1034,6 +1035,7 @@ export default function DiffPanel({
                     },
                   }}
                 />
+                <DiffOverviewRuler files={codeViewFiles} />
               </div>
             ) : (
               <div className="min-h-0 flex-1 overflow-auto p-2">

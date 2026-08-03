@@ -21,6 +21,6 @@ export async function addGitHubPullRequestSurface<E>(input: {
     url: input.url,
   });
   return mapAtomCommandResult(result, (snapshot) => {
-    useRightPanelStore.getState().openGitHubPullRequest(input.threadRef, snapshot.tabId);
+    useRightPanelStore.getState().openGitHubPullRequest(input.threadRef, snapshot.tabId, input.url);
   });
 }

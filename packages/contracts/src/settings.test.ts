@@ -200,7 +200,7 @@ describe("ServerSettings worktree defaults", () => {
   it("defaults Treehouse-style worktree behavior for legacy configs", () => {
     expect(decodeServerSettings({})).toMatchObject({
       newWorktreesStartFromOrigin: true,
-      worktreesRoot: "~/Repositories/.worktrees",
+      worktreesRoot: "~/repositories/.worktrees",
       worktreeEnvFileMode: "link",
       installWorktreeDependencies: true,
     });

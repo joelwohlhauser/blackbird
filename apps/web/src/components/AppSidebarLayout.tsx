@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -10,7 +11,7 @@ import {
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import { isElectron } from "../env";
-import { getLocalStorageItem } from "../hooks/useLocalStorage";
+import { getLocalStorageItem, setLocalStorageItem } from "../hooks/useLocalStorage";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
@@ -26,6 +27,10 @@ import {
   THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
 } from "./threadSidebarWidth";
 import {
+  resolveInitialThreadSidebarOpen,
+  THREAD_SIDEBAR_OPEN_STORAGE_KEY,
+} from "./threadSidebarVisibility";
+import {
   Sidebar,
   SidebarProvider,
   SidebarRail,
@@ -36,6 +41,9 @@ import {
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "90px";
+const SIDEBAR_HOVER_REVEAL_EDGE_PX = 8;
+const SIDEBAR_HOVER_DISMISS_PADDING_PX = 12;
+const SIDEBAR_HOVER_DISMISS_DELAY_MS = 120;
 
 function subscribeToViewportWidth(onChange: () => void): () => void {
   window.addEventListener("resize", onChange);
@@ -55,6 +63,17 @@ function readInitialThreadSidebarWidth(): number {
   } catch (error) {
     console.error("Could not read persisted thread sidebar width.", error);
     return resolveInitialThreadSidebarWidth(null, window.innerWidth);
+  }
+}
+
+function readInitialThreadSidebarOpen(): boolean {
+  try {
+    return resolveInitialThreadSidebarOpen(
+      getLocalStorageItem(THREAD_SIDEBAR_OPEN_STORAGE_KEY, Schema.Boolean),
+    );
+  } catch (error) {
+    console.error("Could not read persisted thread sidebar visibility.", error);
+    return true;
   }
 }
 
@@ -116,6 +135,80 @@ function SidebarControl() {
   );
 }
 
+function SidebarHoverRevealController({
+  sidebarWidth,
+  transientOpen,
+  onTransientOpenChange,
+}: {
+  sidebarWidth: number;
+  transientOpen: boolean;
+  onTransientOpenChange: (open: boolean) => void;
+}) {
+  const { isMobile, open } = useSidebar();
+  const dismissTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const cancelDismiss = () => {
+      if (dismissTimeoutRef.current === null) return;
+      window.clearTimeout(dismissTimeoutRef.current);
+      dismissTimeoutRef.current = null;
+    };
+    const closeImmediately = () => {
+      cancelDismiss();
+      onTransientOpenChange(false);
+    };
+
+    if (isMobile || open) {
+      closeImmediately();
+      return;
+    }
+
+    const scheduleDismiss = () => {
+      if (dismissTimeoutRef.current !== null) return;
+      dismissTimeoutRef.current = window.setTimeout(() => {
+        dismissTimeoutRef.current = null;
+        onTransientOpenChange(false);
+      }, SIDEBAR_HOVER_DISMISS_DELAY_MS);
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      const pointerTarget = event.target;
+      const capturedResizeRail =
+        pointerTarget instanceof Element
+          ? pointerTarget.closest<HTMLButtonElement>("[data-slot='sidebar-rail']")
+          : null;
+      if (capturedResizeRail?.hasPointerCapture(event.pointerId)) {
+        cancelDismiss();
+        return;
+      }
+
+      if (event.clientX <= SIDEBAR_HOVER_REVEAL_EDGE_PX) {
+        cancelDismiss();
+        onTransientOpenChange(true);
+        return;
+      }
+
+      if (!transientOpen) return;
+      if (event.clientX > sidebarWidth + SIDEBAR_HOVER_DISMISS_PADDING_PX) {
+        scheduleDismiss();
+      } else {
+        cancelDismiss();
+      }
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("blur", closeImmediately);
+    document.documentElement.addEventListener("mouseleave", closeImmediately);
+    return () => {
+      cancelDismiss();
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("blur", closeImmediately);
+      document.documentElement.removeEventListener("mouseleave", closeImmediately);
+    };
+  }, [isMobile, onTransientOpenChange, open, sidebarWidth, transientOpen]);
+
+  return null;
+}
+
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const sidebarV2Enabled = useSidebarV2Enabled();
@@ -127,6 +220,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const useSidebarV2Theme = useSidebarV2 || isOnSettings;
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
+  const [sidebarOpen, setSidebarOpen] = useState(readInitialThreadSidebarOpen);
+  const [sidebarTransientOpen, setSidebarTransientOpen] = useState(false);
   // Subscribed rather than read once: the clamp must track live window size,
   // and a clamped drag ends with an unchanged width, which skips the re-render
   // that would otherwise refresh a render-time snapshot.
@@ -182,14 +277,29 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     };
   }, [navigate, pathname]);
 
+  const handleSidebarOpenChange = (open: boolean) => {
+    setSidebarOpen(open);
+    try {
+      setLocalStorageItem(THREAD_SIDEBAR_OPEN_STORAGE_KEY, open, Schema.Boolean);
+    } catch (error) {
+      console.error("Could not persist thread sidebar visibility.", error);
+    }
+  };
+
   return (
-    <SidebarProvider className="h-dvh! min-h-0!" defaultOpen style={sidebarProviderStyle}>
+    <SidebarProvider
+      className="h-dvh! min-h-0!"
+      open={sidebarOpen}
+      onOpenChange={handleSidebarOpenChange}
+      style={sidebarProviderStyle}
+    >
       <Sidebar
         side="left"
         collapsible="offcanvas"
         data-app-sidebar=""
         data-sidebar-version={useSidebarV2Theme ? "v2" : "v1"}
         className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+        transientOpen={sidebarTransientOpen}
         resizable={{
           maxWidth: sidebarMaximumWidth,
           minWidth: THREAD_SIDEBAR_MIN_WIDTH,
@@ -205,6 +315,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       </Sidebar>
       {children}
       <SidebarControl />
+      <SidebarHoverRevealController
+        sidebarWidth={sidebarWidth}
+        transientOpen={sidebarTransientOpen}
+        onTransientOpenChange={setSidebarTransientOpen}
+      />
     </SidebarProvider>
   );
 }

@@ -106,7 +106,7 @@ export async function openTerminalLinkInPreview<E>(
       return;
     }
     applyPreviewServerSnapshot(input.threadRef, result.value);
-    useRightPanelStore.getState().openBrowser(input.threadRef, result.value.tabId);
+    useRightPanelStore.getState().openBrowser(input.threadRef, result.value.tabId, input.url);
     return;
   }
 

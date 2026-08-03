@@ -49,7 +49,7 @@ describe("addLinearSurface", () => {
     ).toEqual({
       isOpen: true,
       activeSurfaceId: "linear",
-      surfaces: [{ id: "linear", kind: "linear", resourceId: "linear-tab" }],
+      surfaces: [{ id: "linear", kind: "linear", resourceId: "linear-tab", url }],
     });
   });
 });

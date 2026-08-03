@@ -2,10 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  Sidebar,
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuSubButton,
   SidebarProvider,
+  SidebarRail,
   SidebarTrigger,
 } from "./sidebar";
 import { resolveSidebarState } from "./sidebarState";
@@ -37,6 +39,32 @@ describe("sidebar interactive cursors", () => {
     );
 
     expect(html).toContain('data-sidebar-state="collapsed"');
+  });
+
+  it("can reveal an off-canvas sidebar transiently without expanding its layout gap", () => {
+    const html = renderToStaticMarkup(
+      <SidebarProvider defaultOpen={false}>
+        <Sidebar transientOpen>Projects</Sidebar>
+      </SidebarProvider>,
+    );
+
+    expect(html).toContain('data-state="collapsed"');
+    expect(html).toContain('data-transient-open="true"');
+    expect(html).toContain("group-data-[transient-open=true]:left-0!");
+    expect(html).toContain("group-data-[collapsible=offcanvas]:w-0");
+  });
+
+  it("keeps a transient off-canvas sidebar resize rail interactive", () => {
+    const html = renderToStaticMarkup(
+      <SidebarProvider defaultOpen={false}>
+        <Sidebar transientOpen resizable>
+          <SidebarRail />
+        </Sidebar>
+      </SidebarProvider>,
+    );
+
+    expect(html).toContain('aria-label="Resize Sidebar"');
+    expect(html).not.toContain("group-data-[collapsible=offcanvas]:pointer-events-none");
   });
 
   it("keeps the sidebar trigger interactive inside Electron drag regions", () => {

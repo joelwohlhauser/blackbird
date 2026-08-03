@@ -104,6 +104,19 @@ export function resolveExistingWorktreeOptions(
   return [...byPath.values()].toSorted((left, right) => left.branch.localeCompare(right.branch));
 }
 
+export function filterExistingWorktreeOptions(
+  worktrees: ReadonlyArray<ExistingWorktreeOption>,
+  query: string,
+): ExistingWorktreeOption[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length === 0) return [...worktrees];
+  return worktrees.filter(
+    (worktree) =>
+      worktree.branch.toLowerCase().includes(normalizedQuery) ||
+      worktree.path.toLowerCase().includes(normalizedQuery),
+  );
+}
+
 export function resolveExistingWorktreeSelectorState(input: {
   hasData: boolean;
   isPending: boolean;

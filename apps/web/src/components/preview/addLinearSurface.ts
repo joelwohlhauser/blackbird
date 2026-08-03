@@ -21,6 +21,6 @@ export async function addLinearSurface<E>(input: {
     url: input.url,
   });
   return mapAtomCommandResult(result, (snapshot) => {
-    useRightPanelStore.getState().openLinear(input.threadRef, snapshot.tabId);
+    useRightPanelStore.getState().openLinear(input.threadRef, snapshot.tabId, input.url);
   });
 }

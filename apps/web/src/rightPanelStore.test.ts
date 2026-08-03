@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
   migratePersistedRightPanelState,
+  resolveAdjacentRightPanelSurface,
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
@@ -22,6 +23,24 @@ beforeEach(() => {
 });
 
 describe("rightPanelStore", () => {
+  it("cycles surfaces in both directions with wraparound", () => {
+    const surfaces = [
+      { id: "diff", kind: "diff" },
+      { id: "files", kind: "files" },
+      { id: "plan", kind: "plan" },
+    ] as const;
+
+    expect(
+      resolveAdjacentRightPanelSurface({ activeSurfaceId: "diff", surfaces }, "next")?.id,
+    ).toBe("files");
+    expect(
+      resolveAdjacentRightPanelSurface({ activeSurfaceId: "diff", surfaces }, "previous")?.id,
+    ).toBe("plan");
+    expect(
+      resolveAdjacentRightPanelSurface({ activeSurfaceId: "plan", surfaces }, "next")?.id,
+    ).toBe("diff");
+  });
+
   it("drops the legacy singleton terminal surface during migration", () => {
     expect(
       migratePersistedRightPanelState({
@@ -408,6 +427,59 @@ describe("rightPanelStore", () => {
       kind: "preview",
       resourceId: "tab-b",
     });
+  });
+
+  it("keeps preview URLs and tab order while replacing restored runtime sessions", () => {
+    useRightPanelStore.getState().openBrowser(refA, "old-browser", "https://example.com/docs");
+    useRightPanelStore
+      .getState()
+      .openLinear(refA, "old-linear", "https://linear.app/example/issue/EX-1");
+
+    useRightPanelStore
+      .getState()
+      .replacePreviewSurfaceResource(refA, "browser:old-browser", "new-browser");
+    useRightPanelStore.getState().replacePreviewSurfaceResource(refA, "linear", "new-linear");
+
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "linear",
+      surfaces: [
+        {
+          id: "browser:new-browser",
+          kind: "preview",
+          resourceId: "new-browser",
+          url: "https://example.com/docs",
+        },
+        {
+          id: "linear",
+          kind: "linear",
+          resourceId: "new-linear",
+          url: "https://linear.app/example/issue/EX-1",
+        },
+      ],
+    });
+  });
+
+  it("updates persisted browser URLs from live preview snapshots", () => {
+    useRightPanelStore.getState().openBrowser(refA, "tab-a", "https://example.com/old");
+    useRightPanelStore.getState().syncPreviewSurfaceUrls(refA, {
+      "tab-a": {
+        threadId: "thread-A",
+        tabId: "tab-a",
+        navStatus: {
+          _tag: "Success",
+          url: "https://example.com/new",
+          title: "New",
+        },
+        canGoBack: true,
+        canGoForward: false,
+        updatedAt: "2026-08-03T12:00:00.000Z",
+      },
+    });
+
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces[0],
+    ).toMatchObject({ url: "https://example.com/new" });
   });
 
   it("tracks Linear as a singleton backed by a browser session", () => {

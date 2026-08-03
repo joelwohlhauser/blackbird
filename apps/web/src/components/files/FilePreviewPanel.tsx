@@ -67,6 +67,7 @@ interface FilePreviewPanelProps {
   composerDraftTarget: ScopedThreadRef | DraftId;
   revealLine: number | null;
   revealRequestId: number;
+  contentRevision: string | null;
   onOpenFile: (relativePath: string) => void;
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
@@ -843,6 +844,7 @@ export default function FilePreviewPanel({
   composerDraftTarget,
   revealLine,
   revealRequestId,
+  contentRevision,
   onOpenFile,
   onPendingChange,
 }: FilePreviewPanelProps) {
@@ -857,6 +859,11 @@ export default function FilePreviewPanel({
   });
   const isImage = relativePath !== null && isWorkspaceImagePreviewPath(relativePath);
   const file = useProjectFileQuery(environmentId, cwd, relativePath, !isImage);
+
+  useEffect(() => {
+    if (relativePath === null || isImage) return;
+    file.refresh();
+  }, [contentRevision, cwd, environmentId, file.refresh, isImage, relativePath]);
   // Reading markdown rendered is a preference, not a property of one file. Keeping
   // it on the panel meant a thread switch dropped it and forced source back.
   const [renderMarkdownPreferred, setRenderMarkdownPreferred] = useLocalStorage(

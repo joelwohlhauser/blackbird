@@ -125,7 +125,7 @@ import {
 } from "./Sidebar.logic";
 import { resolveLocalCheckoutBranchMismatch } from "./BranchToolbar.logic";
 import {
-  prStatusIndicator,
+  sidebarPrStatusIndicator,
   resolveThreadPr,
   settledPrHoverColorClass,
   terminalStatusFromRunningIds,
@@ -551,8 +551,8 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
     threadBranch: thread.branch,
     gitStatus: gitStatus.data,
   });
-  const prStatus = prStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
-  const settledPrHoverClass = pr ? settledPrHoverColorClass(pr.state) : undefined;
+  const prStatus = sidebarPrStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
+  const settledPrHoverClass = prStatus && pr ? settledPrHoverColorClass(pr.state) : undefined;
   // Report the PR state up: the parent partitions rows with effectiveSettled,
   // and a merged/closed PR auto-settles a thread — data only rows have.
   const prState = pr?.state ?? null;
@@ -2701,9 +2701,7 @@ export default function SidebarV2() {
 
   // Same resolution as v1: prefer the local-thread binding, fall back to
   // chat.new, no platform gating — web users have working shortcuts too.
-  const newThreadShortcutLabel =
-    shortcutLabelForCommand(keybindings, "chat.newLocal") ??
-    shortcutLabelForCommand(keybindings, "chat.new");
+  const newThreadShortcutLabel = shortcutLabelForCommand(keybindings, "chat.new");
   return (
     <>
       <SidebarChromeHeader

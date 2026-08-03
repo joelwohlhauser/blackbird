@@ -61,6 +61,7 @@ interface BranchToolbarProps {
   deleteWorktreePending?: boolean;
   envLocked: boolean;
   onCheckoutPullRequestRequest?: (reference: string) => void;
+  onOpenPullRequestRequest?: () => void;
   onComposerFocusRequest?: () => void;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
@@ -257,6 +258,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   deleteWorktreePending = false,
   envLocked,
   onCheckoutPullRequestRequest,
+  onOpenPullRequestRequest,
   onComposerFocusRequest,
   availableEnvironments,
   onEnvironmentChange,
@@ -491,6 +493,7 @@ export const BranchToolbar = memo(function BranchToolbar({
           startFromOrigin={startFromOrigin}
           onStartFromOriginChange={onStartFromOriginChange}
           {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
+          {...(onOpenPullRequestRequest ? { onOpenPullRequestRequest } : {})}
           {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
         />
       ) : null}

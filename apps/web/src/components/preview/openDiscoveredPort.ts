@@ -21,6 +21,6 @@ export async function openDiscoveredPort<E>(input: {
     url: resolvedUrl,
   });
   return mapAtomCommandResult(result, (snapshot) => {
-    useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId);
+    useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId, resolvedUrl);
   });
 }

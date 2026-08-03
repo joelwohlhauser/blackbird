@@ -19,6 +19,12 @@ export async function addBrowserSurface<E>(input: {
     threadRef: input.threadRef,
   });
   return mapAtomCommandResult(result, (snapshot) => {
-    useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId);
+    useRightPanelStore
+      .getState()
+      .openBrowser(
+        input.threadRef,
+        snapshot.tabId,
+        snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url,
+      );
   });
 }

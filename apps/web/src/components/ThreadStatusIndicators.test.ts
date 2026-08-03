@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   prStatusIndicator,
   resolveThreadPr,
+  sidebarPrStatusIndicator,
   settledPrHoverColorClass,
 } from "./ThreadStatusIndicators";
 
@@ -86,6 +87,26 @@ describe("prStatusIndicator", () => {
     expect(prStatusIndicator({ ...closedPr, state: "closed" }, undefined)?.colorClass).toContain(
       "text-red-600",
     );
+  });
+});
+
+describe("sidebarPrStatusIndicator", () => {
+  it("hides open and closed pull requests from chat rows", () => {
+    const pr = status().pr;
+    if (!pr) throw new Error("Expected pull request fixture");
+
+    expect(sidebarPrStatusIndicator(pr, undefined)).toBeNull();
+    expect(sidebarPrStatusIndicator({ ...pr, state: "closed" }, undefined)).toBeNull();
+  });
+
+  it("shows merged pull requests with the violet presentation", () => {
+    const pr = status().pr;
+    if (!pr) throw new Error("Expected pull request fixture");
+
+    expect(sidebarPrStatusIndicator({ ...pr, state: "merged" }, undefined)).toMatchObject({
+      label: "PR merged",
+      colorClass: expect.stringContaining("text-violet-600"),
+    });
   });
 });
 

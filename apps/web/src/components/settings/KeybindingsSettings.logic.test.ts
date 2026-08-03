@@ -122,6 +122,13 @@ describe("KeybindingsSettings.logic", () => {
 
   it("formats static and project script command labels", () => {
     expect(commandLabel("commandPalette.toggle")).toBe("Command Palette: Toggle");
+    expect(commandLabel("chat.newLocal")).toBe("New Quick Chat");
+    expect(commandLabel("chat.switcher")).toBe("Chat Switcher");
+    expect(commandLabel("rightPanel.nextTab")).toBe("Right Panel: Next Tab");
+    expect(commandLabel("rightPanel.previousTab")).toBe("Right Panel: Previous Tab");
+    expect(commandLabel("workspaceNavigator.toggle")).toBe("Toggle Files Sidebar");
+    expect(commandLabel("workspaceNavigator.changes")).toBe("Open Changes Sidebar");
+    expect(commandLabel("workspaceNavigator.pullRequest")).toBe("Open Pull Request Sidebar");
     expect(commandLabel("script.setup-db.run")).toBe("Run Script: Setup Db");
   });
 
@@ -236,13 +243,13 @@ describe("KeybindingsSettings.logic", () => {
       "",
     );
 
-    expect(rows[0]?.conflicts).toEqual(["Chat: New Local"]);
+    expect(rows[0]?.conflicts).toEqual(["New Quick Chat"]);
     expect(
       keybindingConflictLabels(rows, {
         rowId: rows[0]?.id ?? "",
         key: "mod+n",
         when: "",
       }),
-    ).toEqual(["Chat: New Local"]);
+    ).toEqual(["New Quick Chat"]);
   });
 });

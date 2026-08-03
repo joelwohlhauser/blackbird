@@ -42,6 +42,39 @@ it.effect("parses keybinding rules", () =>
     });
     assert.strictEqual(parsedRightPanelToggle.command, "rightPanel.toggle");
 
+    const parsedRightPanelNextTab = yield* decode(KeybindingRule, {
+      key: "ctrl+tab",
+      command: "rightPanel.nextTab",
+    });
+    assert.strictEqual(parsedRightPanelNextTab.command, "rightPanel.nextTab");
+
+    const parsedRightPanelPreviousTab = yield* decode(KeybindingRule, {
+      key: "ctrl+shift+tab",
+      command: "rightPanel.previousTab",
+    });
+    assert.strictEqual(parsedRightPanelPreviousTab.command, "rightPanel.previousTab");
+
+    const parsedWorkspaceNavigatorToggle = yield* decode(KeybindingRule, {
+      key: "mod+shift+b",
+      command: "workspaceNavigator.toggle",
+    });
+    assert.strictEqual(parsedWorkspaceNavigatorToggle.command, "workspaceNavigator.toggle");
+
+    const parsedWorkspaceNavigatorChanges = yield* decode(KeybindingRule, {
+      key: "mod+shift+g",
+      command: "workspaceNavigator.changes",
+    });
+    assert.strictEqual(parsedWorkspaceNavigatorChanges.command, "workspaceNavigator.changes");
+
+    const parsedWorkspaceNavigatorPullRequest = yield* decode(KeybindingRule, {
+      key: "mod+shift+h",
+      command: "workspaceNavigator.pullRequest",
+    });
+    assert.strictEqual(
+      parsedWorkspaceNavigatorPullRequest.command,
+      "workspaceNavigator.pullRequest",
+    );
+
     const parsedClose = yield* decode(KeybindingRule, {
       key: "mod+w",
       command: "terminal.close",
@@ -77,6 +110,12 @@ it.effect("parses keybinding rules", () =>
       command: "chat.newLocal",
     });
     assert.strictEqual(parsedLocal.command, "chat.newLocal");
+
+    const parsedChatSwitcher = yield* decode(KeybindingRule, {
+      key: "alt+tab",
+      command: "chat.switcher",
+    });
+    assert.strictEqual(parsedChatSwitcher.command, "chat.switcher");
 
     const parsedModelPickerToggle = yield* decode(KeybindingRule, {
       key: "mod+shift+m",

@@ -73,6 +73,9 @@ export function sortThreads<T extends { readonly id: string } & ThreadSortInput>
   threads: readonly T[],
   sortOrder: SidebarThreadSortOrder,
 ): T[] {
+  if (sortOrder === "manual") {
+    return [...threads];
+  }
   return Arr.sort(
     threads,
     Order.mapInput(

@@ -8,6 +8,7 @@ import {
 
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
 const PROJECT_SEARCH_CONTENTS_MAX_LIMIT = 500;
+const PROJECT_CREATE_ENTRY_PATH_MAX_LENGTH = 512;
 const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
 const PROJECT_READ_FILE_PATH_MAX_LENGTH = 512;
 
@@ -272,6 +273,47 @@ export const ProjectWriteFileResult = Schema.Struct({
   relativePath: TrimmedNonEmptyString,
 });
 export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
+
+export const ProjectCreateEntryInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  relativePath: TrimmedNonEmptyString.check(
+    Schema.isMaxLength(PROJECT_CREATE_ENTRY_PATH_MAX_LENGTH),
+  ),
+  kind: ProjectEntryKind,
+});
+export type ProjectCreateEntryInput = typeof ProjectCreateEntryInput.Type;
+
+export const ProjectCreateEntryResult = Schema.Struct({
+  relativePath: TrimmedNonEmptyString,
+  kind: ProjectEntryKind,
+});
+export type ProjectCreateEntryResult = typeof ProjectCreateEntryResult.Type;
+
+export class ProjectCreateEntryError extends Schema.TaggedErrorClass<ProjectCreateEntryError>()(
+  "ProjectCreateEntryError",
+  {
+    cwd: Schema.optional(TrimmedNonEmptyString),
+    relativePath: Schema.optional(TrimmedNonEmptyString),
+    kind: Schema.optional(ProjectEntryKind),
+    failure: Schema.optional(ProjectFileFailure),
+    resolvedPath: Schema.optional(TrimmedNonEmptyString),
+    resolvedWorkspaceRoot: Schema.optional(TrimmedNonEmptyString),
+    operation: Schema.optional(ProjectFileOperation),
+    operationPath: Schema.optional(TrimmedNonEmptyString),
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  // @effect-diagnostics-next-line overriddenSchemaConstructor:off
+  constructor(props: ProjectFileFailureContext & { readonly kind: ProjectEntryKind }) {
+    super({
+      ...props,
+      message:
+        decodedProjectErrorMessage(props) ??
+        `Failed to create workspace ${props.kind} '${props.relativePath}' in '${props.cwd}'.`,
+    } as any);
+  }
+}
 
 export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteFileError>()(
   "ProjectWriteFileError",

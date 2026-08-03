@@ -2,11 +2,27 @@ import type {
   ContextMenuItem as TreeContextMenuItem,
   ContextMenuOpenContext as TreeContextMenuOpenContext,
 } from "@pierre/trees";
-import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId, ProjectEntry, ProjectEntryKind } from "@t3tools/contracts";
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
-import { useEffect, useMemo, useRef } from "react";
+import { FilePlus2Icon, FolderPlusIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
 import { InputGroup, InputGroupInput } from "~/components/ui/input-group";
 import { toastManager } from "~/components/ui/toast";
 import { useComposerHandleContext } from "~/composerHandleContext";
@@ -14,8 +30,11 @@ import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { useTheme } from "~/hooks/useTheme";
 import { readLocalApi } from "~/localApi";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
+import { projectEnvironment } from "~/state/projects";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { createFileTreeDragMentionController } from "./fileTreeDragMention";
+import { normalizeNewProjectEntryPath } from "./newProjectEntry";
 import { useProjectEntriesQuery } from "./projectFilesQueryState";
 
 interface FileBrowserPanelProps {
@@ -84,6 +103,7 @@ export default function FileBrowserPanel({
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
+  const createEntry = useAtomCommand(projectEnvironment.createEntry);
   const entries = entriesQuery.data?.entries ?? [];
   const entryKinds = useMemo(
     () => new Map(entries.map((entry) => [entry.path, entry.kind] as const)),
@@ -95,6 +115,63 @@ export default function FileBrowserPanel({
   const syncingSelectionRef = useRef(false);
   const treeSelectionPathRef = useRef<string | null>(null);
   const handledRevealRef = useRef<{ path: string; revealId: number } | null>(null);
+  const [createEntryKind, setCreateEntryKind] = useState<ProjectEntryKind | null>(null);
+  const [newEntryPath, setNewEntryPath] = useState("");
+  const [createEntryError, setCreateEntryError] = useState<string | null>(null);
+  const [isCreatingEntry, setIsCreatingEntry] = useState(false);
+
+  const openCreateEntryDialog = (kind: ProjectEntryKind) => {
+    setCreateEntryKind(kind);
+    setNewEntryPath("");
+    setCreateEntryError(null);
+  };
+  const closeCreateEntryDialog = () => {
+    if (isCreatingEntry) return;
+    setCreateEntryKind(null);
+    setNewEntryPath("");
+    setCreateEntryError(null);
+  };
+  const handleCreateEntry = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (createEntryKind === null || isCreatingEntry) return;
+
+    const normalized = normalizeNewProjectEntryPath(newEntryPath, createEntryKind);
+    if (normalized.path === null) {
+      setCreateEntryError(normalized.error);
+      return;
+    }
+    if (entryKinds.has(normalized.path)) {
+      setCreateEntryError(`An entry already exists at ${normalized.path}.`);
+      return;
+    }
+
+    setCreateEntryError(null);
+    setIsCreatingEntry(true);
+    const result = await createEntry({
+      environmentId,
+      input: { cwd, relativePath: normalized.path, kind: createEntryKind },
+    });
+    setIsCreatingEntry(false);
+
+    if (result._tag === "Success") {
+      entriesQuery.refresh();
+      setCreateEntryKind(null);
+      setNewEntryPath("");
+      toastManager.add({
+        type: "success",
+        title: createEntryKind === "file" ? "File created" : "Folder created",
+        description: result.value.relativePath,
+      });
+      if (createEntryKind === "file") {
+        onOpenFile(result.value.relativePath);
+      }
+      return;
+    }
+    if (isAtomCommandInterrupted(result)) return;
+
+    const error = squashAtomCommandFailure(result);
+    setCreateEntryError(error instanceof Error ? error.message : "Unable to create the entry.");
+  };
 
   // The tree renders rows in shadow DOM and its anchor rect is unreliable, so
   // capture the right-click position ourselves; contextmenu is a composed
@@ -333,6 +410,28 @@ export default function FileBrowserPanel({
           onValueChange={handleSearchValueChange}
           onClose={search.close}
         />
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label="New file"
+          title="New file"
+          onClick={() => openCreateEntryDialog("file")}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <FilePlus2Icon />
+        </Button>
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label="New folder"
+          title="New folder"
+          onClick={() => openCreateEntryDialog("directory")}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <FolderPlusIcon />
+        </Button>
       </div>
       {entriesQuery.error && entriesQuery.data === null ? (
         <div className="p-4 text-xs leading-relaxed text-destructive">{entriesQuery.error}</div>
@@ -347,6 +446,59 @@ export default function FileBrowserPanel({
           }}
         />
       )}
+      <Dialog
+        open={createEntryKind !== null}
+        onOpenChange={(open) => {
+          if (!open) closeCreateEntryDialog();
+        }}
+      >
+        <DialogPopup>
+          <form onSubmit={handleCreateEntry}>
+            <DialogHeader>
+              <DialogTitle>{createEntryKind === "file" ? "New file" : "New folder"}</DialogTitle>
+              <DialogDescription>
+                Enter a path relative to {projectName}. Parent folders are created automatically.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogPanel className="space-y-2">
+              <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                Path
+                <Input
+                  autoFocus
+                  nativeInput
+                  value={newEntryPath}
+                  aria-invalid={createEntryError !== null || undefined}
+                  placeholder={createEntryKind === "file" ? "src/new-file.ts" : "src/new-folder"}
+                  onChange={(event) => {
+                    setNewEntryPath(event.currentTarget.value);
+                    setCreateEntryError(null);
+                  }}
+                />
+              </label>
+              {createEntryError ? (
+                <p className="text-xs leading-relaxed text-destructive">{createEntryError}</p>
+              ) : null}
+            </DialogPanel>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isCreatingEntry}
+                onClick={closeCreateEntryDialog}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isCreatingEntry}>
+                {isCreatingEntry
+                  ? "Creating…"
+                  : createEntryKind === "file"
+                    ? "Create file"
+                    : "Create folder"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogPopup>
+      </Dialog>
     </div>
   );
 }

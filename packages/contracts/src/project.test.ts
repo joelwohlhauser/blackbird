@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  ProjectCreateEntryError,
   ProjectReadFileError,
   ProjectSearchContentsError,
   ProjectSearchContentsInput,
@@ -58,6 +59,16 @@ describe("project RPC errors", () => {
       resolvedPath: "/workspace/src/index.ts",
       cause,
     });
+    const createEntryError = new ProjectCreateEntryError({
+      cwd: "/workspace",
+      relativePath: "src/new-file.ts",
+      kind: "file",
+      failure: "operation_failed",
+      operation: "open",
+      operationPath: "/workspace/src/new-file.ts",
+      resolvedPath: "/workspace/src/new-file.ts",
+      cause,
+    });
 
     expect(searchError.message).toBe("Failed to search workspace entries in '/workspace'.");
     expect(searchError.message).not.toContain(cause.message);
@@ -69,6 +80,10 @@ describe("project RPC errors", () => {
     expect(readError.message).toBe("Failed to read workspace file 'src/index.ts' in '/workspace'.");
     expect(readError.message).not.toContain(cause.message);
     expect(readError.cause).toBe(cause);
+    expect(createEntryError.message).toBe(
+      "Failed to create workspace file 'src/new-file.ts' in '/workspace'.",
+    );
+    expect(createEntryError.cause).toBe(cause);
 
     const contentSearchError = new ProjectSearchContentsError({
       cwd: "/workspace",

@@ -121,6 +121,7 @@ import {
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
   selectWorkspaceNavigatorOpen,
+  resolveAdjacentRightPanelSurface,
   type RightPanelSurface,
   useRightPanelStore,
 } from "../rightPanelStore";
@@ -130,9 +131,10 @@ import {
   useThreadPreviewState,
 } from "../previewStateStore";
 import { addBrowserSurface } from "./preview/addBrowserSurface";
-import { addGitHubPullRequestSurface } from "./preview/addGitHubPullRequestSurface";
+import { useGitHubPullRequestSurface } from "./preview/useGitHubPullRequestSurface";
 import { addLinearSurface } from "./preview/addLinearSurface";
 import { closePreviewSession } from "./preview/closePreviewSession";
+import { openPreviewSession } from "./preview/openPreviewSession";
 import { ThreadPreviewMiniPlayer } from "./preview/ThreadPreviewMiniPlayer";
 import { subscribePreviewAction } from "./preview/previewActionBus";
 import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
@@ -144,9 +146,11 @@ import {
 import { RightPanelTabs } from "./RightPanelTabs";
 import WorkspaceNavigator, {
   type WorkspaceNavigatorDiffTarget,
+  type WorkspaceNavigatorTab,
 } from "./workspace/WorkspaceNavigator";
 import { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 import { BranchToolbar } from "./BranchToolbar";
+import { projectFileCheckpointRevision } from "./files/fileContentRevision";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
@@ -1549,6 +1553,7 @@ function ChatViewContent(props: ChatViewProps) {
     () => (activeThread ? scopeThreadRef(activeThread.environmentId, activeThread.id) : null),
     [activeThread],
   );
+  const openGitHubPullRequestSurface = useGitHubPullRequestSurface(activeThreadRef);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
   const [timelineAnchor, setTimelineAnchor] = useState<{
     readonly threadKey: string | null;
@@ -1568,11 +1573,17 @@ function ChatViewContent(props: ChatViewProps) {
   const workspaceNavigatorOpen = useRightPanelStore((state) =>
     selectWorkspaceNavigatorOpen(state.workspaceNavigatorOpenByThreadKey, activeThreadRef),
   );
+  const [workspaceNavigatorTab, setWorkspaceNavigatorTab] = useState<WorkspaceNavigatorTab>("file");
+  const previewSurfaceRestoreInFlightRef = useRef(new Set<string>());
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
   const activeFileSurface =
     activeRightPanelSurface?.kind === "file" ? activeRightPanelSurface : null;
+  const activeFileContentRevision = projectFileCheckpointRevision(
+    activeThread?.checkpoints ?? [],
+    activeFileSurface?.relativePath ?? null,
+  );
   const activePreviewState = useThreadPreviewState(activeThreadRef);
   const activePreviewMiniPlayer = usePreviewMiniPlayerStore((state) =>
     selectThreadPreviewMiniPlayer(state.byThreadKey, activeThreadRef),
@@ -1596,13 +1607,72 @@ function ChatViewContent(props: ChatViewProps) {
   const rightPanelMaximized =
     canMaximizeRightPanel && maximizedRightPanelThreadKey === routeThreadKey;
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
+  const missingPreviewSurfaces = useMemo(
+    () =>
+      rightPanelState.surfaces.filter(
+        (
+          surface,
+        ): surface is Extract<RightPanelSurface, { kind: "preview" | "linear" | "github-pr" }> =>
+          (surface.kind === "preview" ||
+            surface.kind === "linear" ||
+            surface.kind === "github-pr") &&
+          (surface.resourceId === null || !activePreviewState.sessions[surface.resourceId]),
+      ),
+    [activePreviewState.sessions, rightPanelState.surfaces],
+  );
 
   useEffect(() => {
     if (!activeThreadRef) return;
     useRightPanelStore
       .getState()
-      .reconcileBrowserSurfaces(activeThreadRef, Object.keys(activePreviewState.sessions));
+      .syncPreviewSurfaceUrls(activeThreadRef, activePreviewState.sessions);
   }, [activePreviewState.sessions, activeThreadRef]);
+
+  useEffect(() => {
+    if (
+      !activeThreadRef ||
+      activePreviewState.serverEpoch === null ||
+      !isPreviewSupportedInRuntime()
+    ) {
+      return;
+    }
+    for (const surface of missingPreviewSurfaces) {
+      if (previewSurfaceRestoreInFlightRef.current.has(surface.id)) continue;
+      previewSurfaceRestoreInFlightRef.current.add(surface.id);
+      void openPreviewSession({
+        openPreview,
+        threadRef: activeThreadRef,
+        ...(surface.url ? { url: surface.url } : {}),
+      })
+        .then((result) => {
+          if (result._tag === "Failure") return;
+          useRightPanelStore
+            .getState()
+            .replacePreviewSurfaceResource(activeThreadRef, surface.id, result.value.tabId);
+        })
+        .finally(() => {
+          previewSurfaceRestoreInFlightRef.current.delete(surface.id);
+        });
+    }
+  }, [activePreviewState.serverEpoch, activeThreadRef, missingPreviewSurfaces, openPreview]);
+
+  useEffect(() => {
+    if (
+      !activeThreadRef ||
+      activePreviewState.serverEpoch === null ||
+      missingPreviewSurfaces.length > 0
+    ) {
+      return;
+    }
+    useRightPanelStore
+      .getState()
+      .reconcileBrowserSurfaces(activeThreadRef, Object.keys(activePreviewState.sessions));
+  }, [
+    activePreviewState.serverEpoch,
+    activePreviewState.sessions,
+    activeThreadRef,
+    missingPreviewSurfaces.length,
+  ]);
 
   useEffect(() => {
     if (!activeThreadRef || !activePreviewMiniPlayer) return;
@@ -2596,6 +2666,18 @@ function ChatViewContent(props: ChatViewProps) {
     activeProject !== null &&
     activeWorkspaceRoot !== undefined;
   const showWorkspaceNavigator = workspaceNavigatorAvailable && workspaceNavigatorOpen;
+  useEffect(() => {
+    if (!showWorkspaceNavigator || workspaceNavigatorTab !== "changes" || gitStatusCwd === null) {
+      return;
+    }
+    gitStatusQuery.refresh();
+  }, [
+    activeThread?.checkpoints,
+    gitStatusCwd,
+    gitStatusQuery.refresh,
+    showWorkspaceNavigator,
+    workspaceNavigatorTab,
+  ]);
   const activeTerminalLaunchContext =
     terminalUiLaunchContext?.threadId === activeThreadId ? terminalUiLaunchContext : null;
   // Default true while loading to avoid toolbar flicker.
@@ -3248,23 +3330,9 @@ function ChatViewContent(props: ChatViewProps) {
     openPreview,
   ]);
   const createGitHubPullRequestSurface = useCallback(() => {
-    if (!activeThreadRef || !githubPullRequest || !isPreviewSupportedInRuntime()) return;
-    const existing = useRightPanelStore
-      .getState()
-      .byThreadKey[scopedThreadKey(activeThreadRef)]?.surfaces.find(
-        (surface) => surface.kind === "github-pr",
-      );
-    if (existing && activePreviewState.sessions[existing.resourceId]) {
-      useRightPanelStore.getState().activateSurface(activeThreadRef, existing.id);
-      setActivePreviewTab(activeThreadRef, existing.resourceId);
-      return;
-    }
-    void addGitHubPullRequestSurface({
-      threadRef: activeThreadRef,
-      openPreview,
-      url: githubPullRequest.url,
-    });
-  }, [activePreviewState.sessions, activeThreadRef, githubPullRequest, openPreview]);
+    if (!githubPullRequest) return;
+    openGitHubPullRequestSurface(githubPullRequest.url);
+  }, [githubPullRequest, openGitHubPullRequestSurface]);
   const addDiffSurface = useCallback(() => {
     if (!activeThreadRef || !isServerThread || !isGitRepo) return;
     if (planSidebarOpen) {
@@ -3459,6 +3527,16 @@ function ChatViewContent(props: ChatViewProps) {
     },
     [activeThreadRef, diffOpen, dismissPlanSidebarForCurrentTurn, onDiffPanelOpen, planSidebarOpen],
   );
+  const cycleRightPanelSurface = useCallback(
+    (direction: "next" | "previous"): boolean => {
+      if (!activeThreadRef || !rightPanelState.isOpen) return false;
+      const nextSurface = resolveAdjacentRightPanelSurface(rightPanelState, direction);
+      if (!nextSurface) return false;
+      activateRightPanelSurface(nextSurface);
+      return true;
+    },
+    [activeThreadRef, activateRightPanelSurface, rightPanelState],
+  );
   const toggleRightPanel = useCallback(() => {
     if (!activeThreadRef) return;
     if (rightPanelOpen) {
@@ -3475,6 +3553,16 @@ function ChatViewContent(props: ChatViewProps) {
     if (!workspaceNavigatorAvailable || !activeThreadRef) return;
     useRightPanelStore.getState().toggleWorkspaceNavigator(activeThreadRef);
   }, [activeThreadRef, workspaceNavigatorAvailable]);
+  const openWorkspaceNavigatorTab = useCallback(
+    (tab: WorkspaceNavigatorTab) => {
+      if (!workspaceNavigatorAvailable || !activeThreadRef) return;
+      setWorkspaceNavigatorTab(tab);
+      if (!workspaceNavigatorOpen) {
+        useRightPanelStore.getState().toggleWorkspaceNavigator(activeThreadRef);
+      }
+    },
+    [activeThreadRef, workspaceNavigatorAvailable, workspaceNavigatorOpen],
+  );
   const toggleRightPanelMaximized = useCallback(() => {
     if (!canMaximizeRightPanel) return;
     setMaximizedRightPanelThreadKey((threadKey) =>
@@ -4751,6 +4839,36 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
 
+      if (command === "rightPanel.nextTab" || command === "rightPanel.previousTab") {
+        if (!cycleRightPanelSurface(command === "rightPanel.nextTab" ? "next" : "previous")) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      if (command === "workspaceNavigator.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleWorkspaceNavigator();
+        return;
+      }
+
+      if (command === "workspaceNavigator.changes") {
+        event.preventDefault();
+        event.stopPropagation();
+        openWorkspaceNavigatorTab("changes");
+        return;
+      }
+
+      if (command === "workspaceNavigator.pullRequest") {
+        event.preventDefault();
+        event.stopPropagation();
+        openWorkspaceNavigatorTab("pr");
+        return;
+      }
+
       if (command === "terminal.split") {
         event.preventDefault();
         event.stopPropagation();
@@ -4839,14 +4957,17 @@ function ChatViewContent(props: ChatViewProps) {
     closeTerminal,
     closePanelTerminal,
     createNewTerminal,
+    cycleRightPanelSurface,
     setTerminalOpen,
     runProjectScript,
     splitTerminal,
     splitPanelTerminal,
     keybindings,
     onToggleDiff,
+    openWorkspaceNavigatorTab,
     toggleRightPanel,
     toggleTerminalVisibility,
+    toggleWorkspaceNavigator,
     composerRef,
   ]);
 
@@ -5259,6 +5380,14 @@ function ChatViewContent(props: ChatViewProps) {
       if (startResult._tag === "Failure") {
         failure = startResult;
       } else {
+        // Record the visit baseline as soon as the turn is accepted. New draft
+        // threads (notably Quick Chats) can be left before their promoted
+        // server thread reaches this view's visit effect; without a baseline,
+        // their eventual completion is intentionally treated as already read.
+        markThreadVisited(
+          scopedThreadKey(scopeThreadRef(activeThread.environmentId, threadIdForSend)),
+          messageCreatedAt,
+        );
         turnStartSucceeded = true;
       }
     }
@@ -6083,7 +6212,6 @@ function ChatViewContent(props: ChatViewProps) {
           threadRef={activeThreadRef}
           tabId={activeRightPanelSurface.resourceId}
           visible
-          showChrome={false}
           layoutVersion={
             showWorkspaceNavigator ? "workspace-navigator-open" : "workspace-navigator-closed"
           }
@@ -6154,6 +6282,7 @@ function ChatViewContent(props: ChatViewProps) {
           }
           revealLine={activeFileSurface?.revealLine ?? null}
           revealRequestId={activeFileSurface?.revealRequestId ?? 0}
+          contentRevision={activeFileContentRevision}
           onOpenFile={openFileSurface}
           onPendingChange={handleFilePendingChange}
         />
@@ -6465,6 +6594,7 @@ function ChatViewContent(props: ChatViewProps) {
                                     }
                                   : {})}
                                 envLocked={envLocked}
+                                onOpenPullRequestRequest={createGitHubPullRequestSurface}
                                 onComposerFocusRequest={scheduleComposerFocus}
                                 {...(canCheckoutPullRequestIntoThread
                                   ? {
@@ -6610,7 +6740,9 @@ function ChatViewContent(props: ChatViewProps) {
           gitStatus={gitStatusQuery.data ?? null}
           gitStatusError={gitStatusQuery.error}
           gitStatusPending={gitStatusQuery.isPending}
+          activeTab={workspaceNavigatorTab}
           layoutControls={workspaceNavigatorLayoutControls}
+          onActiveTabChange={setWorkspaceNavigatorTab}
           onOpenFile={openFileSurface}
           onOpenDiffFile={openWorkspaceDiffFile}
         />

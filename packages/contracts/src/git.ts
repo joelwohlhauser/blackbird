@@ -213,6 +213,9 @@ const VcsStatusLocalShape = {
         path: TrimmedNonEmptyStringSchema,
         insertions: NonNegativeInt,
         deletions: NonNegativeInt,
+        status: Schema.optional(
+          Schema.Literals(["modified", "added", "deleted", "renamed", "untracked"]),
+        ),
       }),
     ),
     insertions: NonNegativeInt,

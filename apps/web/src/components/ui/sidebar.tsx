@@ -72,6 +72,7 @@ type SidebarResolvedResizableOptions = {
 type SidebarInstanceContextProps = {
   resizable: SidebarResolvedResizableOptions | null;
   side: "left" | "right";
+  transientOpen: boolean;
 };
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
@@ -182,6 +183,7 @@ function Sidebar({
   variant = "sidebar",
   collapsible = "offcanvas",
   resizable = false,
+  transientOpen = false,
   className,
   children,
   ...props
@@ -190,6 +192,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
   resizable?: boolean | SidebarResizableOptions;
+  transientOpen?: boolean;
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
   const resolvedResizable = React.useMemo<SidebarResolvedResizableOptions | null>(() => {
@@ -207,8 +210,8 @@ function Sidebar({
     };
   }, [collapsible, isMobile, resizable]);
   const instanceContextValue = React.useMemo<SidebarInstanceContextProps>(
-    () => ({ side, resizable: resolvedResizable }),
-    [resolvedResizable, side],
+    () => ({ side, resizable: resolvedResizable, transientOpen }),
+    [resolvedResizable, side, transientOpen],
   );
 
   if (collapsible === "none") {
@@ -274,6 +277,7 @@ function Sidebar({
         data-side={side}
         data-slot="sidebar"
         data-state={state}
+        data-transient-open={transientOpen ? "true" : undefined}
         data-variant={variant}
       >
         {/* This is what handles the sidebar gap on desktop */}
@@ -290,10 +294,10 @@ function Sidebar({
         />
         <div
           className={cn(
-            "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+            "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear group-data-[transient-open=true]:z-40 group-data-[transient-open=true]:shadow-2xl md:flex",
             side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] group-data-[transient-open=true]:left-0!"
+              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] group-data-[transient-open=true]:right-0!",
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -375,7 +379,8 @@ function SidebarRail({
     wrapper: HTMLElement;
   } | null>(null);
   const resolvedResizable = sidebarInstance?.resizable ?? null;
-  const canResize = resolvedResizable !== null && open;
+  const transientOpen = sidebarInstance?.transientOpen ?? false;
+  const canResize = resolvedResizable !== null && (open || transientOpen);
   const railLabel = canResize ? "Resize Sidebar" : "Toggle Sidebar";
   const railTitle = canResize ? "Drag to resize sidebar" : "Toggle Sidebar";
 
@@ -409,7 +414,7 @@ function SidebarRail({
     (event: React.PointerEvent<HTMLButtonElement>) => {
       onPointerDown?.(event);
       if (event.defaultPrevented) return;
-      if (!resolvedResizable || !open || event.button !== 0) return;
+      if (!resolvedResizable || (!open && !transientOpen) || event.button !== 0) return;
 
       const wrapper = event.currentTarget.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
       const sidebarRoot = event.currentTarget.closest<HTMLElement>("[data-slot='sidebar']");
@@ -455,7 +460,7 @@ function SidebarRail({
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
     },
-    [onPointerDown, open, resolvedResizable, sidebarInstance?.side],
+    [onPointerDown, open, resolvedResizable, sidebarInstance?.side, transientOpen],
   );
 
   const handlePointerMove = React.useCallback(
@@ -546,13 +551,13 @@ function SidebarRail({
         event.preventDefault();
         return;
       }
-      if (resolvedResizable && open) {
+      if (resolvedResizable && (open || transientOpen)) {
         event.preventDefault();
         return;
       }
       toggleSidebar();
     },
-    [onClick, open, resolvedResizable, toggleSidebar],
+    [onClick, open, resolvedResizable, toggleSidebar, transientOpen],
   );
 
   React.useLayoutEffect(() => {
@@ -598,10 +603,11 @@ function SidebarRail({
           <button
             aria-label={railLabel}
             className={cn(
-              /* disable pointer events only when offcanvas sidebar is collapsed, that's when the rail sits over the native scrollbar on windows and linux. icon mode stays fully clickable. */
-              "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
+              "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=right]:left-0 sm:flex",
               "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
-              "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
+              !transientOpen &&
+                "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
+              !open && !transientOpen && "group-data-[collapsible=offcanvas]:pointer-events-none",
               "group-data-[collapsible=offcanvas]:translate-x-0 hover:group-data-[collapsible=offcanvas]:bg-sidebar group-data-[collapsible=offcanvas]:after:left-full",
               "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
               "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",

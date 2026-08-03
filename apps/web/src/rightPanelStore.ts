@@ -8,7 +8,7 @@
  * workspace paths, and diff/plan/files remain singleton surfaces.
  */
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { PreviewSessionSnapshot, ScopedThreadRef } from "@t3tools/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -28,10 +28,10 @@ export const RIGHT_PANEL_KINDS = [
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
 export type RightPanelSurface =
-  | { id: `browser:${string}`; kind: "preview"; resourceId: string }
-  | { id: "browser:new"; kind: "preview"; resourceId: null }
-  | { id: "linear"; kind: "linear"; resourceId: string }
-  | { id: "github-pr"; kind: "github-pr"; resourceId: string }
+  | { id: `browser:${string}`; kind: "preview"; resourceId: string; url?: string | null }
+  | { id: "browser:new"; kind: "preview"; resourceId: null; url?: null }
+  | { id: "linear"; kind: "linear"; resourceId: string; url?: string | null }
+  | { id: "github-pr"; kind: "github-pr"; resourceId: string; url?: string | null }
   | {
       id: `terminal:${string}`;
       kind: "terminal";
@@ -67,6 +67,25 @@ export interface ThreadRightPanelState {
   surfaces: RightPanelSurface[];
 }
 
+export function resolveAdjacentRightPanelSurface(
+  state: {
+    readonly activeSurfaceId: string | null;
+    readonly surfaces: readonly RightPanelSurface[];
+  },
+  direction: "next" | "previous",
+): RightPanelSurface | null {
+  if (state.surfaces.length === 0) return null;
+
+  const activeIndex = state.surfaces.findIndex((surface) => surface.id === state.activeSurfaceId);
+  if (activeIndex < 0) {
+    return direction === "next" ? state.surfaces[0]! : state.surfaces.at(-1)!;
+  }
+
+  const offset = direction === "next" ? 1 : -1;
+  const nextIndex = (activeIndex + offset + state.surfaces.length) % state.surfaces.length;
+  return state.surfaces[nextIndex] ?? null;
+}
+
 interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
   workspaceNavigatorOpenByThreadKey: Record<string, true>;
@@ -74,9 +93,9 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<RightPanelKind, "file" | "file-diff" | "terminal" | "linear" | "github-pr">,
   ) => void;
-  openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
-  openLinear: (ref: ScopedThreadRef, tabId: string) => void;
-  openGitHubPullRequest: (ref: ScopedThreadRef, tabId: string) => void;
+  openBrowser: (ref: ScopedThreadRef, tabId: string | null, url?: string | null) => void;
+  openLinear: (ref: ScopedThreadRef, tabId: string, url?: string | null) => void;
+  openGitHubPullRequest: (ref: ScopedThreadRef, tabId: string, url?: string | null) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
   openDiffFile: (
     ref: ScopedThreadRef,
@@ -99,6 +118,11 @@ interface RightPanelStoreState {
   closeSurfacesToRight: (ref: ScopedThreadRef, surfaceId: string) => void;
   closeAllSurfaces: (ref: ScopedThreadRef) => void;
   reconcileBrowserSurfaces: (ref: ScopedThreadRef, tabIds: readonly string[]) => void;
+  syncPreviewSurfaceUrls: (
+    ref: ScopedThreadRef,
+    sessions: Readonly<Record<string, PreviewSessionSnapshot>>,
+  ) => void;
+  replacePreviewSurfaceResource: (ref: ScopedThreadRef, surfaceId: string, tabId: string) => void;
   reconcileFileSurfaces: (ref: ScopedThreadRef, workspaceAvailable: boolean) => void;
   show: (ref: ScopedThreadRef) => void;
   close: (ref: ScopedThreadRef) => void;
@@ -133,10 +157,15 @@ const singletonSurface = (
   }
 };
 
-const browserSurface = (tabId: string | null): RightPanelSurface =>
+const browserSurface = (tabId: string | null, url?: string | null): RightPanelSurface =>
   tabId
-    ? { id: `browser:${tabId}`, kind: "preview", resourceId: tabId }
-    : { id: "browser:new", kind: "preview", resourceId: null };
+    ? {
+        id: `browser:${tabId}`,
+        kind: "preview",
+        resourceId: tabId,
+        ...(url !== undefined ? { url } : {}),
+      }
+    : { id: "browser:new", kind: "preview", resourceId: null, url: null };
 
 const fileSurface = (
   relativePath: string,
@@ -319,23 +348,24 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             return upsertSurface(current, singletonSurface(kind));
           }),
         })),
-      openBrowser: (ref, tabId) =>
+      openBrowser: (ref, tabId, url) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
-            const surface = browserSurface(tabId);
+            const surface = browserSurface(tabId, url);
             const withoutPlaceholder = tabId
               ? current.surfaces.filter((entry) => entry.id !== "browser:new")
               : current.surfaces;
             return upsertSurface({ ...current, surfaces: withoutPlaceholder }, surface);
           }),
         })),
-      openLinear: (ref, tabId) =>
+      openLinear: (ref, tabId, url) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
             const surface: RightPanelSurface = {
               id: "linear",
               kind: "linear",
               resourceId: tabId,
+              ...(url !== undefined ? { url } : {}),
             };
             const surfaces = current.surfaces.filter(
               (entry) =>
@@ -345,13 +375,14 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             return upsertSurface({ ...current, surfaces }, surface);
           }),
         })),
-      openGitHubPullRequest: (ref, tabId) =>
+      openGitHubPullRequest: (ref, tabId, url) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
             const surface: RightPanelSurface = {
               id: "github-pr",
               kind: "github-pr",
               resourceId: tabId,
+              ...(url !== undefined ? { url } : {}),
             };
             const surfaces = current.surfaces.filter(
               (entry) =>
@@ -596,6 +627,56 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               activeSurfaceId: activeStillExists
                 ? current.activeSurfaceId
                 : (fallbackBrowser?.id ?? surfaces[0]?.id ?? null),
+            };
+          }),
+        })),
+      syncPreviewSurfaceUrls: (ref, sessions) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            let changed = false;
+            const surfaces = current.surfaces.map((surface) => {
+              if (
+                (surface.kind !== "preview" &&
+                  surface.kind !== "linear" &&
+                  surface.kind !== "github-pr") ||
+                surface.resourceId === null
+              ) {
+                return surface;
+              }
+              const snapshot = sessions[surface.resourceId];
+              if (!snapshot || snapshot.navStatus._tag === "Idle") return surface;
+              const url = snapshot.navStatus.url;
+              if (surface.url === url) return surface;
+              changed = true;
+              return { ...surface, url };
+            });
+            return changed ? { ...current, surfaces } : current;
+          }),
+        })),
+      replacePreviewSurfaceResource: (ref, surfaceId, tabId) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            const index = current.surfaces.findIndex((surface) => surface.id === surfaceId);
+            const surface = current.surfaces[index];
+            if (
+              !surface ||
+              (surface.kind !== "preview" &&
+                surface.kind !== "linear" &&
+                surface.kind !== "github-pr")
+            ) {
+              return current;
+            }
+            const replacement: RightPanelSurface =
+              surface.kind === "preview"
+                ? { ...surface, id: `browser:${tabId}`, resourceId: tabId }
+                : { ...surface, resourceId: tabId };
+            const surfaces = [...current.surfaces];
+            surfaces[index] = replacement;
+            return {
+              ...current,
+              surfaces,
+              activeSurfaceId:
+                current.activeSurfaceId === surfaceId ? replacement.id : current.activeSurfaceId,
             };
           }),
         })),

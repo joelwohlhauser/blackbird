@@ -269,6 +269,27 @@ export function buildKeybindingCommandOptions(
 
 export function commandLabel(command: KeybindingCommand): string {
   const raw = String(command);
+  if (raw === "chat.newLocal") {
+    return "New Quick Chat";
+  }
+  if (raw === "chat.switcher") {
+    return "Chat Switcher";
+  }
+  if (raw === "rightPanel.nextTab") {
+    return "Right Panel: Next Tab";
+  }
+  if (raw === "rightPanel.previousTab") {
+    return "Right Panel: Previous Tab";
+  }
+  if (raw === "workspaceNavigator.toggle") {
+    return "Toggle Files Sidebar";
+  }
+  if (raw === "workspaceNavigator.changes") {
+    return "Open Changes Sidebar";
+  }
+  if (raw === "workspaceNavigator.pullRequest") {
+    return "Open Pull Request Sidebar";
+  }
   if (raw.startsWith("script.") && raw.endsWith(".run")) {
     return `Run Script: ${titleCaseCommandSegment(raw.slice("script.".length, -".run".length))}`;
   }

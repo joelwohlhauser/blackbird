@@ -10,6 +10,8 @@
 import * as NodeFSP from "node:fs/promises";
 
 import type {
+  ProjectCreateEntryInput,
+  ProjectCreateEntryResult,
   ProjectReadFileInput,
   ProjectReadFileResult,
   ProjectWriteFileInput,
@@ -121,6 +123,13 @@ export class WorkspaceFileSystem extends Context.Service<
       input: ProjectWriteFileInput,
     ) => Effect.Effect<
       ProjectWriteFileResult,
+      WorkspaceFileSystemError | WorkspacePaths.WorkspacePathOutsideRootError
+    >;
+    /** Create a new file or directory without replacing an existing entry. */
+    readonly createEntry: (
+      input: ProjectCreateEntryInput,
+    ) => Effect.Effect<
+      ProjectCreateEntryResult,
       WorkspaceFileSystemError | WorkspacePaths.WorkspacePathOutsideRootError
     >;
   }
@@ -297,7 +306,116 @@ export const make = Effect.gen(function* () {
     return { relativePath: target.relativePath };
   });
 
-  return WorkspaceFileSystem.of({ readFile, writeFile });
+  const createEntry: WorkspaceFileSystem["Service"]["createEntry"] = Effect.fn(
+    "WorkspaceFileSystem.createEntry",
+  )(function* (input) {
+    const target = yield* workspacePaths.resolveRelativePathWithinRoot({
+      workspaceRoot: input.cwd,
+      relativePath: input.relativePath,
+    });
+    const parentPath = path.dirname(target.absolutePath);
+
+    yield* fileSystem.makeDirectory(parentPath, { recursive: true }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new WorkspaceFileSystemOperationError({
+            workspaceRoot: input.cwd,
+            relativePath: input.relativePath,
+            resolvedPath: target.absolutePath,
+            operationPath: parentPath,
+            operation: "make-directory",
+            cause,
+          }),
+      ),
+    );
+
+    const realWorkspaceRoot = yield* Effect.tryPromise({
+      try: () => NodeFSP.realpath(input.cwd),
+      catch: (cause) =>
+        new WorkspaceFileSystemOperationError({
+          workspaceRoot: input.cwd,
+          relativePath: input.relativePath,
+          resolvedPath: target.absolutePath,
+          operationPath: input.cwd,
+          operation: "realpath-workspace-root",
+          cause,
+        }),
+    });
+    const realParentPath = yield* Effect.tryPromise({
+      try: () => NodeFSP.realpath(parentPath),
+      catch: (cause) =>
+        new WorkspaceFileSystemOperationError({
+          workspaceRoot: input.cwd,
+          relativePath: input.relativePath,
+          resolvedPath: target.absolutePath,
+          operationPath: parentPath,
+          operation: "realpath-target",
+          cause,
+        }),
+    });
+    const relativeRealParentPath = path.relative(realWorkspaceRoot, realParentPath);
+    if (
+      relativeRealParentPath.startsWith(`..${path.sep}`) ||
+      relativeRealParentPath === ".." ||
+      path.isAbsolute(relativeRealParentPath)
+    ) {
+      return yield* new WorkspaceFilePathEscapeError({
+        workspaceRoot: input.cwd,
+        relativePath: input.relativePath,
+        resolvedWorkspaceRoot: realWorkspaceRoot,
+        resolvedPath: realParentPath,
+      });
+    }
+
+    if (input.kind === "directory") {
+      yield* Effect.tryPromise({
+        try: () => NodeFSP.mkdir(target.absolutePath),
+        catch: (cause) =>
+          new WorkspaceFileSystemOperationError({
+            workspaceRoot: input.cwd,
+            relativePath: input.relativePath,
+            resolvedPath: target.absolutePath,
+            operationPath: target.absolutePath,
+            operation: "make-directory",
+            cause,
+          }),
+      });
+    } else {
+      yield* Effect.acquireUseRelease(
+        Effect.tryPromise({
+          try: () => NodeFSP.open(target.absolutePath, "wx"),
+          catch: (cause) =>
+            new WorkspaceFileSystemOperationError({
+              workspaceRoot: input.cwd,
+              relativePath: input.relativePath,
+              resolvedPath: target.absolutePath,
+              operationPath: target.absolutePath,
+              operation: "open",
+              cause,
+            }),
+        }),
+        () => Effect.void,
+        (handle) =>
+          Effect.tryPromise({
+            try: () => handle.close(),
+            catch: (cause) =>
+              new WorkspaceFileSystemOperationError({
+                workspaceRoot: input.cwd,
+                relativePath: input.relativePath,
+                resolvedPath: target.absolutePath,
+                operationPath: target.absolutePath,
+                operation: "close",
+                cause,
+              }),
+          }),
+      );
+    }
+
+    yield* workspaceEntries.refresh(input.cwd);
+    return { relativePath: target.relativePath, kind: input.kind };
+  });
+
+  return WorkspaceFileSystem.of({ createEntry, readFile, writeFile });
 });
 
 export const layer = Layer.effect(WorkspaceFileSystem, make);

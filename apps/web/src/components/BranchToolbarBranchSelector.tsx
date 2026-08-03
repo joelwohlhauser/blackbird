@@ -23,7 +23,6 @@ import {
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { readLocalApi } from "../localApi";
-import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { shouldLoadNextBranchPageAfterScroll } from "../state/paginatedBranches";
 import { usePaginatedBranches } from "../state/queries";
 import { useProject, useThread } from "../state/entities";
@@ -78,6 +77,7 @@ interface BranchToolbarBranchSelectorProps {
   startFromOrigin: boolean;
   onStartFromOriginChange: (startFromOrigin: boolean) => void;
   onCheckoutPullRequestRequest?: (reference: string) => void;
+  onOpenPullRequestRequest?: () => void;
   onComposerFocusRequest?: () => void;
 }
 
@@ -97,6 +97,7 @@ export function BranchToolbarBranchSelector({
   startFromOrigin,
   onStartFromOriginChange,
   onCheckoutPullRequestRequest,
+  onOpenPullRequestRequest,
   onComposerFocusRequest,
 }: BranchToolbarBranchSelectorProps) {
   const startFromOriginSwitchId = useId();
@@ -615,9 +616,8 @@ export function BranchToolbarBranchSelector({
   // Action-oriented tooltip (the pill opens the PR), distinct from the sidebar's
   // state-description tooltip.
   const branchPrTooltip = branchPr
-    ? `Open ${sourceControlPresentation.terminology.singular} #${branchPr.number} (${branchPr.state}) in browser`
+    ? `Open ${sourceControlPresentation.terminology.singular} #${branchPr.number} (${branchPr.state}) in right panel`
     : "";
-  const openPrLink = useOpenPrLink();
 
   function renderPickerItem(itemValue: string, index: number) {
     if (checkoutPullRequestItemValue && itemValue === checkoutPullRequestItemValue) {
@@ -724,9 +724,9 @@ export function BranchToolbarBranchSelector({
                 <button
                   type="button"
                   aria-label={branchPrTooltip}
-                  onClick={(event) => openPrLink(event, branchPrStatus.url)}
+                  onClick={onOpenPullRequestRequest}
                   className={cn(
-                    "inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[11px] font-medium tabular-nums transition-colors hover:bg-muted/60",
+                    "inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded px-1 py-0.5 text-[11px] font-medium tabular-nums transition-colors hover:bg-muted/60",
                     branchPrStatus.colorClass,
                   )}
                 />

@@ -96,6 +96,14 @@ export function prStatusIndicator(
   return null;
 }
 
+export function sidebarPrStatusIndicator(
+  pr: ThreadPr,
+  provider: VcsStatusResult["sourceControlProvider"] | null | undefined,
+): PrStatusIndicator | null {
+  if (pr?.state !== "merged") return null;
+  return prStatusIndicator(pr, provider);
+}
+
 export function ChangeRequestStatusIcon({ className }: { className?: string }) {
   return <GitPullRequestIcon className={className} />;
 }

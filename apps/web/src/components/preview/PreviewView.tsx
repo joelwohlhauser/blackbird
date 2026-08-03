@@ -627,10 +627,13 @@ export function PreviewView({
           canGoBack={canGoBack}
           canGoForward={canGoForward}
           refreshDisabled={refreshDisabled}
+          zoomDisabled={!desktopOverlay?.hasWebContents || isUnreachable}
           focusUrlNonce={focusUrlNonce}
           onBack={handleBack}
           onForward={handleForward}
           onRefresh={handleRefresh}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
           onSubmit={(next) => void handleSubmitUrl(next)}
           onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
           onCapture={previewBridge && tabId ? handleCapture : undefined}

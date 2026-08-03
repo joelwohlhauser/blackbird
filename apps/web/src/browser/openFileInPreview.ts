@@ -48,7 +48,7 @@ export async function openUrlInPreview<E>(input: {
   return mapAtomCommandResult(result, (snapshot) => {
     applyPreviewServerSnapshot(input.threadRef, snapshot);
     rememberPreviewUrl(input.threadRef, input.url);
-    useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId);
+    useRightPanelStore.getState().openBrowser(input.threadRef, snapshot.tabId, input.url);
   });
 }
 

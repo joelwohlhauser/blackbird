@@ -28,6 +28,7 @@ import {
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { useClientSettings } from "../hooks/useSettings";
+import { useStartQuickChat } from "../hooks/useStartQuickChat";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -45,6 +46,7 @@ import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
 import {
   primaryServerConfigAtom,
   primaryServerConfigEventAtom,
+  primaryServerKeybindingsAtom,
   primaryServerWelcomeAtom,
 } from "../state/server";
 import { readProject, setActiveEnvironmentId, useActiveEnvironmentId } from "../state/entities";
@@ -52,6 +54,8 @@ import {
   createKeybindingsUpdateToastController,
   type KeybindingsUpdateToastController,
 } from "../components/KeybindingsUpdateToast.logic";
+import { isCommandPaletteOpen } from "../commandPaletteBus";
+import { resolveShortcutCommand } from "../keybindings";
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
@@ -135,11 +139,33 @@ function RootRouteView() {
         <SlowRpcRequestToastCoordinator />
         <HostedStaticEnvironmentBootstrap />
         {primaryEnvironmentAuthenticated ? <EventRouter /> : null}
+        {primaryEnvironmentAuthenticated ? <QuickChatGlobalShortcut /> : null}
         {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
         {appShell}
       </AnchoredToastProvider>
     </ToastProvider>
   );
+}
+
+function QuickChatGlobalShortcut() {
+  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const startQuickChat = useStartQuickChat();
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isCommandPaletteOpen()) return;
+      if (resolveShortcutCommand(event, keybindings) !== "chat.newLocal") return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      void startQuickChat();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [keybindings, startQuickChat]);
+
+  return null;
 }
 
 function GlassAppearanceSync() {

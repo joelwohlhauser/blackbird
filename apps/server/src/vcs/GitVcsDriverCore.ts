@@ -205,6 +205,19 @@ function parsePorcelainPath(line: string): string | null {
   return filePath.length > 0 ? filePath : null;
 }
 
+type WorkingTreeFileStatus = "modified" | "added" | "deleted" | "renamed" | "untracked";
+
+function parsePorcelainFileStatus(line: string): WorkingTreeFileStatus {
+  if (line.startsWith("? ")) return "untracked";
+  if (line.startsWith("2 ")) return "renamed";
+
+  const code = line.trim().split(/\s+/g)[1] ?? "";
+  if (code.includes("D")) return "deleted";
+  if (code.includes("R")) return "renamed";
+  if (code.includes("A")) return "added";
+  return "modified";
+}
+
 function filterBranchesForListQuery(
   refs: ReadonlyArray<VcsRef>,
   query?: string,
@@ -268,6 +281,13 @@ function parseWorktreeBranchPaths(stdout: string): ReadonlyMap<string, string> {
   flush();
 
   return worktreePaths;
+}
+
+function parseWorktreePaths(stdout: string): ReadonlyArray<string> {
+  return stdout
+    .split("\0")
+    .filter((field) => field.startsWith("worktree "))
+    .map((field) => field.slice("worktree ".length));
 }
 
 function splitNullSeparatedPaths(input: string, truncated: boolean): string[] {
@@ -1551,7 +1571,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     const statusResult = yield* executeGitWithStableDiagnostics(
       "GitVcsDriver.statusDetails.status",
       cwd,
-      ["status", "--porcelain=2", "--branch"],
+      ["status", "--porcelain=2", "--branch", "--untracked-files=all"],
       {
         allowNonZeroExit: true,
       },
@@ -1574,7 +1594,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         ...gitCommandContext({
           operation: "GitVcsDriver.statusDetails.status",
           cwd,
-          args: ["status", "--porcelain=2", "--branch"],
+          args: ["status", "--porcelain=2", "--branch", "--untracked-files=all"],
         }),
         detail: "Git status failed.",
         exitCode: statusResult.exitCode,
@@ -1661,7 +1681,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     let behindCount = 0;
     let aheadOfDefaultCount = 0;
     let hasWorkingTreeChanges = false;
-    const changedFilesWithoutNumstat = new Set<string>();
+    const changedFileStatuses = new Map<string, WorkingTreeFileStatus>();
 
     for (const line of statusStdout.split(/\r?\n/g)) {
       if (line.startsWith("# branch.head ")) {
@@ -1684,7 +1704,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       if (line.trim().length > 0 && !line.startsWith("#")) {
         hasWorkingTreeChanges = true;
         const pathValue = parsePorcelainPath(line);
-        if (pathValue) changedFilesWithoutNumstat.add(pathValue);
+        if (pathValue) changedFileStatuses.set(pathValue, parsePorcelainFileStatus(line));
       }
     }
 
@@ -1728,13 +1748,16 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           path: filePath,
           insertions: stat.insertions,
           deletions: stat.deletions,
+          ...(changedFileStatuses.has(filePath)
+            ? { status: changedFileStatuses.get(filePath)! }
+            : {}),
         };
       })
       .toSorted((a, b) => a.path.localeCompare(b.path));
 
-    for (const filePath of changedFilesWithoutNumstat) {
+    for (const [filePath, status] of changedFileStatuses) {
       if (fileStatMap.has(filePath)) continue;
-      files.push({ path: filePath, insertions: 0, deletions: 0 });
+      files.push({ path: filePath, insertions: 0, deletions: 0, status });
     }
     files.sort((a, b) => a.path.localeCompare(b.path));
 
@@ -2812,10 +2835,178 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       args.push("--force");
     }
     args.push(input.path);
-    yield* executeGit("GitVcsDriver.removeWorktree", input.cwd, args, {
-      timeoutMs: 15_000,
-      fallbackErrorDetail: "git worktree remove failed",
-    });
+
+    const normalizedTargetPath = path.normalize(path.resolve(input.path));
+    const canonicalTargetPath = yield* fileSystem
+      .realPath(normalizedTargetPath)
+      .pipe(Effect.orElseSucceed(() => normalizedTargetPath));
+    const gitRemovalError = (detail: string, cause?: unknown) =>
+      new GitCommandError({
+        ...gitCommandContext({
+          operation: "GitVcsDriver.removeWorktree",
+          cwd: input.cwd,
+          args,
+        }),
+        detail,
+        ...(cause === undefined ? {} : { cause }),
+      });
+    const runRemoval = () =>
+      executeGit("GitVcsDriver.removeWorktree", input.cwd, args, {
+        timeoutMs: 60_000,
+        fallbackErrorDetail: "git worktree remove failed",
+      });
+    const pathExists = (targetPath: string) =>
+      fileSystem
+        .exists(targetPath)
+        .pipe(
+          Effect.mapError((cause) =>
+            gitRemovalError("Blackbird could not inspect the worktree directory.", cause),
+          ),
+        );
+    const isRegisteredWorktree = Effect.fn("GitVcsDriver.removeWorktree.isRegistered")(
+      function* () {
+        const result = yield* executeGit(
+          "GitVcsDriver.removeWorktree.list",
+          input.cwd,
+          ["worktree", "list", "--porcelain", "-z"],
+          {
+            timeoutMs: 10_000,
+            maxOutputBytes: 16 * 1024 * 1024,
+          },
+        );
+        const registeredPaths = yield* Effect.forEach(
+          parseWorktreePaths(result.stdout),
+          (worktreePath) => {
+            const normalizedPath = path.normalize(path.resolve(worktreePath));
+            return fileSystem
+              .realPath(normalizedPath)
+              .pipe(Effect.orElseSucceed(() => normalizedPath));
+          },
+        );
+        return registeredPaths.includes(canonicalTargetPath);
+      },
+    );
+
+    const registrationResult = yield* isRegisteredWorktree().pipe(Effect.result);
+    if (Result.isFailure(registrationResult)) {
+      // If the preflight itself fails, preserve Git's normal fail-closed behavior.
+      yield* runRemoval();
+      return;
+    }
+    const wasRegistered = registrationResult.success;
+    const gitCommonDir = yield* resolveGitCommonDir(input.cwd);
+    const linkedWorktreeMarker = yield* fileSystem
+      .readFileString(path.join(normalizedTargetPath, ".git"))
+      .pipe(Effect.orElseSucceed(() => ""));
+    const markerGitDirValue = linkedWorktreeMarker.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim() ?? "";
+    const markerGitDir =
+      markerGitDirValue.length === 0
+        ? null
+        : path.normalize(
+            path.isAbsolute(markerGitDirValue)
+              ? markerGitDirValue
+              : path.resolve(normalizedTargetPath, markerGitDirValue),
+          );
+    const worktreeAdminRoot = path.join(gitCommonDir, "worktrees");
+    const markerRelativeToAdminRoot =
+      markerGitDir === null ? ".." : path.relative(worktreeAdminRoot, markerGitDir);
+    const hasTrustedLinkedWorktreeMarker =
+      markerGitDir !== null &&
+      markerRelativeToAdminRoot.length > 0 &&
+      !/^\.\.(?:[/\\]|$)/.test(markerRelativeToAdminRoot) &&
+      !path.isAbsolute(markerRelativeToAdminRoot);
+
+    if (!wasRegistered) {
+      const removalResult = yield* runRemoval().pipe(Effect.result);
+      if (Result.isSuccess(removalResult)) {
+        return;
+      }
+      if (!hasTrustedLinkedWorktreeMarker || !(yield* pathExists(normalizedTargetPath))) {
+        return yield* removalResult.failure;
+      }
+
+      // Recover an orphan left behind by an older Blackbird version after Git had
+      // already unregistered it but failed to finish deleting generated files.
+      yield* fileSystem.remove(normalizedTargetPath, { recursive: true, force: true }).pipe(
+        Effect.retry({ times: 2 }),
+        Effect.mapError((cause) =>
+          gitRemovalError(
+            "Git had already unregistered the worktree, but Blackbird could not remove the remaining files.",
+            cause,
+          ),
+        ),
+      );
+      return;
+    }
+
+    const targetStillExists = yield* pathExists(normalizedTargetPath);
+    if (!targetStillExists) {
+      yield* runRemoval();
+      return;
+    }
+
+    const statusResult = yield* executeGitWithStableDiagnostics(
+      "GitVcsDriver.removeWorktree.status",
+      normalizedTargetPath,
+      ["status", "--porcelain", "--untracked-files=all"],
+      { allowNonZeroExit: true, timeoutMs: 10_000 },
+    );
+    const canRemoveTransactionally =
+      input.force === true ||
+      (statusResult.exitCode === 0 && statusResult.stdout.trim().length === 0);
+    if (!canRemoveTransactionally) {
+      // Let Git retain its normal dirty-worktree safeguard and diagnostics.
+      yield* runRemoval();
+      return;
+    }
+
+    const removalId = yield* crypto.randomUUIDv4.pipe(
+      Effect.mapError((cause) =>
+        gitRemovalError("Blackbird could not prepare the worktree removal.", cause),
+      ),
+    );
+    const quarantinePath = path.join(
+      path.dirname(normalizedTargetPath),
+      `.${path.basename(normalizedTargetPath)}.blackbird-removing-${removalId}`,
+    );
+    yield* fileSystem
+      .rename(normalizedTargetPath, quarantinePath)
+      .pipe(
+        Effect.mapError((cause) =>
+          gitRemovalError("Blackbird could not isolate the worktree before removal.", cause),
+        ),
+      );
+
+    const removalResult = yield* runRemoval().pipe(Effect.result);
+    if (Result.isFailure(removalResult)) {
+      const originalPathWasRecreated = yield* pathExists(normalizedTargetPath);
+      if (!originalPathWasRecreated) {
+        yield* fileSystem
+          .rename(quarantinePath, normalizedTargetPath)
+          .pipe(
+            Effect.mapError((cause) =>
+              gitRemovalError(
+                "Git could not unregister the worktree, and Blackbird could not restore its directory.",
+                cause,
+              ),
+            ),
+          );
+      }
+      return yield* removalResult.failure;
+    }
+
+    // The original path is now unregistered. Remove the isolated checkout with the
+    // platform filesystem so ignored dependency/build trees cannot make Git leave a
+    // half-deleted worktree behind.
+    yield* fileSystem.remove(quarantinePath, { recursive: true, force: true }).pipe(
+      Effect.retry({ times: 2 }),
+      Effect.mapError((cause) =>
+        gitRemovalError(
+          `Git unregistered the worktree, but Blackbird could not remove the isolated directory at ${quarantinePath}.`,
+          cause,
+        ),
+      ),
+    );
   });
 
   const renameBranch: GitVcsDriver.GitVcsDriver["Service"]["renameBranch"] = Effect.fn(

@@ -1,6 +1,6 @@
 import type { EnvironmentId, ScopedThreadRef, VcsStatusResult } from "@t3tools/contracts";
 import { FileDiffIcon, GitPullRequestIcon } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo } from "react";
 
 import { useResizableWidth } from "~/hooks/useResizableWidth";
 import { cn } from "~/lib/utils";
@@ -15,7 +15,7 @@ import type { DraftId } from "~/composerDraftStore";
 import { patchToFileChanges, workingTreeFilesToChanges } from "./WorkspaceNavigator.logic";
 import { WorkspaceChangeTree } from "./WorkspaceChangeTree";
 
-type WorkspaceNavigatorTab = "file" | "changes" | "pr";
+export type WorkspaceNavigatorTab = "file" | "changes" | "pr";
 
 export type WorkspaceNavigatorDiffTarget =
   | { scope: "unstaged"; filePath: string }
@@ -43,7 +43,9 @@ interface WorkspaceNavigatorProps {
   gitStatus: VcsStatusResult | null;
   gitStatusError: string | null;
   gitStatusPending: boolean;
+  activeTab: WorkspaceNavigatorTab;
   layoutControls: ReactNode;
+  onActiveTabChange: (tab: WorkspaceNavigatorTab) => void;
   onOpenFile: (relativePath: string) => void;
   onOpenDiffFile: (target: WorkspaceNavigatorDiffTarget) => void;
 }
@@ -73,7 +75,6 @@ function NavigatorMessage(props: { icon?: "changes" | "pr"; children: string }) 
 }
 
 export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
-  const [activeTab, setActiveTab] = useState<WorkspaceNavigatorTab>("file");
   const { width, handlers: resizeHandlers } = useResizableWidth({
     storageKey: WORKSPACE_NAVIGATOR_WIDTH_STORAGE_KEY,
     defaultWidth: WORKSPACE_NAVIGATOR_DEFAULT_WIDTH,
@@ -83,7 +84,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
   });
   const pullRequest = props.gitStatus?.pr ?? null;
   const pullRequestDiffQuery = useEnvironmentQuery(
-    activeTab === "pr" && pullRequest
+    props.activeTab === "pr" && pullRequest
       ? reviewEnvironment.diffPreview({
           environmentId: props.environmentId,
           input: { cwd: props.cwd, baseRef: pullRequest.baseRef },
@@ -128,7 +129,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
           aria-label="Workspace navigator views"
         >
           {TABS.map((tab) => {
-            const active = activeTab === tab.id;
+            const active = props.activeTab === tab.id;
             return (
               <button
                 key={tab.id}
@@ -141,7 +142,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                 )}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => props.onActiveTabChange(tab.id)}
               >
                 {tab.label}
               </button>
@@ -154,7 +155,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col" role="tabpanel">
-        {activeTab === "file" ? (
+        {props.activeTab === "file" ? (
           <FileBrowserPanel
             environmentId={props.environmentId}
             cwd={props.cwd}
@@ -163,7 +164,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
             selectedPathRevealId={props.selectedPathRevealId}
             onOpenFile={props.onOpenFile}
           />
-        ) : activeTab === "changes" ? (
+        ) : props.activeTab === "changes" ? (
           <>
             {props.gitStatus?.isRepo !== false ? (
               <div className="shrink-0 border-b border-border px-2 py-2">

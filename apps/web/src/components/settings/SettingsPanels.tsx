@@ -16,6 +16,7 @@ import {
   type BackgroundActivityProfile,
   type BackgroundActivitySettings,
   type DesktopUpdateChannel,
+  type EnvironmentId,
   PROVIDER_DISPLAY_NAMES,
   ProviderDriverKind,
   type ProviderInstanceConfig,
@@ -64,7 +65,12 @@ import {
 import { isElectron } from "../../env";
 import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
 import { useTheme } from "../../hooks/useTheme";
-import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import {
+  useEnvironmentSettings,
+  usePrimarySettings,
+  useUpdateEnvironmentSettings,
+  useUpdatePrimarySettings,
+} from "../../hooks/useSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
@@ -82,7 +88,7 @@ import {
   primaryServerProvidersAtom,
   serverEnvironment,
 } from "../../state/server";
-import { usePrimaryEnvironment } from "../../state/environments";
+import { useEnvironments, usePrimaryEnvironment } from "../../state/environments";
 import { useProjects } from "../../state/entities";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel, getRelativeTimeState } from "../../timestampFormat";
@@ -1135,9 +1141,55 @@ export function AppearanceSettingsPanel() {
   );
 }
 
+function EnvironmentWorktreeLocationSetting({
+  environmentId,
+  environmentLabel,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly environmentLabel: string;
+}) {
+  const worktreesRoot = useEnvironmentSettings(
+    environmentId,
+    (environmentSettings) => environmentSettings.worktreesRoot,
+  );
+  const updateSettings = useUpdateEnvironmentSettings(environmentId);
+
+  return (
+    <SettingsRow
+      title={`Worktree location · ${environmentLabel}`}
+      description={`New worktrees on ${environmentLabel} use this directory. A leading ~ resolves on that environment host.`}
+      resetAction={
+        worktreesRoot !== DEFAULT_UNIFIED_SETTINGS.worktreesRoot ? (
+          <SettingResetButton
+            label={`${environmentLabel} worktree location`}
+            onClick={() =>
+              updateSettings({ worktreesRoot: DEFAULT_UNIFIED_SETTINGS.worktreesRoot })
+            }
+          />
+        ) : null
+      }
+      control={
+        <DraftInput
+          className="w-full sm:w-72"
+          value={worktreesRoot}
+          onCommit={(next) => updateSettings({ worktreesRoot: next })}
+          placeholder="~/repositories/.worktrees"
+          spellCheck={false}
+          aria-label={`${environmentLabel} worktree location`}
+        />
+      }
+    />
+  );
+}
+
 export function GeneralSettingsPanel() {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
+  const primaryEnvironment = usePrimaryEnvironment();
+  const { environments } = useEnvironments();
+  const remoteEnvironments = environments.filter(
+    (environment) => environment.environmentId !== primaryEnvironment?.environmentId,
+  );
   const [backgroundActivityDialogOpen, setBackgroundActivityDialogOpen] = useState(false);
   const lastEnabledProjectGroupingMode = useRef<SidebarProjectGroupingMode>(
     readLastEnabledProjectGroupingMode(),
@@ -1583,7 +1635,7 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("worktree-location")}
-          description="New worktrees use a repo/branch folder layout inside this directory. A leading ~ resolves on the environment host."
+          description="New local worktrees use a repo/branch folder layout inside this directory. A leading ~ resolves on this machine."
           resetAction={
             settings.worktreesRoot !== DEFAULT_UNIFIED_SETTINGS.worktreesRoot ? (
               <SettingResetButton
@@ -1599,12 +1651,20 @@ export function GeneralSettingsPanel() {
               className="w-full sm:w-72"
               value={settings.worktreesRoot}
               onCommit={(next) => updateSettings({ worktreesRoot: next })}
-              placeholder="~/Repositories/.worktrees"
+              placeholder="~/repositories/.worktrees"
               spellCheck={false}
-              aria-label="Worktree location"
+              aria-label="Local worktree location"
             />
           }
         />
+
+        {remoteEnvironments.map((environment) => (
+          <EnvironmentWorktreeLocationSetting
+            key={environment.environmentId}
+            environmentId={environment.environmentId}
+            environmentLabel={environment.label}
+          />
+        ))}
 
         <SettingsRow
           {...searchableSetting("worktree-environment-files")}

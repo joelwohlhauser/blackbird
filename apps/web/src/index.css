@@ -1571,6 +1571,58 @@ label:has(> select#reasoning-effort) select {
   background: color-mix(in srgb, var(--card) 92%, var(--background));
 }
 
+.diff-overview-frame {
+  --diff-overview-ruler-width: 11px;
+  --diff-overview-scrollbar-width: 11px;
+}
+
+.diff-overview-scroll {
+  width: calc(100% - var(--diff-overview-ruler-width));
+  scrollbar-color: var(--app-scrollbar-thumb) color-mix(in srgb, var(--card) 85%, transparent);
+  scrollbar-width: auto;
+}
+
+.diff-overview-scroll::-webkit-scrollbar {
+  width: var(--diff-overview-scrollbar-width);
+}
+
+.diff-overview-scroll::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--card) 85%, transparent);
+}
+
+.diff-overview-scroll::-webkit-scrollbar-thumb {
+  border-radius: 0;
+}
+
+.diff-overview-ruler {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--diff-overview-ruler-width);
+  pointer-events: none;
+  border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--card) 78%, var(--background));
+}
+
+.diff-overview-marker {
+  position: absolute;
+  min-height: 3px;
+  width: 4px;
+  opacity: 0.9;
+}
+
+.diff-overview-marker-addition {
+  right: 1px;
+  background: color-mix(in srgb, var(--success) 76%, transparent);
+}
+
+.diff-overview-marker-deletion {
+  left: 1px;
+  background: color-mix(in srgb, var(--destructive) 78%, transparent);
+}
+
 @keyframes ultrathink-rainbow {
   0% {
     background-position: 0% 50%;

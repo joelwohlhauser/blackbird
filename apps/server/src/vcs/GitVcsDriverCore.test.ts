@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -151,7 +152,10 @@ it.effect("uses stable diagnostics for every parsed non-repository command", () 
     yield* driver.listRefs({ cwd });
 
     assert.deepStrictEqual(commands, [
-      { args: ["status", "--porcelain=2", "--branch"], lcAll: "C" },
+      {
+        args: ["status", "--porcelain=2", "--branch", "--untracked-files=all"],
+        lcAll: "C",
+      },
       { args: ["rev-parse", "--abbrev-ref", "HEAD"], lcAll: "C" },
       { args: ["rev-parse", "--git-common-dir"], lcAll: "C" },
     ]);
@@ -749,6 +753,130 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.notInclude(error.detail, "Git command failed in");
       }),
     );
+
+    it.effect("removes an orphaned directory left by a partial worktree removal", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const pathService = yield* Path.Path;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const worktreePath = pathService.join(
+          yield* makeTmpDir("git-worktrees-"),
+          "orphaned-worktree",
+        );
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* driver.createWorktree({
+          cwd,
+          path: worktreePath,
+          refName: initialBranch,
+          newRefName: "feature/orphaned-worktree",
+        });
+        const linkedWorktreeMarker = yield* fileSystem.readFileString(
+          pathService.join(worktreePath, ".git"),
+        );
+        yield* driver.removeWorktree({ cwd, path: worktreePath });
+
+        yield* fileSystem.makeDirectory(worktreePath, { recursive: true });
+        yield* fileSystem.writeFileString(
+          pathService.join(worktreePath, ".git"),
+          linkedWorktreeMarker,
+        );
+        yield* writeTextFile(worktreePath, ".next/cache/recreated", "leftover\n");
+
+        yield* driver.removeWorktree({ cwd, path: worktreePath });
+
+        assert.equal(yield* fileSystem.exists(worktreePath), false);
+      }),
+    );
+
+    it.effect("does not remove an unregistered directory with an unrelated git marker", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const pathService = yield* Path.Path;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const unrelatedPath = pathService.join(cwd, "unrelated-directory");
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        yield* driver.initRepo({ cwd });
+        yield* writeTextFile(
+          unrelatedPath,
+          ".git",
+          `gitdir: ${pathService.join(cwd, "unrelated-git-dir")}\n`,
+        );
+        yield* writeTextFile(unrelatedPath, "keep.txt", "keep\n");
+
+        const result = yield* driver
+          .removeWorktree({ cwd, path: unrelatedPath })
+          .pipe(Effect.result);
+
+        assert.isTrue(Result.isFailure(result));
+        assert.equal(yield* fileSystem.exists(unrelatedPath), true);
+      }),
+    );
+
+    it.effect("removes a clean worktree containing ignored generated directories", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const pathService = yield* Path.Path;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const worktreePath = pathService.join(
+          yield* makeTmpDir("git-worktrees-"),
+          "generated-files-worktree",
+        );
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* writeTextFile(cwd, ".gitignore", ".next/\nnode_modules/\n");
+        yield* git(cwd, ["add", ".gitignore"]);
+        yield* git(cwd, ["commit", "-m", "ignore generated files"]);
+        yield* driver.createWorktree({
+          cwd,
+          path: worktreePath,
+          refName: initialBranch,
+          newRefName: "feature/generated-files-worktree",
+        });
+        yield* writeTextFile(worktreePath, ".next/cache/recreated", "cache\n");
+        yield* writeTextFile(worktreePath, "node_modules/pkg/index.js", "generated\n");
+
+        yield* driver.removeWorktree({ cwd, path: worktreePath });
+
+        assert.equal(yield* fileSystem.exists(worktreePath), false);
+      }),
+    );
+
+    it.effect("keeps a dirty worktree when force is not authorized", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const pathService = yield* Path.Path;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const worktreePath = pathService.join(
+          yield* makeTmpDir("git-worktrees-"),
+          "dirty-worktree",
+        );
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* driver.createWorktree({
+          cwd,
+          path: worktreePath,
+          refName: initialBranch,
+          newRefName: "feature/dirty-worktree",
+        });
+        yield* writeTextFile(worktreePath, "README.md", "uncommitted change\n");
+        assert.include(yield* git(worktreePath, ["status", "--porcelain"]), "README.md");
+
+        const result = yield* driver
+          .removeWorktree({ cwd, path: worktreePath })
+          .pipe(Effect.result);
+
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) {
+          assert.equal(result.failure._tag, "GitCommandError");
+        }
+        assert.equal(yield* fileSystem.exists(worktreePath), true);
+        assert.include(yield* git(cwd, ["worktree", "list", "--porcelain"]), "dirty-worktree");
+      }),
+    );
   });
 
   describe("review diff previews", () => {
@@ -913,6 +1041,48 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         assert.include(
           status.workingTree.files.map((file) => file.path),
           "feature.ts",
+        );
+      }),
+    );
+
+    it.effect("reports nested untracked files individually instead of their parent directory", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        yield* writeTextFile(
+          cwd,
+          "scripts/database/documentdb-migration-core.ts",
+          "export const migrate = true;\n",
+        );
+        yield* writeTextFile(
+          cwd,
+          "scripts/database/documentdb-migration.integration.ts",
+          "export const integration = true;\n",
+        );
+        yield* writeTextFile(
+          cwd,
+          "src/lib/database/documentdb-migration-core.test.ts",
+          "export const tested = true;\n",
+        );
+
+        const status = yield* (yield* GitVcsDriver.GitVcsDriver).statusDetails(cwd);
+
+        assert.deepEqual(
+          status.workingTree.files.map((file) => ({ path: file.path, status: file.status })),
+          [
+            {
+              path: "scripts/database/documentdb-migration-core.ts",
+              status: "untracked",
+            },
+            {
+              path: "scripts/database/documentdb-migration.integration.ts",
+              status: "untracked",
+            },
+            {
+              path: "src/lib/database/documentdb-migration-core.test.ts",
+              status: "untracked",
+            },
+          ],
         );
       }),
     );

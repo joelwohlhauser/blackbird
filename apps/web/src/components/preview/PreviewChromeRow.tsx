@@ -6,6 +6,8 @@ import {
   MousePointerClick,
   PictureInPicture2,
   RotateCw,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -29,12 +31,15 @@ interface Props {
   canGoBack: boolean;
   canGoForward: boolean;
   refreshDisabled: boolean;
+  zoomDisabled: boolean;
   inputDisabled?: boolean | undefined;
   /** Bumping this value re-focuses and selects the URL input. */
   focusUrlNonce?: number | undefined;
   onBack: () => void;
   onForward: () => void;
   onRefresh: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
   onSubmit: (url: string) => void;
   /** When provided, renders an "Open in browser" affordance to the right. */
   onOpenInBrowser?: (() => void) | undefined;
@@ -71,11 +76,14 @@ export function PreviewChromeRow({
   canGoBack,
   canGoForward,
   refreshDisabled,
+  zoomDisabled,
   inputDisabled,
   focusUrlNonce,
   onBack,
   onForward,
   onRefresh,
+  onZoomIn,
+  onZoomOut,
   onSubmit,
   onOpenInBrowser,
   onCapture,
@@ -163,6 +171,40 @@ export function PreviewChromeRow({
               <RotateCw className={cn(loading && "animate-spin")} />
             </TooltipTrigger>
             <TooltipPopup>{loading ? "Loading…" : "Refresh"}</TooltipPopup>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={zoomDisabled ? NOOP : onZoomOut}
+                  disabled={zoomDisabled}
+                  aria-label="Zoom out"
+                  type="button"
+                />
+              }
+            >
+              <ZoomOut />
+            </TooltipTrigger>
+            <TooltipPopup>Zoom out</TooltipPopup>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={zoomDisabled ? NOOP : onZoomIn}
+                  disabled={zoomDisabled}
+                  aria-label="Zoom in"
+                  type="button"
+                />
+              }
+            >
+              <ZoomIn />
+            </TooltipTrigger>
+            <TooltipPopup>Zoom in</TooltipPopup>
           </Tooltip>
         </div>
 

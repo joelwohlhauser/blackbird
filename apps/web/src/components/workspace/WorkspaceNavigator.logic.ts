@@ -5,6 +5,7 @@ export interface WorkingTreeFileChange {
   readonly path: string;
   readonly insertions: number;
   readonly deletions: number;
+  readonly status?: "modified" | "added" | "deleted" | "renamed" | "untracked" | undefined;
 }
 
 export function workingTreeFilesToChanges(
@@ -12,7 +13,7 @@ export function workingTreeFilesToChanges(
 ): TurnDiffFileChange[] {
   return files.map((file) => ({
     path: file.path,
-    kind: "working-tree",
+    kind: file.status ?? "working-tree",
     additions: file.insertions,
     deletions: file.deletions,
   }));

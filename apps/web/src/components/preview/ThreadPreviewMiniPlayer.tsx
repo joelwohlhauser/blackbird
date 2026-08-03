@@ -63,7 +63,13 @@ export function ThreadPreviewMiniPlayer({ threadRef, tabId, bottomInset }: Props
 
   const openInPanel = () => {
     usePreviewMiniPlayerStore.getState().close(threadRef);
-    useRightPanelStore.getState().openBrowser(threadRef, tabId);
+    useRightPanelStore
+      .getState()
+      .openBrowser(
+        threadRef,
+        tabId,
+        snapshot?.navStatus._tag === "Idle" ? null : snapshot?.navStatus.url,
+      );
   };
 
   const toggleNativePictureInPicture = () => {

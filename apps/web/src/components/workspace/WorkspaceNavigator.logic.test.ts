@@ -6,12 +6,12 @@ describe("WorkspaceNavigator logic", () => {
   it("maps working tree status files to navigator changes", () => {
     expect(
       workingTreeFilesToChanges([
-        { path: "src/app.ts", insertions: 4, deletions: 1 },
-        { path: "README.md", insertions: 2, deletions: 0 },
+        { path: "src/app.ts", insertions: 4, deletions: 1, status: "modified" },
+        { path: "README.md", insertions: 2, deletions: 0, status: "untracked" },
       ]),
     ).toEqual([
-      { path: "src/app.ts", kind: "working-tree", additions: 4, deletions: 1 },
-      { path: "README.md", kind: "working-tree", additions: 2, deletions: 0 },
+      { path: "src/app.ts", kind: "modified", additions: 4, deletions: 1 },
+      { path: "README.md", kind: "untracked", additions: 2, deletions: 0 },
     ]);
   });
 

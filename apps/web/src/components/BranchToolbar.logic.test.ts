@@ -4,6 +4,7 @@ import {
   dedupeRemoteBranchesWithLocalMatches,
   createsNewWorktreeBranch,
   deriveLocalBranchNameFromRemoteRef,
+  filterExistingWorktreeOptions,
   isNewWorktreeEnvMode,
   reusesExistingWorktree,
   resolveEnvironmentOptionLabel,
@@ -257,6 +258,35 @@ describe("resolveExistingWorktreeOptions", () => {
         value: "/repo/.worktrees/beta",
       },
     ]);
+  });
+});
+
+describe("filterExistingWorktreeOptions", () => {
+  const worktrees = [
+    {
+      branch: "add-gcp-opus",
+      label: "add-gcp-opus",
+      path: "/repo/.worktrees/add-gcp-opus",
+      value: "/repo/.worktrees/add-gcp-opus",
+    },
+    {
+      branch: "ai-0-deepsec",
+      label: "ai-0-deepsec",
+      path: "/repo/.worktrees/sheer-eel/example-app",
+      value: "/repo/.worktrees/sheer-eel/example-app",
+    },
+  ];
+
+  it("filters worktrees by branch name without matching case", () => {
+    expect(filterExistingWorktreeOptions(worktrees, "DEEP")).toEqual([worktrees[1]]);
+  });
+
+  it("also filters by worktree path", () => {
+    expect(filterExistingWorktreeOptions(worktrees, "sheer-eel")).toEqual([worktrees[1]]);
+  });
+
+  it("returns every worktree for an empty query", () => {
+    expect(filterExistingWorktreeOptions(worktrees, "  ")).toEqual(worktrees);
   });
 });
 
