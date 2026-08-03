@@ -442,6 +442,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                     },
                   }
             }
+            maintainScrollAtEndThreshold={0}
             maintainVisibleContentPosition={{
               data: true,
               size: false,

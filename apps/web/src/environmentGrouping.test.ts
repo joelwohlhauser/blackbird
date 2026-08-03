@@ -12,6 +12,7 @@ import {
   buildPhysicalToLogicalProjectKeyMap,
   buildSidebarProjectPickerEntries,
   buildSidebarProjectSnapshots,
+  resolveProjectGroupNewThreadTarget,
 } from "./sidebarProjectGrouping";
 import { orderItemsByPreferredIds } from "./components/Sidebar.logic";
 import { legacyProjectCwdPreferenceKey } from "./uiStateStore";
@@ -21,6 +22,8 @@ const primaryEnvironmentId = EnvironmentId.make("env-primary");
 const remoteEnvironmentId = EnvironmentId.make("env-remote");
 const repositoryIdentity = {
   canonicalKey: "github.com/example/shared-repo",
+  displayName: "example/shared-repo",
+  name: "shared-repo",
   locator: {
     source: "git-remote" as const,
     remoteName: "origin",
@@ -79,6 +82,68 @@ describe("environment grouping", () => {
     }).length;
 
     expect(projectGroupCount).toBe(1);
+  });
+
+  it("uses the repository basename instead of the owner-qualified remote name", () => {
+    const primary = makeProject({ repositoryIdentity });
+    const remote = makeProject({
+      id: ProjectId.make("project-remote"),
+      environmentId: remoteEnvironmentId,
+      repositoryIdentity,
+    });
+
+    const [group] = buildSidebarProjectSnapshots({
+      projects: [primary, remote],
+      settings: defaultGroupingSettings,
+      primaryEnvironmentId,
+      resolveEnvironmentLabel: () => null,
+    });
+
+    expect(group?.displayName).toBe("shared-repo");
+  });
+
+  it("starts a grouped project chat in the environment used by its latest chat", () => {
+    const primary = makeProject({ repositoryIdentity });
+    const remote = makeProject({
+      id: ProjectId.make("project-remote"),
+      environmentId: remoteEnvironmentId,
+      repositoryIdentity,
+    });
+    const [group] = buildSidebarProjectSnapshots({
+      projects: [primary, remote],
+      settings: defaultGroupingSettings,
+      primaryEnvironmentId,
+      resolveEnvironmentLabel: () => null,
+    });
+    expect(group).toBeDefined();
+    if (!group) throw new Error("Expected grouped project snapshot");
+
+    const target = resolveProjectGroupNewThreadTarget({
+      group,
+      threads: [
+        {
+          id: "thread-local",
+          environmentId: primaryEnvironmentId,
+          projectId: primary.id,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          latestUserMessageAt: "2026-01-01T01:00:00.000Z",
+        },
+        {
+          id: "thread-remote",
+          environmentId: remoteEnvironmentId,
+          projectId: remote.id,
+          createdAt: "2026-01-02T00:00:00.000Z",
+          updatedAt: "2026-01-02T00:00:00.000Z",
+          latestUserMessageAt: "2026-01-02T01:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(target).toMatchObject({
+      environmentId: remoteEnvironmentId,
+      id: remote.id,
+    });
   });
 
   it("keeps projects without repository identity physically scoped", () => {

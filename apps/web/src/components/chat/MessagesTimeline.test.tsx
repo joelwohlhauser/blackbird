@@ -22,6 +22,7 @@ vi.mock("@legendapp/list/react", async () => {
     };
     contentInsetEndAdjustment?: number;
     className?: string;
+    maintainScrollAtEndThreshold?: number;
     maintainScrollAtEnd?:
       | boolean
       | {
@@ -55,6 +56,7 @@ vi.mock("@legendapp/list/react", async () => {
         data-content-inset-end={props.contentInsetEndAdjustment}
         data-class-name={props.className}
         data-maintain-scroll-at-end={props.maintainScrollAtEnd ? "enabled" : undefined}
+        data-maintain-scroll-at-end-threshold={props.maintainScrollAtEndThreshold}
         data-maintain-scroll-at-end-animated={
           typeof props.maintainScrollAtEnd === "object"
             ? props.maintainScrollAtEnd.animated
@@ -295,11 +297,12 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain("1 changed file");
   });
 
-  it("uses LegendList isNearEnd when deciding whether the live edge is visible", async () => {
+  it("only follows streaming updates when the timeline is at the live edge", async () => {
     const { resolveTimelineIsAtEnd } = await import("./MessagesTimeline.logic");
 
-    expect(resolveTimelineIsAtEnd({ isNearEnd: true, isAtEnd: false })).toBe(true);
-    expect(resolveTimelineIsAtEnd({ isNearEnd: false, isAtEnd: true })).toBe(false);
+    expect(resolveTimelineIsAtEnd({ isNearEnd: true, isAtEnd: false })).toBe(false);
+    expect(resolveTimelineIsAtEnd({ isNearEnd: false, isAtEnd: true })).toBe(true);
+    expect(resolveTimelineIsAtEnd({ isNearEnd: true })).toBeUndefined();
     expect(resolveTimelineIsAtEnd({ isAtEnd: true })).toBe(true);
     expect(resolveTimelineIsAtEnd(undefined)).toBeUndefined();
   });
@@ -366,6 +369,7 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain('data-maintain-scroll-at-end-data-change="true"');
     expect(markup).toContain('data-maintain-scroll-at-end-item-layout="true"');
     expect(markup).toContain('data-maintain-scroll-at-end-layout="true"');
+    expect(markup).toContain('data-maintain-scroll-at-end-threshold="0"');
     expect(markup).toContain('data-user-message-collapsed="true"');
     expect(markup).toContain('data-user-message-fade="true"');
     expect(markup).toContain('data-user-message-footer="true"');

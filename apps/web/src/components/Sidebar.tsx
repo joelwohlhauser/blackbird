@@ -203,6 +203,7 @@ import type { SidebarThreadSummary } from "../types";
 import {
   buildPhysicalToLogicalProjectKeyMap,
   buildSidebarProjectSnapshots,
+  resolveProjectGroupNewThreadTarget,
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
@@ -683,8 +684,13 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
             isActive,
             isSelected,
           }),
-          "relative isolate",
-          alignWithProjectLabel && "pl-6 pr-2",
+          "relative isolate overflow-visible before:pointer-events-none before:absolute before:inset-y-0 before:-right-0.5 before:-left-1.5 before:-z-10 before:rounded-md before:bg-transparent before:content-[''] sm:before:-left-2.5",
+          isActive
+            ? "before:bg-sidebar-row-active hover:before:bg-sidebar-row-active"
+            : isSelected
+              ? "before:bg-sidebar-row-selected hover:before:bg-sidebar-row-active"
+              : "hover:before:bg-sidebar-row-hover",
+          alignWithProjectLabel ? "pl-6 pr-2" : "pl-3.5 pr-2",
         )}
         onClick={handleRowClick}
         onDoubleClick={handleRowDoubleClick}
@@ -985,7 +991,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
   return (
     <SidebarMenuSub
       ref={attachThreadListAutoAnimateRef}
-      className="mx-0.5 my-0 w-full translate-x-0 gap-0.5 overflow-hidden border-l-0 px-1 py-0 sm:mx-1 sm:px-1.5"
+      className="mx-0.5 my-0 w-full translate-x-0 gap-0.5 overflow-visible border-l-0 px-1 py-0 sm:mx-1 sm:px-1.5"
     >
       {shouldShowThreadPanel && showEmptyThreadState ? (
         <SidebarMenuSubItem className="w-full" data-thread-selection-safe>
@@ -993,7 +999,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             data-thread-selection-safe
             className={cn(
               "flex h-8 w-full translate-x-0 items-center pr-2 text-left text-xs text-sidebar-muted-foreground/75",
-              alignWithProjectLabel ? "pl-6" : "pl-2",
+              alignWithProjectLabel ? "pl-6" : "pl-3.5",
             )}
           >
             <span>No threads yet</span>
@@ -1043,7 +1049,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             size="sm"
             className={cn(
               "h-8 w-full translate-x-0 justify-start pr-2 text-left text-xs text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-              alignWithProjectLabel ? "pl-6" : "pl-2",
+              alignWithProjectLabel ? "pl-6" : "pl-3.5",
             )}
             onClick={() => {
               expandThreadListForProject(projectKey);
@@ -1064,7 +1070,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             size="sm"
             className={cn(
               "h-8 w-full translate-x-0 justify-start pr-2 text-left text-xs text-sidebar-muted-foreground/75 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-              alignWithProjectLabel ? "pl-6" : "pl-2",
+              alignWithProjectLabel ? "pl-6" : "pl-3.5",
             )}
             onClick={() => {
               collapseThreadListForProject(projectKey);
@@ -1220,6 +1226,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const sidebarThreadByKeyRef = useRef(sidebarThreadByKey);
   sidebarThreadByKeyRef.current = sidebarThreadByKey;
   const projectThreads = sidebarThreads;
+  const newThreadProjectMember = useMemo(
+    () => resolveProjectGroupNewThreadTarget({ group: project, threads: projectThreads }),
+    [project, projectThreads],
+  );
   const projectPreferenceKeys = useMemo(() => projectExpansionPreferenceKeys(project), [project]);
   const storedProjectExpanded = useUiStateStore((state) =>
     resolveProjectExpanded(state.projectExpandedById, projectPreferenceKeys),
@@ -1980,53 +1990,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       event.preventDefault();
       event.stopPropagation();
 
-      if (project.memberProjects.length === 1) {
-        createThreadForProjectMember(project.memberProjects[0]!);
-        return;
+      if (newThreadProjectMember) {
+        createThreadForProjectMember(newThreadProjectMember);
       }
-
-      void (async () => {
-        const api = readLocalApi();
-        if (!api) {
-          return;
-        }
-        const clickedResult = await settlePromise(() =>
-          api.contextMenu.show(
-            project.memberProjects.map((member) => ({
-              id: member.physicalProjectKey,
-              label: formatProjectMemberActionLabel(member, project.groupedProjectCount),
-            })),
-            {
-              x: event.clientX,
-              y: event.clientY,
-            },
-          ),
-        );
-        if (clickedResult._tag === "Failure") {
-          const error = squashAtomCommandFailure(clickedResult);
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not choose environment",
-              description: error instanceof Error ? error.message : "An error occurred.",
-            }),
-          );
-          return;
-        }
-        const clicked = clickedResult.value;
-        if (!clicked) {
-          return;
-        }
-        const targetMember = project.memberProjects.find(
-          (member) => member.physicalProjectKey === clicked,
-        );
-        if (!targetMember) {
-          return;
-        }
-        createThreadForProjectMember(targetMember);
-      })();
     },
-    [createThreadForProjectMember, project.groupedProjectCount, project.memberProjects],
+    [createThreadForProjectMember, newThreadProjectMember],
   );
 
   const attemptArchiveThread = useCallback(

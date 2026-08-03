@@ -6,6 +6,7 @@ import {
   deriveProjectGroupLabel,
   type ProjectGroupingSettings,
 } from "./logicalProject";
+import { sortThreads, type ThreadSortInput } from "./lib/threadSort";
 import type { Project } from "./types";
 
 export type EnvironmentPresence = "local-only" | "remote-only" | "mixed";
@@ -35,6 +36,12 @@ export interface SidebarProjectPickerEntry {
   group: SidebarProjectSnapshot;
   targetProject: SidebarProjectGroupMember;
   isPreferred: boolean;
+}
+
+interface ProjectUsageThread extends ThreadSortInput {
+  readonly id: string;
+  readonly environmentId: string;
+  readonly projectId: string;
 }
 
 interface SidebarProjectGroupCandidate {
@@ -259,4 +266,40 @@ export function buildSidebarProjectPickerEntries(input: {
     ...entries.slice(0, preferredIndex),
     ...entries.slice(preferredIndex + 1),
   ];
+}
+
+/** Choose the physical project used for a new chat in a grouped repository.
+ * The latest chat is the durable record of whether the user most recently
+ * worked locally or in a remote environment. */
+export function resolveProjectGroupNewThreadTarget(input: {
+  group: SidebarProjectSnapshot;
+  threads: ReadonlyArray<ProjectUsageThread>;
+}): SidebarProjectGroupMember | null {
+  const memberByProjectRef = new Map<string, SidebarProjectGroupMember>(
+    input.group.memberProjects.map(
+      (member) => [`${member.environmentId}\0${member.id}`, member] as const,
+    ),
+  );
+  const latestMatchingThread = sortThreads(
+    input.threads.filter((thread) =>
+      memberByProjectRef.has(`${thread.environmentId}\0${thread.projectId}`),
+    ),
+    "updated_at",
+  )[0];
+  if (latestMatchingThread) {
+    return (
+      memberByProjectRef.get(
+        `${latestMatchingThread.environmentId}\0${latestMatchingThread.projectId}`,
+      ) ?? null
+    );
+  }
+
+  return (
+    input.group.memberProjects.find(
+      (member) =>
+        member.environmentId === input.group.environmentId && member.id === input.group.id,
+    ) ??
+    input.group.memberProjects[0] ??
+    null
+  );
 }

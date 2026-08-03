@@ -17,7 +17,7 @@ export interface TimelineEndState {
 }
 
 export function resolveTimelineIsAtEnd(state: TimelineEndState | undefined): boolean | undefined {
-  return state?.isNearEnd ?? state?.isAtEnd;
+  return state?.isAtEnd;
 }
 
 function computeElapsedMs(startIso: string, endIso: string): number | null {
