@@ -1,10 +1,9 @@
-import { RuntimeMode } from "@t3tools/contracts";
+import { ProviderInteractionMode, RuntimeMode } from "@t3tools/contracts";
 import { memo, type ReactNode } from "react";
-import { EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { EllipsisIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   Menu,
-  MenuItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
@@ -13,12 +12,11 @@ import {
 } from "../ui/menu";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
-  activePlan: boolean;
-  planSidebarLabel: string;
-  planSidebarOpen: boolean;
+  interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
+  showInteractionModeToggle: boolean;
   traitsMenuContent?: ReactNode;
-  onTogglePlanSidebar: () => void;
+  onToggleInteractionMode: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   return (
@@ -42,6 +40,22 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             <MenuDivider />
           </>
         ) : null}
+        {props.showInteractionModeToggle ? (
+          <>
+            <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Mode</div>
+            <MenuRadioGroup
+              value={props.interactionMode}
+              onValueChange={(value) => {
+                if (!value || value === props.interactionMode) return;
+                props.onToggleInteractionMode();
+              }}
+            >
+              <MenuRadioItem value="default">Chat</MenuRadioItem>
+              <MenuRadioItem value="plan">Plan</MenuRadioItem>
+            </MenuRadioGroup>
+            <MenuDivider />
+          </>
+        ) : null}
         <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Access</div>
         <MenuRadioGroup
           value={props.runtimeMode}
@@ -55,17 +69,6 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <MenuRadioItem value="auto">Auto</MenuRadioItem>
           <MenuRadioItem value="full-access">Full access</MenuRadioItem>
         </MenuRadioGroup>
-        {props.activePlan ? (
-          <>
-            <MenuDivider />
-            <MenuItem onClick={props.onTogglePlanSidebar}>
-              <ListTodoIcon className="size-4 shrink-0" />
-              {props.planSidebarOpen
-                ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
-                : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`}
-            </MenuItem>
-          </>
-        ) : null}
       </MenuPopup>
     </Menu>
   );

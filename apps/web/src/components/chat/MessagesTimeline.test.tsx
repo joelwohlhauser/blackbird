@@ -22,7 +22,6 @@ vi.mock("@legendapp/list/react", async () => {
     };
     contentInsetEndAdjustment?: number;
     className?: string;
-    maintainScrollAtEndThreshold?: number;
     maintainScrollAtEnd?:
       | boolean
       | {
@@ -56,7 +55,6 @@ vi.mock("@legendapp/list/react", async () => {
         data-content-inset-end={props.contentInsetEndAdjustment}
         data-class-name={props.className}
         data-maintain-scroll-at-end={props.maintainScrollAtEnd ? "enabled" : undefined}
-        data-maintain-scroll-at-end-threshold={props.maintainScrollAtEndThreshold}
         data-maintain-scroll-at-end-animated={
           typeof props.maintainScrollAtEnd === "object"
             ? props.maintainScrollAtEnd.animated
@@ -196,7 +194,9 @@ function buildProps() {
     onAnchorReady: () => {},
     onAnchorSizeChanged: () => {},
     contentInsetEndAdjustment: 0,
+    liveFollowEnabled: true,
     onIsAtEndChange: () => {},
+    onManualNavigation: () => {},
   };
 }
 
@@ -297,14 +297,91 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain("1 changed file");
   });
 
-  it("only follows streaming updates when the timeline is at the live edge", async () => {
-    const { resolveTimelineIsAtEnd } = await import("./MessagesTimeline.logic");
+  it("treats only the strict list end as the live edge", async () => {
+    const {
+      resolveTimelineIsAtEnd,
+      resolveTimelineMinimapHasPersistentGutter,
+      resolveTimelineMinimapHeightStyle,
+      resolveTimelineMinimapHitStripWidth,
+      resolveTimelineMinimapIndexFromPointer,
+      resolveTimelineMinimapInteractiveWidth,
+      resolveTimelineMinimapTopPercent,
+    } = await import("./MessagesTimeline.logic");
 
-    expect(resolveTimelineIsAtEnd({ isNearEnd: true, isAtEnd: false })).toBe(false);
-    expect(resolveTimelineIsAtEnd({ isNearEnd: false, isAtEnd: true })).toBe(true);
-    expect(resolveTimelineIsAtEnd({ isNearEnd: true })).toBeUndefined();
     expect(resolveTimelineIsAtEnd({ isAtEnd: true })).toBe(true);
     expect(resolveTimelineIsAtEnd(undefined)).toBeUndefined();
+    // Within the pixel band above the content bottom counts as the end...
+    expect(
+      resolveTimelineIsAtEnd({
+        isAtEnd: false,
+        contentLength: 2000,
+        scroll: 1170,
+        scrollLength: 800,
+      }),
+    ).toBe(true);
+    // ...but half a viewport up (LegendList's isNearEnd territory) does not.
+    expect(
+      resolveTimelineIsAtEnd({
+        isAtEnd: false,
+        contentLength: 2000,
+        scroll: 900,
+        scrollLength: 800,
+      }),
+    ).toBe(false);
+    // The composer inset is part of contentLength and must not count as
+    // distance-to-end.
+    expect(
+      resolveTimelineIsAtEnd(
+        { isAtEnd: false, contentLength: 2100, scroll: 1170, scrollLength: 800 },
+        100,
+      ),
+    ).toBe(true);
+    // Geometry missing (older state shape): fall back to the strict flag.
+    expect(resolveTimelineIsAtEnd({ isAtEnd: false })).toBe(false);
+
+    expect(resolveTimelineMinimapHeightStyle(5)).toBe("min(32px, calc(100vh - 18rem))");
+    expect(resolveTimelineMinimapTopPercent(2, 5)).toBe(50);
+    expect(
+      resolveTimelineMinimapIndexFromPointer({
+        itemCount: 101,
+        railTop: 100,
+        railHeight: 500,
+        pointerY: 350,
+      }),
+    ).toBe(50);
+    expect(
+      resolveTimelineMinimapIndexFromPointer({
+        itemCount: 101,
+        railTop: 100,
+        railHeight: 500,
+        pointerY: 999,
+      }),
+    ).toBe(100);
+    expect(resolveTimelineMinimapHasPersistentGutter(832)).toBe(false);
+    expect(resolveTimelineMinimapHasPersistentGutter(863)).toBe(false);
+    expect(resolveTimelineMinimapHasPersistentGutter(864)).toBe(true);
+
+    // No usable gutter (zoomed in / narrow pane): the strip must go inert
+    // instead of overlaying the centered content column.
+    expect(resolveTimelineMinimapHitStripWidth(768)).toBe(0);
+    expect(resolveTimelineMinimapHitStripWidth(792)).toBe(0);
+    // Partial gutter: strip shrinks to what fits between the viewport edge
+    // and the content column.
+    expect(resolveTimelineMinimapHitStripWidth(820)).toBe(14);
+    // Full gutter: unchanged 40px-wide strip.
+    expect(resolveTimelineMinimapHitStripWidth(872)).toBe(40);
+    expect(resolveTimelineMinimapHitStripWidth(1400)).toBe(40);
+    expect(resolveTimelineMinimapHitStripWidth(0)).toBe(0);
+    expect(resolveTimelineMinimapHitStripWidth(Number.NaN)).toBe(0);
+
+    // The collapsed target stays narrow, but an open preview keeps its full
+    // 20rem width plus the 2rem offset from the minimap rail interactive.
+    expect(resolveTimelineMinimapInteractiveWidth(0, false)).toBe(0);
+    expect(resolveTimelineMinimapInteractiveWidth(14, false)).toBe(14);
+    expect(resolveTimelineMinimapInteractiveWidth(40, false)).toBe(40);
+    expect(resolveTimelineMinimapInteractiveWidth(0, true)).toBe("22rem");
+    expect(resolveTimelineMinimapInteractiveWidth(14, true)).toBe("22rem");
+    expect(resolveTimelineMinimapInteractiveWidth(40, true)).toBe("22rem");
   });
 
   it("anchors a sent attachment message using its measured height", () => {
@@ -369,7 +446,6 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain('data-maintain-scroll-at-end-data-change="true"');
     expect(markup).toContain('data-maintain-scroll-at-end-item-layout="true"');
     expect(markup).toContain('data-maintain-scroll-at-end-layout="true"');
-    expect(markup).toContain('data-maintain-scroll-at-end-threshold="0"');
     expect(markup).toContain('data-user-message-collapsed="true"');
     expect(markup).toContain('data-user-message-fade="true"');
     expect(markup).toContain('data-user-message-footer="true"');

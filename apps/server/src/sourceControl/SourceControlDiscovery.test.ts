@@ -59,7 +59,7 @@ it.effect("reports implemented tools separately from locally available executabl
       if (input.command === "gh" && input.args[0] === "--version") {
         return Effect.succeed(processOutput("gh version 2.83.0\n"));
       }
-      if (input.command === "gh" && input.args.join(" ") === "auth status --json hosts") {
+      if (input.command === "gh" && input.args.join(" ") === "auth status") {
         return Effect.succeed(
           processOutput(
             JSON.stringify({
@@ -175,7 +175,7 @@ it.effect("probes provider authentication without exposing token details", () =>
       if (input.args[0] === "--version") {
         return Effect.succeed(processOutput(`${input.command} version test\n`));
       }
-      if (input.command === "gh" && input.args.join(" ") === "auth status --json hosts") {
+      if (input.command === "gh" && input.args.join(" ") === "auth status") {
         return Effect.succeed(
           processOutput(
             JSON.stringify({

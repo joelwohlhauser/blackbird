@@ -13,6 +13,7 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import type { ScopedThreadRef, SidebarProjectGroupingMode } from "@t3tools/contracts";
+import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
   AlarmClockIcon,
   AlarmClockOffIcon,
@@ -331,11 +332,15 @@ function SnoozePopoverButton(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSnooze: (preset: SnoozePreset) => void;
+  timestampFormat: TimestampFormat;
 }) {
-  const { open, onOpenChange, onSnooze } = props;
+  const { open, onOpenChange, onSnooze, timestampFormat } = props;
   // Presets resolve at open time so "In 1 hour" is relative to the click,
   // not to when the row mounted.
-  const presets = useMemo(() => (open ? resolveSnoozePresets(new Date()) : []), [open]);
+  const presets = useMemo(
+    () => (open ? resolveSnoozePresets(new Date(), timestampFormat) : []),
+    [open, timestampFormat],
+  );
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
@@ -387,6 +392,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
   snoozeSupported: boolean;
   // Compact wake countdown ("2h") for rows in the snoozed shelf.
   snoozeWakeLabelText: string | null;
+  timestampFormat: TimestampFormat;
   // When a snooze ended (timer or early wake); drives the Woke pill until
   // the user visits the thread.
   wokeAt: string | null;
@@ -952,6 +958,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                         open={snoozeMenuOpen}
                         onOpenChange={setSnoozeMenuOpen}
                         onSnooze={handleSnoozePreset}
+                        timestampFormat={props.timestampFormat}
                       />
                     ) : null}
                     {props.settlementSupported ? (
@@ -1134,6 +1141,7 @@ export default function SidebarV2() {
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const autoSettleAfterDays = useClientSettings((s) => s.sidebarAutoSettleAfterDays);
+  const timestampFormat = useClientSettings((s) => s.timestampFormat);
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
@@ -2096,7 +2104,11 @@ export default function SidebarV2() {
           toastManager.add(
             stackedThreadToast({
               type: "success",
-              title: `Snoozed until ${snoozeWakeDescription(preset.snoozedUntil, new Date())}`,
+              title: `Snoozed until ${snoozeWakeDescription(
+                preset.snoozedUntil,
+                new Date(),
+                timestampFormat,
+              )}`,
               timeout: 5_000,
               actionProps: {
                 children: "Undo",
@@ -2114,7 +2126,7 @@ export default function SidebarV2() {
         }
       })();
     },
-    [attemptUnsnooze, planForwardNavigation, snoozeThread],
+    [attemptUnsnooze, planForwardNavigation, snoozeThread, timestampFormat],
   );
 
   const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
@@ -2155,7 +2167,7 @@ export default function SidebarV2() {
         supportedCount: titleRegenerationThreads.length,
         actionableCount: regeneratableTitleThreads.length,
       });
-      const snoozePresets = resolveSnoozePresets(new Date());
+      const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
       const clicked = await settlePromise(() =>
         api.contextMenu.show(
           [
@@ -2327,7 +2339,7 @@ export default function SidebarV2() {
         const isSettled = settledThreadKeysRef.current.has(threadKey);
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
         // Presets resolve at menu-open time (same as the popover).
-        const snoozePresets = resolveSnoozePresets(new Date());
+        const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             [
@@ -2964,6 +2976,7 @@ export default function SidebarV2() {
                               })
                             : null
                         }
+                        timestampFormat={timestampFormat}
                         // All sections: a woken thread can classify straight
                         // into the settled tail (PR merged while snoozed), and
                         // the wake signal must survive the trip. Still-snoozed

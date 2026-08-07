@@ -47,6 +47,7 @@ import { Separator } from "./ui/separator";
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
   threadId: ThreadId;
+  showGitControls: boolean;
   draftId?: DraftId;
   onEnvModeChange: (mode: EnvMode) => void;
   effectiveEnvModeOverride?: EnvMode;
@@ -244,6 +245,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
 export const BranchToolbar = memo(function BranchToolbar({
   environmentId,
   threadId,
+  showGitControls,
   draftId,
   onEnvModeChange,
   effectiveEnvModeOverride,
@@ -387,7 +389,7 @@ export const BranchToolbar = memo(function BranchToolbar({
 
   return (
     <div className="chat-composer-context-strip -mt-4 mx-auto flex h-[3.25rem] w-[calc(100%-2.75rem)] max-w-[calc(48rem-2.75rem)] items-center gap-2 ps-1 pe-2 pt-5 pb-1">
-      {isMobile ? (
+      {isMobile && showGitControls ? (
         <>
           <MobileRunContextSelector
             envLocked={envLocked}
@@ -440,18 +442,22 @@ export const BranchToolbar = memo(function BranchToolbar({
                 availableEnvironments={availableEnvironments}
                 {...(showEnvironmentPicker && onEnvironmentChange ? { onEnvironmentChange } : {})}
               />
-              <Separator orientation="vertical" className="mx-0.5 h-3.5!" />
+              {showGitControls ? (
+                <Separator orientation="vertical" className="mx-0.5 h-3.5!" />
+              ) : null}
             </>
           )}
-          <BranchToolbarEnvModeSelector
-            envLocked={envModeLocked}
-            effectiveEnvMode={effectiveEnvMode}
-            activeWorktreePath={activeWorktreePath}
-            onEnvModeChange={onEnvModeChange}
-            canReuseExistingWorktree={canReuseExistingWorktree}
-            previousWorktreeLabel={previousWorktreeLabel}
-            onUsePreviousWorktree={onUsePreviousWorktree}
-          />
+          {showGitControls ? (
+            <BranchToolbarEnvModeSelector
+              envLocked={envModeLocked}
+              effectiveEnvMode={effectiveEnvMode}
+              activeWorktreePath={activeWorktreePath}
+              onEnvModeChange={onEnvModeChange}
+              canReuseExistingWorktree={canReuseExistingWorktree}
+              previousWorktreeLabel={previousWorktreeLabel}
+              onUsePreviousWorktree={onUsePreviousWorktree}
+            />
+          ) : null}
           {activeWorktreePath !== null && onDeleteWorktreeRequest ? (
             <Button
               type="button"
@@ -480,7 +486,7 @@ export const BranchToolbar = memo(function BranchToolbar({
         </div>
       )}
 
-      {effectiveEnvMode !== "worktree-reuse" ? (
+      {showGitControls && effectiveEnvMode !== "worktree-reuse" ? (
         <BranchToolbarBranchSelector
           className="min-w-0 flex-1 justify-end md:ml-auto md:flex-none"
           environmentId={environmentId}

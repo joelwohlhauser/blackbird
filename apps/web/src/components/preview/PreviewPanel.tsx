@@ -1,7 +1,8 @@
 "use client";
 
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { PreviewAnnotationPayload, ScopedThreadRef } from "@t3tools/contracts";
 
+import type { ComposerImageAttachment } from "~/composerDraftStore";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./PreviewPanelShell";
@@ -15,6 +16,10 @@ interface Props {
   visible: boolean;
   showChrome?: boolean;
   layoutVersion?: string | number;
+  onSendAnnotation?: (
+    annotation: PreviewAnnotationPayload,
+    image: ComposerImageAttachment | null,
+  ) => void;
 }
 
 export function PreviewPanel({
@@ -25,6 +30,7 @@ export function PreviewPanel({
   visible,
   showChrome,
   layoutVersion,
+  onSendAnnotation,
 }: Props) {
   if (!isPreviewSupportedInRuntime()) {
     return (
@@ -47,6 +53,7 @@ export function PreviewPanel({
         visible={visible}
         {...(showChrome !== undefined ? { showChrome } : {})}
         {...(layoutVersion !== undefined ? { layoutVersion } : {})}
+        {...(onSendAnnotation ? { onSendAnnotation } : {})}
       />
     </PreviewPanelShell>
   );
