@@ -15,6 +15,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { SshPasswordPrompt } from "./auth.ts";
 import {
   buildRemoteLaunchScript,
+  buildRemotePackageInstallScript,
   buildRemotePairingScript,
   buildRemoteStopScript,
   buildRemoteT3RunnerScript,
@@ -144,6 +145,19 @@ describe("ssh tunnel scripts", () => {
     assert.include(script, 'exec node "$T3_NODE_SCRIPT_PATH" "$@"');
   });
 
+  it("installs a bundled Blackbird server archive into a content-addressed directory", () => {
+    const archiveId = "a".repeat(64);
+    const script = buildRemotePackageInstallScript({
+      archiveBase64: "YmxhY2tiaXJk",
+      archiveId,
+    });
+
+    assert.include(script, `$HOME/.t3/blackbird-server/${archiveId}`);
+    assert.include(script, "YmxhY2tiaXJk");
+    assert.include(script, "npm install --omit=dev --no-audit --no-fund");
+    assert.include(script, "node_modules/t3/dist/bin.mjs");
+  });
+
   it("uses the remote t3 runner for launch and pairing scripts", () => {
     const target = {
       alias: "devbox",
@@ -213,6 +227,23 @@ describe("ssh tunnel scripts", () => {
       buildRemoteLaunchScript().indexOf('DEFAULT_RUNTIME_INFO="$(resolve_default_runtime_port'),
       buildRemoteLaunchScript().indexOf('elif [ -n "$REMOTE_PID" ]'),
     );
+  });
+
+  it("does not adopt an external server when a bundled node script is configured", () => {
+    const bundledScript = buildRemoteLaunchScript({
+      nodeScriptPath: "/root/.t3/blackbird-server/build/node_modules/t3/dist/bin.mjs",
+    });
+
+    assert.include(bundledScript, "FORCE_MANAGED=1");
+    assert.include(
+      bundledScript,
+      'if [ -n "$DEFAULT_REMOTE_PORT" ] && [ "$FORCE_MANAGED" != "1" ]; then',
+    );
+    assert.include(
+      bundledScript,
+      'if [ "$FORCE_MANAGED" = "1" ] && [ "$REMOTE_MANAGED" = "external" ]; then',
+    );
+    assert.include(buildRemoteLaunchScript(), "FORCE_MANAGED=0");
   });
 
   it.effect("accepts launch JSON after remote shell startup noise", () => {

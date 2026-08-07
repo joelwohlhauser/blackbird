@@ -283,6 +283,7 @@ describe("rightPanelStore", () => {
           relativePath: "src/App.tsx",
           scope: "unstaged",
           baseRef: null,
+          headRef: null,
         },
         {
           id: "file-diff:branch:origin%2Fmain:src%2FApp.tsx",
@@ -290,6 +291,7 @@ describe("rightPanelStore", () => {
           relativePath: "src/App.tsx",
           scope: "branch",
           baseRef: "origin/main",
+          headRef: null,
         },
         {
           id: "file-diff:unstaged::src%2Froutes.ts",
@@ -297,6 +299,7 @@ describe("rightPanelStore", () => {
           relativePath: "src/routes.ts",
           scope: "unstaged",
           baseRef: null,
+          headRef: null,
         },
       ],
     });

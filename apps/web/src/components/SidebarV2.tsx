@@ -790,11 +790,10 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                 Regenerating title
               </span>
             ) : null}
-            {/* The PR badge stays outside the hover-fading slot: it must
-              remain visible AND clickable while the row is hovered. Only
-              the time/jump label yields to the settle affordance. */}
+            {/* The PR badge stays outside the hover-fading slot so it remains
+              visible and clickable while the row is hovered. */}
             {prBadge}
-            <span className="relative ml-auto flex h-6 min-w-8 shrink-0 items-center justify-end">
+            <span className="relative ml-auto flex h-6 min-w-0 shrink-0 items-center justify-end">
               <span className="inline-flex justify-end tabular-nums text-muted-foreground/55 transition-opacity group-hover/v2-row:opacity-0">
                 {variantAction === "unsnooze" && props.snoozeWakeLabelText !== null ? (
                   // Snoozed rows show when they come BACK, not when they were
@@ -900,7 +899,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                   actions on hover/keyboard focus or while the popover is open. Keeping
                   the hidden state out of flow lets the project label reclaim
                   space without either state overlapping it. */}
-              <span className="group/v2-status-slot relative ml-auto flex h-5 min-w-8 shrink-0 items-stretch justify-end text-xs">
+              <span className="group/v2-status-slot relative ml-auto flex h-5 min-w-0 shrink-0 items-stretch justify-end text-xs">
                 {/* pointer-events-none: while hovered this label is absolute
                     + opacity-0, which paints it ABOVE the in-flow settle/snooze
                     buttons; without it the invisible label eats their clicks. */}

@@ -1,16 +1,26 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { Outlet, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  Outlet,
+  createFileRoute,
+  redirect,
+  useLocation,
+  useNavigate,
+} from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
+import { resolveThreadStatusPill, type ThreadStatusPill } from "../components/Sidebar.logic";
+import { ThreadStatusLabel } from "../components/ThreadStatusIndicators";
 import {
   activeChatSwitcherDirection,
   adjacentChatSwitcherIndex,
   chatSwitcherDirectionForShortcut,
+  chatSwitcherVisibilityDelayMs,
   initialChatSwitcherIndex,
   orderChatSwitcherItems,
   type ChatSwitcherDirection,
+  type ChatSwitcherModifier,
 } from "../chatSwitcher";
 import { useClientSettings, useSidebarV2Enabled } from "../hooks/useSettings";
 import { useProjects, useThreadShells } from "../state/entities";
@@ -22,17 +32,22 @@ import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
+import {
+  readLastChatPath,
+  resolveBrowserStorage,
+  resolveStartupChatPath,
+  writeLastChatPath,
+} from "../lastChatRoute";
 import { resolveShortcutCommand } from "../keybindings";
 import { buildThreadRouteParams } from "../threadRoutes";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { isPreviewSupportedInRuntime } from "../previewStateStore";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
+import { useUiStateStore } from "../uiStateStore";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { cn } from "~/lib/utils";
-
-type ChatSwitcherModifier = "alt" | "control";
 
 interface ChatSwitcherCandidate {
   readonly key: string;
@@ -40,6 +55,7 @@ interface ChatSwitcherCandidate {
   readonly threadId: ReturnType<typeof useThreadShells>[number]["id"];
   readonly title: string;
   readonly projectTitle: string;
+  readonly status: ThreadStatusPill | null;
   readonly updatedAt: string;
 }
 
@@ -47,6 +63,30 @@ interface ChatSwitcherState {
   readonly modifier: ChatSwitcherModifier;
   readonly items: ReadonlyArray<ChatSwitcherCandidate>;
   readonly selectedIndex: number;
+}
+
+function LastChatRoutePersistence() {
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const checkedStartupRoute = useRef(false);
+
+  useEffect(() => {
+    const storage = resolveBrowserStorage();
+    if (storage === null) return;
+
+    if (!checkedStartupRoute.current) {
+      checkedStartupRoute.current = true;
+      const startupPath = resolveStartupChatPath(pathname, readLastChatPath(storage));
+      if (startupPath !== null) {
+        void navigate({ to: startupPath as "/", replace: true });
+        return;
+      }
+    }
+
+    writeLastChatPath(storage, pathname);
+  }, [navigate, pathname]);
+
+  return null;
 }
 
 function ChatRouteGlobalShortcuts() {
@@ -60,8 +100,10 @@ function ChatRouteGlobalShortcuts() {
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const projects = useProjects();
   const threads = useThreadShells();
+  const threadLastVisitedAtById = useUiStateStore((state) => state.threadLastVisitedAtById);
   const [recentThreadKeys, setRecentThreadKeys] = useState<ReadonlyArray<string>>([]);
   const [chatSwitcher, setChatSwitcher] = useState<ChatSwitcherState | null>(null);
+  const [isChatSwitcherVisible, setIsChatSwitcherVisible] = useState(false);
   const switcherListRef = useRef<HTMLDivElement | null>(null);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const projectGroupCount = useMemo(
@@ -106,17 +148,27 @@ function ChatRouteGlobalShortcuts() {
         recentKeys: recentThreadKeys,
         items: threads
           .filter((thread) => thread.archivedAt === null)
-          .map((thread) => ({
-            key: `${thread.environmentId}:${thread.id}`,
-            environmentId: thread.environmentId,
-            threadId: thread.id,
-            title: thread.title,
-            projectTitle:
-              projectTitleByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? "Chat",
-            updatedAt: thread.updatedAt,
-          })),
+          .map((thread) => {
+            const threadRef = scopeThreadRef(thread.environmentId, thread.id);
+            const lastVisitedAt = threadLastVisitedAtById[scopedThreadKey(threadRef)];
+            return {
+              key: `${thread.environmentId}:${thread.id}`,
+              environmentId: thread.environmentId,
+              threadId: thread.id,
+              title: thread.title,
+              projectTitle:
+                projectTitleByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? "Chat",
+              status: resolveThreadStatusPill({
+                thread: {
+                  ...thread,
+                  ...(lastVisitedAt === undefined ? {} : { lastVisitedAt }),
+                },
+              }),
+              updatedAt: thread.updatedAt,
+            };
+          }),
       }),
-    [projectTitleByKey, recentThreadKeys, routeThreadKey, threads],
+    [projectTitleByKey, recentThreadKeys, routeThreadKey, threadLastVisitedAtById, threads],
   );
 
   useEffect(() => {
@@ -157,6 +209,7 @@ function ChatRouteGlobalShortcuts() {
 
   const activateChatSwitcherItem = useCallback(
     (item: ChatSwitcherCandidate) => {
+      setIsChatSwitcherVisible(false);
       setChatSwitcher(null);
       void navigate({
         to: "/$environmentId/$threadId",
@@ -166,11 +219,24 @@ function ChatRouteGlobalShortcuts() {
     [navigate],
   );
 
+  const chatSwitcherModifier = chatSwitcher?.modifier ?? null;
   useEffect(() => {
-    if (chatSwitcher === null) return;
+    setIsChatSwitcherVisible(false);
+    if (chatSwitcherModifier === null) return;
+    const delayMs = chatSwitcherVisibilityDelayMs(chatSwitcherModifier);
+    if (delayMs === 0) {
+      setIsChatSwitcherVisible(true);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setIsChatSwitcherVisible(true), delayMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [chatSwitcherModifier]);
+
+  useEffect(() => {
+    if (chatSwitcher === null || !isChatSwitcherVisible) return;
     const selected = switcherListRef.current?.querySelector<HTMLElement>("[aria-selected='true']");
     selected?.scrollIntoView({ block: "nearest" });
-  }, [chatSwitcher]);
+  }, [chatSwitcher, isChatSwitcherVisible]);
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -207,6 +273,7 @@ function ChatRouteGlobalShortcuts() {
       if (event.key === "Escape" && chatSwitcher !== null) {
         event.preventDefault();
         event.stopPropagation();
+        setIsChatSwitcherVisible(false);
         setChatSwitcher(null);
         return;
       }
@@ -305,7 +372,10 @@ function ChatRouteGlobalShortcuts() {
       event.stopPropagation();
       const selected = chatSwitcher.items[chatSwitcher.selectedIndex];
       if (selected) activateChatSwitcherItem(selected);
-      else setChatSwitcher(null);
+      else {
+        setIsChatSwitcherVisible(false);
+        setChatSwitcher(null);
+      }
     };
 
     window.addEventListener("keydown", onWindowKeyDown);
@@ -332,7 +402,7 @@ function ChatRouteGlobalShortcuts() {
     openOrAdvanceChatSwitcher,
   ]);
 
-  if (chatSwitcher === null) return null;
+  if (chatSwitcher === null || !isChatSwitcherVisible) return null;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/10 px-6">
@@ -342,7 +412,6 @@ function ChatRouteGlobalShortcuts() {
         className="pointer-events-auto w-full max-w-xl overflow-hidden rounded-2xl border border-border/80 bg-popover/98 p-2 text-popover-foreground shadow-2xl backdrop-blur-xl"
         role="dialog"
       >
-        <div className="px-3 pb-2 pt-1 text-xs font-medium text-muted-foreground">Switch chat</div>
         <div className="max-h-[min(28rem,70vh)] overflow-y-auto" ref={switcherListRef}>
           {chatSwitcher.items.map((item, index) => {
             const selected = index === chatSwitcher.selectedIndex;
@@ -357,6 +426,11 @@ function ChatRouteGlobalShortcuts() {
                 onClick={() => activateChatSwitcherItem(item)}
                 type="button"
               >
+                {item.status ? (
+                  <ThreadStatusLabel status={item.status} compact />
+                ) : (
+                  <span aria-hidden="true" className="size-3.5 shrink-0" />
+                )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{item.title}</span>
                   <span className="mt-0.5 block truncate text-xs text-muted-foreground">
@@ -367,10 +441,6 @@ function ChatRouteGlobalShortcuts() {
             );
           })}
         </div>
-        <div className="px-3 pb-1 pt-2 text-[11px] text-muted-foreground">
-          Keep {chatSwitcher.modifier === "alt" ? "Option" : "Control"} held and press Tab to cycle.
-          Release to switch.
-        </div>
       </div>
     </div>
   );
@@ -379,6 +449,7 @@ function ChatRouteGlobalShortcuts() {
 function ChatRouteLayout() {
   return (
     <>
+      <LastChatRoutePersistence />
       <ChatRouteGlobalShortcuts />
       <Outlet />
     </>

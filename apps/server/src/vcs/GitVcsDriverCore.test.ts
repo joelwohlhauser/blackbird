@@ -937,6 +937,48 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("compares explicit pull request refs from the remote", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const initialCommit = yield* git(cwd, ["rev-parse", "HEAD"]);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        yield* writeTextFile(cwd, "base-only.txt", "already merged upstream\n");
+        yield* git(cwd, ["add", "base-only.txt"]);
+        yield* git(cwd, ["commit", "-m", "advance remote base"]);
+        const remoteBaseCommit = yield* git(cwd, ["rev-parse", "HEAD"]);
+
+        yield* git(cwd, ["checkout", "-b", "feature/pr-preview"]);
+        yield* writeTextFile(cwd, "pr-only.txt", "part of the pull request\n");
+        yield* git(cwd, ["add", "pr-only.txt"]);
+        yield* git(cwd, ["commit", "-m", "add pull request change"]);
+        const remoteHeadCommit = yield* git(cwd, ["rev-parse", "HEAD"]);
+
+        yield* git(cwd, ["remote", "add", "origin", cwd]);
+        yield* git(cwd, ["update-ref", `refs/remotes/origin/${initialBranch}`, remoteBaseCommit]);
+        yield* git(cwd, ["update-ref", "refs/remotes/origin/feature/pr-preview", remoteHeadCommit]);
+        yield* git(cwd, ["branch", "-f", initialBranch, initialCommit]);
+
+        yield* writeTextFile(cwd, "local-only.txt", "not pushed to the pull request\n");
+        yield* git(cwd, ["add", "local-only.txt"]);
+        yield* git(cwd, ["commit", "-m", "local unpushed change"]);
+
+        const preview = yield* driver.getReviewDiffPreview({
+          cwd,
+          baseRef: initialBranch,
+          headRef: "feature/pr-preview",
+        });
+        const branchRange = preview.sources.find((source) => source.kind === "branch-range");
+
+        assert.strictEqual(branchRange?.baseRef, `origin/${initialBranch}`);
+        assert.strictEqual(branchRange?.headRef, "origin/feature/pr-preview");
+        assert.include(branchRange?.diff ?? "", "pr-only.txt");
+        assert.notInclude(branchRange?.diff ?? "", "base-only.txt");
+        assert.notInclude(branchRange?.diff ?? "", "local-only.txt");
+      }),
+    );
+
     it.effect("returns full-file worktree and branch diffs for a selected path", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

@@ -242,10 +242,12 @@ it.effect("preserves explicit provider and runtime mode in thread.turn.start", (
         provider: "codex",
         model: "gpt-5.4",
       },
+      goalObjective: "Complete the migration",
       runtimeMode: "full-access",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.modelSelection?.instanceId, "codex");
+    assert.strictEqual(parsed.goalObjective, "Complete the migration");
     assert.strictEqual(parsed.runtimeMode, "full-access");
     assert.strictEqual(parsed.interactionMode, DEFAULT_PROVIDER_INTERACTION_MODE);
   }),

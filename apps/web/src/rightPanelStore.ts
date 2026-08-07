@@ -48,6 +48,7 @@ export type RightPanelSurface =
       relativePath: string;
       scope: "unstaged" | "branch";
       baseRef: string | null;
+      headRef: string | null;
     }
   | {
       id: `file:${string}`;
@@ -59,7 +60,7 @@ export type RightPanelSurface =
   | { id: "plan"; kind: "plan" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 9;
+const RIGHT_PANEL_STORAGE_VERSION = 10;
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -102,6 +103,7 @@ interface RightPanelStoreState {
     scope: "unstaged" | "branch",
     relativePath: string,
     baseRef?: string | null,
+    headRef?: string | null,
   ) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   splitTerminal: (
@@ -183,20 +185,24 @@ export function rightPanelFileDiffSurfaceId(
   scope: "unstaged" | "branch",
   relativePath: string,
   baseRef: string | null = null,
+  headRef: string | null = null,
 ): `file-diff:${string}` {
-  return `file-diff:${scope}:${encodeURIComponent(baseRef ?? "")}:${encodeURIComponent(relativePath)}`;
+  const comparisonRef = headRef ? `${baseRef ?? ""}...${headRef}` : (baseRef ?? "");
+  return `file-diff:${scope}:${encodeURIComponent(comparisonRef)}:${encodeURIComponent(relativePath)}`;
 }
 
 const fileDiffSurface = (
   scope: "unstaged" | "branch",
   relativePath: string,
   baseRef: string | null,
+  headRef: string | null,
 ): RightPanelSurface => ({
-  id: rightPanelFileDiffSurfaceId(scope, relativePath, baseRef),
+  id: rightPanelFileDiffSurfaceId(scope, relativePath, baseRef, headRef),
   kind: "file-diff",
   relativePath,
   scope,
   baseRef,
+  headRef,
 });
 
 const terminalSurface = (terminalId: string): RightPanelSurface => ({
@@ -271,6 +277,17 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                           ? surface.revealRequestId
                           : 0;
                       return [{ ...surface, revealLine, revealRequestId }];
+                    }
+                    if (surface.kind === "file-diff") {
+                      return [
+                        {
+                          ...surface,
+                          headRef:
+                            "headRef" in surface && typeof surface.headRef === "string"
+                              ? surface.headRef
+                              : null,
+                        },
+                      ];
                     }
                     if (surface.kind !== "terminal") return [surface];
                     if (
@@ -419,7 +436,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             };
           }),
         })),
-      openDiffFile: (ref, scope, relativePath, baseRef) =>
+      openDiffFile: (ref, scope, relativePath, baseRef, headRef) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
             upsertSurface(
@@ -428,6 +445,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                 scope,
                 relativePath,
                 scope === "branch" ? baseRef?.trim() || null : null,
+                scope === "branch" ? headRef?.trim() || null : null,
               ),
             ),
           ),

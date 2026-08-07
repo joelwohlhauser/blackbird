@@ -53,6 +53,7 @@ export class DesktopEnvironment extends Context.Service<
     readonly appRoot: string;
     readonly backendEntryPath: string;
     readonly backendCwd: string;
+    readonly remoteServerPackageArchivePath: string;
     readonly preloadPath: string;
     readonly appUpdateYmlPath: string;
     readonly devServerUrl: Option.Option<URL>;
@@ -194,6 +195,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
     appRoot,
     backendEntryPath: path.join(appRoot, "apps/server/dist/bin.mjs"),
     backendCwd: input.isPackaged ? homeDirectory : appRoot,
+    remoteServerPackageArchivePath: path.join(resourcesPath, "blackbird-remote-server.tgz"),
     preloadPath: path.join(input.dirname, "preload.cjs"),
     appUpdateYmlPath: input.isPackaged
       ? path.join(resourcesPath, "app-update.yml")

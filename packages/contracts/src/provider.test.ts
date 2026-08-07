@@ -115,6 +115,16 @@ describe("ProviderSessionStartInput", () => {
 });
 
 describe("ProviderSendTurnInput", () => {
+  it("accepts a Codex goal objective", () => {
+    const parsed = decodeProviderSendTurnInput({
+      threadId: "thread-1",
+      input: "Ship the desktop release",
+      goalObjective: "Ship the desktop release",
+    });
+
+    expect(parsed.goalObjective).toBe("Ship the desktop release");
+  });
+
   it("accepts codex modelSelection", () => {
     const parsed = decodeProviderSendTurnInput({
       threadId: "thread-1",

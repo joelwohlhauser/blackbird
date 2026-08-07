@@ -208,6 +208,7 @@ interface DiffPanelProps {
     scope: "branch" | "unstaged";
     filePath: string;
     baseRef: string | null;
+    headRef?: string | null;
   };
 }
 
@@ -309,6 +310,8 @@ export default function DiffPanel({
   const selectedTurnId = diffSelection.kind === "turn" ? diffSelection.turnId : null;
   const selectedGitScope = diffSelection.kind === "unstaged" ? "unstaged" : "branch";
   const selectedBaseRef = diffSelection.kind === "branch" ? diffSelection.baseRef : null;
+  const selectedHeadRef =
+    fixedGitSelection?.scope === "branch" ? (fixedGitSelection.headRef ?? null) : null;
   const selectedFilePath = diffSelection.filePath ?? null;
   const selectedFileRevealRequestId = diffSelection.revealRequestId ?? 0;
   const fixedFileBreadcrumbs = useMemo(
@@ -380,6 +383,7 @@ export default function DiffPanel({
           input: {
             cwd: activeCwd,
             ...(selectedBaseRef ? { baseRef: selectedBaseRef } : {}),
+            ...(selectedHeadRef ? { headRef: selectedHeadRef } : {}),
             // The aggregate Diff surface always requests the complete patch.
             // A file path only filters dedicated file-diff tabs; stored file
             // selections in the aggregate view are scroll targets instead.

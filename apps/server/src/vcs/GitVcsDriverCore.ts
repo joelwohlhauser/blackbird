@@ -1460,6 +1460,41 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     return null;
   });
 
+  const resolveRemoteReviewRef = Effect.fn("resolveRemoteReviewRef")(function* (
+    cwd: string,
+    refName: string,
+    preferredRemoteName: string | null,
+  ) {
+    const remoteNames = yield* listRemoteNames(cwd).pipe(Effect.orElseSucceed(() => []));
+    const parsedRemoteRef = parseRemoteRefWithRemoteNames(refName, remoteNames);
+    if (
+      parsedRemoteRef &&
+      (yield* remoteBranchExists(cwd, parsedRemoteRef.remoteName, parsedRemoteRef.branchName).pipe(
+        Effect.orElseSucceed(() => false),
+      ))
+    ) {
+      return `${parsedRemoteRef.remoteName}/${parsedRemoteRef.branchName}`;
+    }
+
+    const primaryRemoteName = yield* resolvePrimaryRemoteName(cwd).pipe(
+      Effect.orElseSucceed(() => null),
+    );
+    const remoteCandidates = [preferredRemoteName, primaryRemoteName, ...remoteNames].filter(
+      (remoteName, index, candidates): remoteName is string =>
+        remoteName !== null && candidates.indexOf(remoteName) === index,
+    );
+
+    for (const remoteName of remoteCandidates) {
+      if (
+        yield* remoteBranchExists(cwd, remoteName, refName).pipe(Effect.orElseSucceed(() => false))
+      ) {
+        return `${remoteName}/${refName}`;
+      }
+    }
+
+    return refName;
+  });
+
   const computeAheadCountAgainstBase = Effect.fn("computeAheadCountAgainstBase")(function* (
     cwd: string,
     refName: string,
@@ -2210,6 +2245,22 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
             Effect.orElseSucceed(() => null),
           )
         : null);
+    const currentUpstream =
+      input.headRef && branch === input.headRef
+        ? yield* resolveCurrentUpstream(input.cwd).pipe(Effect.orElseSucceed(() => null))
+        : null;
+    const preferredRemoteName =
+      currentUpstream?.remoteName ??
+      (yield* resolvePrimaryRemoteName(input.cwd).pipe(Effect.orElseSucceed(() => null)));
+    const comparisonBaseRef =
+      baseRef && input.headRef
+        ? yield* resolveRemoteReviewRef(input.cwd, baseRef, preferredRemoteName)
+        : baseRef;
+    const comparisonHeadRef = input.headRef
+      ? currentUpstream?.branchName === input.headRef
+        ? currentUpstream.upstreamRef
+        : yield* resolveRemoteReviewRef(input.cwd, input.headRef, preferredRemoteName)
+      : "HEAD";
 
     const dirtyTrackedResult = yield* executeGit(
       "GitVcsDriver.getReviewDiffPreview.dirtyTracked",
@@ -2248,7 +2299,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       .filter((diff) => diff.length > 0)
       .join("\n");
 
-    const baseResult = baseRef
+    const baseResult = comparisonBaseRef
       ? yield* executeGit(
           "GitVcsDriver.getReviewDiffPreview.base",
           input.cwd,
@@ -2262,7 +2313,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
             "--minimal",
             ...(input.filePath ? ["--unified=999999"] : []),
             ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
-            `${baseRef}...HEAD`,
+            `${comparisonBaseRef}...${comparisonHeadRef}`,
             "--",
             ...(input.filePath ? [input.filePath] : []),
           ],
@@ -2314,9 +2365,9 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       {
         id: "branch-range",
         kind: "branch-range",
-        title: baseRef ? `Against ${baseRef}` : "Against base branch",
-        baseRef,
-        headRef: branch ?? "HEAD",
+        title: comparisonBaseRef ? `Against ${comparisonBaseRef}` : "Against base branch",
+        baseRef: comparisonBaseRef,
+        headRef: input.headRef ? comparisonHeadRef : (branch ?? "HEAD"),
         diff: baseDiff,
         diffHash: baseDiffHash,
         truncated: baseResult?.stdoutTruncated ?? false,

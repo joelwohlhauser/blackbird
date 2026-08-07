@@ -343,6 +343,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         adapter.sendTurn({
           threadId: asThreadId("sess-missing"),
           input: "hello",
+          goalObjective: "Complete the migration",
           modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.3-codex", [
             { id: "reasoningEffort", value: "high" },
             { id: "serviceTier", value: "priority" },
@@ -353,6 +354,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
 
       NodeAssert.deepStrictEqual(runtime.sendTurnImpl.mock.calls[0]?.[0], {
         input: "hello",
+        goalObjective: "Complete the migration",
         model: "gpt-5.3-codex",
         effort: "high",
         serviceTier: "priority",

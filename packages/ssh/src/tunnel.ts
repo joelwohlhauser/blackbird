@@ -2,6 +2,7 @@ import type {
   DesktopSshEnvironmentBootstrap,
   DesktopSshEnvironmentTarget,
 } from "@t3tools/contracts";
+import * as NodeCrypto from "node:crypto";
 import {
   describeReadinessCause,
   waitForHttpReady as waitForHttpReadyShared,
@@ -10,6 +11,7 @@ import * as NetService from "@t3tools/shared/Net";
 import { extractJsonObject, fromLenientJson } from "@t3tools/shared/schemaJson";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
 import * as Context from "effect/Context";
+import * as Encoding from "effect/Encoding";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -56,11 +58,14 @@ const SSH_READY_PROBE_TIMEOUT_MS = 1_000;
 const TUNNEL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const REMOTE_READY_TIMEOUT_MS = 15_000;
 const REMOTE_REUSE_READY_TIMEOUT_MS = 2_000;
+const REMOTE_PACKAGE_INSTALL_TIMEOUT_MS = 5 * 60_000;
 
 export interface RemoteT3RunnerOptions {
   readonly packageSpec?: string;
   readonly nodeScriptPath?: string | null;
   readonly nodeEngineRange?: string | null;
+  /** A desktop-bundled npm archive that is installed on the SSH host before launch. */
+  readonly localPackageArchivePath?: string | null;
 }
 
 export interface SshEnvironmentManagerOptions {
@@ -116,6 +121,9 @@ function sshTargetLogFields(target: DesktopSshEnvironmentTarget) {
 }
 
 function sshRunnerLogFields(runner: RemoteT3RunnerOptions | undefined) {
+  if (runner?.localPackageArchivePath?.trim()) {
+    return { runner: "local-package-archive" };
+  }
   if (runner?.nodeScriptPath?.trim()) {
     return { runner: "node-script", nodeScriptPath: runner.nodeScriptPath.trim() };
   }
@@ -123,6 +131,51 @@ function sshRunnerLogFields(runner: RemoteT3RunnerOptions | undefined) {
     return { runner: "package", packageSpec: runner.packageSpec.trim() };
   }
   return { runner: "default" };
+}
+
+export function buildRemotePackageInstallScript(input: {
+  readonly archiveBase64: string;
+  readonly archiveId: string;
+}): string {
+  if (!/^[a-f0-9]{64}$/u.test(input.archiveId)) {
+    throw new Error("Remote package archive id must be a SHA-256 digest.");
+  }
+
+  return `set -eu
+INSTALL_ROOT="$HOME/.t3/blackbird-server/${input.archiveId}"
+ENTRY_PATH="$INSTALL_ROOT/node_modules/t3/dist/bin.mjs"
+if [ -f "$ENTRY_PATH" ]; then
+  printf '%s\\n' "$ENTRY_PATH"
+  exit 0
+fi
+
+PARENT_DIR="$HOME/.t3/blackbird-server"
+TEMP_ROOT="$PARENT_DIR/.${input.archiveId}.installing-$$"
+ARCHIVE_PATH="$TEMP_ROOT/blackbird-server.tgz"
+BASE64_PATH="$TEMP_ROOT/blackbird-server.tgz.base64"
+mkdir -p "$PARENT_DIR"
+rm -rf "$TEMP_ROOT"
+mkdir -p "$TEMP_ROOT"
+cat >"$BASE64_PATH" <<'BLACKBIRD_REMOTE_SERVER_ARCHIVE'
+${input.archiveBase64}
+BLACKBIRD_REMOTE_SERVER_ARCHIVE
+if base64 --decode "$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
+  :
+elif base64 -d "$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
+  :
+elif base64 -D "$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
+  :
+else
+  printf '%s\\n' 'Could not decode the Blackbird remote server archive.' >&2
+  exit 1
+fi
+rm -f "$BASE64_PATH"
+npm install --omit=dev --no-audit --no-fund --prefix "$TEMP_ROOT" "$ARCHIVE_PATH"
+rm -f "$ARCHIVE_PATH"
+rm -rf "$INSTALL_ROOT"
+mv "$TEMP_ROOT" "$INSTALL_ROOT"
+printf '%s\\n' "$ENTRY_PATH"
+`;
 }
 
 interface SshAuthOperationInput<T> {
@@ -441,6 +494,7 @@ STATE_KEY="$1"
 STATE_DIR="$HOME/.t3/ssh-launch/$STATE_KEY"
 DEFAULT_SERVER_HOME="$HOME/.t3"
 DEFAULT_RUNTIME_FILE="$DEFAULT_SERVER_HOME/userdata/server-runtime.json"
+FORCE_MANAGED=@@T3_FORCE_MANAGED@@
 PORT_FILE="$STATE_DIR/port"
 PID_FILE="$STATE_DIR/pid"
 MANAGED_FILE="$STATE_DIR/managed"
@@ -515,7 +569,7 @@ if [ -n "$DEFAULT_RUNTIME_INFO" ]; then
   DEFAULT_RUNTIME_PID="\${DEFAULT_RUNTIME_INFO%% *}"
   DEFAULT_REMOTE_PORT="\${DEFAULT_RUNTIME_INFO#* }"
 fi
-if [ -n "$DEFAULT_REMOTE_PORT" ]; then
+if [ -n "$DEFAULT_REMOTE_PORT" ] && [ "$FORCE_MANAGED" != "1" ]; then
   REMOTE_PORT="$DEFAULT_REMOTE_PORT"
   if wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
     if [ "$REMOTE_MANAGED" = "managed" ]; then
@@ -541,6 +595,11 @@ if [ -n "$DEFAULT_REMOTE_PORT" ]; then
     REMOTE_PORT="$(cat "$PORT_FILE" 2>/dev/null || true)"
     REMOTE_MANAGED="$(cat "$MANAGED_FILE" 2>/dev/null || true)"
   fi
+fi
+if [ "$FORCE_MANAGED" = "1" ] && [ "$REMOTE_MANAGED" = "external" ]; then
+  REMOTE_PID=""
+  REMOTE_PORT=""
+  REMOTE_MANAGED=""
 fi
 if [ "$REMOTE_MANAGED" = "external" ]; then
   if [ -z "$REMOTE_PORT" ] || ! wait_ready "@@T3_REUSE_READY_TIMEOUT_MS@@"; then
@@ -662,6 +721,7 @@ export function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
     T3_READY_TIMEOUT_MS: String(REMOTE_READY_TIMEOUT_MS),
     T3_REUSE_READY_TIMEOUT_MS: String(REMOTE_REUSE_READY_TIMEOUT_MS),
     T3_READY_PROBE_TIMEOUT_MS: String(SSH_READY_PROBE_TIMEOUT_MS),
+    T3_FORCE_MANAGED: input?.nodeScriptPath?.trim() ? "1" : "0",
   });
 }
 
@@ -1301,6 +1361,86 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
     });
   });
 
+  const prepareRemoteRunner = Effect.fn("ssh/tunnel.prepareRemoteRunner")(function* (input: {
+    readonly key: string;
+    readonly target: DesktopSshEnvironmentTarget;
+    readonly runner: RemoteT3RunnerOptions;
+  }): Effect.fn.Return<
+    RemoteT3RunnerOptions,
+    SshEnvironmentEffectError,
+    SshEnvironmentEffectContext
+  > {
+    const localArchivePath = input.runner.localPackageArchivePath?.trim();
+    if (!localArchivePath) {
+      return input.runner;
+    }
+
+    const fs = yield* FileSystem.FileSystem;
+    const archive = yield* fs.readFile(localArchivePath).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SshCommandError({
+            command: ["readFile", localArchivePath],
+            exitCode: null,
+            stderr: "",
+            message: `Could not read the bundled Blackbird remote server at ${localArchivePath}.`,
+            cause,
+          }),
+      ),
+    );
+    const archiveId = NodeCrypto.createHash("sha256").update(archive).digest("hex");
+    const expectedEntryPath = `$HOME/.t3/blackbird-server/${archiveId}/node_modules/t3/dist/bin.mjs`;
+    const probe = yield* runWithSshAuth({
+      key: input.key,
+      target: input.target,
+      operation: (authOptions) =>
+        runSshCommand(input.target, {
+          ...authOptions,
+          remoteCommandArgs: ["sh", "-s"],
+          stdin: `set -eu\nENTRY_PATH=\"${expectedEntryPath}\"\nif [ -f \"$ENTRY_PATH\" ]; then printf '%s\\n' \"$ENTRY_PATH\"; fi\n`,
+        }),
+    });
+    let remoteEntryPath = getLastNonEmptyOutputLine(probe.stdout);
+
+    if (remoteEntryPath === null) {
+      yield* Effect.logInfo("ssh.remoteServer.package.install.start", {
+        ...sshTargetLogFields(input.target),
+        archiveId,
+      });
+      const install = yield* runWithSshAuth({
+        key: input.key,
+        target: input.target,
+        operation: (authOptions) =>
+          runSshCommand(input.target, {
+            ...authOptions,
+            remoteCommandArgs: ["sh", "-s"],
+            stdin: buildRemotePackageInstallScript({
+              archiveBase64: Encoding.encodeBase64(archive),
+              archiveId,
+            }),
+            timeoutMs: REMOTE_PACKAGE_INSTALL_TIMEOUT_MS,
+          }),
+      });
+      remoteEntryPath = getLastNonEmptyOutputLine(install.stdout);
+      if (remoteEntryPath === null) {
+        return yield* new SshLaunchError({
+          message: "Installing the Blackbird remote server did not return its entry path.",
+          stdout: install.stdout,
+        });
+      }
+      yield* Effect.logInfo("ssh.remoteServer.package.install.succeeded", {
+        ...sshTargetLogFields(input.target),
+        archiveId,
+      });
+    }
+
+    const { localPackageArchivePath: _, packageSpec: __, ...runner } = input.runner;
+    return {
+      ...runner,
+      nodeScriptPath: remoteEntryPath,
+    };
+  });
+
   const createTunnelEntry = Effect.fn("ssh/tunnel.ensureTunnelEntry.create")(function* (input: {
     readonly key: string;
     readonly resolvedTarget: DesktopSshEnvironmentTarget;
@@ -1510,12 +1650,15 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       key,
     });
     const packageSpec = options.resolveCliPackageSpec?.();
-    const runner =
+    const unresolvedRunner =
       options.resolveCliRunner === undefined
         ? packageSpec === undefined
           ? undefined
           : { packageSpec }
         : yield* options.resolveCliRunner;
+    const runner = unresolvedRunner?.localPackageArchivePath?.trim()
+      ? yield* prepareRemoteRunner({ key, target: resolvedTarget, runner: unresolvedRunner })
+      : unresolvedRunner;
     yield* Effect.logDebug("ssh.environment.runner.resolved", {
       ...sshTargetLogFields(resolvedTarget),
       ...sshRunnerLogFields(runner),

@@ -1,4 +1,9 @@
 export type ChatSwitcherDirection = "next" | "previous";
+export type ChatSwitcherModifier = "alt" | "control";
+
+export function chatSwitcherVisibilityDelayMs(modifier: ChatSwitcherModifier): number {
+  return modifier === "alt" ? 100 : 0;
+}
 
 export type ChatSwitcherShortcutCommand =
   | "chat.switcher"
@@ -15,7 +20,7 @@ export function chatSwitcherDirectionForShortcut(
 }
 
 export function activeChatSwitcherDirection(input: {
-  readonly modifier: "alt" | "control";
+  readonly modifier: ChatSwitcherModifier;
   readonly key: string;
   readonly altKey: boolean;
   readonly ctrlKey: boolean;

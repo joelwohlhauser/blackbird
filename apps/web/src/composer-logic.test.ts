@@ -6,6 +6,7 @@ import {
   detectComposerTrigger,
   expandCollapsedComposerCursor,
   isCollapsedCursorAdjacentToInlineToken,
+  parseComposerGoalCommand,
   parseStandaloneComposerSlashCommand,
   replaceTextRange,
   shouldSubmitComposerOnEnter,
@@ -370,5 +371,18 @@ describe("parseStandaloneComposerSlashCommand", () => {
 
   it("ignores slash commands with extra message text", () => {
     expect(parseStandaloneComposerSlashCommand("/plan explain this")).toBeNull();
+  });
+});
+
+describe("parseComposerGoalCommand", () => {
+  it("extracts and trims a goal objective", () => {
+    expect(parseComposerGoalCommand(" /goal   Ship the desktop release  ")).toEqual({
+      objective: "Ship the desktop release",
+    });
+  });
+
+  it("distinguishes an empty goal command from ordinary text", () => {
+    expect(parseComposerGoalCommand("/goal")).toEqual({ objective: "" });
+    expect(parseComposerGoalCommand("please /goal later")).toBeNull();
   });
 });

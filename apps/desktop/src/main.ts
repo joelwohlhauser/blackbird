@@ -90,6 +90,12 @@ const resolveDesktopSshCliRunner = (
       nodeEngineRange: serverPackageJson.engines.node,
     };
   }
+  if (environment.isPackaged) {
+    return {
+      localPackageArchivePath: environment.remoteServerPackageArchivePath,
+      nodeEngineRange: serverPackageJson.engines.node,
+    };
+  }
   return {
     packageSpec: resolveRemoteT3CliPackageSpec({
       appVersion: environment.appVersion,

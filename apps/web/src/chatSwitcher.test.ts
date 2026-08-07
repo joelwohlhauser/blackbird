@@ -4,6 +4,7 @@ import {
   activeChatSwitcherDirection,
   adjacentChatSwitcherIndex,
   chatSwitcherDirectionForShortcut,
+  chatSwitcherVisibilityDelayMs,
   initialChatSwitcherIndex,
   orderChatSwitcherItems,
 } from "./chatSwitcher";
@@ -74,5 +75,10 @@ describe("chat switcher", () => {
         shiftKey: true,
       }),
     ).toBeNull();
+  });
+
+  it("delays only the Option-based switcher overlay", () => {
+    expect(chatSwitcherVisibilityDelayMs("alt")).toBe(100);
+    expect(chatSwitcherVisibilityDelayMs("control")).toBe(0);
   });
 });

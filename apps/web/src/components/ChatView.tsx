@@ -71,6 +71,7 @@ import { readLocalApi } from "../localApi";
 import { useDiffPanelStore } from "../diffPanelStore";
 import {
   collapseExpandedComposerCursor,
+  parseComposerGoalCommand,
   parseStandaloneComposerSlashCommand,
 } from "../composer-logic";
 import {
@@ -3369,6 +3370,7 @@ function ChatViewContent(props: ChatViewProps) {
         target.scope,
         target.filePath,
         target.scope === "branch" ? target.baseRef : undefined,
+        target.scope === "branch" ? target.headRef : undefined,
       );
       rightPanelStore.show(activeThreadRef);
       onDiffPanelOpen?.();
@@ -5096,11 +5098,22 @@ function ChatViewContent(props: ChatViewProps) {
       composerReviewComments.length === 0
         ? parseStandaloneComposerSlashCommand(trimmed)
         : null;
+    const goalCommand = ctxSelectedProvider === "codex" ? parseComposerGoalCommand(trimmed) : null;
     if (standaloneSlashCommand) {
       handleInteractionModeChange(standaloneSlashCommand);
       promptRef.current = "";
       clearComposerDraftContent(composerDraftTarget);
       composerRef.current?.resetCursorState();
+      return;
+    }
+    if (goalCommand && !goalCommand.objective) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: "Describe the goal",
+          description: "Add the long-running task after /goal.",
+        }),
+      );
       return;
     }
     if (!hasSendableContent) {
@@ -5181,8 +5194,9 @@ function ChatViewContent(props: ChatViewProps) {
     const composerElementContextsSnapshot = [...composerElementContexts];
     const composerPreviewAnnotationsSnapshot = [...composerPreviewAnnotations];
     const composerReviewCommentsSnapshot: ReviewCommentContext[] = [...composerReviewComments];
+    const promptTextForSend = goalCommand?.objective ?? promptForSend;
     const messageTextWithContexts = appendElementContextsToPrompt(
-      appendTerminalContextsToPrompt(promptForSend, composerTerminalContextsSnapshot),
+      appendTerminalContextsToPrompt(promptTextForSend, composerTerminalContextsSnapshot),
       composerElementContextsSnapshot,
     );
     const messageTextWithPreviewAnnotations = composerPreviewAnnotationsSnapshot.reduce(
@@ -5271,7 +5285,7 @@ function ChatViewContent(props: ChatViewProps) {
         firstComposerImageName = firstComposerImage.name;
       }
     }
-    let titleSeed = trimmed;
+    let titleSeed = goalCommand?.objective ?? trimmed;
     if (!titleSeed) {
       if (firstComposerImageName) {
         titleSeed = `Image: ${firstComposerImageName}`;
@@ -5373,6 +5387,7 @@ function ChatViewContent(props: ChatViewProps) {
           titleSeed: title,
           runtimeMode,
           interactionMode,
+          ...(goalCommand ? { goalObjective: goalCommand.objective } : {}),
           ...(bootstrap ? { bootstrap } : {}),
           createdAt: messageCreatedAt,
         },
@@ -6249,6 +6264,7 @@ function ChatViewContent(props: ChatViewProps) {
                   scope: activeRightPanelSurface.scope,
                   filePath: activeRightPanelSurface.relativePath,
                   baseRef: activeRightPanelSurface.baseRef,
+                  headRef: activeRightPanelSurface.headRef,
                 },
               }
             : {})}

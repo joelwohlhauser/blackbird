@@ -646,6 +646,10 @@ export const DESKTOP_EXTRA_RESOURCES = [
     from: "apps/desktop/prod-resources/resource-monitor",
     to: "resource-monitor",
   },
+  {
+    from: "apps/desktop/prod-resources/blackbird-remote-server.tgz",
+    to: "blackbird-remote-server.tgz",
+  },
 ] as const;
 
 export interface MacPasskeySigningConfiguration {
@@ -1956,6 +1960,53 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);
   yield* fs.writeFileString(path.join(stageAppDir, "package.json"), `${stagePackageJsonString}\n`);
+
+  // SSH environments must run the exact Blackbird backend bundled with the
+  // desktop app. The public `t3` npm package does not include Blackbird's
+  // worktree lifecycle, settings, or post-create preparation.
+  const remoteServerPackageDir = path.join(stageRoot, "blackbird-remote-server-package");
+  const remoteServerArchiveName = "blackbird-remote-server.tgz";
+  const packedRemoteServerArchiveName = "t3-0.0.0.tgz";
+  yield* fs.makeDirectory(remoteServerPackageDir, { recursive: true });
+  yield* fs.copy(distDirs.serverDist, path.join(remoteServerPackageDir, "dist"));
+  const remoteServerPackageJson = {
+    name: "t3",
+    version: "0.0.0",
+    private: true,
+    type: "module",
+    bin: { t3: "./dist/bin.mjs" },
+    files: ["dist"],
+    engines: serverPackageJson.engines,
+    dependencies: resolvedServerDependencies,
+  };
+  yield* fs.writeFileString(
+    path.join(remoteServerPackageDir, "package.json"),
+    `${yield* encodeJsonString(remoteServerPackageJson)}\n`,
+  );
+  const npmPack = yield* resolveSpawnCommand("npm", [
+    "pack",
+    remoteServerPackageDir,
+    "--pack-destination",
+    stageResourcesDir,
+    "--silent",
+  ]);
+  yield* runCommand(
+    ChildProcess.make(npmPack.command, npmPack.args, {
+      cwd: repoRoot,
+      shell: npmPack.shell,
+    }),
+    { label: "npm pack Blackbird remote server", verbose: options.verbose },
+  );
+  const packedRemoteServerArchive = path.join(stageResourcesDir, packedRemoteServerArchiveName);
+  const remoteServerArchive = path.join(stageResourcesDir, remoteServerArchiveName);
+  yield* fs.copyFile(packedRemoteServerArchive, remoteServerArchive);
+  yield* fs.remove(packedRemoteServerArchive);
+  yield* fs.copyFile(
+    remoteServerArchive,
+    path.join(stageAppDir, "apps/desktop/prod-resources", remoteServerArchiveName),
+  );
+  yield* Effect.log("[desktop-artifact] Packed the matching Blackbird SSH server.");
+
   const stageWorkspaceConfig = createStageWorkspaceConfig({
     platform: options.platform,
     arch: options.arch,

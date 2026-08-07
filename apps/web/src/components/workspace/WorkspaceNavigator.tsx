@@ -19,7 +19,12 @@ export type WorkspaceNavigatorTab = "file" | "changes" | "pr";
 
 export type WorkspaceNavigatorDiffTarget =
   | { scope: "unstaged"; filePath: string }
-  | { scope: "branch"; filePath: string; baseRef: string | null };
+  | {
+      scope: "branch";
+      filePath: string;
+      baseRef: string | null;
+      headRef?: string | null;
+    };
 
 const TABS: ReadonlyArray<{ id: WorkspaceNavigatorTab; label: string }> = [
   { id: "file", label: "Files" },
@@ -87,7 +92,11 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
     props.activeTab === "pr" && pullRequest
       ? reviewEnvironment.diffPreview({
           environmentId: props.environmentId,
-          input: { cwd: props.cwd, baseRef: pullRequest.baseRef },
+          input: {
+            cwd: props.cwd,
+            baseRef: pullRequest.baseRef,
+            headRef: pullRequest.headRef,
+          },
         })
       : null,
   );
@@ -240,6 +249,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
                         scope: "branch",
                         filePath,
                         baseRef: pullRequest.baseRef,
+                        headRef: pullRequest.headRef,
                       })
                     }
                   />
