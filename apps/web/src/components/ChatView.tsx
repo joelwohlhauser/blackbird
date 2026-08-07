@@ -128,7 +128,6 @@ import {
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
   selectWorkspaceNavigatorOpen,
-  resolveAdjacentRightPanelSurface,
   type RightPanelSurface,
   useRightPanelStore,
 } from "../rightPanelStore";
@@ -143,12 +142,20 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
+  MAIN_CHAT_TAB_ID,
   PANEL_EDGE_DROP_ID,
   resolveWorkspaceTabDrop,
   workspaceTabCollisionDetection,
   workspaceTabDragState,
 } from "../workspaceTabs";
 import { WorkspaceTabDragPreview, WorkspaceTabStrip } from "./WorkspaceTabStrip";
+import {
+  buildWorkspaceTabSwitcherItems,
+  WorkspaceTabSwitcherOverlay,
+  type WorkspaceTabSwitcherItem,
+  type WorkspaceTabSwitcherState,
+} from "./WorkspaceTabSwitcher";
+import { adjacentChatSwitcherIndex } from "../chatSwitcher";
 import {
   isPreviewSupportedInRuntime,
   setActivePreviewTab,
@@ -1622,6 +1629,9 @@ function ChatViewContent(props: ChatViewProps) {
     selectActiveMainSurface(state.byThreadKey, activeThreadRef),
   );
   const [draggingTabSurface, setDraggingTabSurface] = useState<RightPanelSurface | null>(null);
+  const [workspaceTabSwitcher, setWorkspaceTabSwitcher] =
+    useState<WorkspaceTabSwitcherState | null>(null);
+  const [isTabSwitcherVisible, setIsTabSwitcherVisible] = useState(false);
   const activeFileSurface =
     activeRightPanelSurface?.kind === "file"
       ? activeRightPanelSurface
@@ -3546,16 +3556,109 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().activateMainChat(activeThreadRef);
   }, [activeThreadRef]);
-  const cycleRightPanelSurface = useCallback(
+  const activateWorkspaceTabSwitcherItem = useCallback(
+    (item: WorkspaceTabSwitcherItem) => {
+      setIsTabSwitcherVisible(false);
+      setWorkspaceTabSwitcher(null);
+      if (item.surface) {
+        activateRightPanelSurface(item.surface);
+      } else {
+        activateMainChatTab();
+      }
+    },
+    [activateMainChatTab, activateRightPanelSurface],
+  );
+  // Ctrl+Tab tab switcher for the current chat's tabs. Opens only with two
+  // or more tabs; with just the chat tab the shortcut falls through to the
+  // chat switcher in the route layout.
+  const openOrAdvanceWorkspaceTabSwitcher = useCallback(
     (direction: "next" | "previous"): boolean => {
-      if (!activeThreadRef || !rightPanelState.isOpen) return false;
-      const nextSurface = resolveAdjacentRightPanelSurface(rightPanelState, direction);
-      if (!nextSurface) return false;
-      activateRightPanelSurface(nextSurface);
+      if (workspaceTabSwitcher) {
+        setWorkspaceTabSwitcher({
+          items: workspaceTabSwitcher.items,
+          selectedIndex: adjacentChatSwitcherIndex(
+            workspaceTabSwitcher.items.length,
+            workspaceTabSwitcher.selectedIndex,
+            direction,
+          ),
+        });
+        return true;
+      }
+      if (!activeThread) return false;
+      const items = buildWorkspaceTabSwitcherItems({
+        chatTitle: activeThread.title.trim().length > 0 ? activeThread.title : "Chat",
+        mainSurfaces: rightPanelState.mainSurfaces,
+        panelSurfaces: rightPanelState.surfaces,
+        previewSessions: activePreviewState.sessions,
+        terminalLabelsById: activeTerminalLabelsById,
+      });
+      if (items.length < 2) return false;
+      const currentTabId =
+        rightPanelOpen && activeRightPanelSurface
+          ? activeRightPanelSurface.id
+          : (activeMainSurface?.id ?? MAIN_CHAT_TAB_ID);
+      const currentIndex = Math.max(
+        0,
+        items.findIndex((item) => item.id === currentTabId),
+      );
+      setWorkspaceTabSwitcher({
+        items,
+        selectedIndex: adjacentChatSwitcherIndex(items.length, currentIndex, direction),
+      });
       return true;
     },
-    [activeThreadRef, activateRightPanelSurface, rightPanelState],
+    [
+      activeMainSurface,
+      activePreviewState.sessions,
+      activeRightPanelSurface,
+      activeTerminalLabelsById,
+      activeThread,
+      rightPanelOpen,
+      rightPanelState.mainSurfaces,
+      rightPanelState.surfaces,
+      workspaceTabSwitcher,
+    ],
   );
+  // Reveal the overlay only while Ctrl stays held; a quick tap commits first.
+  const tabSwitcherOpen = workspaceTabSwitcher !== null;
+  useEffect(() => {
+    setIsTabSwitcherVisible(false);
+    if (!tabSwitcherOpen) return;
+    const timeoutId = window.setTimeout(() => setIsTabSwitcherVisible(true), 100);
+    return () => window.clearTimeout(timeoutId);
+  }, [tabSwitcherOpen]);
+  // The snapshot goes stale on chat switches.
+  useEffect(() => {
+    setWorkspaceTabSwitcher(null);
+  }, [routeThreadKey]);
+  useEffect(() => {
+    if (!workspaceTabSwitcher) return;
+    const onWindowKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== "Control") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const selected = workspaceTabSwitcher.items[workspaceTabSwitcher.selectedIndex];
+      if (selected) {
+        activateWorkspaceTabSwitcherItem(selected);
+      } else {
+        setIsTabSwitcherVisible(false);
+        setWorkspaceTabSwitcher(null);
+      }
+    };
+    const onWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsTabSwitcherVisible(false);
+      setWorkspaceTabSwitcher(null);
+    };
+    window.addEventListener("keyup", onWindowKeyUp, true);
+    window.addEventListener("keydown", onWindowKeyDown, true);
+    return () => {
+      window.removeEventListener("keyup", onWindowKeyUp, true);
+      window.removeEventListener("keydown", onWindowKeyDown, true);
+    };
+  }, [activateWorkspaceTabSwitcherItem, workspaceTabSwitcher]);
   const toggleRightPanel = useCallback(() => {
     if (!activeThreadRef) return;
     if (rightPanelOpen) {
@@ -5064,7 +5167,9 @@ function ChatViewContent(props: ChatViewProps) {
       }
 
       if (command === "rightPanel.nextTab" || command === "rightPanel.previousTab") {
-        if (!cycleRightPanelSurface(command === "rightPanel.nextTab" ? "next" : "previous")) {
+        if (
+          !openOrAdvanceWorkspaceTabSwitcher(command === "rightPanel.nextTab" ? "next" : "previous")
+        ) {
           return;
         }
         event.preventDefault();
@@ -5181,7 +5286,7 @@ function ChatViewContent(props: ChatViewProps) {
     closeTerminal,
     closePanelTerminal,
     createNewTerminal,
-    cycleRightPanelSurface,
+    openOrAdvanceWorkspaceTabSwitcher,
     setTerminalOpen,
     runProjectScript,
     splitTerminal,
@@ -7155,6 +7260,14 @@ function ChatViewContent(props: ChatViewProps) {
             onClose={closeExpandedImage}
           />
         )}
+
+        {workspaceTabSwitcher && isTabSwitcherVisible ? (
+          <WorkspaceTabSwitcherOverlay
+            state={workspaceTabSwitcher}
+            previewSessions={activePreviewState.sessions}
+            onSelect={activateWorkspaceTabSwitcherItem}
+          />
+        ) : null}
       </div>
       <DragOverlay dropAnimation={null}>
         {draggingTabSurface ? (

@@ -25,6 +25,9 @@ regularly. `origin` is `joelwohlhauser/blackbird`; `upstream` is
   for web hosting. The deploy script builds first, closes a running Blackbird
   only once the replacement is ready, installs it, and relaunches the app.
 - Do not deploy merely because a change is complete; deploy when the user asks.
+- Keep `README.md` up to date: when a bigger feature is added or user-visible
+  behavior changes meaningfully, update the feature map in `README.md` as part
+  of the same change. Plain bug fixes do not need README updates.
 - Keep GitHub Actions disabled/unnecessary for Blackbird's personal workflow,
   even when merging upstream workflow changes.
 - Keep the name and identity **Blackbird**. The project was originally called
@@ -52,11 +55,19 @@ These customizations are intentional and must survive upstream merges:
 - **Chat switcher.** Option+Tab opens the recent-chat switcher; Shift reverses
   direction. A quick tap switches immediately, while the switcher waits about
   100 ms before appearing. It includes chat statuses. Command+Shift+N opens a
-  new Quick chat. Control+Tab / Control+Shift+Tab cycle tabs in the normal right
-  panel.
-- **Two right-side surfaces.** The normal right panel is a persistent,
-  per-chat, tabbed surface for browser pages, terminals, full diffs, file and
-  working-tree tabs, Linear issues, GitHub PRs, and agents. Blackbird also has
+  new Quick chat. Control+Tab / Control+Shift+Tab open the analogous tab
+  switcher for the current chat's workspace tabs; with fewer than two tabs it
+  falls through to the chat switcher. There is no Command-held numbered
+  chat-jump hint overlay (⌘1–9 still jump quietly).
+- **Workspace tabs and two right-side surfaces.** The chat area and the normal
+  right panel are one drag-and-drop tab workspace (browser pages, terminals,
+  full diffs, file and working-tree tabs, Linear issues, GitHub PRs, agents).
+  The chat renders as a pinned, renamable tab carrying the chat title inside
+  the single chat header; tabs move between the two containers, new tabs
+  auto-place by layout (open panel wins, otherwise the chat area unless the
+  window is very wide), and the panel opens/closes through tab placement —
+  there is intentionally no panel toggle button, ⌥⌘B binding, or maximize
+  control. Blackbird also has
   a second, narrow, independently resizable **workspace navigator** (often
   called the new right sidebar/sidepanel) with **Files**, **Changes**, and
   **PR** tabs. Its visibility and selected state are per chat. Selecting a file

@@ -24,9 +24,13 @@ The left sidebar includes:
 
 - a dedicated, collapsible **Quick chats** section above Projects;
 - a collapsible **Projects** section with local and remote copies grouped under
-  the human folder name rather than a GitHub `owner/repo` name;
+  the human folder name rather than a GitHub `owner/repo` name (an open-folder
+  icon marks expanded projects without a favicon);
+- section header actions (new quick chat, sort/options, add project) that stay
+  hidden until the header row is hovered or focused;
 - manual drag-and-drop chat ordering within a project;
-- lightweight working/completed/merged status indicators;
+- lightweight status **dots only** — the status text lives in the tooltip and
+  is never rendered next to the dot, and there is no per-chat PR-state icon;
 - consistent full-width folder and chat rows;
 - persistent open/closed state;
 - resizing while docked or while temporarily overlaid; and
@@ -37,6 +41,13 @@ Option and pressing Tab repeatedly moves forward; adding Shift moves backward.
 A quick tap switches immediately, while the visual switcher appears only after
 about 100 ms and includes chat status. Command+Shift+N opens the Quick-chat
 start page.
+
+Control+Tab is the analogous **tab switcher** for the tabs inside the current
+chat (the pinned chat tab, main-area tabs, and right-panel tabs). It only
+engages when the chat has two or more tabs; otherwise Control+Tab falls
+through to the chat switcher. There is no Command-held numbered chat-jump
+hint overlay (the ⌘1–9 shortcuts still work quietly and appear in the command
+palette).
 
 ### Code and diff presentation
 
@@ -53,12 +64,11 @@ Blackbird uses:
 Changed lines use clear VS Code-like red/green backgrounds, with subtler
 character-level highlights and change markers alongside the scrollbar.
 
-### Two right-side surfaces
+### Workspace tabs and two right-side surfaces
 
-Blackbird has two distinct right-side UI surfaces.
-
-The **normal right panel** is a persistent, per-chat, tabbed workspace. It can
-show:
+The chat area and the **normal right panel** form one tab workspace with two
+containers, deliberately limited to exactly those two (no arbitrary docking or
+nested layouts). Tabs can show:
 
 - browser tabs and local previews;
 - terminals;
@@ -68,9 +78,28 @@ show:
 - GitHub pull requests; and
 - agent/subagent activity.
 
-Its tabs survive app restarts. Control+Tab and Control+Shift+Tab cycle through
-them. Browser-backed tabs include navigation, refresh, URL, zoom, capture, and
-other appropriate browser controls.
+The chat itself renders as a **pinned tab** at the head of the chat area's tab
+strip, inside the single chat header. It carries the chat title (double-click
+renames the chat, replacing the old header title text — the project name is
+gone from the header), never scrolls out of view, and cannot be closed or
+moved to the panel.
+
+Tabs are draggable: reorder them within a container or drag them between the
+chat area and the right panel. Dragging toward the chat column's right edge
+while the panel is closed reveals a drop zone that opens the panel on drop;
+the zone sits left of the workspace navigator when that is open. Moving or
+closing the panel's last tab closes the panel. A dropped tab activates in its
+new container, and tab layout persists per chat across restarts.
+
+New tabs place themselves automatically: an open panel always receives them;
+with the panel closed they open in the chat area unless the window is very
+wide (`WIDE_WORKSPACE_MIN_WIDTH`, 2200px — above any MacBook fullscreen), in
+which case the panel opens. Both tab bars have a Plus "new tab" menu
+(Browser, Terminal, Diff, Linear, GitHub PR, Agents). There is deliberately
+no right-panel toggle button, no ⌥⌘B binding, and no maximize control.
+Control+Tab opens the tab switcher described above. Browser-backed tabs
+include navigation, refresh, URL, zoom, capture, and other appropriate
+browser controls.
 
 The second surface is the narrow, independently resizable **workspace
 navigator**, also referred to as the new right sidebar or sidepanel. It has
@@ -92,7 +121,8 @@ Useful shortcuts on macOS:
 - Command+Shift+B — toggle the workspace navigator
 - Command+Shift+G — open the workspace navigator on Changes
 - Command+Shift+H — open the workspace navigator on PR
-- Control+Tab / Control+Shift+Tab — cycle normal-right-panel tabs
+- Control+Tab / Control+Shift+Tab — tab switcher for the current chat's tabs
+  (falls through to the chat switcher when the chat has no extra tabs)
 
 ### Git worktree workflow
 

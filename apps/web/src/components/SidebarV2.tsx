@@ -60,12 +60,9 @@ import { isElectron } from "../env";
 import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
-  shouldShowThreadJumpHintsForModifiers,
-  threadJumpCommandForIndex,
   threadJumpIndexFromCommand,
   threadTraversalDirectionFromCommand,
 } from "../keybindings";
-import { useShortcutModifierState } from "../shortcutModifierState";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isModelPickerOpen } from "../modelPickerVisibility";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
@@ -182,23 +179,6 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   repository_path: "Group by repository path",
   separate: "Keep separate",
 };
-
-// Floats at the row's right edge, vertically centered, while the jump
-// modifier is held. An overlay pill instead of an inline slot: the hint
-// must neither displace the status/time label (holding ⌘ used to blank
-// out "Working") nor shift any layout when it appears. pointer-events-none
-// so it never swallows clicks meant for the settle/un-settle buttons it
-// can overlap.
-function JumpHintBadge(props: { label: string }) {
-  return (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute right-1.5 top-1/2 z-10 inline-flex h-5 -translate-y-1/2 items-center rounded-full border border-border/80 bg-background/95 px-1.5 font-mono text-[10px] font-medium tracking-tight text-foreground shadow-sm"
-    >
-      {props.label}
-    </span>
-  );
-}
 
 // Self-ticking so only this span re-renders each second, not the whole row.
 function WorkingDuration(props: { startedAt: string | null }) {
@@ -397,7 +377,6 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
   // the user visits the thread.
   wokeAt: string | null;
   isActive: boolean;
-  jumpLabel: string | null;
   currentEnvironmentId: string | null;
   environmentLabel: string | null;
   projectCwd: string | null;
@@ -851,7 +830,6 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                 </button>
               )}
             </span>
-            {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
           </TooltipTrigger>
           {detailsTooltip}
         </Tooltip>
@@ -1019,7 +997,6 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
               </span>
             </div>
           </div>
-          {props.jumpLabel ? <JumpHintBadge label={props.jumpLabel} /> : null}
         </TooltipTrigger>
         {detailsTooltip}
       </Tooltip>
@@ -1823,18 +1800,6 @@ export default function SidebarV2() {
   const snoozedThreadKeysRef = useRef(snoozedThreadKeys);
   snoozedThreadKeysRef.current = snoozedThreadKeys;
 
-  const jumpLabelByKey = useMemo(() => {
-    const mapping = new Map<string, string>();
-    for (const [index, threadKey] of orderedThreadKeys.entries()) {
-      const jumpCommand = threadJumpCommandForIndex(index);
-      if (!jumpCommand) break;
-      const label = shortcutLabelForCommand(keybindings, jumpCommand);
-      if (label) mapping.set(threadKey, label);
-    }
-    return mapping;
-  }, [keybindings, orderedThreadKeys]);
-  const [showJumpHints, setShowJumpHints] = useState(false);
-
   // Settled threads are live shells, so opening one is plain navigation:
   // history stays readable without un-settling, and sending a message or
   // starting a session un-settles server-side.
@@ -2576,19 +2541,6 @@ export default function SidebarV2() {
     threadByKey,
   ]);
 
-  // Same predicate as v1: hints show only while the held modifiers exactly
-  // match a thread-jump binding. Adding Shift (screenshots) or Alt no
-  // longer matches ⌘1..9, so the overlay hides for chords like ⌘⇧4.
-  const shortcutModifiers = useShortcutModifierState();
-  const shouldShowJumpHintsNow = shouldShowThreadJumpHintsForModifiers(
-    shortcutModifiers,
-    keybindings,
-    { platform: navigator.platform },
-  );
-  useEffect(() => {
-    setShowJumpHints(shouldShowJumpHintsNow);
-  }, [shouldShowJumpHintsNow]);
-
   const attachListAutoAnimateRef = useCallback((node: HTMLUListElement | null) => {
     if (!node) return;
     autoAnimate(node, { duration: 150, easing: "ease-out" });
@@ -2983,7 +2935,6 @@ export default function SidebarV2() {
                         // rows resolve to null on their own.
                         wokeAt={threadWokeAt(thread, { now: snoozeNow })}
                         isActive={routeThreadKey === threadKey}
-                        jumpLabel={showJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null}
                         currentEnvironmentId={primaryEnvironmentId}
                         environmentLabel={environmentLabelById.get(thread.environmentId) ?? null}
                         projectCwd={

@@ -22,7 +22,6 @@ import {
   isTerminalToggleShortcut,
   resolveShortcutCommand,
   shouldShowModelPickerJumpHints,
-  shouldShowThreadJumpHints,
   shortcutLabelForCommand,
   terminalDeleteShortcutData,
   terminalNavigationShortcutData,
@@ -492,24 +491,6 @@ describe("thread navigation helpers", () => {
     assert.strictEqual(threadTraversalDirectionFromCommand("thread.next"), "next");
     assert.isNull(threadTraversalDirectionFromCommand("thread.jump.1"));
     assert.isNull(threadTraversalDirectionFromCommand(null));
-  });
-
-  it("shows jump hints only when configured modifiers match", () => {
-    assert.isTrue(
-      shouldShowThreadJumpHints(event({ metaKey: true }), DEFAULT_BINDINGS, {
-        platform: "MacIntel",
-      }),
-    );
-    assert.isFalse(
-      shouldShowThreadJumpHints(event({ metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
-        platform: "MacIntel",
-      }),
-    );
-    assert.isTrue(
-      shouldShowThreadJumpHints(event({ ctrlKey: true }), DEFAULT_BINDINGS, {
-        platform: "Linux",
-      }),
-    );
   });
 });
 

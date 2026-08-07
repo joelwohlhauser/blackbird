@@ -282,32 +282,6 @@ export function threadTraversalDirectionFromCommand(
   return null;
 }
 
-export function shouldShowThreadJumpHints(
-  event: ShortcutEventLike,
-  keybindings: ResolvedKeybindingsConfig,
-  options?: ShortcutMatchOptions,
-): boolean {
-  return shouldShowThreadJumpHintsForModifiers(event, keybindings, options);
-}
-
-export function shouldShowThreadJumpHintsForModifiers(
-  modifiers: ShortcutModifierStateLike,
-  keybindings: ResolvedKeybindingsConfig,
-  options?: ShortcutMatchOptions,
-): boolean {
-  const platform = resolvePlatform(options);
-
-  for (const command of THREAD_JUMP_KEYBINDING_COMMANDS) {
-    const shortcut = findEffectiveShortcutForCommand(keybindings, command, options);
-    if (!shortcut) continue;
-    if (matchesShortcutModifiers(modifiers, shortcut, platform)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 export function modelPickerJumpCommandForIndex(
   index: number,
 ): ModelPickerJumpKeybindingCommand | null {
