@@ -1,4 +1,143 @@
-# T3 Code
+# Blackbird
+
+Blackbird is Joel Wohlhauser's private, personal IDE and a long-lived fork of
+[T3 Code](https://github.com/pingdotgg/t3code). It is a hobby project for one
+engineer and one user. It does not operate critical infrastructure, does not
+need product-scale process, and should optimize for Joel's daily workflow,
+clarity, and maintainability.
+
+T3 Code must remain the base of the application. Preserve Blackbird's custom
+behavior while keeping the delta understandable enough to merge upstream
+regularly. `origin` is `joelwohlhauser/blackbird`; `upstream` is
+`pingdotgg/t3code`.
+
+## Blackbird working agreement
+
+- Work directly on `main`. When a change is complete and the user asks to
+  commit or finish it, commit and push directly to `origin/main`; do not create
+  a branch or pull request unless explicitly asked.
+- This is a personal hobby app. Prefer the smallest safe solution over
+  enterprise process, compatibility machinery with no concrete use, or
+  abstractions intended for hypothetical teams.
+- Browser development is supported and is often the quickest way to test UI.
+  **"Deploy it" has a specific meaning:** run `pnpm deploy:desktop` to build and
+  install the latest Blackbird macOS desktop app locally. It is not a request
+  for web hosting. The deploy script builds first, closes a running Blackbird
+  only once the replacement is ready, installs it, and relaunches the app.
+- Do not deploy merely because a change is complete; deploy when the user asks.
+- Keep GitHub Actions disabled/unnecessary for Blackbird's personal workflow,
+  even when merging upstream workflow changes.
+- Keep the name and identity **Blackbird**. The project was originally called
+  Blackboard; `blackboard` identifiers should only remain where needed for
+  migration/backward compatibility.
+
+## Blackbird product invariants
+
+These customizations are intentional and must survive upstream merges:
+
+- **Visual language.** The UI follows the restrained look of the Codex desktop
+  app. The left sidebar is dark, compact, and project/chat focused. General UI
+  text uses the macOS system/SF Pro stack (with a suitable fallback), while
+  code uses the existing monospace stack and a VS Code **Dark Modern**-style
+  renderer. File and diff rendering should not drift back to the old high-
+  contrast theme. `@pierre/diffs` (diffs.com) renders code/diffs and
+  `@pierre/trees` (trees.software) powers file/change trees.
+- **Left chat sidebar.** Quick chats are a separate collapsible section above
+  the collapsible Projects section, never a normal project folder. Project
+  groups use the human folder name (for example `example-app`), not the GitHub
+  `owner/repo`. Local and remote copies of the same folder are grouped. Chat
+  rows support manual drag-and-drop ordering and status indicators, while the
+  sidebar can be resized, hidden, or temporarily revealed as an overlay from
+  the left window edge without changing the main layout.
+- **Chat switcher.** Option+Tab opens the recent-chat switcher; Shift reverses
+  direction. A quick tap switches immediately, while the switcher waits about
+  100 ms before appearing. It includes chat statuses. Command+Shift+N opens a
+  new Quick chat. Control+Tab / Control+Shift+Tab cycle tabs in the normal right
+  panel.
+- **Two right-side surfaces.** The normal right panel is a persistent,
+  per-chat, tabbed surface for browser pages, terminals, full diffs, file and
+  working-tree tabs, Linear issues, GitHub PRs, and agents. Blackbird also has
+  a second, narrow, independently resizable **workspace navigator** (often
+  called the new right sidebar/sidepanel) with **Files**, **Changes**, and
+  **PR** tabs. Its visibility and selected state are per chat. Selecting a file
+  or change opens it as a tab in the normal right panel; Changes/PR selections
+  open the whole-file diff. Command+Shift+B toggles it, Command+Shift+G opens
+  Changes, and Command+Shift+H opens PR.
+- **Workspace navigator behavior.** Files includes search and file/folder
+  creation. Changes stays live while an agent edits, displays a correct folder
+  hierarchy and colored line counts, and owns the primary commit/push/PR
+  action. PR must show the exact files from the PR associated with the current
+  branch, not a local base-branch approximation. The navigator uses
+  `@pierre/trees` and should not reintroduce the old Files surface in the
+  normal panel.
+- **Worktree workflow.** The composer supports Current checkout, Existing
+  worktree (searchable), New worktree for an existing selected branch, and New
+  worktree & branch with an explicit new branch name and selectable base
+  branch. New worktrees live under the owning environment's configurable
+  `worktreesRoot` (default `~/repositories/.worktrees`), link `.env` files from
+  the main checkout, and install dependencies. Deleting a worktree asks for
+  confirmation only when it has uncommitted changes and also archives its
+  chat. Worktree lifecycle actions must execute on the environment that owns
+  the repository.
+- **Quick chats.** Quick chats are lightweight conversations rooted in the
+  user's home directory and not associated with a visible project/repository.
+  Their start page says "How can I help you?" and hides project Git actions.
+  Internally they use the reserved `blackbird-quick-chats` project because the
+  orchestration model requires a project; keep that implementation detail out
+  of Projects and project pickers.
+- **Linear and GitHub.** Linear and GitHub PR pages open inside browser-backed
+  tabs in the normal right panel, with normal navigation/zoom controls. Linear
+  derives an issue id from the branch name and uses the configurable
+  organization slug (default `acme`). GitHub integration uses authenticated
+  `gh` data to detect the current branch's PR, populate the PR file tree, and
+  open the corresponding GitHub page. PR links and "View PR" actions should
+  use this internal PR tab, not the external browser. Ordinary chat links
+  respect the Ask / right-panel / default-browser setting.
+- **Persistence.** Restarting Blackbird restores the last route (including a
+  project or Quick-chat start page), the left-sidebar open/closed state, and
+  each chat's normal right-panel tabs and workspace-navigator state.
+
+## Local and remote environments
+
+The local machine is normally labelled **Example Mac**. The remote SSH
+environment is **remote** and is reached with `ssh remote`; do not rename it to the
+remote host's internal hostname such as `dev-server`.
+
+Local and remote settings are environment-scoped. On remote, new worktrees must
+default to `~/repositories/.worktrees`; `~` must expand on remote, `.env` links
+must target the main checkout on remote, and dependency installation must run on
+remote. A local desktop deploy does **not** update the server process on remote.
+When a server-side feature works locally but not remotely, check environment
+version drift first, update the Blackbird/T3 server on remote through the remote
+environment update flow, then reconnect/restart it. This version alignment and
+environment-scoped path resolution are the fixes for the earlier class of
+"changes not reflected on remote" and misplaced remote-worktree problems.
+
+## Keeping the fork current
+
+Use a real merge so upstream history remains visible:
+
+```bash
+git fetch upstream
+git merge upstream/main
+git push origin main
+```
+
+Before merging, commit any existing Blackbird work. Resolve conflicts by
+preserving both upstream behavior and the product invariants above; never
+blindly choose one side for the heavily customized sidebar, composer,
+worktree, preview/right-panel, file/diff, settings, or branding code. Run
+focused typechecks/tests and formatting, then commit the merge directly to
+`main` and push `origin/main`.
+
+The detailed feature map and everyday commands live in `README.md`.
+
+# Upstream T3 Code architecture and contributor guidance
+
+The remainder of this file is inherited from T3 Code and remains useful for
+architecture, safety, and verification. Where it refers to T3 Code's public
+maintainers or contribution process, the Blackbird-specific rules above take
+precedence; Joel is Blackbird's sole maintainer and user.
 
 T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs (Codex, Claude Code, Cursor, Grok, OpenCode) and serves web, desktop, and mobile clients.
 
