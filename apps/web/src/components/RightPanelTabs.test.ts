@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { rightPanelTabWheelDelta } from "./RightPanelTabs";
+import { rightPanelTabWheelDelta } from "./WorkspaceTabStrip";
 
 describe("rightPanelTabWheelDelta", () => {
   it("uses the dominant trackpad axis", () => {

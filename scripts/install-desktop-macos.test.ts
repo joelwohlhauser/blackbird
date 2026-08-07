@@ -17,6 +17,7 @@ describe("macOS desktop installer", () => {
   it("finds the legacy Blackboard installation that should be removed after deployment", () => {
     expect(resolveLegacyInstalledAppPaths("/Applications")).toEqual([
       "/Applications/Blackboard (Alpha).app",
+      "/Applications/Blackbird (Alpha).app",
     ]);
   });
 

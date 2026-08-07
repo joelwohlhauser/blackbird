@@ -1,36 +1,19 @@
-import type { ContextMenuItem, PreviewSessionSnapshot } from "@t3tools/contracts";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
-import { Bot, FileDiff, Files, Globe2, Plus, TerminalSquare, X } from "lucide-react";
-import {
-  type MouseEvent as ReactMouseEvent,
-  type WheelEvent as ReactWheelEvent,
-  type ElementType,
-  type ReactElement,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import type { PreviewSessionSnapshot } from "@t3tools/contracts";
+import { Bot, FileDiff, Globe2, Plus, TerminalSquare } from "lucide-react";
+import type { ElementType, ReactElement, ReactNode } from "react";
 
 import { isElectron } from "~/env";
 import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
-import { readLocalApi } from "~/localApi";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
-import { ScrollArea } from "~/components/ui/scroll-area";
-import { faviconUrlForOrigin } from "~/lib/favicon";
-import { useTheme } from "~/hooks/useTheme";
-import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
-import { PierreEntryIcon } from "./chat/PierreEntryIcon";
+import { WorkspaceTabStrip } from "./WorkspaceTabStrip";
 import { GitHubIcon, LinearIcon } from "./Icons";
 
 interface RightPanelTabsProps {
   mode: PreviewPanelMode;
-  maximized?: boolean;
   layoutControls?: ReactNode;
   surfaces: readonly RightPanelSurface[];
   activeSurfaceId: string | null;
@@ -67,25 +50,85 @@ const SURFACE_DISABLED_REASONS = {
   diff: "Diff is only available for server threads in Git repositories.",
 } as const;
 
-type TabContextMenuAction = "copy-path" | "close" | "close-others" | "close-to-right" | "close-all";
-
-export function rightPanelTabWheelDelta(
-  event: Pick<WheelEvent, "deltaMode" | "deltaX" | "deltaY">,
-  pageWidth: number,
-): number {
-  const dominantDelta =
-    Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-  if (event.deltaMode === 1) return dominantDelta * 24;
-  if (event.deltaMode === 2) return dominantDelta * pageWidth;
-  return dominantDelta;
-}
-
 function DisabledReasonTooltip(props: { reason: string; trigger: ReactElement }) {
   return (
     <Tooltip>
       <TooltipTrigger render={props.trigger} />
       <TooltipPopup side="top">{props.reason}</TooltipPopup>
     </Tooltip>
+  );
+}
+
+export interface AddSurfaceMenuProps {
+  triggerAriaLabel: string;
+  onAddBrowser: () => void;
+  onAddLinear: () => void;
+  onAddGitHubPullRequest: () => void;
+  onAddTerminal: () => void;
+  onAddDiff: () => void;
+  onAddAgents: () => void;
+  browserAvailable: boolean;
+  linearAvailable: boolean;
+  githubPullRequestDetected: boolean;
+  githubPullRequestAvailable: boolean;
+  diffAvailable: boolean;
+}
+
+/** Plus menu for opening a new workspace tab, shared by both tab bars. */
+export function AddSurfaceMenu(props: AddSurfaceMenuProps) {
+  return (
+    <Menu>
+      <MenuTrigger
+        className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground [-webkit-app-region:no-drag] hover:bg-accent hover:text-foreground"
+        aria-label={props.triggerAriaLabel}
+      >
+        <Plus className="size-4" />
+      </MenuTrigger>
+      <MenuPopup align="end" side="bottom" sideOffset={6} className="min-w-44">
+        <SurfaceMenuItem
+          available={props.browserAvailable}
+          disabledReason={SURFACE_DISABLED_REASONS.browser}
+          onClick={props.onAddBrowser}
+        >
+          <Globe2 />
+          Browser
+        </SurfaceMenuItem>
+        <SurfaceMenuItem available onClick={props.onAddTerminal}>
+          <TerminalSquare />
+          Terminal
+        </SurfaceMenuItem>
+        <SurfaceMenuItem
+          available={props.diffAvailable}
+          disabledReason={SURFACE_DISABLED_REASONS.diff}
+          onClick={props.onAddDiff}
+        >
+          <FileDiff />
+          Diff
+        </SurfaceMenuItem>
+        <SurfaceMenuItem
+          available={props.linearAvailable}
+          disabledReason={SURFACE_DISABLED_REASONS.linear}
+          onClick={props.onAddLinear}
+        >
+          <LinearIcon />
+          Linear
+        </SurfaceMenuItem>
+        {props.githubPullRequestDetected ? (
+          <SurfaceMenuItem
+            available={props.githubPullRequestAvailable}
+            disabledReason={SURFACE_DISABLED_REASONS.githubPullRequest}
+            onClick={props.onAddGitHubPullRequest}
+          >
+            <GitHubIcon />
+            GitHub PR
+          </SurfaceMenuItem>
+        ) : null}
+        <SurfaceMenuItem available onClick={props.onAddAgents}>
+          <Bot />
+          Agents
+        </SurfaceMenuItem>
+      </MenuPopup>
+    </Menu>
   );
 }
 
@@ -237,344 +280,50 @@ function RightPanelEmptyState(props: {
   );
 }
 
-export function surfaceTitle(
-  surface: RightPanelSurface,
-  sessions: Readonly<Record<string, PreviewSessionSnapshot>>,
-  terminalLabelsById: ReadonlyMap<string, string>,
-): string {
-  switch (surface.kind) {
-    case "diff":
-      return "Diff";
-    case "files":
-      return "Files";
-    case "file":
-      return surface.relativePath.slice(surface.relativePath.lastIndexOf("/") + 1);
-    case "file-diff": {
-      const filename = surface.relativePath.slice(surface.relativePath.lastIndexOf("/") + 1);
-      return `${filename} (${surface.scope === "unstaged" ? "Working Tree" : "Pull Request"})`;
-    }
-    case "linear":
-      return "Issue";
-    case "github-pr":
-      return "PR";
-    case "terminal":
-      return (
-        terminalLabelsById.get(surface.activeTerminalId) ??
-        getTerminalLabel(surface.activeTerminalId)
-      );
-    case "agents":
-      return "Agents";
-    case "preview": {
-      const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
-      if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
-      if (snapshot.navStatus.title.trim().length > 0) return snapshot.navStatus.title;
-      try {
-        return new URL(snapshot.navStatus.url).host || "Browser";
-      } catch {
-        return "Browser";
-      }
-    }
-  }
-}
-
-function PreviewFavicon({ url }: { url: string | null }) {
-  const faviconUrl = faviconUrlForOrigin(url, 32);
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  if (!faviconUrl || failedUrl === faviconUrl) return <Globe2 className="size-3 shrink-0" />;
-  return (
-    <img
-      src={faviconUrl}
-      alt=""
-      aria-hidden
-      draggable={false}
-      className="size-3 shrink-0 rounded-sm"
-      onError={() => setFailedUrl(faviconUrl)}
-    />
-  );
-}
-
-function SurfaceIcon({
-  surface,
-  sessions,
-  theme,
-}: {
-  surface: RightPanelSurface;
-  sessions: Readonly<Record<string, PreviewSessionSnapshot>>;
-  theme: "light" | "dark";
-}) {
-  switch (surface.kind) {
-    case "preview": {
-      const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
-      const url = !snapshot || snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
-      return <PreviewFavicon url={url} />;
-    }
-    case "linear":
-      return <LinearIcon className="size-3.5 shrink-0" />;
-    case "github-pr":
-      return <GitHubIcon className="size-3.5 shrink-0" />;
-    case "diff":
-      return <FileDiff className="size-3 shrink-0" />;
-    case "files":
-      return <Files className="size-3 shrink-0" />;
-    case "file":
-    case "file-diff":
-      return (
-        <PierreEntryIcon
-          pathValue={surface.relativePath}
-          kind="file"
-          theme={theme}
-          className="size-3"
-        />
-      );
-    case "terminal":
-      return <TerminalSquare className="size-3 shrink-0" />;
-    case "agents":
-      return <Bot className="size-3 shrink-0" />;
-  }
-}
-
 export function RightPanelTabs(props: RightPanelTabsProps) {
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
-  const { resolvedTheme } = useTheme();
-  const tabListRef = useRef<HTMLDivElement>(null);
-
-  const handleTabContextMenu = useCallback(
-    async (event: ReactMouseEvent, surface: RightPanelSurface) => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      const api = readLocalApi();
-      if (!api) return;
-
-      const surfaceIndex = props.surfaces.findIndex((entry) => entry.id === surface.id);
-      if (surfaceIndex < 0) return;
-
-      const items: ContextMenuItem<TabContextMenuAction>[] = [];
-      if (surface.kind === "file" || surface.kind === "file-diff") {
-        items.push({ id: "copy-path", label: "Copy path" });
-      }
-      items.push(
-        { id: "close", label: "Close" },
-        {
-          id: "close-others",
-          label: "Close others",
-          disabled: props.surfaces.length <= 1,
-        },
-        {
-          id: "close-to-right",
-          label: "Close to the right",
-          disabled: surfaceIndex >= props.surfaces.length - 1,
-        },
-        {
-          id: "close-all",
-          label: "Close all",
-          disabled: props.surfaces.length === 0,
-        },
-      );
-
-      const action = await api.contextMenu.show(items, {
-        x: event.clientX,
-        y: event.clientY,
-      });
-      switch (action) {
-        case "copy-path":
-          if (surface.kind === "file" || surface.kind === "file-diff") {
-            props.onCopyFilePath(surface.relativePath);
-          }
-          break;
-        case "close":
-          props.onCloseSurface(surface);
-          break;
-        case "close-others":
-          props.onCloseOtherSurfaces(surface);
-          break;
-        case "close-to-right":
-          props.onCloseSurfacesToRight(surface);
-          break;
-        case "close-all":
-          props.onCloseAllSurfaces();
-          break;
-        case null:
-          break;
-      }
-    },
-    [props],
-  );
-  const handleTabMouseDown = useCallback((event: ReactMouseEvent) => {
-    if (event.button !== 1) return;
-    event.preventDefault();
-  }, []);
-  const handleTabAuxClick = useCallback(
-    (event: ReactMouseEvent, surface: RightPanelSurface) => {
-      if (event.button !== 1) return;
-      event.preventDefault();
-      event.stopPropagation();
-      props.onCloseSurface(surface);
-    },
-    [props],
-  );
-  const handleTabListWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    const viewport = event.currentTarget.querySelector<HTMLElement>(
-      "[data-slot='scroll-area-viewport']",
-    );
-    if (!viewport) return;
-
-    const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-    if (maxScrollLeft === 0) return;
-
-    const delta = rightPanelTabWheelDelta(event, viewport.clientWidth);
-    if (delta === 0) return;
-
-    const nextScrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + delta));
-    if (nextScrollLeft === viewport.scrollLeft) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    viewport.scrollLeft = nextScrollLeft;
-  }, []);
-
-  useEffect(() => {
-    const activeTab = tabListRef.current?.querySelector<HTMLElement>("[data-active-tab='true']");
-    activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [props.activeSurfaceId]);
 
   return (
-    <PreviewPanelShell
-      mode={props.mode}
-      {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
-    >
+    <PreviewPanelShell mode={props.mode}>
       <div
         className={cn(
           "workspace-topbar gap-1 pl-2",
           !ownsDesktopTitleBar && "[--workspace-topbar-height:--spacing(11)]",
-          props.mode === "inline" && props.reserveLayoutControls !== false ? "pr-36" : "pr-3",
-          ownsDesktopTitleBar && "wco:pr-[calc(var(--workspace-native-controls-inset)+9rem)]",
-          props.mode === "inline" && props.maximized && COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+          // Reserves room for the two floating panel toggles (the maximize
+          // control is gone) overlaying the topbar's right edge.
+          props.mode === "inline" && props.reserveLayoutControls !== false ? "pr-20" : "pr-3",
+          ownsDesktopTitleBar && "wco:pr-[calc(var(--workspace-native-controls-inset)+5rem)]",
         )}
         data-right-panel-tabbar
       >
-        <ScrollArea
-          ref={tabListRef}
-          hideScrollbars
-          scrollFade
-          className={cn(
-            "h-full w-fit min-w-0 max-w-full flex-[0_1_auto] rounded-none",
-            ownsDesktopTitleBar && "drag-region",
-          )}
-          data-right-panel-tab-list
-          onWheel={handleTabListWheel}
-        >
-          <div className="flex h-full w-max min-w-full items-center gap-1">
-            {props.surfaces.map((surface) => {
-              const active = surface.id === props.activeSurfaceId;
-              const pending = props.pendingSurfaceIds.has(surface.id);
-              const title = surfaceTitle(surface, props.previewSessions, props.terminalLabelsById);
-              return (
-                <div
-                  key={surface.id}
-                  data-active-tab={active}
-                  onMouseDown={handleTabMouseDown}
-                  onAuxClick={(event) => handleTabAuxClick(event, surface)}
-                  onContextMenu={(event) => void handleTabContextMenu(event, surface)}
-                  className={cn(
-                    "group/tab flex h-6 max-w-36 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
-                    active
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                  )}
-                >
-                  <button
-                    type="button"
-                    className="group/close relative flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
-                    aria-label={`Close ${title}`}
-                    onClick={() => props.onCloseSurface(surface)}
-                  >
-                    <span className="relative flex size-3 items-center justify-center group-hover/tab:hidden group-focus-visible/close:hidden">
-                      <SurfaceIcon
-                        surface={surface}
-                        sessions={props.previewSessions}
-                        theme={resolvedTheme}
-                      />
-                      {pending ? (
-                        <span
-                          className="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full bg-current"
-                          aria-hidden
-                        />
-                      ) : null}
-                    </span>
-                    <X className="hidden size-3 group-hover/tab:block group-focus-visible/close:block" />
-                  </button>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <button
-                          type="button"
-                          className="flex min-w-0 flex-1 cursor-pointer items-center"
-                          onClick={() => props.onActivate(surface)}
-                        >
-                          <span className="truncate">{title}</span>
-                        </button>
-                      }
-                    />
-                    <TooltipPopup>{title}</TooltipPopup>
-                  </Tooltip>
-                </div>
-              );
-            })}
-          </div>
-        </ScrollArea>
-        <Menu>
-          <MenuTrigger
-            className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Add panel surface"
-          >
-            <Plus className="size-4" />
-          </MenuTrigger>
-          <MenuPopup align="end" side="bottom" sideOffset={6} className="min-w-44">
-            <SurfaceMenuItem
-              available={props.browserAvailable}
-              disabledReason={SURFACE_DISABLED_REASONS.browser}
-              onClick={props.onAddBrowser}
-            >
-              <Globe2 />
-              Browser
-            </SurfaceMenuItem>
-            <SurfaceMenuItem available onClick={props.onAddTerminal}>
-              <TerminalSquare />
-              Terminal
-            </SurfaceMenuItem>
-            <SurfaceMenuItem
-              available={props.diffAvailable}
-              disabledReason={SURFACE_DISABLED_REASONS.diff}
-              onClick={props.onAddDiff}
-            >
-              <FileDiff />
-              Diff
-            </SurfaceMenuItem>
-            <SurfaceMenuItem
-              available={props.linearAvailable}
-              disabledReason={SURFACE_DISABLED_REASONS.linear}
-              onClick={props.onAddLinear}
-            >
-              <LinearIcon />
-              Linear
-            </SurfaceMenuItem>
-            {props.githubPullRequestDetected ? (
-              <SurfaceMenuItem
-                available={props.githubPullRequestAvailable}
-                disabledReason={SURFACE_DISABLED_REASONS.githubPullRequest}
-                onClick={props.onAddGitHubPullRequest}
-              >
-                <GitHubIcon />
-                GitHub PR
-              </SurfaceMenuItem>
-            ) : null}
-            <SurfaceMenuItem available onClick={props.onAddAgents}>
-              <Bot />
-              Agents
-            </SurfaceMenuItem>
-          </MenuPopup>
-        </Menu>
+        <WorkspaceTabStrip
+          container="panel"
+          surfaces={props.surfaces}
+          activeSurfaceId={props.activeSurfaceId}
+          pendingSurfaceIds={props.pendingSurfaceIds}
+          previewSessions={props.previewSessions}
+          terminalLabelsById={props.terminalLabelsById}
+          onActivate={props.onActivate}
+          onCloseSurface={props.onCloseSurface}
+          onCloseOtherSurfaces={props.onCloseOtherSurfaces}
+          onCloseSurfacesToRight={props.onCloseSurfacesToRight}
+          onCloseAllSurfaces={props.onCloseAllSurfaces}
+          onCopyFilePath={props.onCopyFilePath}
+        />
+        <AddSurfaceMenu
+          triggerAriaLabel="Add panel surface"
+          onAddBrowser={props.onAddBrowser}
+          onAddLinear={props.onAddLinear}
+          onAddGitHubPullRequest={props.onAddGitHubPullRequest}
+          onAddTerminal={props.onAddTerminal}
+          onAddDiff={props.onAddDiff}
+          onAddAgents={props.onAddAgents}
+          browserAvailable={props.browserAvailable}
+          linearAvailable={props.linearAvailable}
+          githubPullRequestDetected={props.githubPullRequestDetected}
+          githubPullRequestAvailable={props.githubPullRequestAvailable}
+          diffAvailable={props.diffAvailable}
+        />
         {props.layoutControls}
       </div>
       <div className="flex min-h-0 flex-1 flex-col" data-right-panel-surface-content>

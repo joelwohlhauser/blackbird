@@ -21,7 +21,8 @@ type WhenToken =
 export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+b", command: "sidebar.toggle" },
   { key: "mod+j", command: "terminal.toggle" },
-  { key: "mod+alt+b", command: "rightPanel.toggle" },
+  // rightPanel.toggle intentionally ships unbound: the panel opens through
+  // tab placement and closes when its last tab closes.
   { key: "ctrl+tab", command: "rightPanel.nextTab" },
   { key: "ctrl+shift+tab", command: "rightPanel.previousTab" },
   { key: "mod+shift+b", command: "workspaceNavigator.toggle" },

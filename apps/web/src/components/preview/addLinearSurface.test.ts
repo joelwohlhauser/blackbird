@@ -50,6 +50,8 @@ describe("addLinearSurface", () => {
       isOpen: true,
       activeSurfaceId: "linear",
       surfaces: [{ id: "linear", kind: "linear", resourceId: "linear-tab", url }],
+      mainSurfaces: [],
+      activeMainSurfaceId: null,
     });
   });
 });

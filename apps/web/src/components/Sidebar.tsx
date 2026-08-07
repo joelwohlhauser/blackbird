@@ -4,6 +4,8 @@ import {
   ChevronRightIcon,
   CloudIcon,
   ContainerIcon,
+  FolderIcon,
+  FolderOpenIcon,
   FolderPlusIcon,
   Globe2Icon,
   LoaderIcon,
@@ -2383,7 +2385,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             onKeyDown={handleProjectButtonKeyDown}
             onContextMenu={handleProjectButtonContextMenu}
           >
-            <ProjectFavicon environmentId={project.environmentId} cwd={project.workspaceRoot} />
+            <ProjectFavicon
+              environmentId={project.environmentId}
+              cwd={project.workspaceRoot}
+              fallbackIcon={projectExpanded ? FolderOpenIcon : FolderIcon}
+            />
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <span className="truncate text-sm font-medium text-sidebar-foreground/85">
                 {project.displayName}

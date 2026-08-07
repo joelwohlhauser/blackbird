@@ -55,6 +55,8 @@ describe("addGitHubPullRequestSurface", () => {
       isOpen: true,
       activeSurfaceId: "github-pr",
       surfaces: [{ id: "github-pr", kind: "github-pr", resourceId: "github-pr-tab", url }],
+      mainSurfaces: [],
+      activeMainSurfaceId: null,
     });
   });
 

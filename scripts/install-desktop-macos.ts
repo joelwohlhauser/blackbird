@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const APP_QUIT_TIMEOUT_MS = 15_000;
 const APP_QUIT_POLL_INTERVAL_MS = 250;
-const LEGACY_DESKTOP_PRODUCT_NAMES = ["Blackboard (Alpha)"] as const;
+const LEGACY_DESKTOP_PRODUCT_NAMES = ["Blackboard (Alpha)", "Blackbird (Alpha)"] as const;
 
 async function run(command: string, args: readonly string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {

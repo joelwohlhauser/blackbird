@@ -29,7 +29,6 @@ function renderHeader(
     <ChatHeader
       activeThreadEnvironmentId={"local" as EnvironmentId}
       activeThreadId={"thread-1" as ThreadId}
-      activeThreadTitle="Quick question"
       activeProjectName="Quick chats"
       activeProjectCwd="~"
       activeProjectScripts={[]}
@@ -40,7 +39,7 @@ function renderHeader(
       workspaceNavigatorOpen={workspaceNavigatorOpen}
       isGitRepo={isGitRepo}
       gitCwd="~"
-      onNewThreadInProject={() => {}}
+      leading={<span>Chat tab strip</span>}
       onRunProjectScript={() => {}}
       onAddProjectScript={async () => undefined as never}
       onUpdateProjectScript={async () => undefined as never}
@@ -53,7 +52,7 @@ describe("ChatHeader project actions", () => {
   it("hides Add action and Initialize Git for Quick Chats", () => {
     const html = renderHeader(false);
 
-    expect(html).toContain("Quick chats");
+    expect(html).toContain("Chat tab strip");
     expect(html).not.toContain("Add action");
     expect(html).not.toContain("Initialize Git");
   });
@@ -73,7 +72,7 @@ describe("ChatHeader project actions", () => {
   });
 
   it("reserves room for panel toggles while both right panels are closed", () => {
-    expect(renderHeader(true)).toContain("pr-24");
+    expect(renderHeader(true)).toContain("pr-16");
   });
 
   it("releases the toggle inset when the main right panel owns the controls", () => {

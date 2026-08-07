@@ -17,11 +17,10 @@ export function activateExistingGitHubPullRequestSurface(
   threadRef: ScopedThreadRef,
   sessions: ReturnType<typeof useThreadPreviewState>["sessions"],
 ): boolean {
-  const existing = useRightPanelStore
-    .getState()
-    .byThreadKey[scopedThreadKey(threadRef)]?.surfaces.find(
-      (surface) => surface.kind === "github-pr",
-    );
+  const threadState = useRightPanelStore.getState().byThreadKey[scopedThreadKey(threadRef)];
+  const existing = [...(threadState?.surfaces ?? []), ...(threadState?.mainSurfaces ?? [])].find(
+    (surface) => surface.kind === "github-pr",
+  );
   if (!existing || !sessions[existing.resourceId]) return false;
 
   useRightPanelStore.getState().activateSurface(threadRef, existing.id);

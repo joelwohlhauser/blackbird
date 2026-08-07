@@ -1,10 +1,4 @@
-import {
-  Maximize2Icon,
-  Minimize2Icon,
-  PanelBottomIcon,
-  PanelRightDashedIcon,
-  PanelRightIcon,
-} from "lucide-react";
+import { PanelBottomIcon, PanelRightDashedIcon } from "lucide-react";
 import { memo } from "react";
 
 import { Toggle } from "../ui/toggle";
@@ -14,13 +8,9 @@ interface PanelLayoutControlsProps {
   terminalAvailable: boolean;
   terminalOpen: boolean;
   terminalShortcutLabel: string | null;
-  rightPanelAvailable: boolean;
-  rightPanelOpen: boolean;
-  rightPanelShortcutLabel: string | null;
   workspaceNavigatorAvailable: boolean;
   workspaceNavigatorOpen: boolean;
   onToggleTerminal: () => void;
-  onToggleRightPanel: () => void;
   onToggleWorkspaceNavigator: () => void;
 }
 
@@ -28,13 +18,9 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   terminalAvailable,
   terminalOpen,
   terminalShortcutLabel,
-  rightPanelAvailable,
-  rightPanelOpen,
-  rightPanelShortcutLabel,
   workspaceNavigatorAvailable,
   workspaceNavigatorOpen,
   onToggleTerminal,
-  onToggleRightPanel,
   onToggleWorkspaceNavigator,
 }: PanelLayoutControlsProps) {
   return (
@@ -69,28 +55,6 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
           render={
             <Toggle
               className="shrink-0 [-webkit-app-region:no-drag]"
-              pressed={rightPanelOpen}
-              onPressedChange={onToggleRightPanel}
-              aria-label="Toggle right panel"
-              variant="ghost"
-              size="sm"
-              disabled={!rightPanelAvailable}
-            >
-              <PanelRightIcon className="size-3.5" />
-            </Toggle>
-          }
-        />
-        <TooltipPopup side="bottom">
-          {rightPanelAvailable
-            ? `Toggle right panel${rightPanelShortcutLabel ? ` (${rightPanelShortcutLabel})` : ""}`
-            : "Right panel is unavailable"}
-        </TooltipPopup>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Toggle
-              className="shrink-0 [-webkit-app-region:no-drag]"
               pressed={workspaceNavigatorOpen}
               onPressedChange={onToggleWorkspaceNavigator}
               aria-label="Toggle workspace navigator"
@@ -109,38 +73,5 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
         </TooltipPopup>
       </Tooltip>
     </div>
-  );
-});
-
-export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl({
-  maximized,
-  onToggle,
-}: {
-  maximized: boolean;
-  onToggle: () => void;
-}) {
-  const label = maximized ? "Restore panel size" : "Maximize panel";
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Toggle
-            className="shrink-0 [-webkit-app-region:no-drag]"
-            pressed={maximized}
-            onPressedChange={onToggle}
-            aria-label={label}
-            variant="ghost"
-            size="sm"
-          >
-            {maximized ? (
-              <Minimize2Icon className="size-3.5" />
-            ) : (
-              <Maximize2Icon className="size-3.5" />
-            )}
-          </Toggle>
-        }
-      />
-      <TooltipPopup side="bottom">{label}</TooltipPopup>
-    </Tooltip>
   );
 });
