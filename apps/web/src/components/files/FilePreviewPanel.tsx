@@ -16,8 +16,8 @@ import { useAssetUrlState } from "~/assets/assetUrls";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
-import { useLocalStorage } from "~/hooks/useLocalStorage";
-import { resolveDiffThemeName } from "~/lib/diffRendering";
+import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
+import { DIFF_SURFACE_THEME_UNSAFE_CSS, resolveDiffThemeName } from "~/lib/diffRendering";
 import { cn } from "~/lib/utils";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { resolvePathLinkTarget } from "~/terminal-links";
@@ -77,11 +77,13 @@ const FILE_SAVE_DEBOUNCE_MS = 500;
 const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
 const FILE_INDENT_GUIDES_ATTRIBUTE = "data-file-indent-guides";
 const FILE_PREVIEW_UNSAFE_CSS = `
+  ${DIFF_SURFACE_THEME_UNSAFE_CSS}
+
   :host {
-    --diffs-light-bg: var(--background);
-    --diffs-dark-bg: var(--background);
-    --diffs-bg: var(--background);
-    --diffs-dark: #d4d4d4;
+    --diffs-light-bg: var(--code-background, var(--background));
+    --diffs-dark-bg: var(--code-background, var(--background));
+    --diffs-bg: var(--code-background, var(--background));
+    --diffs-dark: var(--code-foreground, #d4d4d4);
     --diffs-fg-number-override: #858585;
     --diffs-bg-hover-override: #2a2d2e;
     --diffs-bg-selection-override: #264f78;
@@ -1012,7 +1014,7 @@ export default function FilePreviewPanel({
         </div>
       ) : null}
       {relativePath && file.data?.truncated ? (
-        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/8 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+        <div className="shrink-0 border-b border-warning/20 bg-warning-surface px-3 py-1.5 text-[11px] text-warning-foreground">
           Preview limited to the first 1 MB of a {file.data.byteLength.toLocaleString()} byte file.
         </div>
       ) : null}

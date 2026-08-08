@@ -129,6 +129,7 @@ describe("KeybindingsSettings.logic", () => {
     expect(commandLabel("workspaceNavigator.toggle")).toBe("Toggle Files Sidebar");
     expect(commandLabel("workspaceNavigator.changes")).toBe("Open Changes Sidebar");
     expect(commandLabel("workspaceNavigator.pullRequest")).toBe("Open Pull Request Sidebar");
+    expect(commandLabel("themeEditor.toggle")).toBe("Theme Editor: Toggle");
     expect(commandLabel("script.setup-db.run")).toBe("Run Script: Setup Db");
   });
 
