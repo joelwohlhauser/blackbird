@@ -1748,6 +1748,21 @@ function ChatViewContent(props: ChatViewProps) {
     return openTerminalThreadKeys.filter((nextThreadKey) => existingThreadKeys.has(nextThreadKey));
   }, [draftThreadKeys, openTerminalThreadKeys, serverThreadKeys]);
   const activeLatestTurn = activeThread?.latestTurn ?? null;
+  // Reading a finished thread clears its completed indicator. Stamp the visit
+  // at the completion itself so a later completion can still become unread.
+  useEffect(() => {
+    const completedAt = serverThread?.latestTurn?.completedAt;
+    if (!serverThread?.id || !completedAt) return;
+    markThreadVisited(
+      scopedThreadKey(scopeThreadRef(serverThread.environmentId, serverThread.id)),
+      completedAt,
+    );
+  }, [
+    markThreadVisited,
+    serverThread?.environmentId,
+    serverThread?.id,
+    serverThread?.latestTurn?.completedAt,
+  ]);
   useEffect(() => {
     setMountedTerminalThreadKeys((currentThreadIds) => {
       const nextThreadIds = reconcileMountedTerminalThreadIds({
