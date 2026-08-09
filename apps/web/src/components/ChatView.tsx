@@ -7266,6 +7266,7 @@ function ChatViewContent(props: ChatViewProps) {
             githubPullRequestDetected={githubPullRequest !== null}
             githubPullRequestAvailable={githubPullRequest !== null && isPreviewSupportedInRuntime()}
             diffAvailable={isServerThread && isGitRepo}
+            liveAgentCount={agentPanelModel.liveCount}
           >
             {rightPanelContent}
           </RightPanelTabs>
@@ -7319,6 +7320,7 @@ function ChatViewContent(props: ChatViewProps) {
                 githubPullRequest !== null && isPreviewSupportedInRuntime()
               }
               diffAvailable={isServerThread && isGitRepo}
+              liveAgentCount={agentPanelModel.liveCount}
             >
               {rightPanelContent}
             </RightPanelTabs>

@@ -49,7 +49,9 @@ describe("searchSettings", () => {
       "worktree-location",
       "worktree-environment-files",
       "worktree-dependencies",
+      "project-new-thread-workspace",
     ]);
+    expect(searchSettings("xyzzy")).toEqual([]);
   });
 
   it("keeps catalog order for multiple title matches", () => {

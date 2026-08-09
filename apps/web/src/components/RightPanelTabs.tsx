@@ -39,6 +39,8 @@ interface RightPanelTabsProps {
   githubPullRequestDetected: boolean;
   githubPullRequestAvailable: boolean;
   diffAvailable: boolean;
+  /** Running and waiting subagents shown on the Agents empty-state card. */
+  liveAgentCount: number;
   reserveLayoutControls?: boolean;
   children: ReactNode;
 }
@@ -163,6 +165,7 @@ function RightPanelEmptyState(props: {
   githubPullRequestDetected: boolean;
   githubPullRequestAvailable: boolean;
   diffAvailable: boolean;
+  liveAgentCount: number;
 }) {
   const actions: Array<{
     label: string;
@@ -171,6 +174,7 @@ function RightPanelEmptyState(props: {
     available: boolean;
     disabledReason: string;
     onClick: () => void;
+    badgeCount?: number;
   }> = [
     {
       label: "Browser",
@@ -179,6 +183,7 @@ function RightPanelEmptyState(props: {
       available: props.browserAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.browser,
       onClick: props.onAddBrowser,
+      badgeCount: 0,
     },
     {
       label: "Terminal",
@@ -187,6 +192,7 @@ function RightPanelEmptyState(props: {
       available: true,
       disabledReason: "",
       onClick: props.onAddTerminal,
+      badgeCount: 0,
     },
     {
       label: "Diff",
@@ -195,6 +201,7 @@ function RightPanelEmptyState(props: {
       available: props.diffAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.diff,
       onClick: props.onAddDiff,
+      badgeCount: 0,
     },
     {
       label: "Linear",
@@ -211,6 +218,7 @@ function RightPanelEmptyState(props: {
       available: true,
       disabledReason: "",
       onClick: props.onAddAgents,
+      badgeCount: props.liveAgentCount,
     },
   ];
   if (props.githubPullRequestDetected) {
@@ -238,7 +246,17 @@ function RightPanelEmptyState(props: {
             const Icon = action.icon;
             const content = (
               <>
-                <Icon className="mb-3 size-5" />
+                <span className="relative mb-3 inline-flex">
+                  <Icon className="size-5" />
+                  {(action.badgeCount ?? 0) > 0 ? (
+                    <span
+                      aria-hidden
+                      className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-info px-1 text-[9px] font-semibold tabular-nums text-white"
+                    >
+                      {action.badgeCount}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="text-sm font-medium">{action.label}</span>
                 <span className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   {action.description}
@@ -251,7 +269,7 @@ function RightPanelEmptyState(props: {
                   key={action.label}
                   type="button"
                   onClick={action.onClick}
-                  className="flex min-h-28 w-full flex-col items-start rounded-lg border border-border/80 bg-card p-4 text-left transition hover:border-border hover:bg-accent/60 dark:border-transparent dark:shadow-none dark:inset-ring-1 dark:inset-ring-white/5"
+                  className="cursor-pointer flex min-h-28 w-full flex-col items-start rounded-lg border border-border/80 bg-card p-4 text-left transition hover:border-border hover:bg-accent/60 dark:border-transparent dark:shadow-none dark:inset-ring-1 dark:inset-ring-white/5"
                 >
                   {content}
                 </button>
@@ -340,6 +358,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             githubPullRequestDetected={props.githubPullRequestDetected}
             githubPullRequestAvailable={props.githubPullRequestAvailable}
             diffAvailable={props.diffAvailable}
+            liveAgentCount={props.liveAgentCount}
           />
         ) : (
           props.children

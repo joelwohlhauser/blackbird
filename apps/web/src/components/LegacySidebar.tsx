@@ -2263,6 +2263,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             <ProjectFavicon
               environmentId={project.environmentId}
               cwd={project.workspaceRoot}
+              faviconPath={project.faviconPath}
               fallbackIcon={projectExpanded ? FolderOpenIcon : FolderIcon}
             />
             <span className="flex min-w-0 flex-1 items-center gap-2">

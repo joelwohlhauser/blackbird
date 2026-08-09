@@ -264,3 +264,14 @@ around the left sidebar, Quick chats, composer/worktrees, file and diff
 rendering, the two right-side surfaces, browser integrations, settings,
 persistence, and branding. Avoid rebasing or flattening away upstream history;
 the merge relationship is useful for the next update.
+
+## Documentation
+
+Detailed user and contributor documentation lives in [docs/](./docs), including:
+
+- [Keyboard shortcuts](./docs/user/keybindings.md)
+- [Customize a project icon](./docs/user/project-settings.md)
+- [Remote access](./docs/user/remote-access.md)
+- [Keeping app and server in sync](./docs/user/updating.md)
+- [Source control integrations](./docs/user/source-control.md)
+- [Internal architecture overview](./docs/internals/overview.md)
