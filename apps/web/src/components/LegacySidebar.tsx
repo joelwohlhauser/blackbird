@@ -173,6 +173,7 @@ import {
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import { SidebarPinnedSites } from "./sidebar/SidebarPinnedSites";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { CommandDialogTrigger } from "./ui/command";
@@ -2893,6 +2894,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       ) : null}
       <LocalSecondaryStatus />
+      <SidebarPinnedSites />
       <SidebarGroup aria-label="Quick chats" className="px-2 pt-2 pb-1">
         {/* Section actions reveal on hovering anywhere across the header row
             (or via keyboard focus); touch keeps them always visible. */}

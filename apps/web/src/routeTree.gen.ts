@@ -26,6 +26,7 @@ import { Route as SettingsArchivedRouteImport } from './routes/settings.archived
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ConnectCallbackRouteImport } from './routes/connect_.callback'
 import { Route as SettingsProjectsProjectKeyRouteImport } from './routes/settings.projects_.$projectKey'
+import { Route as ChatSiteSiteIdRouteImport } from './routes/_chat.site.$siteId'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 
@@ -114,6 +115,11 @@ const SettingsProjectsProjectKeyRoute =
     path: '/projects/$projectKey',
     getParentRoute: () => SettingsRoute,
   } as any)
+const ChatSiteSiteIdRoute = ChatSiteSiteIdRouteImport.update({
+  id: '/site/$siteId',
+  path: '/site/$siteId',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
   id: '/draft/$draftId',
   path: '/draft/$draftId',
@@ -144,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/settings/source-control': typeof SettingsSourceControlRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/site/$siteId': typeof ChatSiteSiteIdRoute
   '/settings/projects/$projectKey': typeof SettingsProjectsProjectKeyRoute
 }
 export interface FileRoutesByTo {
@@ -164,6 +171,7 @@ export interface FileRoutesByTo {
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/site/$siteId': typeof ChatSiteSiteIdRoute
   '/settings/projects/$projectKey': typeof SettingsProjectsProjectKeyRoute
 }
 export interface FileRoutesById {
@@ -186,6 +194,7 @@ export interface FileRoutesById {
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/_chat/site/$siteId': typeof ChatSiteSiteIdRoute
   '/settings/projects_/$projectKey': typeof SettingsProjectsProjectKeyRoute
 }
 export interface FileRouteTypes {
@@ -208,6 +217,7 @@ export interface FileRouteTypes {
     | '/settings/source-control'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
+    | '/site/$siteId'
     | '/settings/projects/$projectKey'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -228,6 +238,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
+    | '/site/$siteId'
     | '/settings/projects/$projectKey'
   id:
     | '__root__'
@@ -249,6 +260,7 @@ export interface FileRouteTypes {
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
     | '/_chat/draft/$draftId'
+    | '/_chat/site/$siteId'
     | '/settings/projects_/$projectKey'
   fileRoutesById: FileRoutesById
 }
@@ -382,6 +394,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsProjectsProjectKeyRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/_chat/site/$siteId': {
+      id: '/_chat/site/$siteId'
+      path: '/site/$siteId'
+      fullPath: '/site/$siteId'
+      preLoaderRoute: typeof ChatSiteSiteIdRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/draft/$draftId': {
       id: '/_chat/draft/$draftId'
       path: '/draft/$draftId'
@@ -403,12 +422,14 @@ interface ChatRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
+  ChatSiteSiteIdRoute: typeof ChatSiteSiteIdRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
+  ChatSiteSiteIdRoute: ChatSiteSiteIdRoute,
 }
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)

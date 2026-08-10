@@ -31,6 +31,7 @@ const clientSettings: ClientSettings = {
   fontSmoothing: true,
   glassOpacity: 80,
   linearOrganizationSlug: "acme",
+  pinnedSites: [],
   planModeEnabled: false,
   providerModelPreferences: {},
   sidebarAutoSettleAfterDays: 3,

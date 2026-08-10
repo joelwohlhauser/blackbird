@@ -115,6 +115,18 @@ export const DEFAULT_EXTERNAL_LINK_OPEN_MODE: ExternalLinkOpenMode = "ask";
 export const FontFamilyPreference = Schema.String.check(Schema.isMaxLength(200));
 export type FontFamilyPreference = typeof FontFamilyPreference.Type;
 
+/**
+ * A website pinned to the left sidebar. Pinned sites open in a dedicated
+ * full-window in-app browser view; `title` overrides the hostname-derived
+ * label shown in the sidebar.
+ */
+export const PinnedSite = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString.check(Schema.isMaxLength(2048)),
+  title: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type PinnedSite = typeof PinnedSite.Type;
+
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -185,6 +197,7 @@ export const ClientSettingsSchema = Schema.Struct({
   // Blackbird keeps its customized per-project sidebar as the default while
   // retaining upstream's promoted sidebar behind the legacy-feature switch.
   legacySidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  pinnedSites: Schema.Array(PinnedSite).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   sidebarAutoSettleAfterDays: Schema.NullOr(SidebarAutoSettleAfterDays).pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS)),
   ),
@@ -817,6 +830,7 @@ export const ClientSettingsPatch = Schema.Struct({
   ),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   legacySidebarEnabled: Schema.optionalKey(Schema.Boolean),
+  pinnedSites: Schema.optionalKey(Schema.Array(PinnedSite)),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(

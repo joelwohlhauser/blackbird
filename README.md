@@ -23,6 +23,7 @@ panels that reveal tools without dominating the conversation.
 The left sidebar includes:
 
 - a dedicated, collapsible **Quick chats** section above Projects;
+- a collapsible **Pinned sites** section for persistent full-window browser views;
 - a collapsible **Projects** section with local and remote copies grouped under
   the human folder name rather than a GitHub `owner/repo` name (an open-folder
   icon marks expanded projects without a favicon);
