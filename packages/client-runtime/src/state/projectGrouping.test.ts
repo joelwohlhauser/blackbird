@@ -71,6 +71,28 @@ describe("buildProjectGroups", () => {
     }
   });
 
+  it("keeps the repository folder name when clones share a custom title", () => {
+    const projects = [
+      makeProject("first", "/work/t3code", { title: "Custom project" }),
+      makeProject("second", "/work/t3code-2", { title: "Custom project" }),
+    ];
+
+    expect(buildProjectGroups({ projects, settings: settings("repository") })[0]?.label).toBe(
+      "t3code",
+    );
+  });
+
+  it("uses the repository folder name rather than its display name", () => {
+    const projects = [
+      makeProject("first", "/work/t3code", { title: "t3code" }),
+      makeProject("second", "/work/t3code-2", { title: "t3code" }),
+    ];
+
+    expect(buildProjectGroups({ projects, settings: settings("repository") })[0]?.label).toBe(
+      "t3code",
+    );
+  });
+
   it("keeps physical clones in separate groups when requested", () => {
     const projects = [
       makeProject("t3code", "/work/t3code"),

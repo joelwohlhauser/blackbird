@@ -49,8 +49,8 @@ describe("searchSettings", () => {
       "worktree-location",
       "worktree-environment-files",
       "worktree-dependencies",
-      "project-new-thread-workspace",
     ]);
+    expect(searchSettings("glass").map((item) => item.id)).toEqual(["setting-glass-opacity"]);
     expect(searchSettings("xyzzy")).toEqual([]);
   });
 

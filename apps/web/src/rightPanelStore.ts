@@ -23,6 +23,7 @@ export const RIGHT_PANEL_KINDS = [
   "terminal",
   "linear",
   "github-pr",
+  "pull-request",
   "agents",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
@@ -57,6 +58,17 @@ export type RightPanelSurface =
       revealLine: number | null;
       revealRequestId: number;
     }
+  | {
+      /**
+       * A change request opened beside a thread or in the pull-request list's shared panel.
+       * The reference lives in the id so several pull requests can remain open as peer tabs.
+       */
+      id: `pull-request:${string}`;
+      kind: "pull-request";
+      projectId: string;
+      repository: string;
+      number: number;
+    }
   | { id: "agents"; kind: "agents" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
@@ -79,6 +91,12 @@ export const workspaceLayoutProbe = {
   isWide: (): boolean =>
     typeof window === "undefined" || window.innerWidth >= WIDE_WORKSPACE_MIN_WIDTH,
 };
+
+/**
+ * The pull-request list's shared panel (see PULL_REQUESTS_PANEL_ID in the route) is session
+ * state: reopening the app should show the list, not last session's tabs and detail fetches.
+ */
+const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -114,7 +132,10 @@ interface RightPanelStoreState {
   workspaceNavigatorOpenByThreadKey: Record<string, true>;
   open: (
     ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "file-diff" | "terminal" | "linear" | "github-pr">,
+    kind: Exclude<
+      RightPanelKind,
+      "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request"
+    >,
   ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null, url?: string | null) => void;
   openLinear: (ref: ScopedThreadRef, tabId: string, url?: string | null) => void;
@@ -126,6 +147,10 @@ interface RightPanelStoreState {
     relativePath: string,
     baseRef?: string | null,
     headRef?: string | null,
+  ) => void;
+  openPullRequest: (
+    ref: ScopedThreadRef,
+    target: { projectId: string; repository: string; number: number },
   ) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   splitTerminal: (
@@ -160,7 +185,10 @@ interface RightPanelStoreState {
   toggleWorkspaceNavigator: (ref: ScopedThreadRef) => void;
   toggle: (
     ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "file-diff" | "terminal" | "linear" | "github-pr">,
+    kind: Exclude<
+      RightPanelKind,
+      "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request"
+    >,
   ) => void;
   removeThread: (ref: ScopedThreadRef) => void;
 }
@@ -176,7 +204,7 @@ const EMPTY_THREAD_STATE: ThreadRightPanelState = {
 const singletonSurface = (
   kind: Exclude<
     RightPanelKind,
-    "file" | "file-diff" | "preview" | "terminal" | "linear" | "github-pr"
+    "file" | "file-diff" | "preview" | "terminal" | "linear" | "github-pr" | "pull-request"
   >,
 ): RightPanelSurface => {
   switch (kind) {
@@ -265,6 +293,30 @@ const findSurface = (
  * always receives them; with the panel closed they join the panel only on a
  * very wide window and otherwise open as main-area tabs.
  */
+
+export type PullRequestSurface = Extract<RightPanelSurface, { kind: "pull-request" }>;
+
+export function pullRequestSurfaceId(target: {
+  projectId: string;
+  repository: string;
+  number: number;
+}): PullRequestSurface["id"] {
+  return `pull-request:${encodeURIComponent(target.projectId)}:${encodeURIComponent(target.repository)}:${target.number}`;
+}
+
+export function pullRequestSurface(target: {
+  projectId: string;
+  repository: string;
+  number: number;
+}): PullRequestSurface {
+  return {
+    id: pullRequestSurfaceId(target),
+    kind: "pull-request",
+    projectId: target.projectId,
+    repository: target.repository,
+    number: target.number,
+  };
+}
 const upsertSurface = (
   current: ThreadRightPanelState,
   surface: RightPanelSurface,
@@ -410,6 +462,18 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
         },
       ];
     }
+    if (surface.kind === "pull-request") {
+      if (
+        typeof surface.projectId !== "string" ||
+        typeof surface.repository !== "string" ||
+        typeof surface.number !== "number" ||
+        !Number.isSafeInteger(surface.number) ||
+        surface.number < 1
+      ) {
+        return [];
+      }
+      return [pullRequestSurface(surface)];
+    }
     if (surface.kind !== "terminal") return [surface];
     if (
       !("resourceId" in surface) ||
@@ -456,18 +520,22 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
     persistedState.byThreadKey &&
     typeof persistedState.byThreadKey === "object"
       ? Object.fromEntries(
-          Object.entries(persistedState.byThreadKey as Record<string, ThreadRightPanelState>).map(
-            ([threadKey, threadState]) => {
+          Object.entries(persistedState.byThreadKey as Record<string, ThreadRightPanelState>)
+            .filter(([threadKey]) => !isPullRequestsPanelKey(threadKey))
+            .map(([threadKey, threadState]) => {
               const validThreadState =
                 threadState && typeof threadState === "object" ? threadState : null;
               const surfaces = normalizePersistedSurfaces(validThreadState?.surfaces);
               // Main-area tabs arrived in v11; older states have none.
               const mainSurfaces = normalizePersistedSurfaces(validThreadState?.mainSurfaces);
+              const rawActiveSurfaceId = validThreadState?.activeSurfaceId;
               const persistedActiveSurfaceId = surfaces.some(
-                (surface) => surface.id === validThreadState?.activeSurfaceId,
+                (surface) => surface.id === rawActiveSurfaceId,
               )
-                ? (validThreadState?.activeSurfaceId ?? null)
-                : null;
+                ? (rawActiveSurfaceId ?? null)
+                : rawActiveSurfaceId === "pull-request"
+                  ? (surfaces.find((surface) => surface.kind === "pull-request")?.id ?? null)
+                  : null;
               // A migration that dropped every surface (e.g. plan-only panels
               // in v9) must not reopen an empty panel.
               const isOpen =
@@ -489,8 +557,7 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                 threadKey,
                 { isOpen, surfaces, activeSurfaceId, mainSurfaces, activeMainSurfaceId },
               ];
-            },
-          ),
+            }),
         )
       : {};
   const workspaceNavigatorOpenByThreadKey =
@@ -582,6 +649,12 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               ...(url !== undefined ? { url } : {}),
             };
             return openDedicatedBrowserSurface(current, surface, tabId);
+          }),
+        })),
+      openPullRequest: (ref, target) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            return upsertSurface(current, pullRequestSurface(target));
           }),
         })),
       openFile: (ref, relativePath, line) =>
@@ -1183,7 +1256,11 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined),
       ),
       partialize: (state) => ({
-        byThreadKey: state.byThreadKey,
+        byThreadKey: Object.fromEntries(
+          Object.entries(state.byThreadKey).filter(
+            ([threadKey]) => !isPullRequestsPanelKey(threadKey),
+          ),
+        ),
         workspaceNavigatorOpenByThreadKey: state.workspaceNavigatorOpenByThreadKey,
       }),
       migrate: migratePersistedRightPanelState,
@@ -1221,6 +1298,15 @@ export function selectActiveRightPanelSurface(
 ): RightPanelSurface | null {
   const state = selectThreadRightPanelState(byThreadKey, ref);
   if (!state.isOpen) return null;
+  return selectSelectedRightPanelSurface(byThreadKey, ref);
+}
+
+/** The selected surface even while the panel is hidden, so a layout control can restore it. */
+export function selectSelectedRightPanelSurface(
+  byThreadKey: Record<string, ThreadRightPanelState>,
+  ref: ScopedThreadRef | null | undefined,
+): RightPanelSurface | null {
+  const state = selectThreadRightPanelState(byThreadKey, ref);
   return state.surfaces.find((surface) => surface.id === state.activeSurfaceId) ?? null;
 }
 

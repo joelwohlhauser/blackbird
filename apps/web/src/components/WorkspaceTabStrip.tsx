@@ -8,9 +8,18 @@
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ContextMenuItem, PreviewSessionSnapshot } from "@t3tools/contracts";
+import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
-import { Bot, FileDiff, Files, Globe2, MessageSquare, TerminalSquare, X } from "lucide-react";
+import {
+  Bot,
+  FileDiff,
+  Files,
+  GitPullRequest,
+  Globe2,
+  MessageSquare,
+  TerminalSquare,
+  X,
+} from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
   type WheelEvent as ReactWheelEvent,
@@ -35,6 +44,14 @@ import {
 
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import { GitHubIcon, LinearIcon } from "./Icons";
+
+export interface WorkspacePullRequestTabStatus {
+  projectId: string;
+  repository: string;
+  number: number;
+  state: PullRequestState;
+  isDraft: boolean;
+}
 
 export function rightPanelTabWheelDelta(
   event: Pick<WheelEvent, "deltaMode" | "deltaX" | "deltaY">,
@@ -72,6 +89,8 @@ export function surfaceTitle(
         terminalLabelsById.get(surface.activeTerminalId) ??
         getTerminalLabel(surface.activeTerminalId)
       );
+    case "pull-request":
+      return `#${surface.number}`;
     case "agents":
       return "Agents";
     case "preview": {
@@ -107,10 +126,12 @@ export function SurfaceIcon({
   surface,
   sessions,
   theme,
+  pullRequestStatuses,
 }: {
   surface: RightPanelSurface;
   sessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   theme: "light" | "dark";
+  pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
 }) {
   switch (surface.kind) {
     case "preview": {
@@ -138,6 +159,20 @@ export function SurfaceIcon({
       );
     case "terminal":
       return <TerminalSquare className="size-3 shrink-0" />;
+    case "pull-request": {
+      const status = pullRequestStatuses?.[surface.id] ?? null;
+      const toneClassName =
+        status?.state === "merged"
+          ? "text-violet-600 dark:text-violet-300/90"
+          : status?.state === "closed"
+            ? "text-red-600 dark:text-red-300/90"
+            : status?.isDraft
+              ? "text-zinc-500 dark:text-zinc-400/80"
+              : status?.state === "open"
+                ? "text-emerald-600 dark:text-emerald-300/90"
+                : "text-muted-foreground";
+      return <GitPullRequest className={cn("size-3 shrink-0", toneClassName)} />;
+    }
     case "agents":
       return <Bot className="size-3 shrink-0" />;
   }
@@ -303,6 +338,7 @@ function WorkspaceSurfaceTab(props: {
   title: string;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   theme: "light" | "dark";
+  pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
   onActivate: (surface: RightPanelSurface) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
   onMouseDown: (event: ReactMouseEvent) => void;
@@ -340,6 +376,9 @@ function WorkspaceSurfaceTab(props: {
             surface={props.surface}
             sessions={props.previewSessions}
             theme={props.theme}
+            {...(props.pullRequestStatuses !== undefined
+              ? { pullRequestStatuses: props.pullRequestStatuses }
+              : {})}
           />
           {props.pending ? (
             <span
@@ -375,6 +414,7 @@ export interface WorkspaceTabStripProps {
   pendingSurfaceIds: ReadonlySet<string>;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   terminalLabelsById: ReadonlyMap<string, string>;
+  pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
   onActivate: (surface: RightPanelSurface) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
   onCloseOtherSurfaces: (surface: RightPanelSurface) => void;
@@ -549,6 +589,9 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
                 title={surfaceTitle(surface, props.previewSessions, props.terminalLabelsById)}
                 previewSessions={props.previewSessions}
                 theme={resolvedTheme}
+                {...(props.pullRequestStatuses !== undefined
+                  ? { pullRequestStatuses: props.pullRequestStatuses }
+                  : {})}
                 onActivate={props.onActivate}
                 onCloseSurface={props.onCloseSurface}
                 onMouseDown={handleTabMouseDown}

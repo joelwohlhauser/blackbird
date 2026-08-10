@@ -35,12 +35,12 @@ import {
 import { useTheme } from "../hooks/useTheme";
 import {
   buildFileDiffRenderKey,
+  DIFF_SURFACE_THEME_UNSAFE_CSS,
   getDiffCollapseIconClassName,
   getDiffLineStat,
   getRenderablePatch,
   resolveDiffThemeName,
   resolveFileDiffPath,
-  DIFF_SURFACE_THEME_UNSAFE_CSS,
 } from "../lib/diffRendering";
 import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollapse";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
@@ -82,6 +82,7 @@ import { vcsEnvironment } from "../state/vcs";
 import { buildBaseRefChoices, filterBaseRefChoices } from "../lib/baseRefChoices";
 import { fileBreadcrumbs } from "./files/filePath";
 import { ScrollArea } from "./ui/scroll-area";
+import { createGitDiffFileContentsLoader } from "../lib/diffFileContents";
 
 type DiffThemeType = "light" | "dark";
 const AUTOMATIC_BASE_REF = "__automatic_base_ref__";
@@ -307,7 +308,6 @@ const FILE_DIFF_UNSAFE_CSS = `${DIFF_PANEL_UNSAFE_CSS}
   display: none !important;
 }
 `;
-
 interface DiffPanelProps {
   mode?: DiffPanelMode;
   composerDraftTarget: ScopedThreadRef | DraftId;
@@ -569,45 +569,14 @@ export default function DiffPanel({
       return undefined;
     }
 
-    const source = selectedGitSource;
-    return async (fileDiff) => {
-      const newPath = resolveFileDiffPath(fileDiff);
-      const oldPath = fileDiff.prevName
-        ? resolveFileDiffPath({ ...fileDiff, name: fileDiff.prevName })
-        : newPath;
-      const result = await getDiffFileContents({
-        environmentId: activeThread.environmentId,
-        input: {
-          cwd: preview.cwd,
-          sourceKind: source.kind,
-          changeType: fileDiff.type,
-          baseRef: source.baseRef,
-          headRef: source.headRef,
-          oldPath,
-          newPath,
-        },
-      });
-      if (result._tag !== "Success") {
-        throw squashAtomCommandFailure(result);
-      }
-
-      const newFile = {
-        name: newPath,
-        contents: result.value.newContents,
-        cacheKey: `${source.diffHash}:new:${newPath}`,
-      };
-      if (fileDiff.type === "rename-pure") {
-        return { oldFile: null, newFile };
-      }
-      return {
-        oldFile: {
-          name: oldPath,
-          contents: result.value.oldContents,
-          cacheKey: `${source.diffHash}:old:${oldPath}`,
-        },
-        newFile,
-      };
-    };
+    return createGitDiffFileContentsLoader(getDiffFileContents, {
+      environmentId: activeThread.environmentId,
+      cwd: preview.cwd,
+      sourceKind: selectedGitSource.kind,
+      baseRef: selectedGitSource.baseRef,
+      headRef: selectedGitSource.headRef,
+      cacheKey: selectedGitSource.diffHash,
+    });
   }, [
     activeThread,
     branchDiffPreview.data,
@@ -1212,12 +1181,34 @@ export default function DiffPanel({
                 className="diff-overview-frame relative min-h-0 flex-1 overflow-hidden bg-background"
                 onClickCapture={(event) => {
                   const composedPath = event.nativeEvent.composedPath?.() ?? [];
+                  for (const node of composedPath) {
+                    if (!(node instanceof HTMLElement)) continue;
+                    // Header controls keep their own actions. In particular, the chevron must
+                    // not also trigger the row handler or the two toggles cancel each other.
+                    if (node instanceof HTMLButtonElement || node instanceof HTMLAnchorElement) {
+                      return;
+                    }
+                  }
                   const title = composedPath.find(
                     (node): node is HTMLElement =>
                       node instanceof HTMLElement && node.hasAttribute("data-title"),
                   );
                   const filePath = title?.textContent?.trim();
-                  if (filePath) openDiffFile(filePath);
+                  // The filename remains the explicit "open in editor" affordance.
+                  if (filePath) {
+                    openDiffFile(filePath);
+                    return;
+                  }
+                  const header = composedPath.find(
+                    (node): node is HTMLElement =>
+                      node instanceof HTMLElement && node.hasAttribute("data-diffs-header"),
+                  );
+                  const headerFilePath = header?.querySelector("[data-title]")?.textContent?.trim();
+                  if (!headerFilePath) return;
+                  const file = codeViewFiles.find(
+                    (candidate) => candidate.filePath === headerFilePath,
+                  );
+                  if (file) toggleDiffFileCollapsed(file.fileKey);
                 }}
               >
                 <AnnotatableCodeView

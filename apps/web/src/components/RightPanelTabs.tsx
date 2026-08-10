@@ -1,5 +1,5 @@
 import type { PreviewSessionSnapshot } from "@t3tools/contracts";
-import { Bot, FileDiff, Globe2, Plus, TerminalSquare } from "lucide-react";
+import { Bot, FileDiff, GitPullRequest, Globe2, Plus, TerminalSquare } from "lucide-react";
 import type { ElementType, ReactElement, ReactNode } from "react";
 
 import { isElectron } from "~/env";
@@ -9,11 +9,16 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
-import { WorkspaceTabStrip } from "./WorkspaceTabStrip";
+import { WorkspaceTabStrip, type WorkspacePullRequestTabStatus } from "./WorkspaceTabStrip";
 import { GitHubIcon, LinearIcon } from "./Icons";
 
 interface RightPanelTabsProps {
   mode: PreviewPanelMode;
+  maximized?: boolean;
+  /** Forwarded to PreviewPanelShell so this surface persists its own width. */
+  widthStorageKey?: string;
+  /** Forwarded to PreviewPanelShell as the initial width before a user resize. */
+  defaultWidth?: number;
   layoutControls?: ReactNode;
   surfaces: readonly RightPanelSurface[];
   activeSurfaceId: string | null;
@@ -33,23 +38,35 @@ interface RightPanelTabsProps {
   onAddDiff: () => void;
   /** Retained for persisted legacy Files surfaces; new browsing uses WorkspaceNavigator. */
   onAddFiles: () => void;
+  onAddPullRequest?: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   linearAvailable: boolean;
   githubPullRequestDetected: boolean;
   githubPullRequestAvailable: boolean;
+  terminalAvailable?: boolean;
   diffAvailable: boolean;
+  filesAvailable?: boolean;
+  pullRequestAvailable?: boolean;
+  agentsAvailable?: boolean;
+  pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   /** Running and waiting subagents shown on the Agents empty-state card. */
   liveAgentCount: number;
   reserveLayoutControls?: boolean;
   children: ReactNode;
 }
 
+export type PullRequestTabStatus = WorkspacePullRequestTabStatus;
+
 const SURFACE_DISABLED_REASONS = {
   browser: "Browser previews are only available in the T3 Code desktop app.",
   linear: "Linear is only available in the Blackbird desktop app.",
   githubPullRequest: "GitHub PRs are only available in the Blackbird desktop app.",
+  terminal: "Terminal surfaces are only available from a project thread.",
+  files: "Files are only available when a project is open.",
   diff: "Diff is only available for server threads in Git repositories.",
+  pullRequest: "This thread's branch has no pull request yet.",
+  agents: "Agents are only available from a thread.",
 } as const;
 
 function DisabledReasonTooltip(props: { reason: string; trigger: ReactElement }) {
@@ -68,12 +85,16 @@ export interface AddSurfaceMenuProps {
   onAddGitHubPullRequest: () => void;
   onAddTerminal: () => void;
   onAddDiff: () => void;
+  onAddPullRequest?: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   linearAvailable: boolean;
   githubPullRequestDetected: boolean;
   githubPullRequestAvailable: boolean;
+  terminalAvailable?: boolean;
   diffAvailable: boolean;
+  pullRequestAvailable?: boolean;
+  agentsAvailable?: boolean;
 }
 
 /** Plus menu for opening a new workspace tab, shared by both tab bars. */
@@ -95,10 +116,24 @@ export function AddSurfaceMenu(props: AddSurfaceMenuProps) {
           <Globe2 />
           Browser
         </SurfaceMenuItem>
-        <SurfaceMenuItem available onClick={props.onAddTerminal}>
+        <SurfaceMenuItem
+          available={props.terminalAvailable !== false}
+          disabledReason={SURFACE_DISABLED_REASONS.terminal}
+          onClick={props.onAddTerminal}
+        >
           <TerminalSquare />
           Terminal
         </SurfaceMenuItem>
+        {props.onAddPullRequest ? (
+          <SurfaceMenuItem
+            available={props.pullRequestAvailable === true}
+            disabledReason={SURFACE_DISABLED_REASONS.pullRequest}
+            onClick={props.onAddPullRequest}
+          >
+            <GitPullRequest />
+            Pull request
+          </SurfaceMenuItem>
+        ) : null}
         <SurfaceMenuItem
           available={props.diffAvailable}
           disabledReason={SURFACE_DISABLED_REASONS.diff}
@@ -125,7 +160,11 @@ export function AddSurfaceMenu(props: AddSurfaceMenuProps) {
             GitHub PR
           </SurfaceMenuItem>
         ) : null}
-        <SurfaceMenuItem available onClick={props.onAddAgents}>
+        <SurfaceMenuItem
+          available={props.agentsAvailable !== false}
+          disabledReason={SURFACE_DISABLED_REASONS.agents}
+          onClick={props.onAddAgents}
+        >
           <Bot />
           Agents
         </SurfaceMenuItem>
@@ -159,12 +198,16 @@ function RightPanelEmptyState(props: {
   onAddGitHubPullRequest: () => void;
   onAddTerminal: () => void;
   onAddDiff: () => void;
+  onAddPullRequest?: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   linearAvailable: boolean;
   githubPullRequestDetected: boolean;
   githubPullRequestAvailable: boolean;
+  terminalAvailable?: boolean;
   diffAvailable: boolean;
+  pullRequestAvailable?: boolean;
+  agentsAvailable?: boolean;
   liveAgentCount: number;
 }) {
   const actions: Array<{
@@ -189,8 +232,8 @@ function RightPanelEmptyState(props: {
       label: "Terminal",
       description: "Start a shell in this workspace.",
       icon: TerminalSquare,
-      available: true,
-      disabledReason: "",
+      available: props.terminalAvailable !== false,
+      disabledReason: SURFACE_DISABLED_REASONS.terminal,
       onClick: props.onAddTerminal,
       badgeCount: 0,
     },
@@ -210,13 +253,27 @@ function RightPanelEmptyState(props: {
       available: props.linearAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.linear,
       onClick: props.onAddLinear,
+      badgeCount: 0,
     },
+    ...(props.onAddPullRequest
+      ? [
+          {
+            label: "Pull request",
+            description: "Open the pull request for this thread's branch.",
+            icon: GitPullRequest,
+            available: props.pullRequestAvailable === true,
+            disabledReason: SURFACE_DISABLED_REASONS.pullRequest,
+            onClick: props.onAddPullRequest,
+            badgeCount: 0,
+          },
+        ]
+      : []),
     {
       label: "Agents",
       description: "Watch subagents and workflows run.",
       icon: Bot,
-      available: true,
-      disabledReason: "",
+      available: props.agentsAvailable !== false,
+      disabledReason: SURFACE_DISABLED_REASONS.agents,
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
     },
@@ -302,7 +359,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
 
   return (
-    <PreviewPanelShell mode={props.mode}>
+    <PreviewPanelShell
+      mode={props.mode}
+      {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
+      {...(props.widthStorageKey !== undefined ? { widthStorageKey: props.widthStorageKey } : {})}
+      {...(props.defaultWidth !== undefined ? { defaultWidth: props.defaultWidth } : {})}
+    >
       <div
         className={cn(
           "workspace-topbar gap-1 pl-2",
@@ -321,6 +383,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           pendingSurfaceIds={props.pendingSurfaceIds}
           previewSessions={props.previewSessions}
           terminalLabelsById={props.terminalLabelsById}
+          {...(props.pullRequestStatuses !== undefined
+            ? { pullRequestStatuses: props.pullRequestStatuses }
+            : {})}
           onActivate={props.onActivate}
           onCloseSurface={props.onCloseSurface}
           onCloseOtherSurfaces={props.onCloseOtherSurfaces}
@@ -335,12 +400,24 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           onAddGitHubPullRequest={props.onAddGitHubPullRequest}
           onAddTerminal={props.onAddTerminal}
           onAddDiff={props.onAddDiff}
+          {...(props.onAddPullRequest !== undefined
+            ? { onAddPullRequest: props.onAddPullRequest }
+            : {})}
           onAddAgents={props.onAddAgents}
           browserAvailable={props.browserAvailable}
           linearAvailable={props.linearAvailable}
           githubPullRequestDetected={props.githubPullRequestDetected}
           githubPullRequestAvailable={props.githubPullRequestAvailable}
+          {...(props.terminalAvailable !== undefined
+            ? { terminalAvailable: props.terminalAvailable }
+            : {})}
           diffAvailable={props.diffAvailable}
+          {...(props.pullRequestAvailable !== undefined
+            ? { pullRequestAvailable: props.pullRequestAvailable }
+            : {})}
+          {...(props.agentsAvailable !== undefined
+            ? { agentsAvailable: props.agentsAvailable }
+            : {})}
         />
         {props.layoutControls}
       </div>
@@ -352,12 +429,24 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddGitHubPullRequest={props.onAddGitHubPullRequest}
             onAddTerminal={props.onAddTerminal}
             onAddDiff={props.onAddDiff}
+            {...(props.onAddPullRequest !== undefined
+              ? { onAddPullRequest: props.onAddPullRequest }
+              : {})}
             onAddAgents={props.onAddAgents}
             browserAvailable={props.browserAvailable}
             linearAvailable={props.linearAvailable}
             githubPullRequestDetected={props.githubPullRequestDetected}
             githubPullRequestAvailable={props.githubPullRequestAvailable}
+            {...(props.terminalAvailable !== undefined
+              ? { terminalAvailable: props.terminalAvailable }
+              : {})}
             diffAvailable={props.diffAvailable}
+            {...(props.pullRequestAvailable !== undefined
+              ? { pullRequestAvailable: props.pullRequestAvailable }
+              : {})}
+            {...(props.agentsAvailable !== undefined
+              ? { agentsAvailable: props.agentsAvailable }
+              : {})}
             liveAgentCount={props.liveAgentCount}
           />
         ) : (

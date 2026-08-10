@@ -96,6 +96,11 @@ interface GitActionsControlProps {
   activeThreadRef: ScopedThreadRef | null;
   draftId?: DraftId;
   placement?: "header" | "changes";
+  /**
+   * Opens the thread's own change request beside it. Absent when the thread has no project to
+   * place it against, in which case Blackbird keeps using its browser-backed PR surface.
+   */
+  onOpenPullRequest?: ((number: number) => void) | undefined;
 }
 
 interface PendingDefaultBranchAction {
@@ -973,6 +978,7 @@ export default function GitActionsControl({
   activeThreadRef,
   draftId,
   placement = "header",
+  onOpenPullRequest,
 }: GitActionsControlProps) {
   const updateThreadMetadata = useAtomCommand(
     threadEnvironment.updateMetadata,
@@ -1217,7 +1223,12 @@ export default function GitActionsControl({
   }, [activeEnvironmentId, gitCwd, refreshVcsStatus]);
 
   const openExistingPr = useCallback(() => {
-    const prUrl = gitStatusForActions?.pr?.state === "open" ? gitStatusForActions.pr.url : null;
+    const openPr = gitStatusForActions?.pr?.state === "open" ? gitStatusForActions.pr : null;
+    if (openPr && onOpenPullRequest) {
+      onOpenPullRequest(openPr.number);
+      return;
+    }
+    const prUrl = openPr?.url ?? null;
     if (!prUrl) {
       toastManager.add({
         type: "error",
@@ -1233,7 +1244,7 @@ export default function GitActionsControl({
         data: threadToastData,
       });
     }
-  }, [gitStatusForActions, openGitHubPullRequestSurface, threadToastData]);
+  }, [gitStatusForActions, onOpenPullRequest, openGitHubPullRequestSurface, threadToastData]);
 
   runGitActionWithToast = useEffectEvent(
     async ({
