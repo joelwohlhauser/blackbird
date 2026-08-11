@@ -164,6 +164,26 @@ internal `blackbird-quick-chats` project. That project is deliberately hidden
 from Projects and project pickers. The legacy `blackboard-quick-chats` id is
 recognized only for migration.
 
+### Pinned sites
+
+The **Pinned sites** section sits above Quick chats and pins websites — for
+example a Linear inbox — behind their favicons. Clicking a pin opens the site
+in a dedicated full-window in-app browser view: only the page and the browser
+controls, with no chat header, tab strip, or right-side surfaces. The left
+sidebar stays available.
+
+- The hover **+** in the section header opens a small dialog with the URL and
+  an optional name; the name defaults to the site's hostname.
+- Hovering a row reveals an **x** that unpins the site and closes its browser
+  session.
+- Each pin keeps its own browser session between visits, so switching to a
+  chat and back restores the exact page.
+- While the tab shows a page other than the pinned URL, the row's title gains
+  a muted `/` prefix; clicking the row again returns the tab to the pinned
+  URL.
+- Pins persist in client settings and appear only in the desktop app, since
+  the web build has no in-app browser.
+
 ### Linear, GitHub, and links
 
 The normal right panel has browser-backed integration tabs:
