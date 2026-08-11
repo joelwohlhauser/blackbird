@@ -60,9 +60,18 @@ const previewSessionSyncAtom = Atom.family((threadKey: string) => {
       disposed = true;
     });
     const initialEvent = get.once(eventsAtom);
-    get.subscribe(sessionsAtom, (result) => {
-      reconcileSessions(result);
-    });
+    // `immediate` computes the query atom on mount. A lazy subscription never
+    // evaluates it, so the list RPC would never fire, the thread's serverEpoch
+    // would stay null, and session restore after an app restart would never
+    // run — restored browser tabs then show the empty state instead of their
+    // last URL.
+    get.subscribe(
+      sessionsAtom,
+      (result) => {
+        reconcileSessions(result);
+      },
+      { immediate: true },
+    );
     get.subscribe(eventsAtom, (result) => {
       eventsVersion += 1;
       applyLatestEvent(result);
