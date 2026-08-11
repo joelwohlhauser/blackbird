@@ -1037,6 +1037,7 @@ function PullRequestsRouteView() {
     searchInput,
     filtersMenu,
     rightPanelControl: null,
+    rightPanelOpen: rightPanelState.isOpen,
     listBody,
   };
 
@@ -1290,6 +1291,7 @@ function PullRequestsColumn({
   searchInput,
   filtersMenu,
   rightPanelControl,
+  rightPanelOpen,
   listBody,
 }: {
   refreshing: boolean;
@@ -1305,6 +1307,7 @@ function PullRequestsColumn({
   searchInput: ReactNode;
   filtersMenu: ReactNode;
   rightPanelControl: ReactNode;
+  rightPanelOpen: boolean;
   listBody: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -1369,6 +1372,12 @@ function PullRequestsColumn({
       <header
         className={cn(
           "workspace-topbar drag-region gap-1.5 px-3 sm:px-5",
+          // A closed right panel leaves this column full-width, so its header runs
+          // underneath the native window controls on Windows; reserve the inset the
+          // way Settings and the chat view do. While the panel is open the column
+          // ends at the panel's left edge and the absolute controls strip (already
+          // WCO-aware) owns the top-right corner.
+          !rightPanelOpen && "wco:pr-[var(--workspace-native-controls-inset)]",
           COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
         )}
       >
