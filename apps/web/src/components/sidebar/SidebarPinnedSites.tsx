@@ -158,7 +158,11 @@ function PinnedSiteRow({
  * in client settings; each keeps its own preview session alive between
  * visits via a reserved per-site thread id.
  */
-export const SidebarPinnedSites = memo(function SidebarPinnedSites() {
+export const SidebarPinnedSites = memo(function SidebarPinnedSites({
+  className,
+}: {
+  readonly className?: string;
+}) {
   const pinnedSites = useClientSettings((settings) => settings.pinnedSites);
   const updateClientSettings = useUpdateClientSettings();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -224,7 +228,7 @@ export const SidebarPinnedSites = memo(function SidebarPinnedSites() {
   }
 
   return (
-    <SidebarGroup aria-label="Pinned sites" className="px-2 pt-2 pb-1">
+    <SidebarGroup aria-label="Pinned sites" className={cn("px-2 pt-2 pb-1", className)}>
       <div className="group/section-header mb-1 flex items-center justify-between pl-2 pr-1.5">
         <button
           type="button"
