@@ -43,7 +43,7 @@ import {
   resolvePromptInjectedEffort,
 } from "@t3tools/shared/model";
 import { CHAT_LIST_ANCHOR_OFFSET } from "@t3tools/shared/chatList";
-import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
+import { projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { truncate } from "@t3tools/shared/String";
 import { nextTerminalId, resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
 import { Debouncer } from "@tanstack/react-pacer";
@@ -144,7 +144,9 @@ import {
 } from "@dnd-kit/core";
 import {
   MAIN_CHAT_TAB_ID,
+  NEW_WORKSPACE_TAB_EVENT,
   PANEL_EDGE_DROP_ID,
+  isNewWorkspaceTabShortcut,
   resolveWorkspaceTabDrop,
   workspaceTabCollisionDetection,
   workspaceTabDragState,
@@ -164,6 +166,7 @@ import {
 } from "../previewStateStore";
 import { addBrowserSurface } from "./preview/addBrowserSurface";
 import { useGitHubPullRequestSurface } from "./preview/useGitHubPullRequestSurface";
+import { addGitHubPullRequestSurface } from "./preview/addGitHubPullRequestSurface";
 import { addLinearSurface } from "./preview/addLinearSurface";
 import { closePreviewSession } from "./preview/closePreviewSession";
 import { openPreviewSession } from "./preview/openPreviewSession";
@@ -175,7 +178,7 @@ import {
   selectThreadPreviewMiniPlayer,
   usePreviewMiniPlayerStore,
 } from "../previewMiniPlayerStore";
-import { AddSurfaceMenu, RightPanelTabs } from "./RightPanelTabs";
+import { AddSurfaceMenu, NewTabPage, RightPanelTabs } from "./RightPanelTabs";
 import WorkspaceNavigator, {
   type WorkspaceNavigatorDiffTarget,
   type WorkspaceNavigatorTab,
@@ -222,7 +225,7 @@ import {
   useClientSettingsHydrated,
   useEnvironmentSettings,
 } from "../hooks/useSettings";
-import { linearUrl } from "../linearIntegration";
+import { linearIssueIdFromBranch, linearUrl } from "../linearIntegration";
 import { isQuickChatsProject } from "../quickChats";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { useThreadActions } from "../hooks/useThreadActions";
@@ -287,7 +290,11 @@ import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
-import { resolveTimelineIsAtEnd } from "./chat/MessagesTimeline.logic";
+import {
+  resolveTimelineIsAtEnd,
+  resolveTimelineScrollPosition,
+  type TimelineScrollPosition,
+} from "./chat/MessagesTimeline.logic";
 import { ChatHeader } from "./chat/ChatHeader";
 import { PanelLayoutControls } from "./chat/PanelLayoutControls";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
@@ -345,6 +352,7 @@ import {
   deriveLockedProvider,
   readFileAsDataUrl,
   reconcileMountedTerminalThreadIds,
+  resolveChatTerminalLocation,
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
   revokeBlobPreviewUrl,
@@ -558,14 +566,6 @@ type ChatViewProps =
       draftId: DraftId;
     };
 
-interface TerminalLaunchContext {
-  threadId: ThreadId;
-  cwd: string;
-  worktreePath: string | null;
-}
-
-type PersistentTerminalLaunchContext = Pick<TerminalLaunchContext, "cwd" | "worktreePath">;
-
 function useLocalDispatchState(input: {
   activeThread: Thread | undefined;
   activeLatestTurn: Thread["latestTurn"] | null;
@@ -674,7 +674,6 @@ interface PersistentThreadTerminalDrawerProps {
   threadRef: { environmentId: EnvironmentId; threadId: ThreadId };
   threadId: ThreadId;
   visible: boolean;
-  launchContext: PersistentTerminalLaunchContext | null;
   focusRequestId: number;
   splitShortcutLabel: string | undefined;
   splitVerticalShortcutLabel: string | undefined;
@@ -688,7 +687,6 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
   threadRef,
   threadId,
   visible,
-  launchContext,
   focusRequestId,
   splitShortcutLabel,
   splitVerticalShortcutLabel,
@@ -744,38 +742,6 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
     }
     return next;
   }, [drawerTerminalSessions]);
-  const terminalLaunchLocationsById = useMemo(() => {
-    const next = new Map<
-      string,
-      {
-        readonly cwd: string;
-        readonly worktreePath: string | null;
-        readonly runtimeEnv: Record<string, string>;
-      }
-    >();
-    if (!project) {
-      return next;
-    }
-
-    for (const session of drawerTerminalSessions) {
-      const summary = session.state.summary;
-      if (!summary) {
-        continue;
-      }
-      const worktreePathForLaunch =
-        launchContext !== null ? launchContext.worktreePath : summary.worktreePath;
-      next.set(session.target.terminalId, {
-        cwd: launchContext?.cwd ?? summary.cwd,
-        worktreePath: worktreePathForLaunch,
-        runtimeEnv: projectScriptRuntimeEnv({
-          project: { cwd: project.workspaceRoot },
-          worktreePath: worktreePathForLaunch,
-        }),
-      });
-    }
-
-    return next;
-  }, [drawerTerminalSessions, launchContext, project]);
   const serverOrderedTerminalIds = useMemo(
     () => drawerTerminalSessions.map((session) => session.target.terminalId),
     [drawerTerminalSessions],
@@ -815,34 +781,51 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
     reconcileTerminalIds(threadRef, serverOrderedTerminalIds);
   }, [reconcileTerminalIds, serverOrderedTerminalIds, terminalUiState.terminalIds, threadRef]);
   const [localFocusRequestId, setLocalFocusRequestId] = useState(0);
-  const worktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
-  const effectiveWorktreePath = useMemo(() => {
-    if (launchContext !== null) {
-      return launchContext.worktreePath;
-    }
-    return worktreePath;
-  }, [launchContext, worktreePath]);
-  const cwd = useMemo(
+  const chatTerminalLocation = useMemo(
     () =>
-      launchContext?.cwd ??
-      (project
-        ? projectScriptCwd({
-            project: { cwd: project.workspaceRoot },
-            worktreePath: effectiveWorktreePath,
+      project
+        ? resolveChatTerminalLocation({
+            projectCwd: project.workspaceRoot,
+            serverWorktreePath: serverThread?.worktreePath,
+            draftWorktreePath: draftThread?.worktreePath,
           })
-        : null),
-    [effectiveWorktreePath, launchContext?.cwd, project],
+        : null,
+    [draftThread?.worktreePath, project, serverThread?.worktreePath],
   );
-  const runtimeEnv = useMemo(
+  const worktreePath = chatTerminalLocation?.worktreePath ?? null;
+  const cwd = chatTerminalLocation?.cwd ?? null;
+  const chatTerminalRuntimeEnv = useMemo(
     () =>
       project
         ? projectScriptRuntimeEnv({
             project: { cwd: project.workspaceRoot },
-            worktreePath: effectiveWorktreePath,
+            worktreePath,
           })
         : {},
-    [effectiveWorktreePath, project],
+    [project, worktreePath],
   );
+  // A restored session remembers its previous launch cwd. The chat workspace is authoritative,
+  // otherwise reopening an old drawer can silently move the shell back to a repository parent.
+  const terminalLaunchLocationsById = useMemo(() => {
+    const next = new Map<
+      string,
+      {
+        readonly cwd: string;
+        readonly worktreePath: string | null;
+        readonly runtimeEnv: Record<string, string>;
+      }
+    >();
+    if (!chatTerminalLocation) return next;
+
+    for (const session of drawerTerminalSessions) {
+      next.set(session.target.terminalId, {
+        cwd: chatTerminalLocation.cwd,
+        worktreePath,
+        runtimeEnv: chatTerminalRuntimeEnv,
+      });
+    }
+    return next;
+  }, [chatTerminalLocation, chatTerminalRuntimeEnv, drawerTerminalSessions, worktreePath]);
 
   const bumpFocusRequestId = useCallback(() => {
     if (!visible) {
@@ -859,7 +842,7 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
   );
 
   const splitTerminal = useCallback(() => {
-    if (!cwd) {
+    if (!chatTerminalLocation) {
       return;
     }
     const terminalId = nextTerminalId(allocatableTerminalIds);
@@ -870,24 +853,24 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
       input: {
         threadId,
         terminalId,
-        cwd,
-        ...(effectiveWorktreePath != null ? { worktreePath: effectiveWorktreePath } : {}),
-        env: runtimeEnv,
+        cwd: chatTerminalLocation.cwd,
+        ...(worktreePath != null ? { worktreePath } : {}),
+        env: chatTerminalRuntimeEnv,
       },
     });
   }, [
     allocatableTerminalIds,
     bumpFocusRequestId,
-    cwd,
-    effectiveWorktreePath,
-    runtimeEnv,
+    chatTerminalLocation,
+    chatTerminalRuntimeEnv,
     storeSplitTerminal,
     threadId,
     threadRef,
+    worktreePath,
     openTerminal,
   ]);
   const splitTerminalVertical = useCallback(() => {
-    if (!cwd) {
+    if (!chatTerminalLocation) {
       return;
     }
     const terminalId = nextTerminalId(allocatableTerminalIds);
@@ -898,25 +881,25 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
       input: {
         threadId,
         terminalId,
-        cwd,
-        ...(effectiveWorktreePath != null ? { worktreePath: effectiveWorktreePath } : {}),
-        env: runtimeEnv,
+        cwd: chatTerminalLocation.cwd,
+        ...(worktreePath != null ? { worktreePath } : {}),
+        env: chatTerminalRuntimeEnv,
       },
     });
   }, [
     allocatableTerminalIds,
     bumpFocusRequestId,
-    cwd,
-    effectiveWorktreePath,
+    chatTerminalLocation,
+    chatTerminalRuntimeEnv,
     openTerminal,
-    runtimeEnv,
     storeSplitTerminalVertical,
     threadId,
     threadRef,
+    worktreePath,
   ]);
 
   const createNewTerminal = useCallback(() => {
-    if (!cwd) {
+    if (!chatTerminalLocation) {
       return;
     }
     const terminalId = nextTerminalId(allocatableTerminalIds);
@@ -927,20 +910,20 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
       input: {
         threadId,
         terminalId,
-        cwd,
-        ...(effectiveWorktreePath != null ? { worktreePath: effectiveWorktreePath } : {}),
-        env: runtimeEnv,
+        cwd: chatTerminalLocation.cwd,
+        ...(worktreePath != null ? { worktreePath } : {}),
+        env: chatTerminalRuntimeEnv,
       },
     });
   }, [
     bumpFocusRequestId,
-    cwd,
-    effectiveWorktreePath,
+    chatTerminalLocation,
+    chatTerminalRuntimeEnv,
     allocatableTerminalIds,
-    runtimeEnv,
     storeNewTerminal,
     threadId,
     threadRef,
+    worktreePath,
     openTerminal,
   ]);
 
@@ -1007,8 +990,8 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
         threadRef={threadRef}
         threadId={threadId}
         cwd={cwd}
-        worktreePath={effectiveWorktreePath}
-        runtimeEnv={runtimeEnv}
+        worktreePath={worktreePath}
+        runtimeEnv={chatTerminalRuntimeEnv}
         visible={visible}
         height={terminalUiState.terminalHeight}
         // Known-session order is MRU and changes on focus; persisted store order keeps sidebar labels stable.
@@ -1039,7 +1022,6 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
 interface PersistentThreadTerminalPanelProps {
   threadRef: ScopedThreadRef;
   surface: Extract<RightPanelSurface, { kind: "terminal" }>;
-  launchContext: PersistentTerminalLaunchContext | null;
   focusRequestId: number;
   keybindings: ResolvedKeybindingsConfig;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
@@ -1057,7 +1039,6 @@ interface PersistentThreadTerminalPanelProps {
 const PersistentThreadTerminalPanel = memo(function PersistentThreadTerminalPanel({
   threadRef,
   surface,
-  launchContext,
   focusRequestId,
   keybindings,
   onAddTerminalContext,
@@ -1085,24 +1066,19 @@ const PersistentThreadTerminalPanel = memo(function PersistentThreadTerminalPane
     environmentId: threadRef.environmentId,
     threadId: threadRef.threadId,
   });
-  const threadWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
-  const activeSummary =
-    knownTerminalSessions.find((session) => session.target.terminalId === surface.activeTerminalId)
-      ?.state.summary ?? null;
-  const worktreePath =
-    launchContext?.worktreePath ?? activeSummary?.worktreePath ?? threadWorktreePath;
-  const cwd = useMemo(
+  const chatTerminalLocation = useMemo(
     () =>
-      launchContext?.cwd ??
-      activeSummary?.cwd ??
-      (project
-        ? projectScriptCwd({
-            project: { cwd: project.workspaceRoot },
-            worktreePath,
+      project
+        ? resolveChatTerminalLocation({
+            projectCwd: project.workspaceRoot,
+            serverWorktreePath: serverThread?.worktreePath,
+            draftWorktreePath: draftThread?.worktreePath,
           })
-        : null),
-    [activeSummary?.cwd, launchContext?.cwd, project, worktreePath],
+        : null,
+    [draftThread?.worktreePath, project, serverThread?.worktreePath],
   );
+  const cwd = chatTerminalLocation?.cwd ?? null;
+  const worktreePath = chatTerminalLocation?.worktreePath ?? null;
   const runtimeEnv = useMemo(
     () =>
       project
@@ -1123,6 +1099,8 @@ const PersistentThreadTerminalPanel = memo(function PersistentThreadTerminalPane
     }
     return labels;
   }, [knownTerminalSessions, surface.terminalIds]);
+  // Terminal tabs follow the chat just like the drawer; persisted session metadata is only used
+  // for labels, never as the next launch location.
   const terminalLaunchLocationsById = useMemo(() => {
     const locations = new Map<
       string,
@@ -1132,40 +1110,17 @@ const PersistentThreadTerminalPanel = memo(function PersistentThreadTerminalPane
         readonly runtimeEnv: Record<string, string>;
       }
     >();
+    if (!chatTerminalLocation) return locations;
+
     for (const terminalId of surface.terminalIds) {
-      const summary =
-        knownTerminalSessions.find((session) => session.target.terminalId === terminalId)?.state
-          .summary ?? null;
-      const terminalWorktreePath =
-        launchContext?.worktreePath ?? summary?.worktreePath ?? threadWorktreePath;
-      const terminalCwd =
-        launchContext?.cwd ??
-        summary?.cwd ??
-        (project
-          ? projectScriptCwd({
-              project: { cwd: project.workspaceRoot },
-              worktreePath: terminalWorktreePath,
-            })
-          : null);
-      if (!terminalCwd || !project) continue;
       locations.set(terminalId, {
-        cwd: terminalCwd,
-        worktreePath: terminalWorktreePath,
-        runtimeEnv: projectScriptRuntimeEnv({
-          project: { cwd: project.workspaceRoot },
-          worktreePath: terminalWorktreePath,
-        }),
+        cwd: chatTerminalLocation.cwd,
+        worktreePath,
+        runtimeEnv,
       });
     }
     return locations;
-  }, [
-    knownTerminalSessions,
-    launchContext?.cwd,
-    launchContext?.worktreePath,
-    project,
-    surface.terminalIds,
-    threadWorktreePath,
-  ]);
+  }, [chatTerminalLocation, runtimeEnv, surface.terminalIds, worktreePath]);
 
   if (!project || !cwd) return null;
 
@@ -1214,6 +1169,20 @@ type LocalThreadErrorEntry = {
   readonly message: string | null;
   readonly at: number;
 };
+
+const MAX_REMEMBERED_TIMELINE_SCROLL_POSITIONS = 100;
+const timelineScrollPositionByThreadKey = new Map<string, TimelineScrollPosition>();
+
+function rememberTimelineScrollPosition(threadKey: string, position: TimelineScrollPosition): void {
+  // Refresh insertion order so the bounded map retains recently visited chats.
+  timelineScrollPositionByThreadKey.delete(threadKey);
+  timelineScrollPositionByThreadKey.set(threadKey, position);
+  while (timelineScrollPositionByThreadKey.size > MAX_REMEMBERED_TIMELINE_SCROLL_POSITIONS) {
+    const oldestThreadKey = timelineScrollPositionByThreadKey.keys().next().value;
+    if (oldestThreadKey === undefined) break;
+    timelineScrollPositionByThreadKey.delete(oldestThreadKey);
+  }
+}
 
 function chatActionErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "An error occurred.";
@@ -1416,8 +1385,6 @@ function ChatViewContent(props: ChatViewProps) {
   const [terminalFocusRequestId, setTerminalFocusRequestId] = useState(0);
   const [pullRequestDialogState, setPullRequestDialogState] =
     useState<PullRequestDialogState | null>(null);
-  const [terminalUiLaunchContext, setTerminalUiLaunchContext] =
-    useState<TerminalLaunchContext | null>(null);
   const [attachmentPreviewHandoffByMessageId, setAttachmentPreviewHandoffByMessageId] = useState<
     Record<string, string[]>
   >({});
@@ -1640,6 +1607,7 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const [workspaceNavigatorTab, setWorkspaceNavigatorTab] = useState<WorkspaceNavigatorTab>("file");
   const previewSurfaceRestoreInFlightRef = useRef(new Set<string>());
+  const attachedSurfaceOpenInFlightRef = useRef(new Set<string>());
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
@@ -2738,12 +2706,19 @@ function ChatViewContent(props: ChatViewProps) {
     return byUserMessageId;
   }, [inferredCheckpointTurnCountByTurnId, timelineEntries, turnDiffSummaryByAssistantMessageId]);
 
-  const gitCwd = activeProject
-    ? projectScriptCwd({
-        project: { cwd: activeProject.workspaceRoot },
-        worktreePath: activeThread?.worktreePath ?? null,
-      })
-    : null;
+  const chatTerminalLocation = useMemo(
+    () =>
+      activeProject
+        ? resolveChatTerminalLocation({
+            projectCwd: activeProject.workspaceRoot,
+            serverWorktreePath: activeServerThread?.worktreePath,
+            draftWorktreePath: draftThread?.worktreePath,
+          })
+        : null,
+    [activeProject, activeServerThread?.worktreePath, draftThread?.worktreePath],
+  );
+  const gitCwd = chatTerminalLocation?.cwd ?? null;
+  const chatTerminalWorktreePath = chatTerminalLocation?.worktreePath ?? null;
   const gitStatusCwd = activeThread?.worktreePath ?? gitCwd;
   const gitStatusQuery = useEnvironmentQuery(
     gitStatusCwd === null
@@ -2754,6 +2729,17 @@ function ChatViewContent(props: ChatViewProps) {
         }),
   );
   const githubPullRequest = githubPullRequestFromStatus(gitStatusQuery.data);
+  const attachedBranch =
+    activeThread?.branch ?? draftThread?.branch ?? gitStatusQuery.data?.refName ?? null;
+  const attachedLinearIssueId = linearIssueIdFromBranch(attachedBranch);
+  const attachedWorkspaceSurfaceIds = useMemo(
+    () =>
+      new Set<string>([
+        ...(attachedLinearIssueId ? ["linear"] : []),
+        ...(githubPullRequest ? ["github-pr"] : []),
+      ]),
+    [attachedLinearIssueId, githubPullRequest],
+  );
   const linearOrganizationSlug = useClientSettings((settings) => settings.linearOrganizationSlug);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   // Prefer an instance-id match so a custom Codex instance (e.g.
@@ -2823,8 +2809,6 @@ function ChatViewContent(props: ChatViewProps) {
     showWorkspaceNavigator,
     workspaceNavigatorTab,
   ]);
-  const activeTerminalLaunchContext =
-    terminalUiLaunchContext?.threadId === activeThreadId ? terminalUiLaunchContext : null;
   // Default true while loading to avoid toolbar flicker.
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
   const showComposerContextStrip = shouldShowComposerContextStrip({
@@ -2986,10 +2970,10 @@ function ChatViewContent(props: ChatViewProps) {
           threadId: activeThreadId,
           terminalId,
           cwd: cwdForOpen,
-          ...(activeThreadWorktreePath != null ? { worktreePath: activeThreadWorktreePath } : {}),
+          ...(chatTerminalWorktreePath != null ? { worktreePath: chatTerminalWorktreePath } : {}),
           env: projectScriptRuntimeEnv({
             project: { cwd: activeProject.workspaceRoot },
-            worktreePath: activeThreadWorktreePath,
+            worktreePath: chatTerminalWorktreePath,
           }),
         },
       });
@@ -3000,7 +2984,7 @@ function ChatViewContent(props: ChatViewProps) {
     activeProject,
     activeThreadId,
     activeThreadRef,
-    activeThreadWorktreePath,
+    chatTerminalWorktreePath,
     allocatableActiveTerminalIds,
     environmentId,
     gitCwd,
@@ -3032,10 +3016,10 @@ function ChatViewContent(props: ChatViewProps) {
           threadId: activeThreadId,
           terminalId,
           cwd: cwdForOpen,
-          ...(activeThreadWorktreePath != null ? { worktreePath: activeThreadWorktreePath } : {}),
+          ...(chatTerminalWorktreePath != null ? { worktreePath: chatTerminalWorktreePath } : {}),
           env: projectScriptRuntimeEnv({
             project: { cwd: activeProject.workspaceRoot },
-            worktreePath: activeThreadWorktreePath,
+            worktreePath: chatTerminalWorktreePath,
           }),
         },
       });
@@ -3046,7 +3030,7 @@ function ChatViewContent(props: ChatViewProps) {
       allocatableActiveTerminalIds,
       activeThreadRef,
       openTerminal,
-      activeThreadWorktreePath,
+      chatTerminalWorktreePath,
       environmentId,
       gitCwd,
       hasReachedSplitLimit,
@@ -3071,10 +3055,10 @@ function ChatViewContent(props: ChatViewProps) {
         threadId: activeThreadId,
         terminalId,
         cwd: cwdForOpen,
-        ...(activeThreadWorktreePath != null ? { worktreePath: activeThreadWorktreePath } : {}),
+        ...(chatTerminalWorktreePath != null ? { worktreePath: chatTerminalWorktreePath } : {}),
         env: projectScriptRuntimeEnv({
           project: { cwd: activeProject.workspaceRoot },
-          worktreePath: activeThreadWorktreePath,
+          worktreePath: chatTerminalWorktreePath,
         }),
       },
     });
@@ -3084,7 +3068,7 @@ function ChatViewContent(props: ChatViewProps) {
     allocatableActiveTerminalIds,
     activeThreadRef,
     openTerminal,
-    activeThreadWorktreePath,
+    chatTerminalWorktreePath,
     environmentId,
     gitCwd,
     storeNewTerminal,
@@ -3148,11 +3132,6 @@ function ChatViewContent(props: ChatViewProps) {
       const shouldCreateNewTerminal = wantsNewTerminal;
       const targetWorktreePath = options?.worktreePath ?? activeThread.worktreePath ?? null;
 
-      setTerminalUiLaunchContext({
-        threadId: activeThreadId,
-        cwd: targetCwd,
-        worktreePath: targetWorktreePath,
-      });
       setTerminalOpen(true);
       if (!activeThreadRef) {
         return;
@@ -3432,11 +3411,10 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activeThreadRef, openPreview]);
   const createLinearSurface = useCallback(() => {
     if (!activeThreadRef || !isPreviewSupportedInRuntime()) return;
-    const existing = useRightPanelStore
-      .getState()
-      .byThreadKey[scopedThreadKey(activeThreadRef)]?.surfaces.find(
-        (surface) => surface.kind === "linear",
-      );
+    const threadState = useRightPanelStore.getState().byThreadKey[scopedThreadKey(activeThreadRef)];
+    const existing = [...(threadState?.mainSurfaces ?? []), ...(threadState?.surfaces ?? [])].find(
+      (surface) => surface.kind === "linear",
+    );
     if (existing && activePreviewState.sessions[existing.resourceId]) {
       useRightPanelStore.getState().activateSurface(activeThreadRef, existing.id);
       setActivePreviewTab(activeThreadRef, existing.resourceId);
@@ -3463,6 +3441,59 @@ function ChatViewContent(props: ChatViewProps) {
     if (!githubPullRequest) return;
     openGitHubPullRequestSurface(githubPullRequest.url);
   }, [githubPullRequest, openGitHubPullRequestSurface]);
+  useEffect(() => {
+    if (!activeThreadRef || !isPreviewSupportedInRuntime()) return;
+
+    const threadKey = scopedThreadKey(activeThreadRef);
+    const surfaces = [...rightPanelState.mainSurfaces, ...rightPanelState.surfaces];
+    const ensureAttachedSurface = (
+      surfaceId: "linear" | "github-pr",
+      openSurface: () => Promise<unknown>,
+    ) => {
+      const existing = surfaces.find((surface) => surface.id === surfaceId);
+      if (existing) {
+        useRightPanelStore.getState().pinDedicatedSurface(activeThreadRef, surfaceId);
+        return;
+      }
+      const inFlightKey = `${threadKey}:${surfaceId}`;
+      if (attachedSurfaceOpenInFlightRef.current.has(inFlightKey)) return;
+      attachedSurfaceOpenInFlightRef.current.add(inFlightKey);
+      void openSurface().finally(() => {
+        useRightPanelStore.getState().pinDedicatedSurface(activeThreadRef, surfaceId);
+        attachedSurfaceOpenInFlightRef.current.delete(inFlightKey);
+      });
+    };
+
+    if (attachedLinearIssueId) {
+      ensureAttachedSurface("linear", () =>
+        addLinearSurface({
+          threadRef: activeThreadRef,
+          openPreview,
+          url: linearUrl({ organizationSlug: linearOrganizationSlug, branch: attachedBranch }),
+          pinned: true,
+        }),
+      );
+    }
+    if (githubPullRequest) {
+      ensureAttachedSurface("github-pr", () =>
+        addGitHubPullRequestSurface({
+          threadRef: activeThreadRef,
+          openPreview,
+          url: githubPullRequest.url,
+          pinned: true,
+        }),
+      );
+    }
+  }, [
+    activeThreadRef,
+    attachedBranch,
+    attachedLinearIssueId,
+    githubPullRequest,
+    linearOrganizationSlug,
+    openPreview,
+    rightPanelState.mainSurfaces,
+    rightPanelState.surfaces,
+  ]);
   const addDiffSurface = useCallback(() => {
     if (!activeThreadRef || !isServerThread || !isGitRepo) return;
     useRightPanelStore.getState().open(activeThreadRef, "diff");
@@ -3476,6 +3507,14 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
+  const openNewTabPage = useCallback(() => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "new-tab");
+  }, [activeThreadRef]);
+  useEffect(() => {
+    window.addEventListener(NEW_WORKSPACE_TAB_EVENT, openNewTabPage);
+    return () => window.removeEventListener(NEW_WORKSPACE_TAB_EVENT, openNewTabPage);
+  }, [openNewTabPage]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -3552,10 +3591,10 @@ function ChatViewContent(props: ChatViewProps) {
         threadId: activeThreadId,
         terminalId,
         cwd,
-        ...(activeThreadWorktreePath != null ? { worktreePath: activeThreadWorktreePath } : {}),
+        ...(chatTerminalWorktreePath != null ? { worktreePath: chatTerminalWorktreePath } : {}),
         env: projectScriptRuntimeEnv({
           project: { cwd: activeProject.workspaceRoot },
-          worktreePath: activeThreadWorktreePath,
+          worktreePath: chatTerminalWorktreePath,
         }),
       },
     });
@@ -3563,7 +3602,7 @@ function ChatViewContent(props: ChatViewProps) {
     activeProject,
     activeThreadId,
     activeThreadRef,
-    activeThreadWorktreePath,
+    chatTerminalWorktreePath,
     allocatableActiveTerminalIds,
     gitCwd,
     openTerminal,
@@ -3591,10 +3630,10 @@ function ChatViewContent(props: ChatViewProps) {
           threadId: activeThreadId,
           terminalId,
           cwd,
-          ...(activeThreadWorktreePath != null ? { worktreePath: activeThreadWorktreePath } : {}),
+          ...(chatTerminalWorktreePath != null ? { worktreePath: chatTerminalWorktreePath } : {}),
           env: projectScriptRuntimeEnv({
             project: { cwd: activeProject.workspaceRoot },
-            worktreePath: activeThreadWorktreePath,
+            worktreePath: chatTerminalWorktreePath,
           }),
         },
       });
@@ -3603,7 +3642,7 @@ function ChatViewContent(props: ChatViewProps) {
       activeProject,
       activeThreadId,
       activeThreadRef,
-      activeThreadWorktreePath,
+      chatTerminalWorktreePath,
       allocatableActiveTerminalIds,
       gitCwd,
       openTerminal,
@@ -3861,11 +3900,17 @@ function ChatViewContent(props: ChatViewProps) {
   const closeRightPanelSurface = useCallback(
     (surface: RightPanelSurface) => {
       if (!activeThreadRef) return;
+      if (attachedWorkspaceSurfaceIds.has(surface.id)) return;
       cleanupRightPanelSurfaces([surface]);
       useRightPanelStore.getState().closeSurface(activeThreadRef, surface.id);
       syncActivePreviewSurface();
     },
-    [activeThreadRef, cleanupRightPanelSurfaces, syncActivePreviewSurface],
+    [
+      activeThreadRef,
+      attachedWorkspaceSurfaceIds,
+      cleanupRightPanelSurfaces,
+      syncActivePreviewSurface,
+    ],
   );
   const surfacesInContainerOf = useCallback(
     (surface: RightPanelSurface): readonly RightPanelSurface[] =>
@@ -3877,12 +3922,23 @@ function ChatViewContent(props: ChatViewProps) {
   const closeOtherRightPanelSurfaces = useCallback(
     (surface: RightPanelSurface) => {
       if (!activeThreadRef) return;
-      const surfaces = surfacesInContainerOf(surface).filter((entry) => entry.id !== surface.id);
+      const surfaces = surfacesInContainerOf(surface).filter(
+        (entry) => entry.id !== surface.id && !attachedWorkspaceSurfaceIds.has(entry.id),
+      );
       cleanupRightPanelSurfaces(surfaces);
-      useRightPanelStore.getState().closeOtherSurfaces(activeThreadRef, surface.id);
+      for (const entry of surfaces) {
+        useRightPanelStore.getState().closeSurface(activeThreadRef, entry.id);
+      }
+      useRightPanelStore.getState().activateSurface(activeThreadRef, surface.id);
       syncActivePreviewSurface();
     },
-    [activeThreadRef, cleanupRightPanelSurfaces, surfacesInContainerOf, syncActivePreviewSurface],
+    [
+      activeThreadRef,
+      attachedWorkspaceSurfaceIds,
+      cleanupRightPanelSurfaces,
+      surfacesInContainerOf,
+      syncActivePreviewSurface,
+    ],
   );
   const closeRightPanelSurfacesToRight = useCallback(
     (surface: RightPanelSurface) => {
@@ -3890,23 +3946,53 @@ function ChatViewContent(props: ChatViewProps) {
       const containerSurfaces = surfacesInContainerOf(surface);
       const surfaceIndex = containerSurfaces.findIndex((entry) => entry.id === surface.id);
       if (surfaceIndex < 0) return;
-      const surfaces = containerSurfaces.slice(surfaceIndex + 1);
+      const surfaces = containerSurfaces
+        .slice(surfaceIndex + 1)
+        .filter((entry) => !attachedWorkspaceSurfaceIds.has(entry.id));
       cleanupRightPanelSurfaces(surfaces);
-      useRightPanelStore.getState().closeSurfacesToRight(activeThreadRef, surface.id);
+      for (const entry of surfaces) {
+        useRightPanelStore.getState().closeSurface(activeThreadRef, entry.id);
+      }
       syncActivePreviewSurface();
     },
-    [activeThreadRef, cleanupRightPanelSurfaces, surfacesInContainerOf, syncActivePreviewSurface],
+    [
+      activeThreadRef,
+      attachedWorkspaceSurfaceIds,
+      cleanupRightPanelSurfaces,
+      surfacesInContainerOf,
+      syncActivePreviewSurface,
+    ],
   );
   const closeAllRightPanelSurfaces = useCallback(() => {
     if (!activeThreadRef) return;
-    cleanupRightPanelSurfaces(rightPanelState.surfaces);
-    useRightPanelStore.getState().closeAllSurfaces(activeThreadRef);
-  }, [activeThreadRef, cleanupRightPanelSurfaces, rightPanelState.surfaces]);
+    const surfaces = rightPanelState.surfaces.filter(
+      (surface) => !attachedWorkspaceSurfaceIds.has(surface.id),
+    );
+    cleanupRightPanelSurfaces(surfaces);
+    for (const surface of surfaces) {
+      useRightPanelStore.getState().closeSurface(activeThreadRef, surface.id);
+    }
+  }, [
+    activeThreadRef,
+    attachedWorkspaceSurfaceIds,
+    cleanupRightPanelSurfaces,
+    rightPanelState.surfaces,
+  ]);
   const closeAllMainSurfaces = useCallback(() => {
     if (!activeThreadRef) return;
-    cleanupRightPanelSurfaces(rightPanelState.mainSurfaces);
-    useRightPanelStore.getState().closeAllSurfaces(activeThreadRef, "main");
-  }, [activeThreadRef, cleanupRightPanelSurfaces, rightPanelState.mainSurfaces]);
+    const surfaces = rightPanelState.mainSurfaces.filter(
+      (surface) => !attachedWorkspaceSurfaceIds.has(surface.id),
+    );
+    cleanupRightPanelSurfaces(surfaces);
+    for (const surface of surfaces) {
+      useRightPanelStore.getState().closeSurface(activeThreadRef, surface.id);
+    }
+  }, [
+    activeThreadRef,
+    attachedWorkspaceSurfaceIds,
+    cleanupRightPanelSurfaces,
+    rightPanelState.mainSurfaces,
+  ]);
   const tabDragSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
@@ -3915,13 +4001,14 @@ function ChatViewContent(props: ChatViewProps) {
       // A completed drag must not fire the click that follows pointerup.
       workspaceTabDragState.suppressClickAfterDrag = true;
       const surfaceId = String(event.active.id);
+      if (attachedWorkspaceSurfaceIds.has(surfaceId)) return;
       setDraggingTabSurface(
         rightPanelState.surfaces.find((entry) => entry.id === surfaceId) ??
           rightPanelState.mainSurfaces.find((entry) => entry.id === surfaceId) ??
           null,
       );
     },
-    [rightPanelState.mainSurfaces, rightPanelState.surfaces],
+    [attachedWorkspaceSurfaceIds, rightPanelState.mainSurfaces, rightPanelState.surfaces],
   );
   const handleTabDragCancel = useCallback(() => {
     setDraggingTabSurface(null);
@@ -3931,6 +4018,7 @@ function ChatViewContent(props: ChatViewProps) {
       setDraggingTabSurface(null);
       if (!activeThreadRef) return;
       const surfaceId = String(event.active.id);
+      if (attachedWorkspaceSurfaceIds.has(surfaceId)) return;
       const surface =
         rightPanelState.surfaces.find((entry) => entry.id === surfaceId) ??
         rightPanelState.mainSurfaces.find((entry) => entry.id === surfaceId);
@@ -3953,7 +4041,16 @@ function ChatViewContent(props: ChatViewProps) {
       const sourceContainer = rightPanelState.mainSurfaces.some((entry) => entry.id === surfaceId)
         ? "main"
         : "panel";
-      useRightPanelStore.getState().moveSurface(activeThreadRef, surfaceId, target);
+      const targetSurfaces =
+        target.container === "main" ? rightPanelState.mainSurfaces : rightPanelState.surfaces;
+      const pinnedTargetCount = targetSurfaces.filter((entry) =>
+        attachedWorkspaceSurfaceIds.has(entry.id),
+      ).length;
+      const constrainedTarget = {
+        ...target,
+        index: Math.max(target.index, pinnedTargetCount),
+      };
+      useRightPanelStore.getState().moveSurface(activeThreadRef, surfaceId, constrainedTarget);
       // Cross-container drops activate the moved tab in its new container.
       if (sourceContainer !== target.container) {
         applySurfaceActivationEffects(surface);
@@ -3962,6 +4059,7 @@ function ChatViewContent(props: ChatViewProps) {
     [
       activeThreadRef,
       applySurfaceActivationEffects,
+      attachedWorkspaceSurfaceIds,
       rightPanelState.mainSurfaces,
       rightPanelState.surfaces,
     ],
@@ -4088,10 +4186,33 @@ function ChatViewContent(props: ChatViewProps) {
     new Debouncer(() => setShowScrollToBottom(true), { wait: 150 }),
   );
   const timelineScrollModeRef = useRef<TimelineScrollMode>("following-end");
+  const initialTimelineScrollPosition = useMemo(
+    () => timelineScrollPositionByThreadKey.get(routeThreadKey) ?? null,
+    [routeThreadKey],
+  );
   // State mirror of the follow mode refs. LegendList's maintainScrollAtEnd
   // re-pins on its own (independent of the refs), so the timeline needs a
   // render-visible flag to switch it off once the user scrolls away.
-  const [timelineLiveFollowEnabled, setTimelineLiveFollowEnabled] = useState(true);
+  const [timelineLiveFollowState, setTimelineLiveFollowState] = useState(() => ({
+    threadKey: routeThreadKey,
+    enabled: initialTimelineScrollPosition?.kind !== "offset",
+  }));
+  const timelineLiveFollowEnabled =
+    timelineLiveFollowState.threadKey === routeThreadKey
+      ? timelineLiveFollowState.enabled
+      : initialTimelineScrollPosition?.kind !== "offset";
+  const timelineLiveFollowThreadKeyRef = useRef(routeThreadKey);
+  useLayoutEffect(() => {
+    timelineLiveFollowThreadKeyRef.current = routeThreadKey;
+  }, [routeThreadKey]);
+  const setTimelineLiveFollowEnabled = useCallback((enabled: boolean) => {
+    const threadKey = timelineLiveFollowThreadKeyRef.current;
+    setTimelineLiveFollowState((current) =>
+      current.threadKey === threadKey && current.enabled === enabled
+        ? current
+        : { threadKey, enabled },
+    );
+  }, []);
   const pendingTimelineAnchorRef = useRef<MessageId | null>(null);
   const positionedTimelineAnchorRef = useRef<MessageId | null>(null);
   const settledTimelineAnchorRef = useRef<MessageId | null>(null);
@@ -4337,29 +4458,40 @@ function ChatViewContent(props: ChatViewProps) {
     requestAnimationFrame(() => positionAnchor(12));
   }, []);
 
-  const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
-    if (
-      !isAtEnd &&
-      liveFollowUserScrollGenerationRef.current === anchorUserScrollGenerationRef.current
-    ) {
-      showScrollDebouncer.current.cancel();
-      setShowScrollToBottom(false);
-      return;
-    }
-    if (isAtEndRef.current === isAtEnd) return;
-    isAtEndRef.current = isAtEnd;
-    if (isAtEnd) {
-      timelineScrollModeRef.current = "following-end";
-      liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-      setTimelineLiveFollowEnabled(true);
-      showScrollDebouncer.current.cancel();
-      setShowScrollToBottom(false);
-    } else {
-      timelineScrollModeRef.current = "free-scrolling";
-      liveFollowUserScrollGenerationRef.current = null;
-      showScrollDebouncer.current.maybeExecute();
-    }
-  }, []);
+  const onIsAtEndChange = useCallback(
+    (isAtEnd: boolean) => {
+      const position = resolveTimelineScrollPosition({
+        isAtEnd,
+        isUserPositioned: timelineScrollModeRef.current === "free-scrolling",
+        scroll: legendListRef.current?.getState().scroll,
+      });
+      if (position !== null) {
+        rememberTimelineScrollPosition(routeThreadKey, position);
+      }
+      if (
+        !isAtEnd &&
+        liveFollowUserScrollGenerationRef.current === anchorUserScrollGenerationRef.current
+      ) {
+        showScrollDebouncer.current.cancel();
+        setShowScrollToBottom(false);
+        return;
+      }
+      if (isAtEndRef.current === isAtEnd) return;
+      isAtEndRef.current = isAtEnd;
+      if (isAtEnd) {
+        timelineScrollModeRef.current = "following-end";
+        liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
+        setTimelineLiveFollowEnabled(true);
+        showScrollDebouncer.current.cancel();
+        setShowScrollToBottom(false);
+      } else {
+        timelineScrollModeRef.current = "free-scrolling";
+        liveFollowUserScrollGenerationRef.current = null;
+        showScrollDebouncer.current.maybeExecute();
+      }
+    },
+    [routeThreadKey, setTimelineLiveFollowEnabled],
+  );
 
   // Anchored end space intentionally disables LegendList's normal end-follow so
   // the sent message can stay near the top. T3 only owns streaming adjustments
@@ -4415,10 +4547,13 @@ function ChatViewContent(props: ChatViewProps) {
 
   useEffect(() => {
     setPullRequestDialogState(null);
-    isAtEndRef.current = true;
-    timelineScrollModeRef.current = "following-end";
-    liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-    setTimelineLiveFollowEnabled(true);
+    const restoresReadingPosition = initialTimelineScrollPosition?.kind === "offset";
+    isAtEndRef.current = !restoresReadingPosition;
+    timelineScrollModeRef.current = restoresReadingPosition ? "free-scrolling" : "following-end";
+    liveFollowUserScrollGenerationRef.current = restoresReadingPosition
+      ? null
+      : anchorUserScrollGenerationRef.current;
+    setTimelineLiveFollowEnabled(!restoresReadingPosition);
     pendingTimelineAnchorRef.current = null;
     positionedTimelineAnchorRef.current = null;
     settledTimelineAnchorRef.current = null;
@@ -4426,7 +4561,7 @@ function ChatViewContent(props: ChatViewProps) {
     showScrollDebouncer.current.cancel();
     setShowScrollToBottom(false);
     // activeThreadRef resets transitively with the active thread.
-  }, [activeThread?.id]);
+  }, [activeThread?.id, initialTimelineScrollPosition, setTimelineLiveFollowEnabled]);
 
   useEffect(() => {
     setIsRevertingCheckpoint(false);
@@ -4686,8 +4821,18 @@ function ChatViewContent(props: ChatViewProps) {
     if (activeThreadPr === null) return;
     openThreadPullRequest(activeThreadPr.number);
   }, [activeThreadPr, openThreadPullRequest]);
-  const pullRequestSurfaceAvailable =
-    supportsPullRequests && activeThreadPr !== null && threadRepository !== null;
+  const activeThreadPullRequestReference =
+    supportsPullRequests &&
+    activeThreadPr !== null &&
+    threadRepository !== null &&
+    activeProject !== null
+      ? {
+          projectId: activeProject.id,
+          repository: threadRepository,
+          number: activeThreadPr.number,
+        }
+      : null;
+  const pullRequestSurfaceAvailable = activeThreadPullRequestReference !== null;
   const supportsSettlement = serverConfig?.environment.capabilities.threadSettlement === true;
   const supportsSnooze = serverConfig?.environment.capabilities.threadSnooze === true;
   const nowMinute = useNowMinute();
@@ -5172,49 +5317,6 @@ function ChatViewContent(props: ChatViewProps) {
   }, [canOverrideServerThreadEnvMode]);
 
   useEffect(() => {
-    if (!activeThreadId) {
-      setTerminalUiLaunchContext(null);
-      return;
-    }
-    setTerminalUiLaunchContext((current) => {
-      if (!current) return current;
-      if (current.threadId === activeThreadId) return current;
-      return null;
-    });
-  }, [activeThreadId]);
-
-  useEffect(() => {
-    if (!activeThreadId || !activeProjectCwd) {
-      return;
-    }
-    setTerminalUiLaunchContext((current) => {
-      if (!current || current.threadId !== activeThreadId) {
-        return current;
-      }
-      const settledCwd = projectScriptCwd({
-        project: { cwd: activeProjectCwd },
-        worktreePath: activeThreadWorktreePath,
-      });
-      if (
-        settledCwd === current.cwd &&
-        (activeThreadWorktreePath ?? null) === current.worktreePath
-      ) {
-        return null;
-      }
-      return current;
-    });
-  }, [activeProjectCwd, activeThreadId, activeThreadWorktreePath]);
-
-  useEffect(() => {
-    if (terminalUiState.terminalOpen) {
-      return;
-    }
-    setTerminalUiLaunchContext((current) =>
-      current?.threadId === activeThreadId ? null : current,
-    );
-  }, [activeThreadId, terminalUiState.terminalOpen]);
-
-  useEffect(() => {
     if (!activeThreadKey) return;
     const previous = terminalUiOpenByThreadRef.current[activeThreadKey] ?? false;
     const current = Boolean(terminalUiState.terminalOpen);
@@ -5243,6 +5345,12 @@ function ChatViewContent(props: ChatViewProps) {
         return;
       }
       if (!activeThreadId || isCommandPaletteOpen()) {
+        return;
+      }
+      if (isNewWorkspaceTabShortcut(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        openNewTabPage();
         return;
       }
       const terminalFocusOwner = getTerminalFocusOwner();
@@ -5407,6 +5515,7 @@ function ChatViewContent(props: ChatViewProps) {
     closePanelTerminal,
     createNewTerminal,
     openOrAdvanceWorkspaceTabSwitcher,
+    openNewTabPage,
     setTerminalOpen,
     runProjectScript,
     splitTerminal,
@@ -6698,6 +6807,32 @@ function ChatViewContent(props: ChatViewProps) {
   const renderSurfaceContent = (surface: RightPanelSurface) => {
     if (!activeThreadRef) return null;
     switch (surface.kind) {
+      case "new-tab": {
+        const choose = (action: () => void) => () => {
+          closeRightPanelSurface(surface);
+          action();
+        };
+        return (
+          <NewTabPage
+            onAddBrowser={choose(createBrowserSurface)}
+            onAddLinear={choose(createLinearSurface)}
+            onAddGitHubPullRequest={choose(createGitHubPullRequestSurface)}
+            onAddTerminal={choose(addTerminalSurface)}
+            onAddDiff={choose(addDiffSurface)}
+            onAddPullRequest={choose(addPullRequestSurface)}
+            onAddAgents={choose(addAgentsSurface)}
+            browserAvailable={isPreviewSupportedInRuntime()}
+            linearAvailable={isPreviewSupportedInRuntime()}
+            githubPullRequestDetected={githubPullRequest !== null}
+            githubPullRequestAvailable={githubPullRequest !== null && isPreviewSupportedInRuntime()}
+            terminalAvailable={activeProject !== null}
+            diffAvailable={isServerThread && isGitRepo}
+            pullRequestAvailable={pullRequestSurfaceAvailable}
+            agentsAvailable
+            liveAgentCount={agentPanelModel.liveCount}
+          />
+        );
+      }
       case "preview":
         return (
           <Suspense fallback={null}>
@@ -6736,7 +6871,6 @@ function ChatViewContent(props: ChatViewProps) {
           <PersistentThreadTerminalPanel
             threadRef={activeThreadRef}
             surface={surface}
-            launchContext={activeTerminalLaunchContext ?? null}
             focusRequestId={terminalFocusRequestId}
             keybindings={keybindings}
             onAddTerminalContext={addTerminalContextToDraft}
@@ -6851,6 +6985,7 @@ function ChatViewContent(props: ChatViewProps) {
         previewSessions={activePreviewState.sessions}
         terminalLabelsById={activeTerminalLabelsById}
         pullRequestStatuses={pullRequestTabStatuses}
+        pinnedSurfaceIds={attachedWorkspaceSurfaceIds}
         onActivate={activateRightPanelSurface}
         onCloseSurface={closeRightPanelSurface}
         onCloseOtherSurfaces={closeOtherRightPanelSurfaces}
@@ -6993,6 +7128,7 @@ function ChatViewContent(props: ChatViewProps) {
                   onAnchorReady={onTimelineAnchorReady}
                   contentInsetEndAdjustment={composerOverlayHeight}
                   liveFollowEnabled={timelineLiveFollowEnabled}
+                  initialScrollPosition={initialTimelineScrollPosition}
                   onIsAtEndChange={onIsAtEndChange}
                   hideEmptyPlaceholder={isDraftHeroState || threadDetailLoading}
                   topFadeEnabled={!hasTimelineTopBanner}
@@ -7296,11 +7432,6 @@ function ChatViewContent(props: ChatViewProps) {
                 threadRef={mountedThreadRef}
                 threadId={mountedThreadRef.threadId}
                 visible={mountedThreadKey === activeThreadKey && terminalUiState.terminalOpen}
-                launchContext={
-                  mountedThreadKey === activeThreadKey
-                    ? (activeTerminalLaunchContext ?? null)
-                    : null
-                }
                 focusRequestId={mountedThreadKey === activeThreadKey ? terminalFocusRequestId : 0}
                 splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
                 splitVerticalShortcutLabel={splitTerminalVerticalShortcutLabel ?? undefined}
@@ -7329,6 +7460,7 @@ function ChatViewContent(props: ChatViewProps) {
             previewSessions={activePreviewState.sessions}
             terminalLabelsById={activeTerminalLabelsById}
             pullRequestStatuses={pullRequestTabStatuses}
+            pinnedSurfaceIds={attachedWorkspaceSurfaceIds}
             onActivate={activateRightPanelSurface}
             onCloseSurface={closeRightPanelSurface}
             onCloseOtherSurfaces={closeOtherRightPanelSurfaces}
@@ -7364,6 +7496,7 @@ function ChatViewContent(props: ChatViewProps) {
             {...(routeKind === "draft" && draftId ? { draftId } : {})}
             cwd={activeWorkspaceRoot}
             projectName={activeProject.title}
+            pullRequestReference={activeThreadPullRequestReference}
             selectedPath={activeFileSurface?.relativePath ?? null}
             selectedPathRevealId={activeFileSurface?.revealRequestId ?? 0}
             gitStatus={gitStatusQuery.data ?? null}
@@ -7387,6 +7520,7 @@ function ChatViewContent(props: ChatViewProps) {
               previewSessions={activePreviewState.sessions}
               terminalLabelsById={activeTerminalLabelsById}
               pullRequestStatuses={pullRequestTabStatuses}
+              pinnedSurfaceIds={attachedWorkspaceSurfaceIds}
               onActivate={activateRightPanelSurface}
               onCloseSurface={closeRightPanelSurface}
               onCloseOtherSurfaces={closeOtherRightPanelSurfaces}

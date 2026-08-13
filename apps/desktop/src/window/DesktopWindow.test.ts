@@ -438,7 +438,7 @@ describe("DesktopWindow", () => {
     }),
   );
 
-  it.effect("blocks only repeated Cmd+W input before it reaches the native window menu", () =>
+  it.effect("handles native window shortcuts before they reach the system or menu", () =>
     Effect.gen(function* () {
       const fakeWindow = makeFakeBrowserWindow();
       const createCount = yield* Ref.make(0);
@@ -479,6 +479,25 @@ describe("DesktopWindow", () => {
         prevented = false;
         beforeInput(event, { ...input, meta: false });
         assert.isFalse(prevented);
+
+        fakeWindow.send.mockClear();
+        prevented = false;
+        beforeInput(event, {
+          ...input,
+          isAutoRepeat: false,
+          key: "Tab",
+        });
+        assert.isTrue(prevented);
+        assert.deepEqual(fakeWindow.send.mock.calls, [[MENU_ACTION_CHANNEL, "new-workspace-tab"]]);
+
+        fakeWindow.send.mockClear();
+        prevented = false;
+        beforeInput(event, {
+          ...input,
+          key: "Tab",
+        });
+        assert.isTrue(prevented);
+        assert.deepEqual(fakeWindow.send.mock.calls, []);
       }).pipe(Effect.provide(layer));
     }),
   );

@@ -81,7 +81,17 @@ const DEFAULT_PROCESS_KILL_GRACE_MS = 1_000;
 const DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS = 128;
 const DEFAULT_OPEN_COLS = 120;
 const DEFAULT_OPEN_ROWS = 30;
-const TERMINAL_ENV_BLOCKLIST = new Set(["PORT", "ELECTRON_RENDERER_PORT", "ELECTRON_RUN_AS_NODE"]);
+const TERMINAL_ENV_BLOCKLIST = new Set([
+  "PORT",
+  "ELECTRON_RENDERER_PORT",
+  "ELECTRON_RUN_AS_NODE",
+  // Blackbird can itself be launched from Apple Terminal. Passing that terminal's identity into
+  // an integrated shell makes macOS restore its saved session file, including a stale `cd` that
+  // overrides the cwd explicitly supplied to the PTY.
+  "TERM_PROGRAM",
+  "TERM_PROGRAM_VERSION",
+  "TERM_SESSION_ID",
+]);
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 const MAX_TERMINAL_LABEL_LENGTH = 128;
 
@@ -2331,6 +2341,24 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         const session = existing.value;
         const targetCols = input.cols ?? session.cols;
         const targetRows = input.rows ?? session.rows;
+        const requestedWorktreePath =
+          input.worktreePath !== undefined ? (input.worktreePath ?? null) : session.worktreePath;
+        // Attach normally preserves a live PTY. An idle shell is safe to relaunch when the client
+        // has moved its owning chat to a different checkout; active child processes still win.
+        const idleLaunchLocationChanged =
+          session.process !== null &&
+          session.status === "running" &&
+          !session.hasRunningSubprocess &&
+          input.cwd !== undefined &&
+          (session.cwd !== input.cwd || session.worktreePath !== requestedWorktreePath);
+
+        if (idleLaunchLocationChanged) {
+          return yield* openLocked({
+            ...input,
+            terminalId,
+            cwd: input.cwd,
+          });
+        }
 
         if (!session.process && input.cwd && input.restartIfNotRunning === true) {
           return yield* openLocked({

@@ -322,6 +322,77 @@ it.layer(
     }),
   );
 
+  it.effect("restarts an idle attached shell when its requested cwd changes", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter, baseDir } = yield* createManager();
+      const path = yield* Path.Path;
+      const originalCwd = path.join(baseDir, "original");
+      const worktreeCwd = path.join(baseDir, "worktree");
+      yield* makeDirectory(originalCwd);
+      yield* makeDirectory(worktreeCwd);
+
+      yield* manager.open(openInput({ cwd: originalCwd }));
+      const firstProcess = ptyAdapter.processes[0];
+      expect(firstProcess).toBeDefined();
+      if (!firstProcess) return;
+
+      const attachEvents = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
+      const unsubscribe = yield* manager.attachStream(
+        openInput({ cwd: worktreeCwd, worktreePath: worktreeCwd }),
+        (event) => Ref.update(attachEvents, (events) => [...events, event]),
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+      const snapshot = (yield* Ref.get(attachEvents)).find((event) => event.type === "snapshot");
+      expect(snapshot).toBeDefined();
+      if (!snapshot || snapshot.type !== "snapshot") return;
+      assert.equal(firstProcess.killed, true);
+      assert.equal(snapshot.snapshot.cwd, worktreeCwd);
+      assert.equal(snapshot.snapshot.worktreePath, worktreeCwd);
+      expect(ptyAdapter.spawnInputs).toHaveLength(2);
+    }),
+  );
+
+  it.effect("does not relocate an attached terminal while a subprocess is running", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter, getEvents, baseDir } = yield* createManager(5, {
+        subprocessInspector: () =>
+          Effect.succeed({
+            hasRunningSubprocess: true,
+            childCommand: "dev-server",
+            processIds: [100],
+          }),
+        subprocessPollIntervalMs: 20,
+      });
+      const path = yield* Path.Path;
+      const originalCwd = path.join(baseDir, "original");
+      const worktreeCwd = path.join(baseDir, "worktree");
+      yield* makeDirectory(originalCwd);
+      yield* makeDirectory(worktreeCwd);
+
+      yield* manager.open(openInput({ cwd: originalCwd }));
+      yield* waitFor(
+        Effect.map(getEvents, (events) =>
+          events.some((event) => event.type === "activity" && event.hasRunningSubprocess === true),
+        ),
+        "1200 millis",
+      );
+
+      const attachEvents = yield* Ref.make<ReadonlyArray<TerminalAttachStreamEvent>>([]);
+      const unsubscribe = yield* manager.attachStream(
+        openInput({ cwd: worktreeCwd, worktreePath: worktreeCwd }),
+        (event) => Ref.update(attachEvents, (events) => [...events, event]),
+      );
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+      const snapshot = (yield* Ref.get(attachEvents)).find((event) => event.type === "snapshot");
+      expect(snapshot).toBeDefined();
+      if (!snapshot || snapshot.type !== "snapshot") return;
+      assert.equal(snapshot.snapshot.cwd, originalCwd);
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+    }),
+  );
+
   it.effect("keeps attach streams live when a terminal id is closed and reopened", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();
@@ -1372,6 +1443,9 @@ it.layer(
           PORT: "5173",
           T3CODE_PORT: "3773",
           VITE_DEV_SERVER_URL: "http://localhost:5173",
+          TERM_PROGRAM: "Apple_Terminal",
+          TERM_PROGRAM_VERSION: "487",
+          TERM_SESSION_ID: "stale-apple-terminal-session",
           TEST_TERMINAL_KEEP: "keep-me",
         },
       });
@@ -1383,6 +1457,9 @@ it.layer(
       expect(spawnInput.env.PORT).toBeUndefined();
       expect(spawnInput.env.T3CODE_PORT).toBeUndefined();
       expect(spawnInput.env.VITE_DEV_SERVER_URL).toBeUndefined();
+      expect(spawnInput.env.TERM_PROGRAM).toBeUndefined();
+      expect(spawnInput.env.TERM_PROGRAM_VERSION).toBeUndefined();
+      expect(spawnInput.env.TERM_SESSION_ID).toBeUndefined();
       // Arbitrary host env vars must pass through — terminals inherit the
       // user's environment apart from the explicit blocklist.
       expect(spawnInput.env.TEST_TERMINAL_KEEP).toBe("keep-me");

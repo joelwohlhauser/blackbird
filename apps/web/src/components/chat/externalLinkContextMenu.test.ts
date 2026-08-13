@@ -36,7 +36,7 @@ describe("external chat link context menu", () => {
 
     expect(harness.showContextMenu).toHaveBeenCalledWith(
       [
-        { id: "open-in-preview", label: "Open in right panel" },
+        { id: "open-in-preview", label: "Open in Blackbird" },
         { id: "open-external", label: "Open in default browser" },
       ],
       { x: 12, y: 24 },

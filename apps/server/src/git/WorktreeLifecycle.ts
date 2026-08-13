@@ -42,16 +42,19 @@ function isPathInside(parent: string, candidate: string): boolean {
 }
 
 function worktreeBranchSegments(branchName: string): ReadonlyArray<string> {
-  const segments = branchName
+  const pathBranchName = branchName.startsWith("origin/")
+    ? branchName.slice("origin/".length)
+    : branchName;
+  const segments = pathBranchName
     .split(/[\\/]+/)
     .filter((segment) => segment.length > 0)
     .map((segment) => (segment === "." || segment === ".." ? "-" : segment));
-  return segments.length > 0 ? segments : ["worktree"];
+  return segments.length > 0 ? [segments.join("-")] : ["worktree"];
 }
 
 /**
- * Mirrors Treehouse's default `${repo}/${branch}` layout inside the configured
- * root while keeping every generated path contained by that root.
+ * Uses a flat `${repo}/${branch}` layout inside the configured root while
+ * keeping every generated path contained by that root.
  */
 export function resolveConfiguredWorktreePath(input: {
   readonly worktreesRoot: string;

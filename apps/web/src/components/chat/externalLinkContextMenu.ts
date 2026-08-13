@@ -22,7 +22,7 @@ const EXTERNAL_LINK_CONTEXT_MENU_ITEMS = [
 ] as const satisfies readonly ContextMenuItem<ExternalLinkContextMenuAction>[];
 
 const EXTERNAL_LINK_OPEN_MENU_ITEMS = [
-  { id: "open-in-preview", label: "Open in right panel" },
+  { id: "open-in-preview", label: "Open in Blackbird" },
   { id: "open-external", label: "Open in default browser" },
 ] as const satisfies readonly ContextMenuItem<ExternalLinkOpenAction>[];
 

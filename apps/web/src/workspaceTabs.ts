@@ -26,6 +26,18 @@ export const workspaceTabDragState = {
   suppressClickAfterDrag: false,
 };
 
+export const NEW_WORKSPACE_TAB_EVENT = "blackbird:new-workspace-tab";
+
+export function isNewWorkspaceTabShortcut(event: {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}): boolean {
+  return event.key === "Tab" && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
+}
+
 export interface WorkspaceTabDropTarget {
   container: WorkspaceTabContainer;
   /** Insertion index into the target container's surface list. */

@@ -529,11 +529,26 @@ export const make = Effect.gen(function* () {
       }
     });
 
-    // Electron's windowMenu close role owns CmdOrCtrl+W. Holding the
-    // close-terminal shortcut can outlive the terminal that handled its first
-    // press, so reject repeats before they reach the native window accelerator.
-    // Deliberate presses still flow through the renderer or native menu.
+    // Capture Cmd+Tab in the focused desktop window before macOS treats it as
+    // an application switch. Electron's windowMenu close role also owns
+    // CmdOrCtrl+W; reject repeats before they reach that native accelerator so
+    // holding the terminal-close shortcut cannot close the whole window.
     window.webContents.on("before-input-event", (event, input) => {
+      if (
+        environment.platform === "darwin" &&
+        input.type === "keyDown" &&
+        input.meta &&
+        !input.control &&
+        !input.alt &&
+        !input.shift &&
+        input.key === "Tab"
+      ) {
+        event.preventDefault();
+        if (!input.isAutoRepeat) {
+          window.webContents.send(MENU_ACTION_CHANNEL, "new-workspace-tab");
+        }
+        return;
+      }
       if (input.type !== "keyDown" || !input.isAutoRepeat) return;
       const modifier = environment.platform === "darwin" ? input.meta : input.control;
       if (modifier && !input.alt && !input.shift && input.key.toLowerCase() === "w") {

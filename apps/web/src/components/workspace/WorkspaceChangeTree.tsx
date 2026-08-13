@@ -99,9 +99,8 @@ export const WorkspaceChangeTree = memo(function WorkspaceChangeTree(props: {
 
   const { model } = useFileTree({
     density: "compact",
-    // Keep every directory level explicit. Compacting a single-child directory chain into one
-    // row makes the root-level files that follow it look as though they belong to that chain.
-    flattenEmptyDirectories: false,
+    // Match VS Code's compact folders: directory chains with no sibling files share one row.
+    flattenEmptyDirectories: true,
     initialExpansion: "open",
     icons: T3_PIERRE_ICONS,
     onSelectionChange: (selectedPaths) => {

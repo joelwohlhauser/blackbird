@@ -1,10 +1,15 @@
-import type { EnvironmentId, ScopedThreadRef, VcsStatusResult } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PullRequestRef,
+  ScopedThreadRef,
+  VcsStatusResult,
+} from "@t3tools/contracts";
 import { FileDiffIcon, GitPullRequestIcon } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { useResizableWidth } from "~/hooks/useResizableWidth";
 import { cn } from "~/lib/utils";
-import { reviewEnvironment } from "~/state/review";
+import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
 import FileBrowserPanel from "~/components/files/FileBrowserPanel";
 import { DiffStatLabel, hasNonZeroStat } from "~/components/chat/DiffStatLabel";
@@ -12,7 +17,12 @@ import { RightPanelResizeHandle } from "~/components/preview/RightPanelResizeHan
 import GitActionsControl from "~/components/GitActionsControl";
 import type { DraftId } from "~/composerDraftStore";
 
-import { patchToFileChanges, workingTreeFilesToChanges } from "./WorkspaceNavigator.logic";
+import {
+  advancePullRequestDiffWalk,
+  EMPTY_PULL_REQUEST_DIFF_WALK,
+  pullRequestDiffSlicesToFileChanges,
+  workingTreeFilesToChanges,
+} from "./WorkspaceNavigator.logic";
 import { WorkspaceChangeTree } from "./WorkspaceChangeTree";
 
 export type WorkspaceNavigatorTab = "file" | "changes" | "pr";
@@ -43,6 +53,7 @@ interface WorkspaceNavigatorProps {
   draftId?: DraftId;
   cwd: string;
   projectName: string;
+  pullRequestReference: PullRequestRef | null;
   selectedPath: string | null;
   selectedPathRevealId: number;
   gitStatus: VcsStatusResult | null;
@@ -88,28 +99,44 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
     edge: "left",
   });
   const pullRequest = props.gitStatus?.pr ?? null;
+  const pullRequestKey = props.pullRequestReference
+    ? `${props.environmentId}:${props.pullRequestReference.projectId}:${props.pullRequestReference.repository}#${props.pullRequestReference.number}`
+    : null;
+  const [pullRequestDiffWalk, setPullRequestDiffWalk] = useState(EMPTY_PULL_REQUEST_DIFF_WALK);
+  const currentPullRequestDiffWalk =
+    pullRequestKey !== null && pullRequestDiffWalk.key === pullRequestKey
+      ? pullRequestDiffWalk
+      : EMPTY_PULL_REQUEST_DIFF_WALK;
+  const pullRequestDiffCursor = currentPullRequestDiffWalk.cursor;
   const pullRequestDiffQuery = useEnvironmentQuery(
-    props.activeTab === "pr" && pullRequest
-      ? reviewEnvironment.diffPreview({
+    props.activeTab === "pr" && pullRequest && props.pullRequestReference
+      ? pullRequestEnvironment.diff({
           environmentId: props.environmentId,
           input: {
-            cwd: props.cwd,
-            baseRef: pullRequest.baseRef,
-            headRef: pullRequest.headRef,
+            ...props.pullRequestReference,
+            ...(pullRequestDiffCursor === null ? {} : { cursor: pullRequestDiffCursor }),
           },
         })
       : null,
   );
+  useEffect(() => {
+    const result = pullRequestDiffQuery.data;
+    if (pullRequestKey === null || result === null) return;
+    setPullRequestDiffWalk((previous) =>
+      advancePullRequestDiffWalk(previous, {
+        key: pullRequestKey,
+        cursor: pullRequestDiffCursor,
+        result,
+      }),
+    );
+  }, [pullRequestDiffCursor, pullRequestDiffQuery.data, pullRequestKey]);
   const workingTreeFiles = useMemo(
     () => workingTreeFilesToChanges(props.gitStatus?.workingTree.files ?? []),
     [props.gitStatus?.workingTree.files],
   );
-  const pullRequestSource = pullRequestDiffQuery.data?.sources.find(
-    (source) => source.kind === "branch-range",
-  );
   const pullRequestFiles = useMemo(
-    () => patchToFileChanges(pullRequestSource?.diff),
-    [pullRequestSource?.diff],
+    () => pullRequestDiffSlicesToFileChanges(currentPullRequestDiffWalk.slices),
+    [currentPullRequestDiffWalk.slices],
   );
   const pullRequestStat = useMemo(
     () =>
@@ -227,17 +254,22 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
               <NavigatorMessage icon="pr">
                 No pull request is associated with the current branch.
               </NavigatorMessage>
+            ) : props.pullRequestReference === null ? (
+              <NavigatorMessage icon="pr">
+                Pull request files are unavailable for this repository.
+              </NavigatorMessage>
             ) : pullRequestDiffQuery.error ? (
               <NavigatorMessage>{pullRequestDiffQuery.error}</NavigatorMessage>
-            ) : pullRequestDiffQuery.isPending && pullRequestDiffQuery.data === null ? (
+            ) : pullRequestFiles.length === 0 &&
+              (!currentPullRequestDiffWalk.complete || pullRequestDiffQuery.isPending) ? (
               <NavigatorMessage>Loading pull request files…</NavigatorMessage>
-            ) : pullRequestFiles.length === 0 ? (
+            ) : pullRequestFiles.length === 0 && currentPullRequestDiffWalk.complete ? (
               <NavigatorMessage icon="pr">No files changed in this pull request.</NavigatorMessage>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col py-2">
-                {pullRequestSource?.truncated ? (
+                {!currentPullRequestDiffWalk.complete ? (
                   <p className="mx-2 mb-2 rounded-md bg-muted px-2 py-1.5 text-[11px] text-muted-foreground">
-                    This pull request is large; the file list may be incomplete.
+                    Loading remaining pull request files…
                   </p>
                 ) : null}
                 <div className="min-h-0 flex-1">

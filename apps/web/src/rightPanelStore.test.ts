@@ -28,6 +28,44 @@ beforeEach(() => {
 });
 
 describe("rightPanelStore", () => {
+  it("adds attached surfaces as pinned tabs without leaving the chat", () => {
+    const originalIsWide = workspaceLayoutProbe.isWide;
+    try {
+      workspaceLayoutProbe.isWide = () => false;
+      useRightPanelStore.getState().openLinear(refA, "linear-tab", null, { pinned: true });
+      useRightPanelStore
+        .getState()
+        .openGitHubPullRequest(refA, "github-tab", null, { pinned: true });
+
+      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      expect(state.mainSurfaces.map((surface) => surface.id)).toEqual(["linear", "github-pr"]);
+      expect(state.activeMainSurfaceId).toBeNull();
+      expect(state.isOpen).toBe(false);
+      expect(state.activeSurfaceId).toBeNull();
+    } finally {
+      workspaceLayoutProbe.isWide = originalIsWide;
+    }
+  });
+
+  it("pins attached Linear and GitHub surfaces beside the chat without activating them", () => {
+    useRightPanelStore.getState().open(refA, "diff");
+    useRightPanelStore.getState().openGitHubPullRequest(refA, "github-tab");
+    useRightPanelStore.getState().openLinear(refA, "linear-tab");
+
+    useRightPanelStore.getState().pinDedicatedSurface(refA, "github-pr");
+    useRightPanelStore.getState().pinDedicatedSurface(refA, "linear");
+
+    const pinned = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(pinned.mainSurfaces.map((surface) => surface.id)).toEqual(["linear", "github-pr"]);
+    expect(pinned.surfaces.map((surface) => surface.id)).toEqual(["diff"]);
+    expect(pinned.activeMainSurfaceId).toBeNull();
+    expect(pinned.activeSurfaceId).toBe("diff");
+
+    const stableState = useRightPanelStore.getState().byThreadKey;
+    useRightPanelStore.getState().pinDedicatedSurface(refA, "linear");
+    expect(useRightPanelStore.getState().byThreadKey).toBe(stableState);
+  });
+
   it("cycles surfaces in both directions with wraparound", () => {
     const surfaces = [
       { id: "diff", kind: "diff" },

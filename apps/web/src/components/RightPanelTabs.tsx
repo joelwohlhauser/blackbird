@@ -50,6 +50,7 @@ interface RightPanelTabsProps {
   pullRequestAvailable?: boolean;
   agentsAvailable?: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
+  pinnedSurfaceIds?: ReadonlySet<string>;
   /** Running and waiting subagents shown on the Agents empty-state card. */
   liveAgentCount: number;
   reserveLayoutControls?: boolean;
@@ -192,7 +193,7 @@ function SurfaceMenuItem(props: {
   return <DisabledReasonTooltip reason={props.disabledReason} trigger={item} />;
 }
 
-function RightPanelEmptyState(props: {
+export function NewTabPage(props: {
   onAddBrowser: () => void;
   onAddLinear: () => void;
   onAddGitHubPullRequest: () => void;
@@ -293,9 +294,9 @@ function RightPanelEmptyState(props: {
     <div className="flex min-h-0 flex-1 items-center justify-center p-6">
       <div className="w-full max-w-xl">
         <div className="mb-5 text-center">
-          <h3 className="text-sm font-medium text-foreground">Open a surface</h3>
+          <h3 className="text-sm font-medium text-foreground">New Tab</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Choose what to show in the right panel.
+            Choose what to open in this workspace.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -386,6 +387,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           {...(props.pullRequestStatuses !== undefined
             ? { pullRequestStatuses: props.pullRequestStatuses }
             : {})}
+          {...(props.pinnedSurfaceIds !== undefined
+            ? { pinnedSurfaceIds: props.pinnedSurfaceIds }
+            : {})}
           onActivate={props.onActivate}
           onCloseSurface={props.onCloseSurface}
           onCloseOtherSurfaces={props.onCloseOtherSurfaces}
@@ -423,7 +427,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       </div>
       <div className="flex min-h-0 flex-1 flex-col" data-right-panel-surface-content>
         {props.activeSurfaceId === null ? (
-          <RightPanelEmptyState
+          <NewTabPage
             onAddBrowser={props.onAddBrowser}
             onAddLinear={props.onAddLinear}
             onAddGitHubPullRequest={props.onAddGitHubPullRequest}

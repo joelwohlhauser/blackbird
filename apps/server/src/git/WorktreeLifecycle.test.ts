@@ -29,14 +29,24 @@ const writeTextFile = Effect.fn("WorktreeLifecycleTest.writeTextFile")(function*
 });
 
 describe("resolveConfiguredWorktreePath", () => {
-  it("uses the Treehouse repo/branch layout", () => {
+  it("flattens branch namespaces into one worktree directory", () => {
     expect(
       WorktreeLifecycle.resolveConfiguredWorktreePath({
         worktreesRoot: "/tmp/.worktrees",
         repositoryCwd: "/Users/example/Repositories/blackbird",
         branchName: "feature/base-branch",
       }),
-    ).toBe("/tmp/.worktrees/blackbird/feature/base-branch");
+    ).toBe("/tmp/.worktrees/blackbird/feature-base-branch");
+  });
+
+  it("omits the origin remote from the worktree directory", () => {
+    expect(
+      WorktreeLifecycle.resolveConfiguredWorktreePath({
+        worktreesRoot: "/tmp/.worktrees",
+        repositoryCwd: "/Users/example/Repositories/example-app",
+        branchName: "origin/eng-456-add-conversation-logs",
+      }),
+    ).toBe("/tmp/.worktrees/example-app/eng-456-add-conversation-logs");
   });
 
   it("keeps generated paths inside the configured root", () => {
@@ -46,7 +56,7 @@ describe("resolveConfiguredWorktreePath", () => {
         repositoryCwd: "/Users/example/Repositories/blackbird",
         branchName: "../escape",
       }),
-    ).toBe("/tmp/.worktrees/blackbird/-/escape");
+    ).toBe("/tmp/.worktrees/blackbird/--escape");
   });
 });
 

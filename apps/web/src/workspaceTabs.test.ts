@@ -3,11 +3,44 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   MAIN_CHAT_TAB_ID,
   PANEL_EDGE_DROP_ID,
+  isNewWorkspaceTabShortcut,
   resolveWorkspaceTabDrop,
   workspaceTabContainerDropId,
 } from "./workspaceTabs";
 
 const counts = { panelSurfaceCount: 3, mainSurfaceCount: 2 };
+
+describe("isNewWorkspaceTabShortcut", () => {
+  it("matches Command+Tab without accepting tab-switcher variants", () => {
+    expect(
+      isNewWorkspaceTabShortcut({
+        key: "Tab",
+        metaKey: true,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isNewWorkspaceTabShortcut({
+        key: "Tab",
+        metaKey: false,
+        ctrlKey: true,
+        altKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(false);
+    expect(
+      isNewWorkspaceTabShortcut({
+        key: "Tab",
+        metaKey: true,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: true,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("resolveWorkspaceTabDrop", () => {
   it("returns null when the drop lands nowhere", () => {

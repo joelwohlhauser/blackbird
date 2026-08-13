@@ -14,6 +14,7 @@ export async function addLinearSurface<E>(input: {
   readonly threadRef: ScopedThreadRef;
   readonly openPreview: OpenPreviewMutation<E>;
   readonly url: string;
+  readonly pinned?: boolean;
 }): Promise<AtomCommandResult<void, E>> {
   const result = await openPreviewSession({
     openPreview: input.openPreview,
@@ -21,6 +22,8 @@ export async function addLinearSurface<E>(input: {
     url: input.url,
   });
   return mapAtomCommandResult(result, (snapshot) => {
-    useRightPanelStore.getState().openLinear(input.threadRef, snapshot.tabId, input.url);
+    useRightPanelStore.getState().openLinear(input.threadRef, snapshot.tabId, input.url, {
+      ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
+    });
   });
 }

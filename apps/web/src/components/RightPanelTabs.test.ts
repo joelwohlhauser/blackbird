@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { rightPanelTabWheelDelta } from "./WorkspaceTabStrip";
+import { rightPanelTabWheelDelta, surfaceTitle } from "./WorkspaceTabStrip";
+
+describe("surfaceTitle", () => {
+  it("names dedicated integration tabs", () => {
+    expect(
+      surfaceTitle({ id: "linear", kind: "linear", resourceId: "linear" }, {}, new Map()),
+    ).toBe("Linear Issue");
+    expect(
+      surfaceTitle({ id: "github-pr", kind: "github-pr", resourceId: "github-pr" }, {}, new Map()),
+    ).toBe("GitHub PR");
+  });
+});
 
 describe("rightPanelTabWheelDelta", () => {
   it("uses the dominant trackpad axis", () => {

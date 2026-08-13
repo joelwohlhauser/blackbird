@@ -250,8 +250,8 @@ export function ThreadPreviewMiniPlayer({ threadRef, tabId, bottomInset }: Props
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="Open preview in right panel"
-            title="Open in right panel"
+            aria-label="Open preview in Blackbird"
+            title="Open in Blackbird"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={openInPanel}
           >

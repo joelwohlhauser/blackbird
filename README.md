@@ -85,6 +85,11 @@ renames the chat, replacing the old header title text — the project name is
 gone from the header), never scrolls out of view, and cannot be closed or
 moved to the panel.
 
+When the chat branch identifies a Linear issue or has a detected GitHub pull
+request, those browser-backed tabs are created automatically and pinned beside
+the chat tab. They stay visible, cannot be closed or moved, and disappear from
+the pinned set when the branch no longer identifies that issue or PR.
+
 Tabs are draggable: reorder them within a container or drag them between the
 chat area and the right panel. Dragging toward the chat column's right edge
 while the panel is closed reveals a drop zone that opens the panel on drop;
@@ -101,6 +106,8 @@ no right-panel toggle button, no ⌥⌘B binding, and no maximize control.
 Control+Tab opens the tab switcher described above. Browser-backed tabs
 include navigation, refresh, URL, zoom, capture, and other appropriate
 browser controls.
+Command+Tab opens a **New Tab** page with the available Browser, Terminal,
+Diff, Linear, GitHub PR, Pull request, and Agents surfaces.
 
 The second surface is the narrow, independently resizable **workspace
 navigator**, also referred to as the new right sidebar or sidepanel. It has
@@ -124,6 +131,7 @@ Useful shortcuts on macOS:
 - Command+Shift+H — open the workspace navigator on PR
 - Control+Tab / Control+Shift+Tab — tab switcher for the current chat's tabs
   (falls through to the chat switcher when the chat has no extra tabs)
+- Command+Tab — open the New Tab page
 
 ### Git worktree workflow
 

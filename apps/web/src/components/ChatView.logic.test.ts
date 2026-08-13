@@ -26,6 +26,7 @@ import {
   isBranchMismatchDismissedForSession,
   reconcileMountedTerminalThreadIds,
   reconcileRetainedMountedThreadIds,
+  resolveChatTerminalLocation,
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
   scheduleEnvironmentReconnectWarning,
@@ -38,6 +39,35 @@ const environmentId = EnvironmentId.make("environment-local");
 const projectId = ProjectId.make("project-1");
 const threadId = ThreadId.make("thread-1");
 const now = "2026-03-29T00:00:00.000Z";
+
+describe("resolveChatTerminalLocation", () => {
+  it("opens terminals in the server thread worktree", () => {
+    expect(
+      resolveChatTerminalLocation({
+        projectCwd: "/repo",
+        serverWorktreePath: "/worktrees/server",
+        draftWorktreePath: "/worktrees/draft",
+      }),
+    ).toEqual({ cwd: "/worktrees/server", worktreePath: "/worktrees/server" });
+  });
+
+  it("keeps using the draft worktree while server metadata catches up", () => {
+    expect(
+      resolveChatTerminalLocation({
+        projectCwd: "/repo",
+        serverWorktreePath: null,
+        draftWorktreePath: "/worktrees/draft",
+      }),
+    ).toEqual({ cwd: "/worktrees/draft", worktreePath: "/worktrees/draft" });
+  });
+
+  it("opens terminals in the project checkout when the chat has no worktree", () => {
+    expect(resolveChatTerminalLocation({ projectCwd: "/repo" })).toEqual({
+      cwd: "/repo",
+      worktreePath: null,
+    });
+  });
+});
 
 describe("environment reconnect warning grace", () => {
   afterEach(() => vi.useRealTimers());

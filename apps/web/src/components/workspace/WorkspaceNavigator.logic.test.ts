@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { patchToFileChanges, workingTreeFilesToChanges } from "./WorkspaceNavigator.logic";
+import {
+  advancePullRequestDiffWalk,
+  EMPTY_PULL_REQUEST_DIFF_WALK,
+  patchToFileChanges,
+  pullRequestDiffSlicesToFileChanges,
+  workingTreeFilesToChanges,
+} from "./WorkspaceNavigator.logic";
 
 describe("WorkspaceNavigator logic", () => {
   it("maps working tree status files to navigator changes", () => {
@@ -37,5 +43,42 @@ describe("WorkspaceNavigator logic", () => {
       { path: "README.md", kind: "change", additions: 2, deletions: 0 },
       { path: "src/z.ts", kind: "change", additions: 1, deletions: 1 },
     ]);
+  });
+
+  it("walks every pull request diff page and keeps all changed files", () => {
+    const patchFor = (paths: ReadonlyArray<string>) =>
+      paths
+        .map((path) =>
+          [
+            `diff --git a/${path} b/${path}`,
+            `--- a/${path}`,
+            `+++ b/${path}`,
+            "@@ -1 +1 @@",
+            "-old",
+            "+new",
+          ].join("\n"),
+        )
+        .join("\n");
+    const firstPaths = Array.from({ length: 100 }, (_, index) => `src/file-${index}.ts`);
+    const finalPaths = ["README.md", "src/file-100.ts"];
+
+    const first = advancePullRequestDiffWalk(EMPTY_PULL_REQUEST_DIFF_WALK, {
+      key: "project:repo#825",
+      cursor: null,
+      result: { patch: patchFor(firstPaths), truncated: false, nextCursor: "2" },
+    });
+    expect(first.cursor).toBe("2");
+    expect(first.complete).toBe(false);
+
+    const complete = advancePullRequestDiffWalk(first, {
+      key: "project:repo#825",
+      cursor: "2",
+      result: { patch: patchFor(finalPaths), truncated: false, nextCursor: null },
+    });
+    expect(complete.complete).toBe(true);
+    expect(pullRequestDiffSlicesToFileChanges(complete.slices)).toHaveLength(102);
+    expect(pullRequestDiffSlicesToFileChanges(complete.slices).map((file) => file.path)).toContain(
+      "src/file-100.ts",
+    );
   });
 });

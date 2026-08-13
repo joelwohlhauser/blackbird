@@ -24,6 +24,30 @@ export interface TimelineEndState {
   readonly scrollLength?: number;
 }
 
+export type TimelineScrollPosition =
+  | { readonly kind: "end" }
+  | { readonly kind: "offset"; readonly offset: number };
+
+/**
+ * Preserve an explicit reading position only after the user has opted out of
+ * live-follow. Transient layout scrolls while the timeline is following the
+ * end should reopen at the current end instead of freezing an incidental
+ * pixel offset.
+ */
+export function resolveTimelineScrollPosition(input: {
+  readonly isAtEnd: boolean;
+  readonly isUserPositioned: boolean;
+  readonly scroll: number | undefined;
+}): TimelineScrollPosition | null {
+  if (input.isAtEnd || !input.isUserPositioned) {
+    return { kind: "end" };
+  }
+  if (input.scroll === undefined || !Number.isFinite(input.scroll)) {
+    return null;
+  }
+  return { kind: "offset", offset: Math.max(0, input.scroll) };
+}
+
 /**
  * Follow re-arm band above the hard bottom. Strict on purpose: LegendList's
  * isNearEnd fires within half a viewport, which re-armed live-follow while the

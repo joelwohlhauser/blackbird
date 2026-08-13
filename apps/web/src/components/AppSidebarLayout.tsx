@@ -15,6 +15,7 @@ import { getLocalStorageItem, setLocalStorageItem } from "../hooks/useLocalStora
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
+import { NEW_WORKSPACE_TAB_EVENT } from "../workspaceTabs";
 import { useEnvironmentIdentificationMode, useLegacySidebarEnabled } from "../hooks/useSettings";
 import LegacyThreadSidebar from "./LegacySidebar";
 import ThreadSidebar from "./Sidebar";
@@ -278,6 +279,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         if (!isSettingsRoute) {
           void navigate({ to: "/settings" });
         }
+        return;
+      }
+      if (action === "new-workspace-tab") {
+        window.dispatchEvent(new Event(NEW_WORKSPACE_TAB_EVENT));
       }
     });
 

@@ -76,6 +76,7 @@ import {
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
   resolveTimelineIsAtEnd,
+  type TimelineScrollPosition,
   type StableMessagesTimelineRowsState,
   type MessagesTimelineRow,
   type TimelineLatestTurn,
@@ -227,6 +228,7 @@ interface MessagesTimelineProps {
    * scroll-mode refs whenever the user drifts near the bottom.
    */
   liveFollowEnabled: boolean;
+  initialScrollPosition?: TimelineScrollPosition | null;
   onIsAtEndChange: (isAtEnd: boolean) => void;
   hideEmptyPlaceholder?: boolean;
   topFadeEnabled?: boolean;
@@ -266,6 +268,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onAnchorReady,
   contentInsetEndAdjustment,
   liveFollowEnabled,
+  initialScrollPosition = null,
   onIsAtEndChange,
   hideEmptyPlaceholder = false,
   topFadeEnabled = false,
@@ -543,7 +546,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             getItemType={getItemType}
             renderItem={renderItem}
             estimatedItemSize={90}
-            initialScrollAtEnd
+            initialScrollAtEnd={initialScrollPosition?.kind !== "offset"}
+            {...(initialScrollPosition?.kind === "offset"
+              ? { initialScrollOffset: initialScrollPosition.offset }
+              : {})}
             {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
             contentInsetEndAdjustment={contentInsetEndAdjustment}
             maintainScrollAtEnd={

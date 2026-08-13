@@ -5,7 +5,57 @@ import {
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
+  resolveTimelineScrollPosition,
 } from "./MessagesTimeline.logic";
+
+describe("resolveTimelineScrollPosition", () => {
+  it("remembers the live edge while the timeline is following", () => {
+    expect(
+      resolveTimelineScrollPosition({
+        isAtEnd: false,
+        isUserPositioned: false,
+        scroll: 420,
+      }),
+    ).toEqual({ kind: "end" });
+  });
+
+  it("remembers a user-selected history offset", () => {
+    expect(
+      resolveTimelineScrollPosition({
+        isAtEnd: false,
+        isUserPositioned: true,
+        scroll: 420,
+      }),
+    ).toEqual({ kind: "offset", offset: 420 });
+  });
+
+  it("returns to end semantics when the user reaches the live edge", () => {
+    expect(
+      resolveTimelineScrollPosition({
+        isAtEnd: true,
+        isUserPositioned: true,
+        scroll: 420,
+      }),
+    ).toEqual({ kind: "end" });
+  });
+
+  it("ignores invalid offsets and clamps negative offsets", () => {
+    expect(
+      resolveTimelineScrollPosition({
+        isAtEnd: false,
+        isUserPositioned: true,
+        scroll: Number.NaN,
+      }),
+    ).toBeNull();
+    expect(
+      resolveTimelineScrollPosition({
+        isAtEnd: false,
+        isUserPositioned: true,
+        scroll: -20,
+      }),
+    ).toEqual({ kind: "offset", offset: 0 });
+  });
+});
 
 describe("computeMessageDurationStart", () => {
   it("returns message createdAt when there is no preceding user message", () => {

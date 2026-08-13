@@ -17,6 +17,7 @@ import {
   GitPullRequest,
   Globe2,
   MessageSquare,
+  Plus,
   TerminalSquare,
   X,
 } from "lucide-react";
@@ -70,6 +71,8 @@ export function surfaceTitle(
   terminalLabelsById: ReadonlyMap<string, string>,
 ): string {
   switch (surface.kind) {
+    case "new-tab":
+      return "New Tab";
     case "diff":
       return "Diff";
     case "files":
@@ -81,9 +84,9 @@ export function surfaceTitle(
       return `${filename} (${surface.scope === "unstaged" ? "Working Tree" : "Pull Request"})`;
     }
     case "linear":
-      return "Issue";
+      return "Linear Issue";
     case "github-pr":
-      return "PR";
+      return "GitHub PR";
     case "terminal":
       return (
         terminalLabelsById.get(surface.activeTerminalId) ??
@@ -134,6 +137,8 @@ export function SurfaceIcon({
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
 }) {
   switch (surface.kind) {
+    case "new-tab":
+      return <Plus className="size-3 shrink-0" />;
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       const url = !snapshot || snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
@@ -335,6 +340,7 @@ function WorkspaceSurfaceTab(props: {
   surface: RightPanelSurface;
   active: boolean;
   pending: boolean;
+  pinned: boolean;
   title: string;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   theme: "light" | "dark";
@@ -348,6 +354,7 @@ function WorkspaceSurfaceTab(props: {
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
     id: props.surface.id,
     data: { type: "workspace-tab", container: props.container },
+    disabled: { draggable: props.pinned },
   });
   return (
     <div
@@ -365,13 +372,13 @@ function WorkspaceSurfaceTab(props: {
         isDragging && "opacity-40",
       )}
     >
-      <button
-        type="button"
-        className="group/close relative flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
-        aria-label={`Close ${props.title}`}
-        onClick={() => props.onCloseSurface(props.surface)}
-      >
-        <span className="relative flex size-3 items-center justify-center group-hover/tab:hidden group-focus-visible/close:hidden">
+      {props.pinned ? (
+        <button
+          type="button"
+          className="relative flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-muted"
+          aria-label={`Open ${props.title}`}
+          onClick={() => props.onActivate(props.surface)}
+        >
           <SurfaceIcon
             surface={props.surface}
             sessions={props.previewSessions}
@@ -382,13 +389,37 @@ function WorkspaceSurfaceTab(props: {
           />
           {props.pending ? (
             <span
-              className="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full bg-current"
+              className="absolute right-0 bottom-0 size-1.5 rounded-full bg-current"
               aria-hidden
             />
           ) : null}
-        </span>
-        <X className="hidden size-3 group-hover/tab:block group-focus-visible/close:block" />
-      </button>
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="group/close relative flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
+          aria-label={`Close ${props.title}`}
+          onClick={() => props.onCloseSurface(props.surface)}
+        >
+          <span className="relative flex size-3 items-center justify-center group-hover/tab:hidden group-focus-visible/close:hidden">
+            <SurfaceIcon
+              surface={props.surface}
+              sessions={props.previewSessions}
+              theme={props.theme}
+              {...(props.pullRequestStatuses !== undefined
+                ? { pullRequestStatuses: props.pullRequestStatuses }
+                : {})}
+            />
+            {props.pending ? (
+              <span
+                className="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full bg-current"
+                aria-hidden
+              />
+            ) : null}
+          </span>
+          <X className="hidden size-3 group-hover/tab:block group-focus-visible/close:block" />
+        </button>
+      )}
       <Tooltip>
         <TooltipTrigger
           render={
@@ -415,6 +446,8 @@ export interface WorkspaceTabStripProps {
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   terminalLabelsById: ReadonlyMap<string, string>;
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
+  /** Surface ids fixed beside the chat tab and protected from close/drag. */
+  pinnedSurfaceIds?: ReadonlySet<string>;
   onActivate: (surface: RightPanelSurface) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
   onCloseOtherSurfaces: (surface: RightPanelSurface) => void;
@@ -444,6 +477,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
 
       const surfaceIndex = props.surfaces.findIndex((entry) => entry.id === surface.id);
       if (surfaceIndex < 0) return;
+      if (props.pinnedSurfaceIds?.has(surface.id)) return;
 
       const items: ContextMenuItem<TabContextMenuAction>[] = [];
       if (surface.kind === "file" || surface.kind === "file-diff") {
@@ -505,6 +539,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       if (event.button !== 1) return;
       event.preventDefault();
       event.stopPropagation();
+      if (props.pinnedSurfaceIds?.has(surface.id)) return;
       props.onCloseSurface(surface);
     },
     [props],
@@ -549,6 +584,33 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     ...(props.chatTab ? [MAIN_CHAT_TAB_ID] : []),
     ...props.surfaces.map((surface) => surface.id),
   ];
+  const pinnedSurfaces = props.surfaces.filter((surface) =>
+    props.pinnedSurfaceIds?.has(surface.id),
+  );
+  const scrollingSurfaces = props.surfaces.filter(
+    (surface) => !props.pinnedSurfaceIds?.has(surface.id),
+  );
+  const renderSurfaceTab = (surface: RightPanelSurface) => (
+    <WorkspaceSurfaceTab
+      key={surface.id}
+      container={props.container}
+      surface={surface}
+      active={surface.id === props.activeSurfaceId}
+      pending={props.pendingSurfaceIds.has(surface.id)}
+      pinned={props.pinnedSurfaceIds?.has(surface.id) ?? false}
+      title={surfaceTitle(surface, props.previewSessions, props.terminalLabelsById)}
+      previewSessions={props.previewSessions}
+      theme={resolvedTheme}
+      {...(props.pullRequestStatuses !== undefined
+        ? { pullRequestStatuses: props.pullRequestStatuses }
+        : {})}
+      onActivate={props.onActivate}
+      onCloseSurface={props.onCloseSurface}
+      onMouseDown={handleTabMouseDown}
+      onAuxClick={handleTabAuxClick}
+      onContextMenu={(event, contextSurface) => void handleTabContextMenu(event, contextSurface)}
+    />
+  );
 
   return (
     // The whole strip opts out of the Electron window-drag region: drag
@@ -569,6 +631,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
         {/* The chat tab is pinned outside the scroll viewport so it stays
             visible however many tabs are open. */}
         {props.chatTab ? <MainChatTab {...props.chatTab} /> : null}
+        {pinnedSurfaces.map(renderSurfaceTab)}
         <ScrollArea
           ref={tabListRef}
           hideScrollbars
@@ -579,28 +642,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
             ref={setBlankSpaceDropRef}
             className="flex h-full w-max min-w-full items-center gap-1"
           >
-            {props.surfaces.map((surface) => (
-              <WorkspaceSurfaceTab
-                key={surface.id}
-                container={props.container}
-                surface={surface}
-                active={surface.id === props.activeSurfaceId}
-                pending={props.pendingSurfaceIds.has(surface.id)}
-                title={surfaceTitle(surface, props.previewSessions, props.terminalLabelsById)}
-                previewSessions={props.previewSessions}
-                theme={resolvedTheme}
-                {...(props.pullRequestStatuses !== undefined
-                  ? { pullRequestStatuses: props.pullRequestStatuses }
-                  : {})}
-                onActivate={props.onActivate}
-                onCloseSurface={props.onCloseSurface}
-                onMouseDown={handleTabMouseDown}
-                onAuxClick={handleTabAuxClick}
-                onContextMenu={(event, contextSurface) =>
-                  void handleTabContextMenu(event, contextSurface)
-                }
-              />
-            ))}
+            {scrollingSurfaces.map(renderSurfaceTab)}
           </div>
         </ScrollArea>
       </SortableContext>

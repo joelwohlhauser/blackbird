@@ -51,6 +51,18 @@ export function startNewThreadForProject(
   return true;
 }
 
+export function resolveChatTerminalLocation(input: {
+  projectCwd: string;
+  serverWorktreePath?: string | null | undefined;
+  draftWorktreePath?: string | null | undefined;
+}): { cwd: string; worktreePath: string | null } {
+  const worktreePath = input.serverWorktreePath ?? input.draftWorktreePath ?? null;
+  return {
+    cwd: worktreePath ?? input.projectCwd,
+    worktreePath,
+  };
+}
+
 export function resolveThreadMetadataUpdateForNextTurn(input: {
   currentModelSelection: ModelSelection;
   nextModelSelection?: ModelSelection;

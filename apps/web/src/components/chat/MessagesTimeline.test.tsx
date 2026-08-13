@@ -20,6 +20,8 @@ vi.mock("@legendapp/list/react", async () => {
       onReady?: (info: { anchorIndex: number }) => void;
     };
     contentInsetEndAdjustment?: number;
+    initialScrollAtEnd?: boolean;
+    initialScrollOffset?: number;
     className?: string;
     maintainScrollAtEnd?:
       | boolean
@@ -51,6 +53,8 @@ vi.mock("@legendapp/list/react", async () => {
         data-anchor-offset={props.anchoredEndSpace?.anchorOffset}
         data-anchor-on-ready={Boolean(props.anchoredEndSpace?.onReady)}
         data-content-inset-end={props.contentInsetEndAdjustment}
+        data-initial-scroll-at-end={props.initialScrollAtEnd}
+        data-initial-scroll-offset={props.initialScrollOffset}
         data-class-name={props.className}
         data-maintain-scroll-at-end={props.maintainScrollAtEnd ? "enabled" : undefined}
         data-maintain-scroll-at-end-animated={
@@ -226,6 +230,26 @@ function buildUserTimelineEntry(text: string) {
 }
 
 describe("MessagesTimeline", () => {
+  it("restores a saved reading offset instead of starting at the end", () => {
+    const timelineEntries = [buildUserTimelineEntry("Hello")];
+
+    const restoredMarkup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        timelineEntries={timelineEntries}
+        initialScrollPosition={{ kind: "offset", offset: 420 }}
+      />,
+    );
+    const defaultMarkup = renderToStaticMarkup(
+      <MessagesTimeline {...buildProps()} timelineEntries={timelineEntries} />,
+    );
+
+    expect(restoredMarkup).toContain('data-initial-scroll-at-end="false"');
+    expect(restoredMarkup).toContain('data-initial-scroll-offset="420"');
+    expect(defaultMarkup).toContain('data-initial-scroll-at-end="true"');
+    expect(defaultMarkup).not.toContain("data-initial-scroll-offset");
+  });
+
   it("uses the larger leading inset only when the top fade is enabled", () => {
     const timelineEntries = [buildUserTimelineEntry("Hello")];
 
