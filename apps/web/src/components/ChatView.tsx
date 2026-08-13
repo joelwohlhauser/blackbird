@@ -124,12 +124,12 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import {
   selectActiveMainSurface,
-  pullRequestSurfaceId,
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
   selectWorkspaceNavigatorOpen,
   type RightPanelSurface,
+  updatePullRequestTabStatus,
   useRightPanelStore,
 } from "../rightPanelStore";
 import {
@@ -183,6 +183,7 @@ import WorkspaceNavigator, {
   type WorkspaceNavigatorDiffTarget,
   type WorkspaceNavigatorTab,
 } from "./workspace/WorkspaceNavigator";
+import { isThreadOwnPullRequest } from "./pullRequest/pullRequestDetail.logic";
 import { PullRequestDetailPanel } from "./pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "./pullRequest/PullRequestsUnavailableState";
@@ -315,7 +316,13 @@ import {
   ProviderStatusBanner,
   shouldShowProviderStatusBanner,
 } from "./chat/ProviderStatusBanner";
-import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
+import {
+  dismissThreadErrorBannerForSession,
+  getThreadErrorBannerKey,
+  isThreadErrorBannerDismissedForSession,
+  shouldShowThreadErrorBanner,
+  ThreadErrorBanner,
+} from "./chat/ThreadErrorBanner";
 import { resolveThreadPr } from "./ThreadStatusIndicators";
 import { ComposerBannerStack, type ComposerBannerStackItem } from "./chat/ComposerBannerStack";
 import { ThreadSyncStatusPill } from "./chat/ThreadSyncStatusPill";
@@ -526,6 +533,11 @@ function shouldTypeToFocusComposer(event: KeyboardEvent): boolean {
   if (eventPathContainsSelector(event, TYPE_TO_FOCUS_EDITABLE_SELECTOR)) return false;
   if (eventPathContainsSelector(event, TYPE_TO_FOCUS_INTERACTIVE_SELECTOR)) return false;
   if (document.querySelector(TYPE_TO_FOCUS_FLOATING_LAYER_SELECTOR)) return false;
+
+  const launcherKeys = document
+    .querySelector("[data-surface-launcher-keys]")
+    ?.getAttribute("data-surface-launcher-keys");
+  if (launcherKeys && launcherKeys.toLowerCase().includes(event.key.toLowerCase())) return false;
 
   return true;
 }
@@ -1532,6 +1544,15 @@ function ChatViewContent(props: ChatViewProps) {
   const threadError = isServerThread
     ? (localServerError ?? activeServerThread?.session?.lastError ?? null)
     : localDraftError;
+  const threadErrorBannerKey = getThreadErrorBannerKey(routeThreadKey, threadError);
+  const visibleThreadError = shouldShowThreadErrorBanner(
+    routeThreadKey,
+    threadError,
+    isThreadErrorBannerDismissedForSession(threadErrorBannerKey),
+  )
+    ? threadError
+    : null;
+  const [, setThreadErrorBannerDismissTick] = useState(0);
   const runtimeMode = composerRuntimeMode ?? activeThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   // Plan mode is legacy (Settings → Beta). With the flag off the effective
   // mode is forced to "default" — even for threads with a stored plan mode —
@@ -1621,14 +1642,14 @@ function ChatViewContent(props: ChatViewProps) {
   const [pullRequestTabStatuses, setPullRequestTabStatuses] = useState<
     Record<string, PullRequestTabStatus>
   >({});
-  const handlePullRequestTabStatusChange = useCallback((status: PullRequestTabStatus) => {
-    const id = pullRequestSurfaceId(status);
-    setPullRequestTabStatuses((current) =>
-      current[id]?.state === status.state && current[id]?.isDraft === status.isDraft
-        ? current
-        : { ...current, [id]: status },
-    );
-  }, []);
+  const handlePullRequestTabStatusChange = useCallback(
+    (surfaceId: string, status: PullRequestTabStatus) => {
+      setPullRequestTabStatuses((current) =>
+        updatePullRequestTabStatus(current, surfaceId, status),
+      );
+    },
+    [],
+  );
   const activeFileSurface =
     activeRightPanelSurface?.kind === "file"
       ? activeRightPanelSurface
@@ -2779,7 +2800,7 @@ function ChatViewContent(props: ChatViewProps) {
   )
     ? activeProviderStatus
     : null;
-  const hasTimelineTopBanner = Boolean(threadError) || visibleProviderStatus !== null;
+  const hasTimelineTopBanner = Boolean(visibleThreadError) || visibleProviderStatus !== null;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const projectRootGitStatusQuery = useEnvironmentQuery(
@@ -6927,11 +6948,24 @@ function ChatViewContent(props: ChatViewProps) {
               number: surface.number,
             }}
             context={
-              activeThreadPr?.number === surface.number && threadRepository === surface.repository
+              isThreadOwnPullRequest(
+                {
+                  projectId: activeProject?.id ?? null,
+                  repository: threadRepository,
+                  number: activeThreadPr?.number ?? null,
+                },
+                {
+                  projectId: surface.projectId,
+                  repository: surface.repository,
+                  number: surface.number,
+                },
+              )
                 ? "thread"
                 : "page"
             }
-            onStateChange={handlePullRequestTabStatusChange}
+            chromeVariant="collapse"
+            composerDraftTarget={composerDraftTarget}
+            onStateChange={(status) => handlePullRequestTabStatusChange(surface.id, status)}
           />
         );
       case "agents":
@@ -7076,8 +7110,12 @@ function ChatViewContent(props: ChatViewProps) {
           </header>
 
           <ThreadErrorBanner
-            error={threadError}
-            onDismiss={() => setThreadError(activeThread.id, null)}
+            error={visibleThreadError}
+            onDismiss={() => {
+              setThreadError(activeThread.id, null);
+              dismissThreadErrorBannerForSession(threadErrorBannerKey);
+              setThreadErrorBannerDismissTick((tick) => tick + 1);
+            }}
           />
           {/* Main content area with optional plan sidebar. The chat stays
             mounted (hidden) while a main-area tab is active so its state

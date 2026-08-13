@@ -268,6 +268,11 @@ type StyledDiffCodeViewProps<LAnnotation> = (
 ) & {
   readonly options?: StyledDiffCodeViewOptions<LAnnotation>;
   readonly viewerRef?: Ref<CodeViewHandle<LAnnotation>>;
+  /**
+   * Appended to the shared stylesheet inside the viewer's shadow root, for a surface that has
+   * to restyle chrome the viewer owns — such as replacing its per-file line counts.
+   */
+  readonly unsafeCSSExtra?: string;
 };
 
 /** The shared web CodeView surface: app styling and virtualized geometry stay paired here. */
@@ -275,6 +280,7 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
   options,
   viewerRef,
   className,
+  unsafeCSSExtra,
   ...props
 }: StyledDiffCodeViewProps<LAnnotation>) {
   const { unsafeCSS, itemMetrics, layout, ...restOptions } = options ?? {};
@@ -292,16 +298,21 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
       }
       options={{
         ...restOptions,
-        unsafeCSS: unsafeCSS ?? DIFF_VIEW_UNSAFE_CSS,
+        unsafeCSS: `${DIFF_VIEW_UNSAFE_CSS}${unsafeCSS ? `\n${unsafeCSS}` : ""}${unsafeCSSExtra ? `\n${unsafeCSSExtra}` : ""}`,
         itemMetrics: {
           diffHeaderHeight: 32,
           hunkSeparatorHeight: 24,
           // Pierre uses its general file spacing as a fallback in expanded-file layout paths.
-          // Keep it zero alongside the explicit paddings or expanding the first file can
+          // Keep it zero alongside the explicit paddingTop or expanding the first file can
           // reintroduce the library's default 8px gap above its header.
           spacing: 0,
           paddingTop: 0,
-          paddingBottom: 0,
+          // Unlike the gap above, the 8px under a file's last line is painted
+          // unconditionally by Pierre's stylesheet (`--diffs-gap-fallback`), so the metric has
+          // to count it: at zero every expanded file's virtual height ran 8px short of its
+          // rendered height, and the end of the list sat past the reachable scroll range —
+          // one clipped file row per expanded file above it.
+          paddingBottom: 8,
           ...itemMetrics,
         },
         layout: { paddingTop: 0, paddingBottom: 0, gap: 0, ...layout },
