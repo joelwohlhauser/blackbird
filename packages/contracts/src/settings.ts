@@ -197,6 +197,7 @@ export const ClientSettingsSchema = Schema.Struct({
   // Blackbird keeps its customized per-project sidebar as the default while
   // retaining upstream's promoted sidebar behind the legacy-feature switch.
   legacySidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  pinnedSitesEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   pinnedSites: Schema.Array(PinnedSite).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   sidebarAutoSettleAfterDays: Schema.NullOr(SidebarAutoSettleAfterDays).pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS)),
@@ -831,6 +832,7 @@ export const ClientSettingsPatch = Schema.Struct({
   ),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   legacySidebarEnabled: Schema.optionalKey(Schema.Boolean),
+  pinnedSitesEnabled: Schema.optionalKey(Schema.Boolean),
   pinnedSites: Schema.optionalKey(Schema.Array(PinnedSite)),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),

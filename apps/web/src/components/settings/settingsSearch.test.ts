@@ -51,6 +51,7 @@ describe("searchSettings", () => {
       "worktree-dependencies",
     ]);
     expect(searchSettings("glass").map((item) => item.id)).toEqual(["setting-glass-opacity"]);
+    expect(searchSettings("pinned sites").map((item) => item.id)).toEqual(["pinned-sites"]);
     expect(searchSettings("xyzzy")).toEqual([]);
   });
 

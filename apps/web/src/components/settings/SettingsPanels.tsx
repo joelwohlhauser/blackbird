@@ -497,6 +497,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.externalLinkOpenMode !== DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode
         ? ["Open web links"]
         : []),
+      ...(settings.pinnedSitesEnabled !== DEFAULT_UNIFIED_SETTINGS.pinnedSitesEnabled
+        ? ["Pinned sites"]
+        : []),
       ...(settings.sidebarThreadPreviewCount !== DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount
         ? ["Visible threads"]
         : []),
@@ -567,6 +570,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.diffIgnoreWhitespace,
       settings.environmentIdentificationMode,
       settings.externalLinkOpenMode,
+      settings.pinnedSitesEnabled,
       settings.fontFamilyCode,
       settings.fontFamilyComposer,
       settings.fontFamilySans,
@@ -655,6 +659,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     updateSettings({
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       externalLinkOpenMode: DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode,
+      pinnedSitesEnabled: DEFAULT_UNIFIED_SETTINGS.pinnedSitesEnabled,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
@@ -2067,6 +2072,32 @@ export function GeneralSettingsPanel() {
                 </SelectItem>
               </SelectPopup>
             </Select>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("pinned-sites")}
+          description="Show a Pinned sites section in the left sidebar for websites that open in dedicated browser views."
+          resetAction={
+            settings.pinnedSitesEnabled !== DEFAULT_UNIFIED_SETTINGS.pinnedSitesEnabled ? (
+              <SettingResetButton
+                label="pinned sites"
+                onClick={() =>
+                  updateSettings({
+                    pinnedSitesEnabled: DEFAULT_UNIFIED_SETTINGS.pinnedSitesEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.pinnedSitesEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ pinnedSitesEnabled: Boolean(checked) })
+              }
+              aria-label="Enable pinned sites"
+            />
           }
         />
 

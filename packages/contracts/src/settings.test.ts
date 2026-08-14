@@ -96,6 +96,18 @@ describe("ClientSettings Linear integration", () => {
   });
 });
 
+describe("ClientSettings pinned sites", () => {
+  it("disables pinned sites by default", () => {
+    expect(decodeClientSettings({}).pinnedSitesEnabled).toBe(false);
+  });
+
+  it.each([true, false])("accepts pinnedSitesEnabled=%s", (enabled) => {
+    expect(decodeClientSettingsPatch({ pinnedSitesEnabled: enabled }).pinnedSitesEnabled).toBe(
+      enabled,
+    );
+  });
+});
+
 describe("ClientSettings sidebar", () => {
   it("keeps Blackbird's customized sidebar as the default", () => {
     const settings = decodeClientSettings({});

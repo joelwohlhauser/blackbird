@@ -163,6 +163,7 @@ export const SidebarPinnedSites = memo(function SidebarPinnedSites({
 }: {
   readonly className?: string;
 }) {
+  const pinnedSitesEnabled = useClientSettings((settings) => settings.pinnedSitesEnabled);
   const pinnedSites = useClientSettings((settings) => settings.pinnedSites);
   const updateClientSettings = useUpdateClientSettings();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -223,7 +224,7 @@ export const SidebarPinnedSites = memo(function SidebarPinnedSites({
     [activeSiteId, closePreview, navigate, pinnedSites, primaryEnvironmentId, updateClientSettings],
   );
 
-  if (!isPreviewSupportedInRuntime()) {
+  if (!pinnedSitesEnabled || !isPreviewSupportedInRuntime()) {
     return null;
   }
 

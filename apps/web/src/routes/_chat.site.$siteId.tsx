@@ -45,16 +45,19 @@ function PinnedSiteRouteView() {
   const { siteId } = Route.useParams();
   const navigate = useNavigate();
   const settingsHydrated = useClientSettingsHydrated();
-  const site = useClientSettings(
-    (settings) => settings.pinnedSites.find((pinned) => pinned.id === siteId) ?? null,
+  const pinnedSitesEnabled = useClientSettings((settings) => settings.pinnedSitesEnabled);
+  const site = useClientSettings((settings) =>
+    settings.pinnedSitesEnabled
+      ? (settings.pinnedSites.find((pinned) => pinned.id === siteId) ?? null)
+      : null,
   );
   const environmentId = usePrimaryEnvironmentId();
 
   useEffect(() => {
-    if (settingsHydrated && site === null) {
+    if (settingsHydrated && (!pinnedSitesEnabled || site === null)) {
       void navigate({ to: "/", replace: true });
     }
-  }, [navigate, settingsHydrated, site]);
+  }, [navigate, pinnedSitesEnabled, settingsHydrated, site]);
 
   return (
     <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">

@@ -23,7 +23,7 @@ panels that reveal tools without dominating the conversation.
 The left sidebar includes:
 
 - a dedicated, collapsible **Quick chats** section above Projects;
-- a collapsible **Pinned sites** section for persistent full-window browser views;
+- an optional, collapsible **Pinned sites** section for persistent full-window browser views;
 - a collapsible **Projects** section with local and remote copies grouped under
   the human folder name rather than a GitHub `owner/repo` name (an open-folder
   icon marks expanded projects without a favicon);
@@ -178,7 +178,9 @@ The **Pinned sites** section sits above Quick chats and pins websites — for
 example a Linear inbox — behind their favicons. Clicking a pin opens the site
 in a dedicated full-window in-app browser view: only the page and the browser
 controls, with no chat header, tab strip, or right-side surfaces. The left
-sidebar stays available.
+sidebar stays available. The feature is disabled by default and can be enabled
+under **Settings → General → Pinned sites**; disabling it hides the section and
+its routes without deleting saved pins.
 
 - The hover **+** in the section header opens a small dialog with the URL and
   an optional name; the name defaults to the site's hostname.
