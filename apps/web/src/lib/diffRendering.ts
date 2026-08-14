@@ -57,6 +57,37 @@ export interface DiffLineStat {
   deletions: number;
 }
 
+export interface FirstChangedDiffLine {
+  lineNumber: number;
+  side: "additions" | "deletions";
+}
+
+/** The first rendered addition/deletion, excluding leading hunk context. */
+export function getFirstChangedDiffLine(file: FileDiffMetadata): FirstChangedDiffLine | null {
+  for (const hunk of file.hunks) {
+    let additionLineNumber = hunk.additionStart;
+    let deletionLineNumber = hunk.deletionStart;
+
+    for (const segment of hunk.hunkContent) {
+      if (segment.type === "context") {
+        additionLineNumber += segment.lines;
+        deletionLineNumber += segment.lines;
+        continue;
+      }
+      // Unified diffs render deletions before additions within one change
+      // block. In split mode both sides share the same vertical row.
+      if (segment.deletions > 0) {
+        return { lineNumber: deletionLineNumber, side: "deletions" };
+      }
+      if (segment.additions > 0) {
+        return { lineNumber: additionLineNumber, side: "additions" };
+      }
+    }
+  }
+
+  return null;
+}
+
 export function getDiffLineStat(files: ReadonlyArray<FileDiffMetadata>): DiffLineStat {
   return files.reduce<DiffLineStat>(
     (total, file) => {

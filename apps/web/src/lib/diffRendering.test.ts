@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildFileDiffRenderKey,
   buildPatchCacheKey,
+  getFirstChangedDiffLine,
   getDiffLineStat,
   getRenderablePatch,
   resolveDiffThemeName,
@@ -149,6 +150,50 @@ describe("getDiffLineStat", () => {
     expect(getDiffLineStat(parsed.files)).toEqual({
       additions: 3,
       deletions: 2,
+    });
+  });
+});
+
+describe("getFirstChangedDiffLine", () => {
+  it("skips leading context and targets the first deletion in a changed block", () => {
+    const patch = [
+      "diff --git a/example.ts b/example.ts",
+      "--- a/example.ts",
+      "+++ b/example.ts",
+      "@@ -48,4 +48,4 @@",
+      " context",
+      "-before",
+      "+after",
+      " context",
+      " context",
+    ].join("\n");
+    const parsed = getRenderablePatch(patch);
+    expect(parsed?.kind).toBe("files");
+    if (parsed?.kind !== "files" || !parsed.files[0]) return;
+
+    expect(getFirstChangedDiffLine(parsed.files[0])).toEqual({
+      lineNumber: 49,
+      side: "deletions",
+    });
+  });
+
+  it("targets the additions side when the first change only adds lines", () => {
+    const patch = [
+      "diff --git a/example.ts b/example.ts",
+      "--- a/example.ts",
+      "+++ b/example.ts",
+      "@@ -80,2 +80,3 @@",
+      " context",
+      "+added",
+      " context",
+    ].join("\n");
+    const parsed = getRenderablePatch(patch);
+    expect(parsed?.kind).toBe("files");
+    if (parsed?.kind !== "files" || !parsed.files[0]) return;
+
+    expect(getFirstChangedDiffLine(parsed.files[0])).toEqual({
+      lineNumber: 81,
+      side: "additions",
     });
   });
 });

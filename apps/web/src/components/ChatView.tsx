@@ -6933,6 +6933,7 @@ function ChatViewContent(props: ChatViewProps) {
                       filePath: surface.relativePath,
                       baseRef: surface.baseRef,
                       headRef: surface.headRef,
+                      revealRequestId: surface.revealRequestId,
                     },
                   }
                 : {})}

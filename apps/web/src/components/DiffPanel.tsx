@@ -21,7 +21,7 @@ import {
   SearchIcon,
   TextWrapIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useOpenInPreferredEditor } from "../editorPreferences";
 import { type DraftId } from "../composerDraftStore";
 import { openDiffFilePrimaryAction } from "../diffFileActions";
@@ -36,6 +36,7 @@ import { useTheme } from "../hooks/useTheme";
 import {
   buildFileDiffRenderKey,
   DIFF_SURFACE_THEME_UNSAFE_CSS,
+  getFirstChangedDiffLine,
   getDiffCollapseIconClassName,
   getDiffLineStat,
   getRenderablePatch,
@@ -317,6 +318,7 @@ interface DiffPanelProps {
     filePath: string;
     baseRef: string | null;
     headRef?: string | null;
+    revealRequestId?: number;
   };
 }
 
@@ -393,8 +395,17 @@ export default function DiffPanel({
           kind: "branch",
           baseRef: fixedGitSelection.baseRef,
           filePath: fixedGitSelection.filePath,
+          ...(fixedGitSelection.revealRequestId !== undefined
+            ? { revealRequestId: fixedGitSelection.revealRequestId }
+            : {}),
         }
-      : { kind: "unstaged", filePath: fixedGitSelection.filePath }
+      : {
+          kind: "unstaged",
+          filePath: fixedGitSelection.filePath,
+          ...(fixedGitSelection.revealRequestId !== undefined
+            ? { revealRequestId: fixedGitSelection.revealRequestId }
+            : {}),
+        }
     : storedDiffSelection;
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
@@ -685,8 +696,12 @@ export default function DiffPanel({
   const diffFileKeys = useMemo(() => codeViewFiles.map((file) => file.fileKey), [codeViewFiles]);
   const allDiffFilesCollapsed = areAllDiffFilesCollapsed(diffFileKeys, collapsedDiffFileKeys);
   const diffLineStat = useMemo(() => getDiffLineStat(renderableFiles), [renderableFiles]);
-  const selectedDiffFileKey = selectedFilePath
-    ? (codeViewFiles.find((candidate) => candidate.filePath === selectedFilePath)?.fileKey ?? null)
+  const selectedDiffFile = selectedFilePath
+    ? (codeViewFiles.find((candidate) => candidate.filePath === selectedFilePath) ?? null)
+    : null;
+  const selectedDiffFileKey = selectedDiffFile?.fileKey ?? null;
+  const selectedDiffFirstChange = selectedDiffFile
+    ? getFirstChangedDiffLine(selectedDiffFile.fileDiff)
     : null;
 
   useEffect(() => {
@@ -696,10 +711,26 @@ export default function DiffPanel({
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [fixedFileBreadcrumbs, fixedGitSelection?.filePath]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedDiffFileKey) return;
-    codeViewRef.current?.scrollTo({ type: "item", id: selectedDiffFileKey, align: "start" });
-  }, [codeViewMountKey, selectedDiffFileKey, selectedFileRevealRequestId]);
+    codeViewRef.current?.scrollTo(
+      selectedDiffFirstChange
+        ? {
+            type: "line",
+            id: selectedDiffFileKey,
+            lineNumber: selectedDiffFirstChange.lineNumber,
+            side: selectedDiffFirstChange.side,
+            align: "center",
+          }
+        : { type: "item", id: selectedDiffFileKey, align: "start" },
+    );
+  }, [
+    codeViewMountKey,
+    selectedDiffFileKey,
+    selectedDiffFirstChange?.lineNumber,
+    selectedDiffFirstChange?.side,
+    selectedFileRevealRequestId,
+  ]);
 
   const openDiffFile = useCallback(
     (filePath: string) => {

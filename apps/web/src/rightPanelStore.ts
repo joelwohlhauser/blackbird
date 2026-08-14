@@ -52,6 +52,7 @@ export type RightPanelSurface =
       scope: "unstaged" | "branch";
       baseRef: string | null;
       headRef: string | null;
+      revealRequestId: number;
     }
   | {
       id: `file:${string}`;
@@ -80,7 +81,7 @@ export type RightPanelSurface =
   | { id: "agents"; kind: "agents" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 11;
+const RIGHT_PANEL_STORAGE_VERSION = 12;
 
 /** The two workspace tab containers: the right panel and the main content area. */
 export type WorkspaceTabContainer = "panel" | "main";
@@ -275,6 +276,7 @@ const fileDiffSurface = (
   relativePath: string,
   baseRef: string | null,
   headRef: string | null,
+  revealRequestId: number,
 ): RightPanelSurface => ({
   id: rightPanelFileDiffSurfaceId(scope, relativePath, baseRef, headRef),
   kind: "file-diff",
@@ -282,6 +284,7 @@ const fileDiffSurface = (
   scope,
   baseRef,
   headRef,
+  revealRequestId,
 });
 
 const terminalSurface = (terminalId: string): RightPanelSurface => ({
@@ -558,11 +561,18 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
       return [{ ...surface, revealLine, revealRequestId }];
     }
     if (surface.kind === "file-diff") {
+      const revealRequestId =
+        typeof surface.revealRequestId === "number" &&
+        Number.isSafeInteger(surface.revealRequestId) &&
+        surface.revealRequestId >= 0
+          ? surface.revealRequestId
+          : 0;
       return [
         {
           ...surface,
           headRef:
             "headRef" in surface && typeof surface.headRef === "string" ? surface.headRef : null,
+          revealRequestId,
         },
       ];
     }
@@ -816,17 +826,39 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       openDiffFile: (ref, scope, relativePath, baseRef, headRef) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
-            upsertSurface(
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            const normalizedBaseRef = scope === "branch" ? baseRef?.trim() || null : null;
+            const normalizedHeadRef = scope === "branch" ? headRef?.trim() || null : null;
+            const surfaceId = rightPanelFileDiffSurfaceId(
+              scope,
+              relativePath,
+              normalizedBaseRef,
+              normalizedHeadRef,
+            );
+            const existing = findSurface(
               current,
-              fileDiffSurface(
-                scope,
-                relativePath,
-                scope === "branch" ? baseRef?.trim() || null : null,
-                scope === "branch" ? headRef?.trim() || null : null,
-              ),
-            ),
-          ),
+              (surface) => surface.kind === "file-diff" && surface.id === surfaceId,
+            );
+            const surface = fileDiffSurface(
+              scope,
+              relativePath,
+              normalizedBaseRef,
+              normalizedHeadRef,
+              (existing?.kind === "file-diff" ? existing.revealRequestId : 0) + 1,
+            );
+            const refreshed = existing
+              ? {
+                  ...current,
+                  surfaces: current.surfaces.map((entry) =>
+                    entry.id === surface.id ? surface : entry,
+                  ),
+                  mainSurfaces: current.mainSurfaces.map((entry) =>
+                    entry.id === surface.id ? surface : entry,
+                  ),
+                }
+              : current;
+            return upsertSurface(refreshed, surface);
+          }),
         })),
       openTerminal: (ref, terminalId) =>
         set((state) => ({

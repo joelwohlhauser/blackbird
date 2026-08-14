@@ -143,7 +143,7 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("upgrades saved file surfaces with neutral reveal state", () => {
+  it("upgrades saved file and diff surfaces with neutral reveal state", () => {
     expect(
       migratePersistedRightPanelState({
         byThreadKey: {
@@ -155,6 +155,13 @@ describe("rightPanelStore", () => {
                 id: "file:src/index.ts",
                 kind: "file",
                 relativePath: "src/index.ts",
+              },
+              {
+                id: "file-diff:unstaged::src%2Findex.ts",
+                kind: "file-diff",
+                relativePath: "src/index.ts",
+                scope: "unstaged",
+                baseRef: null,
               },
             ],
           },
@@ -172,6 +179,15 @@ describe("rightPanelStore", () => {
               kind: "file",
               relativePath: "src/index.ts",
               revealLine: null,
+              revealRequestId: 0,
+            },
+            {
+              id: "file-diff:unstaged::src%2Findex.ts",
+              kind: "file-diff",
+              relativePath: "src/index.ts",
+              scope: "unstaged",
+              baseRef: null,
+              headRef: null,
               revealRequestId: 0,
             },
           ],
@@ -453,6 +469,7 @@ describe("rightPanelStore", () => {
           scope: "unstaged",
           baseRef: null,
           headRef: null,
+          revealRequestId: 2,
         },
         {
           id: "file-diff:branch:origin%2Fmain:src%2FApp.tsx",
@@ -461,6 +478,7 @@ describe("rightPanelStore", () => {
           scope: "branch",
           baseRef: "origin/main",
           headRef: null,
+          revealRequestId: 1,
         },
         {
           id: "file-diff:unstaged::src%2Froutes.ts",
@@ -469,6 +487,7 @@ describe("rightPanelStore", () => {
           scope: "unstaged",
           baseRef: null,
           headRef: null,
+          revealRequestId: 1,
         },
       ],
     });
