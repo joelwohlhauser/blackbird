@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { isElectron } from "~/env";
+import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -34,6 +35,7 @@ interface RightPanelTabsProps {
   activeSurfaceId: string | null;
   pendingSurfaceIds: ReadonlySet<string>;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
+  desktopByTabId: Readonly<Record<string, DesktopPreviewOverlay>>;
   terminalLabelsById: ReadonlyMap<string, string>;
   onActivate: (surface: RightPanelSurface) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
@@ -497,6 +499,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           activeSurfaceId={props.activeSurfaceId}
           pendingSurfaceIds={props.pendingSurfaceIds}
           previewSessions={props.previewSessions}
+          desktopByTabId={props.desktopByTabId}
           terminalLabelsById={props.terminalLabelsById}
           {...(props.pullRequestStatuses !== undefined
             ? { pullRequestStatuses: props.pullRequestStatuses }

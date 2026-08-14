@@ -91,7 +91,7 @@ function SidebarBrand({ onBackdrop, onClick }: { onBackdrop: boolean; onClick?: 
   const label = (
     <span
       className={cn(
-        "truncate text-sm font-medium tracking-tight",
+        "-translate-y-px truncate text-sm font-medium tracking-tight",
         onBackdrop ? "text-white/70" : "text-muted-foreground",
       )}
     >

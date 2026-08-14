@@ -30,6 +30,7 @@ import {
   useState,
 } from "react";
 
+import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface, WorkspaceTabContainer } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
@@ -45,6 +46,7 @@ import {
 
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import { GitHubIcon, LinearIcon } from "./Icons";
+import { FaviconImage } from "./preview/PreviewFaviconIcon";
 
 export interface WorkspacePullRequestTabStatus {
   projectId: string;
@@ -109,30 +111,35 @@ export function surfaceTitle(
   }
 }
 
-function PreviewFavicon({ url }: { url: string | null }) {
-  const faviconUrl = faviconUrlForOrigin(url, 32);
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  if (!faviconUrl || failedUrl === faviconUrl) return <Globe2 className="size-3 shrink-0" />;
+function PreviewFavicon({ capturedUrl, url }: { capturedUrl: string | null; url: string | null }) {
+  const publicProviderUrl = faviconUrlForOrigin(url, 32);
   return (
-    <img
-      src={faviconUrl}
-      alt=""
-      aria-hidden
-      draggable={false}
-      className="size-3 shrink-0 rounded-sm"
-      onError={() => setFailedUrl(faviconUrl)}
+    <FaviconImage
+      sources={[capturedUrl, publicProviderUrl]}
+      fallback={<Globe2 className="size-3 shrink-0" />}
+      className="size-3 shrink-0 rounded-sm object-contain"
     />
   );
+}
+
+function sameOrigin(left: string, right: string): boolean {
+  try {
+    return new URL(left).origin === new URL(right).origin;
+  } catch {
+    return false;
+  }
 }
 
 export function SurfaceIcon({
   surface,
   sessions,
+  desktopByTabId,
   theme,
   pullRequestStatuses,
 }: {
   surface: RightPanelSurface;
   sessions: Readonly<Record<string, PreviewSessionSnapshot>>;
+  desktopByTabId?: Readonly<Record<string, DesktopPreviewOverlay>>;
   theme: "light" | "dark";
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
 }) {
@@ -142,7 +149,10 @@ export function SurfaceIcon({
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       const url = !snapshot || snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
-      return <PreviewFavicon url={url} />;
+      const favicon = snapshot ? (desktopByTabId?.[snapshot.tabId]?.favicon ?? null) : null;
+      const capturedUrl =
+        favicon && url && sameOrigin(favicon.pageUrl, url) ? favicon.dataUrl : null;
+      return <PreviewFavicon capturedUrl={capturedUrl} url={url} />;
     }
     case "linear":
       return <LinearIcon className="size-3.5 shrink-0" />;
@@ -199,6 +209,7 @@ const tabStateClass = (active: boolean) =>
 export function WorkspaceTabDragPreview(props: {
   surface: RightPanelSurface;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
+  desktopByTabId: Readonly<Record<string, DesktopPreviewOverlay>>;
   terminalLabelsById: ReadonlyMap<string, string>;
 }) {
   const { resolvedTheme } = useTheme();
@@ -214,6 +225,7 @@ export function WorkspaceTabDragPreview(props: {
         <SurfaceIcon
           surface={props.surface}
           sessions={props.previewSessions}
+          desktopByTabId={props.desktopByTabId}
           theme={resolvedTheme}
         />
       </span>
@@ -343,6 +355,7 @@ function WorkspaceSurfaceTab(props: {
   pinned: boolean;
   title: string;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
+  desktopByTabId: Readonly<Record<string, DesktopPreviewOverlay>>;
   theme: "light" | "dark";
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
   onActivate: (surface: RightPanelSurface) => void;
@@ -382,6 +395,7 @@ function WorkspaceSurfaceTab(props: {
           <SurfaceIcon
             surface={props.surface}
             sessions={props.previewSessions}
+            desktopByTabId={props.desktopByTabId}
             theme={props.theme}
             {...(props.pullRequestStatuses !== undefined
               ? { pullRequestStatuses: props.pullRequestStatuses }
@@ -405,6 +419,7 @@ function WorkspaceSurfaceTab(props: {
             <SurfaceIcon
               surface={props.surface}
               sessions={props.previewSessions}
+              desktopByTabId={props.desktopByTabId}
               theme={props.theme}
               {...(props.pullRequestStatuses !== undefined
                 ? { pullRequestStatuses: props.pullRequestStatuses }
@@ -444,6 +459,7 @@ export interface WorkspaceTabStripProps {
   activeSurfaceId: string | null;
   pendingSurfaceIds: ReadonlySet<string>;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
+  desktopByTabId: Readonly<Record<string, DesktopPreviewOverlay>>;
   terminalLabelsById: ReadonlyMap<string, string>;
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
   /** Surface ids fixed beside the chat tab and protected from close/drag. */
@@ -600,6 +616,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       pinned={props.pinnedSurfaceIds?.has(surface.id) ?? false}
       title={surfaceTitle(surface, props.previewSessions, props.terminalLabelsById)}
       previewSessions={props.previewSessions}
+      desktopByTabId={props.desktopByTabId}
       theme={resolvedTheme}
       {...(props.pullRequestStatuses !== undefined
         ? { pullRequestStatuses: props.pullRequestStatuses }

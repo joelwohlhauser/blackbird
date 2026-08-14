@@ -43,7 +43,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
                 size="sm"
                 disabled={!terminalAvailable}
               >
-                <PanelBottomIcon className="size-3.5" />
+                <PanelBottomIcon className="size-4" />
               </Toggle>
             }
           />
