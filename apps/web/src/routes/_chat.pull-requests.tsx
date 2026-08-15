@@ -68,6 +68,7 @@ import { PullRequestListEmptyState } from "../components/pullRequest/PullRequest
 import { PullRequestListGhost } from "../components/pullRequest/PullRequestGhosts";
 import { PullRequestRow } from "../components/pullRequest/PullRequestRow";
 import { PullRequestsUnavailableState } from "../components/pullRequest/PullRequestsUnavailableState";
+import { AnimatedRightSurface } from "../components/AnimatedRightSurface";
 import { RightPanelTabs, type PullRequestTabStatus } from "../components/RightPanelTabs";
 import {
   WorkspaceBreadcrumb,
@@ -381,7 +382,7 @@ function PullRequestsRouteView() {
   // The open tab names its own server; a link that arrived before any tab was opened names it
   // through the project it selected.
   const panelEnvironmentId =
-    (activePullRequestSurface?.environmentId as EnvironmentId | undefined) ??
+    (selectedPullRequestSurface?.environmentId as EnvironmentId | undefined) ??
     selectedProject?.environmentId ??
     null;
   const [pullRequestTabStatuses, setPullRequestTabStatuses] = useState<
@@ -1495,76 +1496,84 @@ function PullRequestsRouteView() {
       <div className="relative flex min-h-0 flex-1">
         <PullRequestsColumn {...columnProps} />
 
-        {rightPanelState.isOpen && activePullRequestSurface && panelEnvironmentId !== null ? (
-          <RightPanelTabs
-            mode="inline"
-            widthStorageKey="t3code:pull-request-panel-width"
-            // Default to roughly half the viewport: the PR list needs more
-            // room than a chat, so the 540px chat-preview default squashes
-            // it. SSR has no window, so fall back to a reasonable width.
-            defaultWidth={typeof window === "undefined" ? 640 : Math.floor(window.innerWidth / 2)}
-            surfaces={rightPanelState.surfaces}
-            activeSurfaceId={activePullRequestSurface.id}
-            pendingSurfaceIds={EMPTY_PENDING_SURFACES}
-            previewSessions={EMPTY_PREVIEW_SESSIONS}
-            desktopByTabId={EMPTY_PREVIEW_DESKTOP_STATE}
-            terminalLabelsById={EMPTY_TERMINAL_LABELS}
-            onActivate={(surface) => {
-              if (surface.kind === "pull-request") activateSurface(surface);
-            }}
-            onCloseSurface={(surface) => {
-              if (surface.kind === "pull-request") closeSurface(surface);
-            }}
-            onCloseOtherSurfaces={(surface) => {
-              if (surface.kind === "pull-request") closeOtherSurfaces(surface);
-            }}
-            onCloseSurfacesToRight={(surface) => {
-              if (surface.kind === "pull-request") closeSurfacesToRight(surface);
-            }}
-            onCloseAllSurfaces={closeAllSurfaces}
-            onCopyFilePath={() => undefined}
-            onAddBrowser={() => undefined}
-            onAddLinear={() => undefined}
-            onAddGitHubPullRequest={() => undefined}
-            onAddTerminal={() => undefined}
-            onAddDiff={() => undefined}
-            onAddFiles={() => undefined}
-            onAddPullRequest={() => undefined}
-            onAddAgents={() => undefined}
-            browserAvailable={false}
-            linearAvailable={false}
-            githubPullRequestDetected={false}
-            githubPullRequestAvailable={false}
-            terminalAvailable={false}
-            diffAvailable={false}
-            filesAvailable={false}
-            pullRequestAvailable={false}
-            agentsAvailable={false}
-            liveAgentCount={0}
-            pullRequestStatuses={pullRequestTabStatuses}
-          >
-            <PullRequestDetailPanel
-              key={activePullRequestSurface.id}
-              environmentId={panelEnvironmentId}
-              reference={{
-                projectId: activePullRequestSurface.projectId as ProjectId,
-                repository: activePullRequestSurface.repository,
-                number: activePullRequestSurface.number,
+        <AnimatedRightSurface
+          open={
+            rightPanelState.isOpen &&
+            selectedPullRequestSurface !== null &&
+            panelEnvironmentId !== null
+          }
+        >
+          {selectedPullRequestSurface && panelEnvironmentId !== null ? (
+            <RightPanelTabs
+              mode="inline"
+              widthStorageKey="t3code:pull-request-panel-width"
+              // Default to roughly half the viewport: the PR list needs more
+              // room than a chat, so the 540px chat-preview default squashes
+              // it. SSR has no window, so fall back to a reasonable width.
+              defaultWidth={typeof window === "undefined" ? 640 : Math.floor(window.innerWidth / 2)}
+              surfaces={rightPanelState.surfaces}
+              activeSurfaceId={selectedPullRequestSurface.id}
+              pendingSurfaceIds={EMPTY_PENDING_SURFACES}
+              previewSessions={EMPTY_PREVIEW_SESSIONS}
+              desktopByTabId={EMPTY_PREVIEW_DESKTOP_STATE}
+              terminalLabelsById={EMPTY_TERMINAL_LABELS}
+              onActivate={(surface) => {
+                if (surface.kind === "pull-request") activateSurface(surface);
               }}
-              refreshToken={detailRefreshToken}
-              // Merging, closing or reopening changes the row this panel was opened from, so
-              // the list behind it is out of date the moment the host takes the action.
-              onActed={() => {
-                refreshList();
-                baselineQuery.refresh();
-                authoredQuery.refresh();
-                reviewingQuery.refresh();
+              onCloseSurface={(surface) => {
+                if (surface.kind === "pull-request") closeSurface(surface);
               }}
-              onStateChange={handlePullRequestTabStatusChange}
-              chromeVariant="collapse"
-            />
-          </RightPanelTabs>
-        ) : null}
+              onCloseOtherSurfaces={(surface) => {
+                if (surface.kind === "pull-request") closeOtherSurfaces(surface);
+              }}
+              onCloseSurfacesToRight={(surface) => {
+                if (surface.kind === "pull-request") closeSurfacesToRight(surface);
+              }}
+              onCloseAllSurfaces={closeAllSurfaces}
+              onCopyFilePath={() => undefined}
+              onAddBrowser={() => undefined}
+              onAddLinear={() => undefined}
+              onAddGitHubPullRequest={() => undefined}
+              onAddTerminal={() => undefined}
+              onAddDiff={() => undefined}
+              onAddFiles={() => undefined}
+              onAddPullRequest={() => undefined}
+              onAddAgents={() => undefined}
+              browserAvailable={false}
+              linearAvailable={false}
+              githubPullRequestDetected={false}
+              githubPullRequestAvailable={false}
+              terminalAvailable={false}
+              diffAvailable={false}
+              filesAvailable={false}
+              pullRequestAvailable={false}
+              agentsAvailable={false}
+              liveAgentCount={0}
+              pullRequestStatuses={pullRequestTabStatuses}
+            >
+              <PullRequestDetailPanel
+                key={selectedPullRequestSurface.id}
+                environmentId={panelEnvironmentId}
+                reference={{
+                  projectId: selectedPullRequestSurface.projectId as ProjectId,
+                  repository: selectedPullRequestSurface.repository,
+                  number: selectedPullRequestSurface.number,
+                }}
+                refreshToken={detailRefreshToken}
+                // Merging, closing or reopening changes the row this panel was opened from, so
+                // the list behind it is out of date the moment the host takes the action.
+                onActed={() => {
+                  refreshList();
+                  baselineQuery.refresh();
+                  authoredQuery.refresh();
+                  reviewingQuery.refresh();
+                }}
+                onStateChange={handlePullRequestTabStatusChange}
+                chromeVariant="collapse"
+              />
+            </RightPanelTabs>
+          ) : null}
+        </AnimatedRightSurface>
       </div>
     </SidebarInset>
   );

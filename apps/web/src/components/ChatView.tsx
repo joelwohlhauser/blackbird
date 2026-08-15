@@ -127,6 +127,7 @@ import {
   selectActiveMainSurface,
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
+  selectSelectedRightPanelSurface,
   selectThreadRightPanelState,
   selectWorkspaceNavigatorOpen,
   type RightPanelSurface,
@@ -180,6 +181,7 @@ import {
   usePreviewMiniPlayerStore,
 } from "../previewMiniPlayerStore";
 import { AddSurfaceMenu, NewTabPage, RightPanelTabs } from "./RightPanelTabs";
+import { AnimatedRightSurface } from "./AnimatedRightSurface";
 import WorkspaceNavigator, {
   type WorkspaceNavigatorDiffTarget,
   type WorkspaceNavigatorTab,
@@ -1633,6 +1635,9 @@ function ChatViewContent(props: ChatViewProps) {
   const attachedSurfaceOpenInFlightRef = useRef(new Set<string>());
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
+  );
+  const selectedRightPanelSurface = useRightPanelStore((state) =>
+    selectSelectedRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
   const activeMainSurface = useRightPanelStore((state) =>
     selectActiveMainSurface(state.byThreadKey, activeThreadRef),
@@ -7014,8 +7019,8 @@ function ChatViewContent(props: ChatViewProps) {
         );
     }
   };
-  const rightPanelContent = activeRightPanelSurface
-    ? renderSurfaceContent(activeRightPanelSurface)
+  const rightPanelContent = selectedRightPanelSurface
+    ? renderSurfaceContent(selectedRightPanelSurface)
     : null;
   // The main-area strip lives in the chat header: the chat tab carries the
   // thread title (replacing the old project/title header text) and stays the
@@ -7501,68 +7506,83 @@ function ChatViewContent(props: ChatViewProps) {
           ) : null}
         </div>
 
-        {!shouldUseRightPanelSheet && rightPanelOpen && activeThreadRef ? (
-          <RightPanelTabs
-            mode="inline"
-            reserveLayoutControls={!showWorkspaceNavigator}
-            surfaces={rightPanelState.surfaces}
-            activeSurfaceId={activeRightPanelSurface?.id ?? null}
-            pendingSurfaceIds={pendingFileSurfaceIds}
-            previewSessions={activePreviewState.sessions}
-            desktopByTabId={activePreviewState.desktopByTabId}
-            terminalLabelsById={activeTerminalLabelsById}
-            pullRequestStatuses={pullRequestTabStatuses}
-            pinnedSurfaceIds={attachedWorkspaceSurfaceIds}
-            onActivate={activateRightPanelSurface}
-            onCloseSurface={closeRightPanelSurface}
-            onCloseOtherSurfaces={closeOtherRightPanelSurfaces}
-            onCloseSurfacesToRight={closeRightPanelSurfacesToRight}
-            onCloseAllSurfaces={closeAllRightPanelSurfaces}
-            onCopyFilePath={copyRightPanelFilePath}
-            onAddBrowser={createBrowserSurface}
-            onAddLinear={createLinearSurface}
-            onAddGitHubPullRequest={createGitHubPullRequestSurface}
-            onAddTerminal={addTerminalSurface}
-            onAddDiff={addDiffSurface}
-            onAddFiles={addFilesSurface}
-            onAddPullRequest={addPullRequestSurface}
-            onAddAgents={addAgentsSurface}
-            browserAvailable={isPreviewSupportedInRuntime()}
-            linearAvailable={isPreviewSupportedInRuntime()}
-            githubPullRequestDetected={githubPullRequest !== null}
-            githubPullRequestAvailable={githubPullRequest !== null && isPreviewSupportedInRuntime()}
-            terminalAvailable={activeProject !== null}
-            diffAvailable={isServerThread && isGitRepo}
-            filesAvailable={activeProject !== null}
-            pullRequestAvailable={pullRequestSurfaceAvailable}
-            agentsAvailable
-            liveAgentCount={agentPanelModel.liveCount}
-          >
-            {rightPanelContent}
-          </RightPanelTabs>
-        ) : null}
-        {showWorkspaceNavigator && activeThreadRef && activeProject && activeWorkspaceRoot ? (
-          <WorkspaceNavigator
-            environmentId={activeProject.environmentId}
-            activeThreadRef={activeThreadRef}
-            {...(routeKind === "draft" && draftId ? { draftId } : {})}
-            cwd={activeWorkspaceRoot}
-            projectName={activeProject.title}
-            pullRequestReference={activeThreadPullRequestReference}
-            selectedPath={activeFileSurface?.relativePath ?? null}
-            selectedPathRevealId={activeFileSurface?.revealRequestId ?? 0}
-            gitStatus={gitStatusQuery.data ?? null}
-            gitStatusError={gitStatusQuery.error}
-            gitStatusPending={gitStatusQuery.isPending}
-            activeTab={workspaceNavigatorTab}
-            layoutControls={workspaceNavigatorLayoutControls}
-            onActiveTabChange={setWorkspaceNavigatorTab}
-            onOpenFile={openFileSurface}
-            onOpenDiffFile={openWorkspaceDiffFile}
-          />
-        ) : null}
-        {shouldUseRightPanelSheet && rightPanelOpen && activeThreadRef ? (
-          <RightPanelSheet open onClose={closePreviewPanel}>
+        <AnimatedRightSurface
+          open={!shouldUseRightPanelSheet && rightPanelOpen && activeThreadRef !== null}
+        >
+          {activeThreadRef ? (
+            <RightPanelTabs
+              mode="inline"
+              reserveLayoutControls={!showWorkspaceNavigator}
+              surfaces={rightPanelState.surfaces}
+              activeSurfaceId={selectedRightPanelSurface?.id ?? null}
+              pendingSurfaceIds={pendingFileSurfaceIds}
+              previewSessions={activePreviewState.sessions}
+              desktopByTabId={activePreviewState.desktopByTabId}
+              terminalLabelsById={activeTerminalLabelsById}
+              pullRequestStatuses={pullRequestTabStatuses}
+              pinnedSurfaceIds={attachedWorkspaceSurfaceIds}
+              onActivate={activateRightPanelSurface}
+              onCloseSurface={closeRightPanelSurface}
+              onCloseOtherSurfaces={closeOtherRightPanelSurfaces}
+              onCloseSurfacesToRight={closeRightPanelSurfacesToRight}
+              onCloseAllSurfaces={closeAllRightPanelSurfaces}
+              onCopyFilePath={copyRightPanelFilePath}
+              onAddBrowser={createBrowserSurface}
+              onAddLinear={createLinearSurface}
+              onAddGitHubPullRequest={createGitHubPullRequestSurface}
+              onAddTerminal={addTerminalSurface}
+              onAddDiff={addDiffSurface}
+              onAddFiles={addFilesSurface}
+              onAddPullRequest={addPullRequestSurface}
+              onAddAgents={addAgentsSurface}
+              browserAvailable={isPreviewSupportedInRuntime()}
+              linearAvailable={isPreviewSupportedInRuntime()}
+              githubPullRequestDetected={githubPullRequest !== null}
+              githubPullRequestAvailable={
+                githubPullRequest !== null && isPreviewSupportedInRuntime()
+              }
+              terminalAvailable={activeProject !== null}
+              diffAvailable={isServerThread && isGitRepo}
+              filesAvailable={activeProject !== null}
+              pullRequestAvailable={pullRequestSurfaceAvailable}
+              agentsAvailable
+              liveAgentCount={agentPanelModel.liveCount}
+            >
+              {rightPanelContent}
+            </RightPanelTabs>
+          ) : null}
+        </AnimatedRightSurface>
+        <AnimatedRightSurface
+          open={
+            showWorkspaceNavigator &&
+            activeThreadRef !== null &&
+            activeProject !== null &&
+            activeWorkspaceRoot !== undefined
+          }
+        >
+          {activeThreadRef && activeProject && activeWorkspaceRoot ? (
+            <WorkspaceNavigator
+              environmentId={activeProject.environmentId}
+              activeThreadRef={activeThreadRef}
+              {...(routeKind === "draft" && draftId ? { draftId } : {})}
+              cwd={activeWorkspaceRoot}
+              projectName={activeProject.title}
+              pullRequestReference={activeThreadPullRequestReference}
+              selectedPath={activeFileSurface?.relativePath ?? null}
+              selectedPathRevealId={activeFileSurface?.revealRequestId ?? 0}
+              gitStatus={gitStatusQuery.data ?? null}
+              gitStatusError={gitStatusQuery.error}
+              gitStatusPending={gitStatusQuery.isPending}
+              activeTab={workspaceNavigatorTab}
+              layoutControls={workspaceNavigatorLayoutControls}
+              onActiveTabChange={setWorkspaceNavigatorTab}
+              onOpenFile={openFileSurface}
+              onOpenDiffFile={openWorkspaceDiffFile}
+            />
+          ) : null}
+        </AnimatedRightSurface>
+        {shouldUseRightPanelSheet && activeThreadRef ? (
+          <RightPanelSheet open={rightPanelOpen} onClose={closePreviewPanel}>
             <RightPanelTabs
               mode="sheet"
               layoutControls={panelToggleControls}
