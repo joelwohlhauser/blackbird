@@ -16,10 +16,11 @@ export function AnimatedRightSurface(props: {
   readonly open: boolean;
   readonly children: ReactNode;
   readonly className?: string;
+  readonly animateOnMount?: boolean;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(props.open);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(props.open && props.animateOnMount === false);
   const [animating, setAnimating] = useState(false);
   const [contentWidth, setContentWidth] = useState(0);
 

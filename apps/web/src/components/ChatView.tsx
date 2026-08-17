@@ -7566,6 +7566,8 @@ function ChatViewContent(props: ChatViewProps) {
         </div>
 
         <AnimatedRightSurface
+          key={`${activeThreadKey}:right-panel`}
+          animateOnMount={false}
           open={!shouldUseRightPanelSheet && rightPanelOpen && activeThreadRef !== null}
         >
           {activeThreadRef ? (
@@ -7612,6 +7614,8 @@ function ChatViewContent(props: ChatViewProps) {
           ) : null}
         </AnimatedRightSurface>
         <AnimatedRightSurface
+          key={`${activeThreadKey}:workspace-navigator`}
+          animateOnMount={false}
           open={
             showWorkspaceNavigator &&
             activeThreadRef !== null &&
