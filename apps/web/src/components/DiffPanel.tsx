@@ -313,12 +313,14 @@ interface DiffPanelProps {
   mode?: DiffPanelMode;
   composerDraftTarget: ScopedThreadRef | DraftId;
   initialGitScope: "branch" | "unstaged";
+  initialScrollTop?: number;
+  revealFirstChange?: boolean;
+  onScrollPositionChange?: (scrollTop: number) => void;
   fixedGitSelection?: {
     scope: "branch" | "unstaged";
     filePath: string;
     baseRef: string | null;
     headRef?: string | null;
-    revealRequestId?: number;
   };
 }
 
@@ -328,6 +330,9 @@ export default function DiffPanel({
   mode = "inline",
   composerDraftTarget,
   initialGitScope: initialGitScopeProp,
+  initialScrollTop,
+  revealFirstChange = false,
+  onScrollPositionChange,
   fixedGitSelection,
 }: DiffPanelProps) {
   const { resolvedTheme } = useTheme();
@@ -344,6 +349,9 @@ export default function DiffPanel({
   }));
   const [codeViewRevision, setCodeViewRevision] = useState(0);
   const codeViewRef = useRef<AnnotatableCodeViewHandle>(null);
+  const currentScrollTopRef = useRef(initialScrollTop);
+  const shouldRevealFirstChangeRef = useRef(revealFirstChange);
+  const appliedFixedCodeViewMountKeyRef = useRef<string | null>(null);
   const fileBreadcrumbRef = useRef<HTMLDivElement>(null);
   const lastCompletedTurnRefreshRef = useRef<{
     readonly threadKey: string | null;
@@ -395,16 +403,10 @@ export default function DiffPanel({
           kind: "branch",
           baseRef: fixedGitSelection.baseRef,
           filePath: fixedGitSelection.filePath,
-          ...(fixedGitSelection.revealRequestId !== undefined
-            ? { revealRequestId: fixedGitSelection.revealRequestId }
-            : {}),
         }
       : {
           kind: "unstaged",
           filePath: fixedGitSelection.filePath,
-          ...(fixedGitSelection.revealRequestId !== undefined
-            ? { revealRequestId: fixedGitSelection.revealRequestId }
-            : {}),
         }
     : storedDiffSelection;
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
@@ -440,6 +442,13 @@ export default function DiffPanel({
     fixedGitSelection?.scope === "branch" ? (fixedGitSelection.headRef ?? null) : null;
   const selectedFilePath = diffSelection.filePath ?? null;
   const selectedFileRevealRequestId = diffSelection.revealRequestId ?? 0;
+  const handleCodeViewScroll = useCallback(
+    (scrollTop: number) => {
+      currentScrollTopRef.current = scrollTop;
+      onScrollPositionChange?.(scrollTop);
+    },
+    [onScrollPositionChange],
+  );
   const fixedFileBreadcrumbs = useMemo(
     () =>
       fixedGitSelection?.filePath && activeProject?.title
@@ -713,7 +722,38 @@ export default function DiffPanel({
 
   useLayoutEffect(() => {
     if (!selectedDiffFileKey) return;
-    codeViewRef.current?.scrollTo(
+    const viewer = codeViewRef.current;
+    if (!viewer) return;
+
+    if (fixedGitSelection) {
+      if (appliedFixedCodeViewMountKeyRef.current === codeViewMountKey) return;
+      appliedFixedCodeViewMountKeyRef.current = codeViewMountKey;
+
+      if (shouldRevealFirstChangeRef.current) {
+        shouldRevealFirstChangeRef.current = false;
+        viewer.scrollTo(
+          selectedDiffFirstChange
+            ? {
+                type: "line",
+                id: selectedDiffFileKey,
+                lineNumber: selectedDiffFirstChange.lineNumber,
+                side: selectedDiffFirstChange.side,
+                align: "center",
+              }
+            : { type: "item", id: selectedDiffFileKey, align: "start" },
+        );
+        const scrollTop = viewer.getInstance()?.getScrollTop();
+        if (scrollTop !== undefined) handleCodeViewScroll(scrollTop);
+        return;
+      }
+
+      if (currentScrollTopRef.current !== undefined) {
+        viewer.scrollTo({ type: "position", position: currentScrollTopRef.current });
+      }
+      return;
+    }
+
+    viewer.scrollTo(
       selectedDiffFirstChange
         ? {
             type: "line",
@@ -726,6 +766,8 @@ export default function DiffPanel({
     );
   }, [
     codeViewMountKey,
+    fixedGitSelection,
+    handleCodeViewScroll,
     selectedDiffFileKey,
     selectedDiffFirstChange?.lineNumber,
     selectedDiffFirstChange?.side,
@@ -1245,6 +1287,7 @@ export default function DiffPanel({
                 <AnnotatableCodeView
                   key={collapseScopeKey ?? codeViewMountKey ?? reviewSectionId}
                   viewerRef={codeViewRef}
+                  onScroll={handleCodeViewScroll}
                   codeViewKey={codeViewMountKey}
                   className="diff-render-surface diff-overview-scroll h-full min-h-0 overflow-auto bg-background"
                   files={codeViewFiles}

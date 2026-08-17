@@ -122,9 +122,9 @@ three tabs:
 Selecting a file opens it in the normal right panel. Selecting an item from
 Changes or PR opens a dedicated whole-file diff tab rather than replacing the
 aggregate Diff surface. Opening a changed file centers its first changed line,
-including when reopening a diff tab that is already visible. The workspace
-navigator's visibility, selected tab, and size belong to the current chat and
-survive chat switches/restarts.
+while returning to an existing diff tab restores the scroll position where it
+was left. The workspace navigator's visibility, selected tab, and size belong
+to the current chat and survive chat switches/restarts.
 
 Useful shortcuts on macOS:
 

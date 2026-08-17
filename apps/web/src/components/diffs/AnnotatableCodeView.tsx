@@ -84,6 +84,7 @@ interface AnnotatableCodeViewProps {
   composerDraftTarget: ScopedThreadRef | DraftId;
   options: StyledDiffCodeViewOptions<DiffCommentAnnotationGroup>;
   viewerRef?: Ref<AnnotatableCodeViewHandle>;
+  onScroll?: (scrollTop: number) => void;
   className?: string;
   renderHeaderPrefix: (
     fileDiff: FileDiffMetadata,
@@ -104,6 +105,7 @@ export function AnnotatableCodeView({
   composerDraftTarget,
   options,
   viewerRef,
+  onScroll,
   className,
   renderHeaderPrefix,
 }: AnnotatableCodeViewProps) {
@@ -241,6 +243,7 @@ export function AnnotatableCodeView({
     <StyledDiffCodeView<DiffCommentAnnotationGroup>
       key={codeViewKey}
       {...(viewerRef ? { viewerRef } : {})}
+      {...(onScroll ? { onScroll } : {})}
       {...(className ? { className } : {})}
       items={items}
       selectedLines={selectedLines}

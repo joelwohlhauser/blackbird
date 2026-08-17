@@ -130,6 +130,7 @@ import {
   selectSelectedRightPanelSurface,
   selectThreadRightPanelState,
   selectWorkspaceNavigatorOpen,
+  rightPanelFileDiffSurfaceId,
   type RightPanelSurface,
   updatePullRequestTabStatus,
   useRightPanelStore,
@@ -1188,6 +1189,27 @@ type LocalThreadErrorEntry = {
 
 const MAX_REMEMBERED_TIMELINE_SCROLL_POSITIONS = 100;
 const timelineScrollPositionByThreadKey = new Map<string, TimelineScrollPosition>();
+
+type WorkspaceDiffScrollState =
+  | { readonly kind: "reveal-first-change" }
+  | { readonly kind: "position"; readonly scrollTop: number };
+
+const MAX_REMEMBERED_WORKSPACE_DIFF_SCROLL_POSITIONS = 200;
+const workspaceDiffScrollStateByTabKey = new Map<string, WorkspaceDiffScrollState>();
+
+function workspaceDiffTabKey(threadKey: string, surfaceId: string): string {
+  return `${threadKey}:${surfaceId}`;
+}
+
+function rememberWorkspaceDiffScrollState(tabKey: string, state: WorkspaceDiffScrollState): void {
+  workspaceDiffScrollStateByTabKey.delete(tabKey);
+  workspaceDiffScrollStateByTabKey.set(tabKey, state);
+  while (workspaceDiffScrollStateByTabKey.size > MAX_REMEMBERED_WORKSPACE_DIFF_SCROLL_POSITIONS) {
+    const oldestTabKey = workspaceDiffScrollStateByTabKey.keys().next().value;
+    if (oldestTabKey === undefined) break;
+    workspaceDiffScrollStateByTabKey.delete(oldestTabKey);
+  }
+}
 
 function rememberTimelineScrollPosition(threadKey: string, position: TimelineScrollPosition): void {
   // Refresh insertion order so the bounded map retains recently visited chats.
@@ -3560,19 +3582,33 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const openWorkspaceDiffFile = useCallback(
     (target: WorkspaceNavigatorDiffTarget) => {
-      if (!activeThreadRef || !isServerThread || !isGitRepo) return;
+      if (!activeThreadRef || !activeThreadKey || !isServerThread || !isGitRepo) return;
+      const baseRef = target.scope === "branch" ? target.baseRef?.trim() || null : null;
+      const headRef = target.scope === "branch" ? target.headRef?.trim() || null : null;
+      const surfaceId = rightPanelFileDiffSurfaceId(
+        target.scope,
+        target.filePath,
+        baseRef,
+        headRef,
+      );
+      const current = selectThreadRightPanelState(
+        useRightPanelStore.getState().byThreadKey,
+        activeThreadRef,
+      );
+      const alreadyOpen = [...current.surfaces, ...current.mainSurfaces].some(
+        (surface) => surface.id === surfaceId,
+      );
+      if (!alreadyOpen) {
+        rememberWorkspaceDiffScrollState(workspaceDiffTabKey(activeThreadKey, surfaceId), {
+          kind: "reveal-first-change",
+        });
+      }
       useRightPanelStore
         .getState()
-        .openDiffFile(
-          activeThreadRef,
-          target.scope,
-          target.filePath,
-          target.scope === "branch" ? target.baseRef : undefined,
-          target.scope === "branch" ? target.headRef : undefined,
-        );
+        .openDiffFile(activeThreadRef, target.scope, target.filePath, baseRef, headRef);
       onDiffPanelOpen?.();
     },
-    [activeThreadRef, isGitRepo, isServerThread, onDiffPanelOpen],
+    [activeThreadKey, activeThreadRef, isGitRepo, isServerThread, onDiffPanelOpen],
   );
   // The thread's own change request, placed against the project it belongs to. Without a
   // project there is nothing to resolve it against, so the caller falls back to the browser.
@@ -3880,6 +3916,9 @@ function ChatViewContent(props: ChatViewProps) {
     (surfaces: readonly RightPanelSurface[]) => {
       if (!activeThreadRef) return;
       for (const surface of surfaces) {
+        if (activeThreadKey && surface.kind === "file-diff") {
+          workspaceDiffScrollStateByTabKey.delete(workspaceDiffTabKey(activeThreadKey, surface.id));
+        }
         if (
           (surface.kind === "preview" ||
             surface.kind === "linear" ||
@@ -3910,6 +3949,7 @@ function ChatViewContent(props: ChatViewProps) {
     },
     [
       activeThreadRef,
+      activeThreadKey,
       activePreviewState.sessions,
       closePreview,
       closeTerminalMutation,
@@ -6924,6 +6964,12 @@ function ChatViewContent(props: ChatViewProps) {
         );
       case "diff":
       case "file-diff":
+        const diffTabKey = activeThreadKey
+          ? workspaceDiffTabKey(activeThreadKey, surface.id)
+          : null;
+        const diffScrollState = diffTabKey
+          ? workspaceDiffScrollStateByTabKey.get(diffTabKey)
+          : undefined;
         return (
           <Suspense fallback={null}>
             <DiffPanel
@@ -6931,6 +6977,20 @@ function ChatViewContent(props: ChatViewProps) {
               mode="embedded"
               composerDraftTarget={composerDraftTarget}
               initialGitScope={initialDiffPanelGitScope}
+              {...(surface.kind === "file-diff" && diffTabKey
+                ? {
+                    ...(diffScrollState?.kind === "position"
+                      ? { initialScrollTop: diffScrollState.scrollTop }
+                      : {}),
+                    revealFirstChange: diffScrollState?.kind === "reveal-first-change",
+                    onScrollPositionChange: (scrollTop: number) => {
+                      rememberWorkspaceDiffScrollState(diffTabKey, {
+                        kind: "position",
+                        scrollTop,
+                      });
+                    },
+                  }
+                : {})}
               {...(surface.kind === "file-diff"
                 ? {
                     fixedGitSelection: {
@@ -6938,7 +6998,6 @@ function ChatViewContent(props: ChatViewProps) {
                       filePath: surface.relativePath,
                       baseRef: surface.baseRef,
                       headRef: surface.headRef,
-                      revealRequestId: surface.revealRequestId,
                     },
                   }
                 : {})}
