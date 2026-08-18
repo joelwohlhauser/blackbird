@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { PreviewChromeRow } from "./PreviewChromeRow";
 
 describe("PreviewChromeRow", () => {
-  it("renders zoom controls in the browser navigation group", () => {
+  it("renders zoom controls to the right of the address bar", () => {
     const markup = renderToStaticMarkup(
       <PreviewChromeRow
         url="https://example.com"
@@ -25,6 +25,9 @@ describe("PreviewChromeRow", () => {
 
     expect(markup).toContain('aria-label="Zoom out"');
     expect(markup).toContain('aria-label="Zoom in"');
+    expect(markup.indexOf("data-preview-url-input")).toBeLessThan(
+      markup.indexOf('aria-label="Zoom out"'),
+    );
   });
 
   it("disables both zoom controls while the webview is unavailable", () => {

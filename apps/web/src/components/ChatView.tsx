@@ -384,6 +384,7 @@ import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
 import { RightPanelSheet } from "./RightPanelSheet";
 import { previewEnvironment } from "../state/preview";
 import { useAtomCommand } from "../state/use-atom-command";
+import { usePreviewSession } from "./preview/usePreviewSession";
 import { Button } from "./ui/button";
 import {
   AlertDialog,
@@ -492,6 +493,11 @@ const PreviewPanel = lazy(() =>
 const DiffPanel = lazy(() => import("./DiffPanel"));
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
+
+function PreviewSessionPreloader({ threadRef }: { readonly threadRef: ScopedThreadRef }) {
+  usePreviewSession(threadRef);
+  return null;
+}
 const TYPE_TO_FOCUS_EDITABLE_SELECTOR = [
   "input",
   "textarea",
@@ -7184,6 +7190,9 @@ function ChatViewContent(props: ChatViewProps) {
       onDragEnd={handleTabDragEnd}
       onDragCancel={handleTabDragCancel}
     >
+      {activeThreadRef && isPreviewSupportedInRuntime() ? (
+        <PreviewSessionPreloader threadRef={activeThreadRef} />
+      ) : null}
       <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
         {rightPanelOpen && !shouldUseRightPanelSheet && !showWorkspaceNavigator
           ? panelLayoutControls

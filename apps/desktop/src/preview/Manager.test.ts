@@ -219,6 +219,7 @@ const makeFaviconWebContents = (options?: {
       options?.rasterize ? options.rasterize(scripts[0]?.code ?? "") : TEST_FAVICON,
   );
   const reload = vi.fn();
+  const setWindowOpenHandler = vi.fn();
   const loadURL = vi.fn(async (url: string) => {
     currentUrl = url;
   });
@@ -245,7 +246,7 @@ const makeFaviconWebContents = (options?: {
     send: webviewSend,
     session: { fetch },
     navigationHistory: { canGoBack: () => false, canGoForward: () => false },
-    setWindowOpenHandler: vi.fn(),
+    setWindowOpenHandler,
     executeJavaScriptInIsolatedWorld,
     debugger: {
       isAttached: () => false,
@@ -263,6 +264,7 @@ const makeFaviconWebContents = (options?: {
     loadURL,
     off,
     reload,
+    setWindowOpenHandler,
     setDestroyed: (value: boolean) => {
       destroyed = value;
     },
@@ -771,6 +773,28 @@ describe("PreviewManager", () => {
         yield* settle(() => states.at(-1)?.navStatus.kind === "Success");
 
         expect(states.at(-1)?.favicon).toBeUndefined();
+      }),
+    ),
+  );
+
+  effectIt.effect("opens popup links in the same preview tab after denying the popup", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const preview = makeFaviconWebContents();
+        fromId.mockReturnValue(preview.webContents);
+        yield* manager.createTab("tab_popup_link");
+        yield* manager.registerWebview("tab_popup_link", 42);
+
+        const handler = preview.setWindowOpenHandler.mock.calls[0]?.[0];
+        expect(handler).toBeTypeOf("function");
+
+        const decision = handler?.({ url: "https://sentry.io/issues/123" });
+        expect(decision).toEqual({ action: "deny" });
+        expect(preview.loadURL).not.toHaveBeenCalled();
+
+        yield* Effect.promise(() => Promise.resolve());
+        yield* settle(() => preview.loadURL.mock.calls.length === 1);
+        expect(preview.loadURL).toHaveBeenCalledWith("https://sentry.io/issues/123");
       }),
     ),
   );

@@ -88,7 +88,9 @@ moved to the panel.
 When the chat branch identifies a Linear issue or has a detected GitHub pull
 request, those browser-backed tabs are created automatically and pinned beside
 the chat tab. They stay visible, cannot be closed or moved, and disappear from
-the pinned set when the branch no longer identifies that issue or PR.
+the pinned set when the branch no longer identifies that issue or PR. Their
+browser sessions preload when the chat opens, so selecting either tab does not
+start a cold page load.
 
 Tabs are draggable: reorder them within a container or drag them between the
 chat area and the right panel. Dragging toward the chat column's right edge
@@ -97,10 +99,11 @@ the zone sits left of the workspace navigator when that is open. Moving or
 closing the panel's last tab closes the panel. A dropped tab activates in its
 new container, and tab layout persists per chat across restarts.
 
-New tabs place themselves automatically: an open panel always receives them;
-with the panel closed they open in the chat area unless the window is very
-wide (`WIDE_WORKSPACE_MIN_WIDTH`, 2200px — above any MacBook fullscreen), in
-which case the panel opens. Both tab bars have a Plus "new tab" menu
+New tabs, including browser sessions opened by agents, place themselves
+automatically: an open panel always receives them; with the panel closed they
+open in the chat area unless the window is very wide
+(`WIDE_WORKSPACE_MIN_WIDTH`, 2200px — above any MacBook fullscreen), in which
+case the panel opens. Both tab bars have a Plus "new tab" menu
 (Browser, Terminal, Diff, Linear, GitHub PR, Agents). There is deliberately
 no right-panel toggle button, no ⌥⌘B binding, and no maximize control.
 Control+Tab opens the tab switcher described above. Browser-backed tabs
@@ -208,9 +211,10 @@ The normal right panel has browser-backed integration tabs:
   workspace navigator's PR file tree from the same PR.
 
 PR chips, composer PR actions, and **View PR** open the internal PR tab rather
-than the system browser. Other chat/terminal links can ask each time, always
-open in the normal right panel, or always open in the default browser; this is
-configurable in Settings.
+than the system browser. Links opened by a page in the in-app browser navigate
+that same tab, including links to a different domain. Other chat/terminal links
+can ask each time, always open in the normal right panel, or always open in the
+default browser; this is configurable in Settings.
 
 ## Local and remote environments
 

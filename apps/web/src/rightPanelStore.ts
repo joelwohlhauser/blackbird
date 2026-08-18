@@ -1143,8 +1143,9 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               ),
             );
             // Main-area tabs keep their slot; only stale browser-backed
-            // surfaces are dropped. New browser tabs always join the panel.
-            const mainSurfaces = current.mainSurfaces.filter((surface) => {
+            // surfaces are dropped. Newly discovered sessions follow the
+            // same workspace placement rule as browser tabs opened by hand.
+            const retainedMainSurfaces = current.mainSurfaces.filter((surface) => {
               if (surface.kind === "preview") {
                 return (
                   surface.id !== "browser:new" &&
@@ -1159,7 +1160,9 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               return true;
             });
             const mainBrowserIds = new Set(
-              mainSurfaces.flatMap((surface) => (surface.kind === "preview" ? [surface.id] : [])),
+              retainedMainSurfaces.flatMap((surface) =>
+                surface.kind === "preview" ? [surface.id] : [],
+              ),
             );
             const nonBrowser = current.surfaces.filter(
               (surface) =>
@@ -1184,7 +1187,16 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                   !dedicatedBrowserTabIds.has(tabId),
               )
               .map((tabId) => browserSurface(tabId));
-            const surfaces = [...nonBrowser, ...existingBrowser, ...added];
+            const placeAddedInMain =
+              added.length > 0 && !current.isOpen && !workspaceLayoutProbe.isWide();
+            const mainSurfaces = placeAddedInMain
+              ? [...retainedMainSurfaces, ...added]
+              : retainedMainSurfaces;
+            const surfaces = [
+              ...nonBrowser,
+              ...existingBrowser,
+              ...(placeAddedInMain ? [] : added),
+            ];
             const activeStillExists = surfaces.some(
               (surface) => surface.id === current.activeSurfaceId,
             );
@@ -1192,14 +1204,20 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             const activeMainStillExists =
               current.activeMainSurfaceId === null ||
               mainSurfaces.some((surface) => surface.id === current.activeMainSurfaceId);
+            const addedMainSurfaceId = placeAddedInMain ? (added.at(-1)?.id ?? null) : null;
+            const addedPanelSurfaceId = !placeAddedInMain ? (added.at(-1)?.id ?? null) : null;
             return {
               ...current,
+              isOpen: addedPanelSurfaceId ? true : current.isOpen,
               surfaces,
-              activeSurfaceId: activeStillExists
-                ? current.activeSurfaceId
-                : (fallbackBrowser?.id ?? surfaces[0]?.id ?? null),
+              activeSurfaceId:
+                addedPanelSurfaceId ??
+                (activeStillExists
+                  ? current.activeSurfaceId
+                  : (fallbackBrowser?.id ?? surfaces[0]?.id ?? null)),
               mainSurfaces,
-              activeMainSurfaceId: activeMainStillExists ? current.activeMainSurfaceId : null,
+              activeMainSurfaceId:
+                addedMainSurfaceId ?? (activeMainStillExists ? current.activeMainSurfaceId : null),
             };
           }),
         })),

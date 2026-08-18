@@ -174,40 +174,6 @@ export function PreviewChromeRow({
             </TooltipTrigger>
             <TooltipPopup>{loading ? "Loading…" : "Refresh"}</TooltipPopup>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={zoomDisabled ? NOOP : onZoomOut}
-                  disabled={zoomDisabled}
-                  aria-label="Zoom out"
-                  type="button"
-                />
-              }
-            >
-              <ZoomOut />
-            </TooltipTrigger>
-            <TooltipPopup>Zoom out</TooltipPopup>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={zoomDisabled ? NOOP : onZoomIn}
-                  disabled={zoomDisabled}
-                  aria-label="Zoom in"
-                  type="button"
-                />
-              }
-            >
-              <ZoomIn />
-            </TooltipTrigger>
-            <TooltipPopup>Zoom in</TooltipPopup>
-          </Tooltip>
         </div>
 
         <InputGroup variant="ghost" className="group/address h-7 flex-1">
@@ -272,6 +238,43 @@ export function PreviewChromeRow({
             </InputGroupAddon>
           ) : null}
         </InputGroup>
+
+        <div className="flex items-center gap-0.5" role="group" aria-label="Zoom">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={zoomDisabled ? NOOP : onZoomOut}
+                  disabled={zoomDisabled}
+                  aria-label="Zoom out"
+                  type="button"
+                />
+              }
+            >
+              <ZoomOut />
+            </TooltipTrigger>
+            <TooltipPopup>Zoom out</TooltipPopup>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={zoomDisabled ? NOOP : onZoomIn}
+                  disabled={zoomDisabled}
+                  aria-label="Zoom in"
+                  type="button"
+                />
+              }
+            >
+              <ZoomIn />
+            </TooltipTrigger>
+            <TooltipPopup>Zoom in</TooltipPopup>
+          </Tooltip>
+        </div>
 
         {onPickElement ? (
           <Tooltip>

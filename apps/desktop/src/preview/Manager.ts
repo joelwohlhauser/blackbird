@@ -1601,11 +1601,17 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         wc.ipc.on(HUMAN_INPUT_CHANNEL, humanInput);
         wc.ipc.on(MOUSE_NAVIGATE_CHANNEL, mouseNavigate);
         wc.setWindowOpenHandler(({ url }) => {
-          runFork(
-            attemptPromise({ operation: "openPreviewWindow", tabId, webContentsId: wc.id }, () =>
-              wc.loadURL(url),
-            ).pipe(Effect.ignore),
-          );
+          // Finish denying the popup before navigating its opener. Starting
+          // loadURL inside Electron's window-open callback can be cancelled
+          // along with the popup, which makes cross-origin target=_blank
+          // links look inert.
+          queueMicrotask(() => {
+            runFork(
+              attemptPromise({ operation: "openPreviewWindow", tabId, webContentsId: wc.id }, () =>
+                wc.loadURL(url),
+              ).pipe(Effect.ignore),
+            );
+          });
           return { action: "deny" };
         });
         wc.on("before-input-event", beforeInput);

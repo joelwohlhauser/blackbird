@@ -998,6 +998,47 @@ describe("rightPanelStore", () => {
     ).toEqual(["terminal:term-1", "browser:tab-b", "browser:tab-c"]);
   });
 
+  it("places agent-created browser sessions in the main area on smaller windows", () => {
+    const originalIsWide = workspaceLayoutProbe.isWide;
+    try {
+      workspaceLayoutProbe.isWide = () => false;
+      useRightPanelStore.getState().reconcileBrowserSurfaces(refA, ["agent-tab"]);
+
+      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      expect(state).toMatchObject({
+        isOpen: false,
+        surfaces: [],
+        activeMainSurfaceId: "browser:agent-tab",
+      });
+      expect(state.mainSurfaces).toEqual([
+        { id: "browser:agent-tab", kind: "preview", resourceId: "agent-tab" },
+      ]);
+    } finally {
+      workspaceLayoutProbe.isWide = originalIsWide;
+    }
+  });
+
+  it("places agent-created browser sessions in an already-open panel", () => {
+    const originalIsWide = workspaceLayoutProbe.isWide;
+    try {
+      workspaceLayoutProbe.isWide = () => false;
+      useRightPanelStore.getState().toggleVisibility(refA);
+      useRightPanelStore.getState().reconcileBrowserSurfaces(refA, ["agent-tab"]);
+
+      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      expect(state).toMatchObject({
+        isOpen: true,
+        activeSurfaceId: "browser:agent-tab",
+        mainSurfaces: [],
+      });
+      expect(state.surfaces).toEqual([
+        { id: "browser:agent-tab", kind: "preview", resourceId: "agent-tab" },
+      ]);
+    } finally {
+      workspaceLayoutProbe.isWide = originalIsWide;
+    }
+  });
+
   it("does not duplicate a Linear browser session as a Browser surface", () => {
     useRightPanelStore.getState().openLinear(refA, "linear-tab");
     useRightPanelStore.getState().reconcileBrowserSurfaces(refA, ["linear-tab", "browser-tab"]);
