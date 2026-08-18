@@ -72,6 +72,7 @@ function renderTabs(first: DesktopPreviewFavicon | null, second?: DesktopPreview
       onCloseSurfacesToRight={() => undefined}
       onCloseAllSurfaces={() => undefined}
       onCopyFilePath={() => undefined}
+      onOpenNewTab={() => undefined}
       onAddBrowser={() => undefined}
       onAddTerminal={() => undefined}
       onAddPullRequest={() => undefined}
@@ -92,6 +93,10 @@ function renderTabs(first: DesktopPreviewFavicon | null, second?: DesktopPreview
 }
 
 describe("RightPanelTabs preview favicon", () => {
+  it("opens the New Tab page from the panel tab bar", () => {
+    expect(renderTabs(null)).toContain('aria-label="New panel tab"');
+  });
+
   it("prefers a live capture and never asks Google about a private hostname", () => {
     const captured = renderTabs(favicon("data:image/png;base64,AAAA", "http://24x.xf.local/"));
     expect(captured).toContain("data:image/png;base64,AAAA");

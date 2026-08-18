@@ -11,10 +11,10 @@ import {
 const counts = { panelSurfaceCount: 3, mainSurfaceCount: 2 };
 
 describe("isNewWorkspaceTabShortcut", () => {
-  it("matches Command+Tab without accepting tab-switcher variants", () => {
+  it("matches Command/Ctrl+T without accepting modified variants", () => {
     expect(
       isNewWorkspaceTabShortcut({
-        key: "Tab",
+        key: "t",
         metaKey: true,
         ctrlKey: false,
         altKey: false,
@@ -23,11 +23,20 @@ describe("isNewWorkspaceTabShortcut", () => {
     ).toBe(true);
     expect(
       isNewWorkspaceTabShortcut({
-        key: "Tab",
+        key: "T",
         metaKey: false,
         ctrlKey: true,
         altKey: false,
         shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isNewWorkspaceTabShortcut({
+        key: "t",
+        metaKey: true,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: true,
       }),
     ).toBe(false);
     expect(
@@ -36,7 +45,7 @@ describe("isNewWorkspaceTabShortcut", () => {
         metaKey: true,
         ctrlKey: false,
         altKey: false,
-        shiftKey: true,
+        shiftKey: false,
       }),
     ).toBe(false);
   });

@@ -35,7 +35,8 @@ export function isNewWorkspaceTabShortcut(event: {
   altKey: boolean;
   shiftKey: boolean;
 }): boolean {
-  return event.key === "Tab" && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
+  const commandOrControl = event.metaKey !== event.ctrlKey && (event.metaKey || event.ctrlKey);
+  return event.key.toLowerCase() === "t" && commandOrControl && !event.altKey && !event.shiftKey;
 }
 
 export interface WorkspaceTabDropTarget {

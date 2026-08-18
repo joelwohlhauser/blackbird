@@ -1,4 +1,4 @@
-import { PanelBottomIcon, PanelRightDashedIcon } from "lucide-react";
+import { PanelBottomIcon, PanelRightDashedIcon, PanelRightIcon } from "lucide-react";
 import { memo } from "react";
 
 import { Toggle } from "../ui/toggle";
@@ -9,9 +9,12 @@ interface PanelLayoutControlsProps {
   terminalAvailable: boolean;
   terminalOpen: boolean;
   terminalShortcutLabel: string | null;
+  rightPanelAvailable: boolean;
+  rightPanelOpen: boolean;
   workspaceNavigatorAvailable: boolean;
   workspaceNavigatorOpen: boolean;
   onToggleTerminal: () => void;
+  onToggleRightPanel: () => void;
   onToggleWorkspaceNavigator: () => void;
 }
 
@@ -20,9 +23,12 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   terminalAvailable,
   terminalOpen,
   terminalShortcutLabel,
+  rightPanelAvailable,
+  rightPanelOpen,
   workspaceNavigatorAvailable,
   workspaceNavigatorOpen,
   onToggleTerminal,
+  onToggleRightPanel,
   onToggleWorkspaceNavigator,
 }: PanelLayoutControlsProps) {
   return (
@@ -54,6 +60,26 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
           </TooltipPopup>
         </Tooltip>
       ) : null}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Toggle
+              className="shrink-0 [-webkit-app-region:no-drag]"
+              pressed={rightPanelOpen}
+              onPressedChange={onToggleRightPanel}
+              aria-label="Toggle right panel"
+              variant="ghost"
+              size="sm"
+              disabled={!rightPanelAvailable}
+            >
+              <PanelRightIcon className="size-3.5" />
+            </Toggle>
+          }
+        />
+        <TooltipPopup side="bottom">
+          {rightPanelAvailable ? "Toggle right panel" : "Right panel is unavailable"}
+        </TooltipPopup>
+      </Tooltip>
       <Tooltip>
         <TooltipTrigger
           render={

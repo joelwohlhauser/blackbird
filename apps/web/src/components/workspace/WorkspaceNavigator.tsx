@@ -4,7 +4,7 @@ import type {
   ScopedThreadRef,
   VcsStatusResult,
 } from "@t3tools/contracts";
-import { FileDiffIcon, GitPullRequestIcon } from "lucide-react";
+import { FileDiffIcon, GitPullRequestIcon, RefreshCwIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { useResizableWidth } from "~/hooks/useResizableWidth";
@@ -16,6 +16,8 @@ import { DiffStatLabel, hasNonZeroStat } from "~/components/chat/DiffStatLabel";
 import { RightPanelResizeHandle } from "~/components/preview/RightPanelResizeHandle";
 import GitActionsControl from "~/components/GitActionsControl";
 import type { DraftId } from "~/composerDraftStore";
+import { Button } from "~/components/ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
 import {
   advancePullRequestDiffWalk,
@@ -61,12 +63,18 @@ interface WorkspaceNavigatorProps {
   gitStatusPending: boolean;
   activeTab: WorkspaceNavigatorTab;
   layoutControls: ReactNode;
+  onRefreshPullRequest: () => void;
   onActiveTabChange: (tab: WorkspaceNavigatorTab) => void;
   onOpenFile: (relativePath: string) => void;
   onOpenDiffFile: (target: WorkspaceNavigatorDiffTarget) => void;
 }
 
-function NavigatorHeader(props: { label: string; additions: number; deletions: number }) {
+function NavigatorHeader(props: {
+  label: string;
+  additions: number;
+  deletions: number;
+  trailingAction?: ReactNode;
+}) {
   const stat = { additions: props.additions, deletions: props.deletions };
   return (
     <div className="surface-subheader gap-2 px-2.5" data-surface-subheader>
@@ -76,6 +84,7 @@ function NavigatorHeader(props: { label: string; additions: number; deletions: n
       {hasNonZeroStat(stat) ? (
         <DiffStatLabel {...stat} className="text-[10px]" layout="inline" />
       ) : null}
+      {props.trailingAction}
     </div>
   );
 }
@@ -103,6 +112,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
     ? `${props.environmentId}:${props.pullRequestReference.projectId}:${props.pullRequestReference.repository}#${props.pullRequestReference.number}`
     : null;
   const [pullRequestDiffWalk, setPullRequestDiffWalk] = useState(EMPTY_PULL_REQUEST_DIFF_WALK);
+  const [pullRequestRefreshRequest, setPullRequestRefreshRequest] = useState(0);
   const currentPullRequestDiffWalk =
     pullRequestKey !== null && pullRequestDiffWalk.key === pullRequestKey
       ? pullRequestDiffWalk
@@ -130,6 +140,10 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
       }),
     );
   }, [pullRequestDiffCursor, pullRequestDiffQuery.data, pullRequestKey]);
+  useEffect(() => {
+    if (pullRequestRefreshRequest === 0) return;
+    pullRequestDiffQuery.refresh();
+  }, [pullRequestDiffQuery.refresh, pullRequestRefreshRequest]);
   const workingTreeFiles = useMemo(
     () => workingTreeFilesToChanges(props.gitStatus?.workingTree.files ?? []),
     [props.gitStatus?.workingTree.files],
@@ -243,6 +257,35 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
               label={pullRequest ? `Pull request #${pullRequest.number}` : "Pull request"}
               additions={pullRequestStat.additions}
               deletions={pullRequestStat.deletions}
+              trailingAction={
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="Refresh pull request"
+                        disabled={props.gitStatusPending || pullRequestDiffQuery.isPending}
+                        onClick={() => {
+                          setPullRequestDiffWalk(EMPTY_PULL_REQUEST_DIFF_WALK);
+                          setPullRequestRefreshRequest((request) => request + 1);
+                          props.onRefreshPullRequest();
+                        }}
+                      />
+                    }
+                  >
+                    <RefreshCwIcon
+                      className={cn(
+                        "size-3.5",
+                        (props.gitStatusPending || pullRequestDiffQuery.isPending) &&
+                          "animate-spin",
+                      )}
+                    />
+                  </TooltipTrigger>
+                  <TooltipPopup side="left">Refresh pull request</TooltipPopup>
+                </Tooltip>
+              }
             />
             {props.gitStatusError && props.gitStatus === null ? (
               <NavigatorMessage>{props.gitStatusError}</NavigatorMessage>

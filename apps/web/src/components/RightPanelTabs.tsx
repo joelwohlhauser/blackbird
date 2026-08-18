@@ -3,7 +3,6 @@ import { Bot, FileDiff, GitPullRequest, Globe2, Plus, TerminalSquare } from "luc
 import {
   type ElementType,
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -17,7 +16,6 @@ import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Kbd } from "~/components/ui/kbd";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
 import { WorkspaceTabStrip, type WorkspacePullRequestTabStatus } from "./WorkspaceTabStrip";
@@ -43,6 +41,7 @@ interface RightPanelTabsProps {
   onCloseSurfacesToRight: (surface: RightPanelSurface) => void;
   onCloseAllSurfaces: () => void;
   onCopyFilePath: (relativePath: string) => void;
+  onOpenNewTab?: () => void;
   onAddBrowser: () => void;
   onAddLinear: () => void;
   onAddGitHubPullRequest: () => void;
@@ -71,17 +70,6 @@ interface RightPanelTabsProps {
 
 export type PullRequestTabStatus = WorkspacePullRequestTabStatus;
 
-const SURFACE_DISABLED_REASONS = {
-  browser: "Browser previews are only available in the T3 Code desktop app.",
-  linear: "Linear is only available in the Blackbird desktop app.",
-  githubPullRequest: "GitHub PRs are only available in the Blackbird desktop app.",
-  terminal: "Terminal surfaces are only available from a project thread.",
-  files: "Files are only available when a project is open.",
-  diff: "Diff is only available for server threads in Git repositories.",
-  pullRequest: "This thread's branch has no pull request yet.",
-  agents: "Agents are only available from a thread.",
-} as const;
-
 const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
   '[data-slot="dialog-popup"]',
   '[data-slot="alert-dialog-popup"]',
@@ -103,127 +91,24 @@ const SURFACE_UNAVAILABLE_HINTS = {
   agents: "Available from a thread.",
 } as const;
 
-function DisabledReasonTooltip(props: { reason: string; trigger: ReactElement }) {
+export function NewTabButton(props: { ariaLabel: string; onClick: () => void }) {
   return (
     <Tooltip>
-      <TooltipTrigger render={props.trigger} />
-      <TooltipPopup side="top">{props.reason}</TooltipPopup>
-    </Tooltip>
-  );
-}
-
-export interface AddSurfaceMenuProps {
-  triggerAriaLabel: string;
-  onAddBrowser: () => void;
-  onAddLinear: () => void;
-  onAddGitHubPullRequest: () => void;
-  onAddTerminal: () => void;
-  onAddDiff: () => void;
-  onAddPullRequest?: () => void;
-  onAddAgents: () => void;
-  browserAvailable: boolean;
-  linearAvailable: boolean;
-  githubPullRequestDetected: boolean;
-  githubPullRequestAvailable: boolean;
-  terminalAvailable?: boolean;
-  diffAvailable: boolean;
-  pullRequestAvailable?: boolean;
-  agentsAvailable?: boolean;
-}
-
-/** Plus menu for opening a new workspace tab, shared by both tab bars. */
-export function AddSurfaceMenu(props: AddSurfaceMenuProps) {
-  return (
-    <Menu>
-      <MenuTrigger
-        className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground [-webkit-app-region:no-drag] hover:bg-accent hover:text-foreground"
-        aria-label={props.triggerAriaLabel}
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground [-webkit-app-region:no-drag] hover:bg-accent hover:text-foreground"
+            aria-label={props.ariaLabel}
+            onClick={props.onClick}
+          />
+        }
       >
         <Plus className="size-4" />
-      </MenuTrigger>
-      <MenuPopup align="end" side="bottom" sideOffset={6} className="min-w-44">
-        <SurfaceMenuItem
-          available={props.browserAvailable}
-          disabledReason={SURFACE_DISABLED_REASONS.browser}
-          onClick={props.onAddBrowser}
-        >
-          <Globe2 />
-          Browser
-        </SurfaceMenuItem>
-        <SurfaceMenuItem
-          available={props.terminalAvailable !== false}
-          disabledReason={SURFACE_DISABLED_REASONS.terminal}
-          onClick={props.onAddTerminal}
-        >
-          <TerminalSquare />
-          Terminal
-        </SurfaceMenuItem>
-        {props.onAddPullRequest ? (
-          <SurfaceMenuItem
-            available={props.pullRequestAvailable === true}
-            disabledReason={SURFACE_DISABLED_REASONS.pullRequest}
-            onClick={props.onAddPullRequest}
-          >
-            <GitPullRequest />
-            Pull request
-          </SurfaceMenuItem>
-        ) : null}
-        <SurfaceMenuItem
-          available={props.diffAvailable}
-          disabledReason={SURFACE_DISABLED_REASONS.diff}
-          onClick={props.onAddDiff}
-        >
-          <FileDiff />
-          Diff
-        </SurfaceMenuItem>
-        <SurfaceMenuItem
-          available={props.linearAvailable}
-          disabledReason={SURFACE_DISABLED_REASONS.linear}
-          onClick={props.onAddLinear}
-        >
-          <LinearIcon />
-          Linear
-        </SurfaceMenuItem>
-        {props.githubPullRequestDetected ? (
-          <SurfaceMenuItem
-            available={props.githubPullRequestAvailable}
-            disabledReason={SURFACE_DISABLED_REASONS.githubPullRequest}
-            onClick={props.onAddGitHubPullRequest}
-          >
-            <GitHubIcon />
-            GitHub PR
-          </SurfaceMenuItem>
-        ) : null}
-        <SurfaceMenuItem
-          available={props.agentsAvailable !== false}
-          disabledReason={SURFACE_DISABLED_REASONS.agents}
-          onClick={props.onAddAgents}
-        >
-          <Bot />
-          Agents
-        </SurfaceMenuItem>
-      </MenuPopup>
-    </Menu>
+      </TooltipTrigger>
+      <TooltipPopup side="bottom">New tab</TooltipPopup>
+    </Tooltip>
   );
-}
-
-function SurfaceMenuItem(props: {
-  available: boolean;
-  disabledReason?: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  const item = (
-    <MenuItem
-      className={!props.available ? "data-disabled:pointer-events-auto" : undefined}
-      onClick={props.onClick}
-      disabled={!props.available}
-    >
-      {props.children}
-    </MenuItem>
-  );
-  if (props.available || !props.disabledReason) return item;
-  return <DisabledReasonTooltip reason={props.disabledReason} trigger={item} />;
 }
 
 export function NewTabPage(props: {
@@ -486,10 +371,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         className={cn(
           "workspace-topbar gap-1 pl-2",
           !ownsDesktopTitleBar && "[--workspace-topbar-height:--spacing(11)]",
-          // Reserves room for the two floating panel toggles (the maximize
-          // control is gone) overlaying the topbar's right edge.
-          props.mode === "inline" && props.reserveLayoutControls !== false ? "pr-20" : "pr-3",
-          ownsDesktopTitleBar && "wco:pr-[calc(var(--workspace-native-controls-inset)+5rem)]",
+          // Reserves room for the three floating panel toggles overlaying the
+          // topbar's right edge.
+          props.mode === "inline" && props.reserveLayoutControls !== false ? "pr-28" : "pr-3",
+          ownsDesktopTitleBar &&
+            props.reserveLayoutControls !== false &&
+            "wco:pr-[calc(var(--workspace-native-controls-inset)+7rem)]",
         )}
         data-right-panel-tabbar
       >
@@ -514,32 +401,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           onCloseAllSurfaces={props.onCloseAllSurfaces}
           onCopyFilePath={props.onCopyFilePath}
         />
-        <AddSurfaceMenu
-          triggerAriaLabel="Add panel surface"
-          onAddBrowser={props.onAddBrowser}
-          onAddLinear={props.onAddLinear}
-          onAddGitHubPullRequest={props.onAddGitHubPullRequest}
-          onAddTerminal={props.onAddTerminal}
-          onAddDiff={props.onAddDiff}
-          {...(props.onAddPullRequest !== undefined
-            ? { onAddPullRequest: props.onAddPullRequest }
-            : {})}
-          onAddAgents={props.onAddAgents}
-          browserAvailable={props.browserAvailable}
-          linearAvailable={props.linearAvailable}
-          githubPullRequestDetected={props.githubPullRequestDetected}
-          githubPullRequestAvailable={props.githubPullRequestAvailable}
-          {...(props.terminalAvailable !== undefined
-            ? { terminalAvailable: props.terminalAvailable }
-            : {})}
-          diffAvailable={props.diffAvailable}
-          {...(props.pullRequestAvailable !== undefined
-            ? { pullRequestAvailable: props.pullRequestAvailable }
-            : {})}
-          {...(props.agentsAvailable !== undefined
-            ? { agentsAvailable: props.agentsAvailable }
-            : {})}
-        />
+        {props.onOpenNewTab ? (
+          <NewTabButton ariaLabel="New panel tab" onClick={props.onOpenNewTab} />
+        ) : null}
         {props.layoutControls}
       </div>
       <div className="flex min-h-0 flex-1 flex-col" data-right-panel-surface-content>

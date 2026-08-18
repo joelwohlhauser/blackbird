@@ -132,6 +132,7 @@ import {
   selectWorkspaceNavigatorOpen,
   rightPanelFileDiffSurfaceId,
   type RightPanelSurface,
+  type WorkspaceTabContainer,
   updatePullRequestTabStatus,
   useRightPanelStore,
 } from "../rightPanelStore";
@@ -182,7 +183,7 @@ import {
   selectThreadPreviewMiniPlayer,
   usePreviewMiniPlayerStore,
 } from "../previewMiniPlayerStore";
-import { AddSurfaceMenu, NewTabPage, RightPanelTabs } from "./RightPanelTabs";
+import { NewTabButton, NewTabPage, RightPanelTabs } from "./RightPanelTabs";
 import { AnimatedRightSurface } from "./AnimatedRightSurface";
 import WorkspaceNavigator, {
   type WorkspaceNavigatorDiffTarget,
@@ -3587,13 +3588,22 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef) return;
     useRightPanelStore.getState().open(activeThreadRef, "agents");
   }, [activeThreadRef]);
-  const openNewTabPage = useCallback(() => {
-    if (!activeThreadRef) return;
-    useRightPanelStore.getState().open(activeThreadRef, "new-tab");
-  }, [activeThreadRef]);
+  const openNewTabPage = useCallback(
+    (container: WorkspaceTabContainer) => {
+      if (!activeThreadRef) return;
+      const store = useRightPanelStore.getState();
+      store.open(activeThreadRef, "new-tab");
+      store.moveSurface(activeThreadRef, "new-tab", {
+        container,
+        index: Number.MAX_SAFE_INTEGER,
+      });
+    },
+    [activeThreadRef],
+  );
   useEffect(() => {
-    window.addEventListener(NEW_WORKSPACE_TAB_EVENT, openNewTabPage);
-    return () => window.removeEventListener(NEW_WORKSPACE_TAB_EVENT, openNewTabPage);
+    const openNewMainTab = () => openNewTabPage("main");
+    window.addEventListener(NEW_WORKSPACE_TAB_EVENT, openNewMainTab);
+    return () => window.removeEventListener(NEW_WORKSPACE_TAB_EVENT, openNewMainTab);
   }, [openNewTabPage]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
@@ -5454,7 +5464,12 @@ function ChatViewContent(props: ChatViewProps) {
       if (isNewWorkspaceTabShortcut(event)) {
         event.preventDefault();
         event.stopPropagation();
-        openNewTabPage();
+        const container =
+          event.target instanceof Element &&
+          event.target.closest("[data-right-panel-tabbar], [data-right-panel-surface-content]")
+            ? "panel"
+            : "main";
+        openNewTabPage(container);
         return;
       }
       const terminalFocusOwner = getTerminalFocusOwner();
@@ -6900,9 +6915,12 @@ function ChatViewContent(props: ChatViewProps) {
       terminalAvailable={activeProject !== null}
       terminalOpen={terminalUiState.terminalOpen}
       terminalShortcutLabel={shortcutLabelForCommand(keybindings, "terminal.toggle")}
+      rightPanelAvailable={activeThreadRef !== null}
+      rightPanelOpen={rightPanelOpen}
       workspaceNavigatorAvailable={workspaceNavigatorAvailable}
       workspaceNavigatorOpen={showWorkspaceNavigator}
       onToggleTerminal={toggleTerminalVisibility}
+      onToggleRightPanel={toggleRightPanel}
       onToggleWorkspaceNavigator={toggleWorkspaceNavigator}
     />
   );
@@ -6921,7 +6939,19 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const workspaceNavigatorLayoutControls = (
     <div className="flex h-full items-center gap-1 [-webkit-app-region:no-drag]">
-      {panelToggleControls}
+      <PanelLayoutControls
+        showTerminalControl={false}
+        terminalAvailable={activeProject !== null}
+        terminalOpen={terminalUiState.terminalOpen}
+        terminalShortcutLabel={shortcutLabelForCommand(keybindings, "terminal.toggle")}
+        rightPanelAvailable={activeThreadRef !== null}
+        rightPanelOpen={rightPanelOpen}
+        workspaceNavigatorAvailable={workspaceNavigatorAvailable}
+        workspaceNavigatorOpen={showWorkspaceNavigator}
+        onToggleTerminal={toggleTerminalVisibility}
+        onToggleRightPanel={toggleRightPanel}
+        onToggleWorkspaceNavigator={toggleWorkspaceNavigator}
+      />
     </div>
   );
   // Shared between the two tab containers so a surface renders identically
@@ -7156,24 +7186,7 @@ function ChatViewContent(props: ChatViewProps) {
           ...(isServerThread ? { onRename: handleRenameActiveThread } : {}),
         }}
       />
-      <AddSurfaceMenu
-        triggerAriaLabel="New tab"
-        onAddBrowser={createBrowserSurface}
-        onAddLinear={createLinearSurface}
-        onAddGitHubPullRequest={createGitHubPullRequestSurface}
-        onAddTerminal={addTerminalSurface}
-        onAddDiff={addDiffSurface}
-        onAddPullRequest={addPullRequestSurface}
-        onAddAgents={addAgentsSurface}
-        browserAvailable={isPreviewSupportedInRuntime()}
-        linearAvailable={isPreviewSupportedInRuntime()}
-        githubPullRequestDetected={githubPullRequest !== null}
-        githubPullRequestAvailable={githubPullRequest !== null && isPreviewSupportedInRuntime()}
-        terminalAvailable={activeProject !== null}
-        diffAvailable={isServerThread && isGitRepo}
-        pullRequestAvailable={pullRequestSurfaceAvailable}
-        agentsAvailable
-      />
+      <NewTabButton ariaLabel="New tab" onClick={() => openNewTabPage("main")} />
     </>
   );
 
@@ -7662,6 +7675,7 @@ function ChatViewContent(props: ChatViewProps) {
               onCloseSurfacesToRight={closeRightPanelSurfacesToRight}
               onCloseAllSurfaces={closeAllRightPanelSurfaces}
               onCopyFilePath={copyRightPanelFilePath}
+              onOpenNewTab={() => openNewTabPage("panel")}
               onAddBrowser={createBrowserSurface}
               onAddLinear={createLinearSurface}
               onAddGitHubPullRequest={createGitHubPullRequestSurface}
@@ -7712,6 +7726,7 @@ function ChatViewContent(props: ChatViewProps) {
               gitStatusPending={gitStatusQuery.isPending}
               activeTab={workspaceNavigatorTab}
               layoutControls={workspaceNavigatorLayoutControls}
+              onRefreshPullRequest={gitStatusQuery.refresh}
               onActiveTabChange={setWorkspaceNavigatorTab}
               onOpenFile={openFileSurface}
               onOpenDiffFile={openWorkspaceDiffFile}
@@ -7737,6 +7752,7 @@ function ChatViewContent(props: ChatViewProps) {
               onCloseSurfacesToRight={closeRightPanelSurfacesToRight}
               onCloseAllSurfaces={closeAllRightPanelSurfaces}
               onCopyFilePath={copyRightPanelFilePath}
+              onOpenNewTab={() => openNewTabPage("panel")}
               onAddBrowser={createBrowserSurface}
               onAddLinear={createLinearSurface}
               onAddGitHubPullRequest={createGitHubPullRequestSurface}

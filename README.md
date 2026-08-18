@@ -99,17 +99,19 @@ the zone sits left of the workspace navigator when that is open. Moving or
 closing the panel's last tab closes the panel. A dropped tab activates in its
 new container, and tab layout persists per chat across restarts.
 
-New tabs, including browser sessions opened by agents, place themselves
-automatically: an open panel always receives them; with the panel closed they
-open in the chat area unless the window is very wide
+Tabs opened without a specific container, including browser sessions opened by
+agents, place themselves automatically: an open panel receives them; with the
+panel closed they open in the chat area unless the window is very wide
 (`WIDE_WORKSPACE_MIN_WIDTH`, 2200px — above any MacBook fullscreen), in which
-case the panel opens. Both tab bars have a Plus "new tab" menu
-(Browser, Terminal, Diff, Linear, GitHub PR, Agents). There is deliberately
-no right-panel toggle button, no ⌥⌘B binding, and no maximize control.
+case the panel opens. Both tab bars have a Plus button that opens the full New
+Tab page in that container (Browser, Terminal, Diff, Linear, GitHub PR, Pull
+request, and Agents).
+A title-bar button toggles the normal right panel; there is no ⌥⌘B binding or
+maximize control.
 Control+Tab opens the tab switcher described above. Browser-backed tabs
 include navigation, refresh, URL, zoom, capture, and other appropriate
 browser controls.
-Command+Tab opens a **New Tab** page with the available Browser, Terminal,
+Command+T opens a **New Tab** page with the available Browser, Terminal,
 Diff, Linear, GitHub PR, Pull request, and Agents surfaces.
 
 The second surface is the narrow, independently resizable **workspace
@@ -120,7 +122,7 @@ three tabs:
 - **Changes** — live uncommitted changes, colored per-file line counts, and the
   primary commit/push/PR action;
 - **PR** — the exact files changed by the pull request associated with the
-  current branch.
+  current branch, with an explicit refresh action for the PR and its files.
 
 Selecting a file opens it in the normal right panel. Selecting an item from
 Changes or PR opens a dedicated whole-file diff tab rather than replacing the
@@ -136,7 +138,7 @@ Useful shortcuts on macOS:
 - Command+Shift+H — open the workspace navigator on PR
 - Control+Tab / Control+Shift+Tab — tab switcher for the current chat's tabs
   (falls through to the chat switcher when the chat has no extra tabs)
-- Command+Tab — open the New Tab page
+- Command+T — open the New Tab page
 
 ### Git worktree workflow
 

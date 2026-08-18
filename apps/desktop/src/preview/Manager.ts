@@ -428,6 +428,8 @@ const APP_FORWARDED_SHORTCUTS: ReadonlyArray<{
   { key: ",", meta: true, shift: false, control: false },
   // mod+W → close tab/panel
   { key: "w", meta: true, shift: false, control: false },
+  // mod+T → new workspace tab
+  { key: "t", meta: true, shift: false, control: false },
 ]);
 
 export const isPreviewRefreshShortcut = (input: Electron.Input): boolean =>

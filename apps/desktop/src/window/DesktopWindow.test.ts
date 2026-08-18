@@ -510,7 +510,7 @@ describe("DesktopWindow", () => {
         beforeInput(event, {
           ...input,
           isAutoRepeat: false,
-          key: "Tab",
+          key: "T",
         });
         assert.isTrue(prevented);
         assert.deepEqual(fakeWindow.send.mock.calls, [[MENU_ACTION_CHANNEL, "new-workspace-tab"]]);
@@ -519,7 +519,7 @@ describe("DesktopWindow", () => {
         prevented = false;
         beforeInput(event, {
           ...input,
-          key: "Tab",
+          key: "T",
         });
         assert.isTrue(prevented);
         assert.deepEqual(fakeWindow.send.mock.calls, []);

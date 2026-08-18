@@ -72,7 +72,7 @@ describe("ChatHeader project actions", () => {
   });
 
   it("reserves room for panel toggles while both right panels are closed", () => {
-    expect(renderHeader(true)).toContain("pr-16");
+    expect(renderHeader(true)).toContain("pr-24");
   });
 
   it("releases the toggle inset when the main right panel owns the controls", () => {

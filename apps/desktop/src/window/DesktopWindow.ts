@@ -542,8 +542,8 @@ export const make = Effect.gen(function* () {
       }
     });
 
-    // Capture Cmd+Tab in the focused desktop window before macOS treats it as
-    // an application switch.
+    // Capture Cmd+T in the focused desktop window so embedded surfaces cannot
+    // swallow the workspace's New Tab shortcut.
     // Electron's windowMenu close role owns CmdOrCtrl+W. Holding the
     // close-terminal shortcut can outlive the terminal that handled its first
     // press, so reject repeats before they reach the native window accelerator.
@@ -581,7 +581,7 @@ export const make = Effect.gen(function* () {
         !input.control &&
         !input.alt &&
         !input.shift &&
-        input.key === "Tab"
+        input.key.toLowerCase() === "t"
       ) {
         event.preventDefault();
         if (!input.isAutoRepeat) {

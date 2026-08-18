@@ -65,9 +65,10 @@ These customizations are intentional and must survive upstream merges:
   The chat renders as a pinned, renamable tab carrying the chat title inside
   the single chat header; tabs move between the two containers, new tabs
   auto-place by layout (open panel wins, otherwise the chat area unless the
-  window is very wide), and the panel opens/closes through tab placement —
-  there is intentionally no panel toggle button, ⌥⌘B binding, or maximize
-  control. Blackbird also has
+  window is very wide), while each tab bar's Plus button opens its New Tab page
+  in that container. The panel opens/closes through tab placement or its
+  title-bar toggle — there is intentionally no ⌥⌘B binding or maximize control.
+  Command+T opens the main area's New Tab page. Blackbird also has
   a second, narrow, independently resizable **workspace navigator** (often
   called the new right sidebar/sidepanel) with **Files**, **Changes**, and
   **PR** tabs. Its visibility and selected state are per chat. Selecting a file
