@@ -134,6 +134,7 @@ import {
   backgroundActivitySharedPolicySettings,
   durationToSeconds,
   formatDiagnosticsDescription,
+  getChangedBrowserSettingLabels,
   getChangedTypographySettingLabels,
   normalizeIntervalSeconds,
   PROVIDER_HEALTH_INTERVAL_STEP_SECONDS,
@@ -296,7 +297,6 @@ function AboutVersionSection() {
         confirmed = await ensureLocalApi().dialogs.confirm(
           getDesktopUpdateInstallConfirmationMessage(
             updateState ?? { availableVersion: null, downloadedVersion: null },
-            navigator.platform,
           ),
         );
       } catch (error) {
@@ -554,11 +554,24 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.confirmThreadDelete !== DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete
         ? ["Delete confirmation"]
         : []),
+      ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit
+        ? ["Quit confirmation"]
+        : []),
       ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
+      ...getChangedBrowserSettingLabels(settings),
+      ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
+        ? ["Agent browser access"]
+        : []),
     ],
     [
       isTextGenerationModelDirty,
       isBackgroundActivityDirty,
+      settings.browserDefaultViewport,
+      settings.browserDefaultZoomFactor,
+      settings.browserDefaultAppearance,
+      settings.browserAutoShowFloatingPreview,
+      settings.enableAgentBrowserAccess,
+      settings.confirmQuit,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.addProjectBaseDirectory,
@@ -682,6 +695,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
+      confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
@@ -691,6 +705,14 @@ export function useSettingsRestore(onRestored?: () => void) {
       fontSizePrompt: DEFAULT_UNIFIED_SETTINGS.fontSizePrompt,
       fontSizeCode: DEFAULT_UNIFIED_SETTINGS.fontSizeCode,
       fontSizeTerminal: DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal,
+      browserDefaultViewport: DEFAULT_UNIFIED_SETTINGS.browserDefaultViewport,
+      browserDefaultZoomFactor: DEFAULT_UNIFIED_SETTINGS.browserDefaultZoomFactor,
+      browserDefaultAppearance: DEFAULT_UNIFIED_SETTINGS.browserDefaultAppearance,
+      browserAutoShowFloatingPreview: DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
+      // Re-granted like any other default. The confirmation dialog lists it by
+      // name, so a user restoring defaults is told the agent regains access
+      // rather than discovering it later.
+      enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
     });
     onRestored?.();
   }, [
@@ -2500,6 +2522,30 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+
+        {isElectron ? (
+          <SettingsRow
+            {...searchableSetting("quit-confirmation")}
+            description="Require holding the quit shortcut before the desktop app quits. A quick tap shows a hint instead."
+            resetAction={
+              settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? (
+                <SettingResetButton
+                  label="quit confirmation"
+                  onClick={() =>
+                    updateSettings({ confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Switch
+                checked={settings.confirmQuit}
+                onCheckedChange={(checked) => updateSettings({ confirmQuit: Boolean(checked) })}
+                aria-label="Hold to quit"
+              />
+            }
+          />
+        ) : null}
 
         <SettingsRow
           {...searchableSetting("text-generation-model")}

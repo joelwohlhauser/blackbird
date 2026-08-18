@@ -931,7 +931,10 @@ export default function FilePreviewPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {relativePath ? (
-        <div className="surface-subheader gap-2 px-3" data-surface-subheader>
+        <div
+          className="flex h-10 min-h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-background px-3 in-data-[preview-panel-mode=inline]:mb-3 in-data-[preview-panel-mode=inline]:h-7 in-data-[preview-panel-mode=inline]:min-h-7 in-data-[preview-panel-mode=inline]:border-b-transparent"
+          data-surface-subheader
+        >
           <ScrollArea
             ref={breadcrumbRef}
             hideScrollbars
@@ -949,17 +952,25 @@ export default function FilePreviewPanel({
                   {index > 0 ? (
                     <ChevronRight className="mx-1 size-3.5 shrink-0 text-muted-foreground/60" />
                   ) : null}
-                  <span
-                    className={cn(
-                      "max-w-40 truncate",
-                      crumb.kind === "file"
-                        ? "font-medium text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                    title={crumb.path || projectName}
-                  >
-                    {crumb.label}
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span
+                          className={cn(
+                            "max-w-40 truncate",
+                            crumb.kind === "file"
+                              ? "font-medium text-foreground"
+                              : "text-muted-foreground",
+                          )}
+                        />
+                      }
+                    >
+                      {crumb.label}
+                    </TooltipTrigger>
+                    <TooltipPopup side="top" className="max-w-80">
+                      {crumb.path || projectName}
+                    </TooltipPopup>
+                  </Tooltip>
                 </div>
               ))}
             </div>

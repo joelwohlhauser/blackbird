@@ -64,7 +64,6 @@ export const ChatHeader = memo(function ChatHeader({
     activeThreadEnvironmentId,
     activeProjectScripts ? activeProjectCwd : null,
   );
-
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">

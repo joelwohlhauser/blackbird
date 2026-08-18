@@ -3000,8 +3000,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <button
-                    type="button"
+                  <Button
+                    size="icon-xs"
+                    variant="ghost-muted"
                     aria-label="Add project"
                     data-testid="sidebar-add-project-trigger"
                     className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
@@ -3725,7 +3726,7 @@ export default function Sidebar() {
       let confirmed = false;
       try {
         confirmed = await ensureLocalApi().dialogs.confirm(
-          getDesktopUpdateInstallConfirmationMessage(desktopUpdateState, navigator.platform),
+          getDesktopUpdateInstallConfirmationMessage(desktopUpdateState),
         );
       } catch (error) {
         setDesktopUpdateActionPending(false);

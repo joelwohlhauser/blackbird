@@ -6,6 +6,7 @@ import {
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
   resolveTimelineScrollPosition,
+  shouldPreserveAssistantLineBreaks,
 } from "./MessagesTimeline.logic";
 
 describe("resolveTimelineScrollPosition", () => {
@@ -54,6 +55,17 @@ describe("resolveTimelineScrollPosition", () => {
         scroll: -20,
       }),
     ).toEqual({ kind: "offset", offset: 0 });
+  });
+});
+
+describe("shouldPreserveAssistantLineBreaks", () => {
+  it("preserves Claude insight formatting without changing regular markdown", () => {
+    expect(
+      shouldPreserveAssistantLineBreaks(
+        "★ Insight ─────────────────\\nFirst observation\\nSecond observation\\n─────────────────",
+      ),
+    ).toBe(true);
+    expect(shouldPreserveAssistantLineBreaks("A normal\\nmarkdown paragraph")).toBe(false);
   });
 });
 
