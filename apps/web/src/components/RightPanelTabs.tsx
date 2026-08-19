@@ -64,7 +64,7 @@ interface RightPanelTabsProps {
   pinnedSurfaceIds?: ReadonlySet<string>;
   /** Running and waiting subagents shown on the Agents empty-state card. */
   liveAgentCount: number;
-  reserveLayoutControls?: boolean;
+  reserveNativeControlsInset?: boolean;
   children: ReactNode;
 }
 
@@ -371,12 +371,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         className={cn(
           "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1 pl-2",
           !ownsDesktopTitleBar && "[--workspace-topbar-height:--spacing(11)]",
-          // Reserves room for the three floating panel toggles overlaying the
-          // topbar's right edge.
-          props.mode === "inline" && props.reserveLayoutControls !== false ? "pr-28" : "pr-3",
+          "pr-3",
+          // The control is in this row; only native window controls need a
+          // separate inset when the panel reaches the window edge.
           ownsDesktopTitleBar &&
-            props.reserveLayoutControls !== false &&
-            "wco:pr-[calc(var(--workspace-native-controls-inset)+7rem)]",
+            props.reserveNativeControlsInset !== false &&
+            "wco:pr-[var(--workspace-native-controls-inset)]",
         )}
         data-right-panel-tabbar
       >

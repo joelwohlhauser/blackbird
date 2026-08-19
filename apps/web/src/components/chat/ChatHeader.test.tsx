@@ -75,11 +75,15 @@ describe("ChatHeader project actions", () => {
     expect(renderHeader(true)).toContain("pr-24");
   });
 
-  it("releases the toggle inset when the main right panel owns the controls", () => {
-    expect(renderHeader(true, true)).toContain("pr-0");
+  it("reserves room for terminal and navigator controls while the right panel is open", () => {
+    expect(renderHeader(true, true)).toContain("pr-16");
   });
 
-  it("releases the toggle inset when the workspace navigator owns the controls", () => {
-    expect(renderHeader(true, false, true)).toContain("pr-0");
+  it("reserves room for terminal and right-panel controls while the navigator is open", () => {
+    expect(renderHeader(true, false, true)).toContain("pr-16");
+  });
+
+  it("keeps the terminal control inset when both right-side surfaces are open", () => {
+    expect(renderHeader(true, true, true)).toContain("pr-8");
   });
 });

@@ -23,15 +23,17 @@ describe("PanelLayoutControls", () => {
     expect(html).toContain('aria-label="Toggle terminal drawer"');
     expect(html).toContain('aria-label="Toggle right panel"');
     expect(html).toContain('aria-label="Toggle workspace navigator"');
-    expect(html.match(/sm:h-6/g)).toHaveLength(3);
-    expect(html.match(/size-3\.5/g)).toHaveLength(3);
+    expect(html.match(/sm:size-6/g)).toHaveLength(3);
+    expect(html.match(/<svg[^>]*size-3\.5/g)).toHaveLength(3);
     expect(html).toContain('aria-pressed="true"');
+    expect(html).not.toContain(' data-pressed="');
   });
 
-  it("keeps the narrow workspace navigator to the two side-surface controls", () => {
+  it("lets an open surface own only its matching control", () => {
     const html = renderToStaticMarkup(
       <PanelLayoutControls
         showTerminalControl={false}
+        showRightPanelControl={false}
         terminalAvailable
         terminalOpen={false}
         terminalShortcutLabel="⌘J"
@@ -46,7 +48,7 @@ describe("PanelLayoutControls", () => {
     );
 
     expect(html).not.toContain('aria-label="Toggle terminal drawer"');
-    expect(html).toContain('aria-label="Toggle right panel"');
+    expect(html).not.toContain('aria-label="Toggle right panel"');
     expect(html).toContain('aria-label="Toggle workspace navigator"');
   });
 });

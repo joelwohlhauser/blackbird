@@ -6972,8 +6972,10 @@ function ChatViewContent(props: ChatViewProps) {
     return <NoActiveThreadState />;
   }
 
-  const panelToggleControls = (
+  const mainPanelToggleControls = (
     <PanelLayoutControls
+      showRightPanelControl={!rightPanelOpen}
+      showWorkspaceNavigatorControl={!showWorkspaceNavigator}
       terminalAvailable={activeProject !== null}
       terminalOpen={terminalUiState.terminalOpen}
       terminalShortcutLabel={shortcutLabelForCommand(keybindings, "terminal.toggle")}
@@ -6986,23 +6988,42 @@ function ChatViewContent(props: ChatViewProps) {
       onToggleWorkspaceNavigator={toggleWorkspaceNavigator}
     />
   );
-  const panelLayoutControls = (
+  const mainPanelLayoutControls = (
     <div
       className={cn(
-        // One inset in both states: the controls move between containers when
-        // the right panel opens, and a different right offset made them jump
-        // sideways on every toggle.
-        "absolute top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] z-50 mr-px flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
+        "absolute top-[var(--workspace-controls-top)] z-50 mr-px flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
+        rightPanelOpen || showWorkspaceNavigator
+          ? "right-3"
+          : "right-[var(--workspace-controls-right)]",
       )}
       data-workspace-titlebar-controls
     >
-      {panelToggleControls}
+      {mainPanelToggleControls}
+    </div>
+  );
+  const rightPanelLayoutControls = (
+    <div className="ml-auto flex h-full items-center [-webkit-app-region:no-drag]">
+      <PanelLayoutControls
+        showTerminalControl={false}
+        showWorkspaceNavigatorControl={false}
+        terminalAvailable={activeProject !== null}
+        terminalOpen={terminalUiState.terminalOpen}
+        terminalShortcutLabel={shortcutLabelForCommand(keybindings, "terminal.toggle")}
+        rightPanelAvailable={activeThreadRef !== null}
+        rightPanelOpen={rightPanelOpen}
+        workspaceNavigatorAvailable={workspaceNavigatorAvailable}
+        workspaceNavigatorOpen={showWorkspaceNavigator}
+        onToggleTerminal={toggleTerminalVisibility}
+        onToggleRightPanel={toggleRightPanel}
+        onToggleWorkspaceNavigator={toggleWorkspaceNavigator}
+      />
     </div>
   );
   const workspaceNavigatorLayoutControls = (
     <div className="flex h-full items-center gap-1 [-webkit-app-region:no-drag]">
       <PanelLayoutControls
         showTerminalControl={false}
+        showRightPanelControl={false}
         terminalAvailable={activeProject !== null}
         terminalOpen={terminalUiState.terminalOpen}
         terminalShortcutLabel={shortcutLabelForCommand(keybindings, "terminal.toggle")}
@@ -7269,9 +7290,6 @@ function ChatViewContent(props: ChatViewProps) {
         <PreviewSessionPreloader threadRef={activeThreadRef} />
       ) : null}
       <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
-        {rightPanelOpen && !shouldUseRightPanelSheet && !showWorkspaceNavigator
-          ? panelLayoutControls
-          : null}
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
           {/* Top bar */}
           <header
@@ -7289,7 +7307,7 @@ function ChatViewContent(props: ChatViewProps) {
               COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
             )}
           >
-            {!rightPanelOpen && !showWorkspaceNavigator ? panelLayoutControls : null}
+            {mainPanelLayoutControls}
             <ChatHeader
               activeThreadEnvironmentId={activeThread.environmentId}
               activeThreadId={activeThread.id}
@@ -7722,7 +7740,8 @@ function ChatViewContent(props: ChatViewProps) {
           {activeThreadRef ? (
             <RightPanelTabs
               mode="inline"
-              reserveLayoutControls={!showWorkspaceNavigator}
+              reserveNativeControlsInset={!showWorkspaceNavigator}
+              layoutControls={rightPanelLayoutControls}
               surfaces={rightPanelState.surfaces}
               activeSurfaceId={selectedRightPanelSurface?.id ?? null}
               pendingSurfaceIds={pendingFileSurfaceIds}
@@ -7799,7 +7818,7 @@ function ChatViewContent(props: ChatViewProps) {
           <RightPanelSheet open={rightPanelOpen} onClose={closePreviewPanel}>
             <RightPanelTabs
               mode="sheet"
-              layoutControls={panelToggleControls}
+              layoutControls={rightPanelLayoutControls}
               surfaces={rightPanelState.surfaces}
               activeSurfaceId={activeRightPanelSurface?.id ?? null}
               pendingSurfaceIds={pendingFileSurfaceIds}
