@@ -611,6 +611,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             interactionMode: event.payload.interactionMode,
             branch: event.payload.branch,
             worktreePath: event.payload.worktreePath,
+            pendingWorkspaceHandoff: null,
             latestTurnId: null,
             createdAt: event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
@@ -643,6 +644,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             archivedAt: event.payload.archivedAt,
             titleRegenerationRequestId: null,
             titleRegenerationStartedAt: null,
+            pendingWorkspaceHandoff: null,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -799,6 +801,58 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.worktreePath !== undefined
               ? { worktreePath: event.payload.worktreePath }
               : {}),
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.workspace-handoff-requested": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            pendingWorkspaceHandoff: {
+              sourceTurnId: event.payload.sourceTurnId,
+              branch: event.payload.branch,
+              worktreePath: event.payload.worktreePath,
+              requestedAt: event.payload.requestedAt,
+            },
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.workspace-handoff-applied": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            branch: event.payload.branch,
+            worktreePath: event.payload.worktreePath,
+            pendingWorkspaceHandoff: null,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.workspace-handoff-cancelled": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            pendingWorkspaceHandoff: null,
             updatedAt: event.payload.updatedAt,
           });
           return;
@@ -977,6 +1031,11 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             threadId: event.payload.threadId,
             turnId: event.payload.turnId,
             role: event.payload.role,
+            ...(event.payload.source !== undefined
+              ? { source: event.payload.source }
+              : previousMessage?.source !== undefined
+                ? { source: previousMessage.source }
+                : {}),
             text: nextText,
             ...(nextAttachments !== undefined ? { attachments: [...nextAttachments] } : {}),
             isStreaming: event.payload.streaming,

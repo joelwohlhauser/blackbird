@@ -52,6 +52,7 @@ import {
   CircleAlertIcon,
   EyeIcon,
   GlobeIcon,
+  GitBranchIcon,
   HammerIcon,
   MessageCircleIcon,
   MousePointerClickIcon,
@@ -650,7 +651,8 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
         (row.kind === "message" && row.message.role === "assistant" && !row.showAssistantMeta) ||
           row.kind === "work" ||
           row.kind === "work-toggle" ||
-          row.kind === "turn-plan"
+          row.kind === "turn-plan" ||
+          (row.kind === "message" && row.message.source === "workspace-handoff")
           ? "pb-2"
           : "pb-4",
         row.kind === "message" && row.message.role === "assistant" ? "group/assistant" : null,
@@ -663,7 +665,14 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       {row.kind === "work" ? <WorkGroupSection groupedEntries={row.groupedEntries} /> : null}
       {row.kind === "work-toggle" ? <WorkGroupToggleTimelineRow row={row} /> : null}
       {row.kind === "turn-fold" ? <TurnFoldTimelineRow row={row} /> : null}
-      {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
+      {row.kind === "message" && row.message.source === "workspace-handoff" ? (
+        <WorkspaceHandoffTimelineRow row={row} />
+      ) : null}
+      {row.kind === "message" &&
+      row.message.role === "user" &&
+      row.message.source !== "workspace-handoff" ? (
+        <UserTimelineRow row={row} />
+      ) : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
       ) : null}
@@ -673,6 +682,16 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
     </div>
   );
 });
+
+function WorkspaceHandoffTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
+  const branch = row.message.text.match(/^Workspace switched to branch '([^']+)'/)?.[1];
+  return (
+    <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+      <GitBranchIcon className="size-3.5" />
+      <span>{branch ? `Switched workspace to ${branch}` : "Switched workspace"}</span>
+    </div>
+  );
+}
 
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);

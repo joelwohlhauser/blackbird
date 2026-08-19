@@ -852,6 +852,130 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "thread.workspace-handoff.request": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      if (thread.pendingWorkspaceHandoff != null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `thread ${command.threadId} already has a pending workspace handoff`,
+        });
+      }
+      if (thread.session?.activeTurnId !== command.sourceTurnId) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `turn ${command.sourceTurnId} is not active on thread ${command.threadId}`,
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.workspace-handoff-requested",
+        payload: {
+          threadId: command.threadId,
+          sourceTurnId: command.sourceTurnId,
+          branch: command.branch,
+          worktreePath: command.worktreePath,
+          requestedAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "thread.workspace-handoff.apply": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const handoff = thread.pendingWorkspaceHandoff;
+      if (handoff == null || handoff.sourceTurnId !== command.sourceTurnId) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `thread ${command.threadId} has no matching pending workspace handoff`,
+        });
+      }
+
+      const appliedEvent = {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.workspace-handoff-applied",
+        payload: {
+          threadId: command.threadId,
+          sourceTurnId: command.sourceTurnId,
+          branch: handoff.branch,
+          worktreePath: handoff.worktreePath,
+          updatedAt: command.createdAt,
+        },
+      } satisfies PlannedOrchestrationEvent;
+      const nextReadModel = yield* projectEvent(readModel, {
+        ...appliedEvent,
+        sequence: readModel.snapshotSequence + 1,
+      }).pipe(Effect.orDie);
+      const continuationEvents = yield* decideCommandSequence({
+        readModel: nextReadModel,
+        commands: [
+          {
+            type: "thread.turn.start",
+            commandId: command.commandId,
+            threadId: command.threadId,
+            message: {
+              messageId: command.messageId,
+              role: "user",
+              source: "workspace-handoff",
+              text: `Workspace switched to branch '${handoff.branch}' at '${handoff.worktreePath}'. Continue the user's current task in this workspace. Do not repeat completed external actions such as creating issues.`,
+              attachments: [],
+            },
+            runtimeMode: thread.runtimeMode,
+            interactionMode: thread.interactionMode,
+            createdAt: command.createdAt,
+          },
+        ],
+      });
+      return [appliedEvent, ...continuationEvents];
+    }
+
+    case "thread.workspace-handoff.cancel": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const handoff = thread.pendingWorkspaceHandoff;
+      if (handoff == null || handoff.sourceTurnId !== command.sourceTurnId) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `thread ${command.threadId} has no matching pending workspace handoff`,
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.workspace-handoff-cancelled",
+        payload: {
+          threadId: command.threadId,
+          sourceTurnId: command.sourceTurnId,
+          reason: command.reason,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
     case "thread.title.regeneration.complete": {
       const thread = yield* requireThread({
         readModel,
@@ -965,6 +1089,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           threadId: command.threadId,
           messageId: command.message.messageId,
           role: "user",
+          ...(command.message.source !== undefined ? { source: command.message.source } : {}),
           text: command.message.text,
           attachments: command.message.attachments,
           turnId: null,

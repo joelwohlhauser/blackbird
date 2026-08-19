@@ -59,6 +59,7 @@ import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
 import { ServerConfig } from "../../config.ts";
 import * as WorkspaceEntries from "../../workspace/WorkspaceEntries.ts";
 import * as WorkspacePaths from "../../workspace/WorkspacePaths.ts";
+import { WorkspaceHandoffService } from "../../workspace/WorkspaceHandoffService.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
@@ -285,6 +286,7 @@ describe("CheckpointReactor", () => {
     readonly providerSessionCwd?: string;
     readonly providerName?: ProviderDriverKind;
     readonly gitStatusRefreshCalls?: Array<string>;
+    readonly handoffSawCompletedCheckpoint?: Array<boolean>;
   }) {
     const cwd = createGitRepository();
     tempDirs.push(cwd);
@@ -340,6 +342,20 @@ describe("CheckpointReactor", () => {
       Layer.provideMerge(RuntimeReceiptBusLive),
       Layer.provideMerge(Layer.succeed(ProviderService, provider.service)),
       Layer.provideMerge(vcsStatusBroadcasterLayer),
+      Layer.provideMerge(
+        Layer.mock(WorkspaceHandoffService)({
+          request: () => Effect.die("request should not be called in this test"),
+          applyAfterCheckpoint: (threadId, sourceTurnId) =>
+            Effect.sync(() => {
+              options?.handoffSawCompletedCheckpoint?.push(
+                gitRefExists(cwd, checkpointRefForThreadTurn(threadId, 1)) &&
+                  sourceTurnId === TurnId.make("turn-1"),
+              );
+            }),
+          applyReady: () => Effect.void,
+          recover: Effect.void,
+        }),
+      ),
       Layer.provideMerge(CheckpointStore.layer.pipe(Layer.provide(VcsDriverRegistry.layer))),
       Layer.provideMerge(
         WorkspaceEntries.layer.pipe(
@@ -454,7 +470,11 @@ describe("CheckpointReactor", () => {
   }
 
   it("captures pre-turn baseline on turn.started and post-turn checkpoint on turn.completed", async () => {
-    const harness = await createHarness({ seedFilesystemCheckpoints: false });
+    const handoffSawCompletedCheckpoint: boolean[] = [];
+    const harness = await createHarness({
+      seedFilesystemCheckpoints: false,
+      handoffSawCompletedCheckpoint,
+    });
     const createdAt = "2026-01-01T00:00:00.000Z";
 
     await Effect.runPromise(
@@ -513,6 +533,9 @@ describe("CheckpointReactor", () => {
     expect(
       gitRefExists(harness.cwd, checkpointRefForThreadTurn(ThreadId.make("thread-1"), 1)),
     ).toBe(true);
+    await harness.drain();
+    expect(handoffSawCompletedCheckpoint.length).toBeGreaterThan(0);
+    expect(handoffSawCompletedCheckpoint.every(Boolean)).toBe(true);
     expect(
       gitShowFileAtRef(
         harness.cwd,
@@ -527,6 +550,48 @@ describe("CheckpointReactor", () => {
         "README.md",
       ),
     ).toBe("v2\n");
+  });
+
+  it("marks a successfully captured interrupted turn as a usable checkpoint", async () => {
+    const harness = await createHarness({ seedFilesystemCheckpoints: false });
+    const turnId = asTurnId("turn-interrupted-captured");
+
+    harness.provider.emit({
+      type: "turn.started",
+      eventId: EventId.make("evt-turn-started-interrupted-captured"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      threadId: ThreadId.make("thread-1"),
+      turnId,
+    });
+    await waitForGitRefExists(
+      harness.cwd,
+      checkpointRefForThreadTurn(ThreadId.make("thread-1"), 0),
+    );
+
+    NodeFS.writeFileSync(NodePath.join(harness.cwd, "README.md"), "interrupted\n", "utf8");
+    harness.provider.emit({
+      type: "turn.completed",
+      eventId: EventId.make("evt-turn-completed-interrupted-captured"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: "2026-01-01T00:00:01.000Z",
+      threadId: ThreadId.make("thread-1"),
+      turnId,
+      payload: { state: "interrupted" },
+    });
+
+    await harness.drain();
+    const events = await waitForEvent(
+      harness.engine,
+      (event) => event.type === "thread.turn-diff-completed",
+    );
+    const checkpointEvent = events.find(
+      (event) => event.type === "thread.turn-diff-completed" && event.payload.turnId === turnId,
+    );
+    expect(checkpointEvent?.type).toBe("thread.turn-diff-completed");
+    if (checkpointEvent?.type === "thread.turn-diff-completed") {
+      expect(checkpointEvent.payload.status).toBe("ready");
+    }
   });
 
   it("refreshes local git status state on turn completion using the session cwd", async () => {

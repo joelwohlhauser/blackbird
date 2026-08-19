@@ -164,6 +164,17 @@ New worktrees:
 - run all filesystem and Git operations on the environment that owns the
   project.
 
+Agents can start the same workflow from an active chat through Blackbird's MCP
+tool. The agent creates a named branch and worktree, the current turn finishes
+and is checkpointed, then the same thread automatically continues in the new
+workspace. The composer branch label, Files and Changes navigator roots, and
+new workspace-backed tabs follow the new worktree. This works for local and
+remote environments and is available to Codex, Claude Code, Cursor, Grok, and
+OpenCode. Dependency installation follows the environment setting by default;
+an agent can explicitly skip it for a particular handoff. Agent-created
+worktrees also honor the environment's **Start from origin** default and launch
+the project's configured setup script, matching the composer workflow.
+
 An active worktree chat shows a **Delete it** action. Clean worktrees can be
 removed directly; dirty worktrees require confirmation. Removing the worktree
 also archives its associated chat.

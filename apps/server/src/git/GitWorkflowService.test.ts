@@ -59,13 +59,16 @@ describe("GitWorkflowService", () => {
 
     return Effect.gen(function* () {
       const workflow = yield* GitWorkflowService.GitWorkflowService;
-      const result = yield* workflow.createWorktree({
-        cwd: "/repo",
-        refName: "develop",
-        newRefName: "feature/configurable-base",
-        baseRefName: "develop",
-        path: null,
-      });
+      const result = yield* workflow.createWorktree(
+        {
+          cwd: "/repo",
+          refName: "develop",
+          newRefName: "feature/configurable-base",
+          baseRefName: "develop",
+          path: null,
+        },
+        { installDependencies: false },
+      );
 
       expect(createWorktree).toHaveBeenCalledWith(
         expect.objectContaining({ path: "/configured/worktree", refName: "develop" }),
@@ -73,8 +76,62 @@ describe("GitWorkflowService", () => {
       expect(prepareCreatedWorktree).toHaveBeenCalledWith({
         projectCwd: "/repo",
         worktreePath: "/configured/worktree",
+        installDependencies: false,
       });
       expect(result.worktree.refName).toBe("feature/configurable-base");
+    }).pipe(Effect.provide(testLayer));
+  });
+
+  it.effect("starts new worktrees from the fetched origin commit when requested", () => {
+    const createWorktree = vi.fn((input) =>
+      Effect.succeed({
+        worktree: {
+          path: input.path ?? "/unexpected",
+          refName: input.newRefName ?? input.refName,
+        },
+      }),
+    );
+    const fetchRemote = vi.fn(() => Effect.void);
+    const testLayer = GitWorkflowService.layer.pipe(
+      Layer.provide(
+        Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
+          resolve: () => Effect.succeed({ kind: "git" } as VcsDriverRegistry.VcsDriverHandle),
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(GitVcsDriver.GitVcsDriver)({
+          createWorktree,
+          remoteExists: () => Effect.succeed(true),
+          fetchRemote,
+          resolveRemoteTrackingCommit: () =>
+            Effect.succeed({ commitSha: "origin-main-sha", remoteRefName: "origin/main" }),
+        }),
+      ),
+      Layer.provide(Layer.mock(GitManager.GitManager)({})),
+      Layer.provide(WorktreeLifecycleTestLayer),
+    );
+
+    return Effect.gen(function* () {
+      const workflow = yield* GitWorkflowService.GitWorkflowService;
+      yield* workflow.createWorktree(
+        {
+          cwd: "/repo",
+          refName: "main",
+          newRefName: "feature/fresh-base",
+          baseRefName: "main",
+          path: "/worktree",
+        },
+        { startFromOrigin: true },
+      );
+
+      expect(fetchRemote).toHaveBeenCalledWith({ cwd: "/repo", remoteName: "origin" });
+      expect(createWorktree).toHaveBeenCalledWith(
+        expect.objectContaining({
+          refName: "origin-main-sha",
+          newRefName: "feature/fresh-base",
+          baseRefName: "main",
+        }),
+      );
     }).pipe(Effect.provide(testLayer));
   });
 

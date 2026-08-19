@@ -20,6 +20,9 @@ import {
   ThreadDeletedPayload,
   ThreadInteractionModeSetPayload,
   ThreadMetaUpdatedPayload,
+  ThreadWorkspaceHandoffAppliedPayload,
+  ThreadWorkspaceHandoffCancelledPayload,
+  ThreadWorkspaceHandoffRequestedPayload,
   ThreadProposedPlanUpsertedPayload,
   ThreadRuntimeModeSetPayload,
   ThreadSettledPayload,
@@ -297,6 +300,7 @@ export function projectEvent(
             interactionMode: payload.interactionMode,
             branch: payload.branch,
             worktreePath: payload.worktreePath,
+            pendingWorkspaceHandoff: null,
             latestTurn: null,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
@@ -341,6 +345,7 @@ export function projectEvent(
           threads: updateThread(nextBase.threads, payload.threadId, {
             archivedAt: payload.archivedAt,
             titleRegeneration: null,
+            pendingWorkspaceHandoff: null,
             updatedAt: payload.updatedAt,
           }),
         })),
@@ -461,6 +466,61 @@ export function projectEvent(
         })),
       );
 
+    case "thread.workspace-handoff-requested":
+      return decodeForEvent(
+        ThreadWorkspaceHandoffRequestedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            pendingWorkspaceHandoff: {
+              sourceTurnId: payload.sourceTurnId,
+              branch: payload.branch,
+              worktreePath: payload.worktreePath,
+              requestedAt: payload.requestedAt,
+            },
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.workspace-handoff-applied":
+      return decodeForEvent(
+        ThreadWorkspaceHandoffAppliedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            branch: payload.branch,
+            worktreePath: payload.worktreePath,
+            pendingWorkspaceHandoff: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.workspace-handoff-cancelled":
+      return decodeForEvent(
+        ThreadWorkspaceHandoffCancelledPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            pendingWorkspaceHandoff: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
     case "thread.runtime-mode-set":
       return decodeForEvent(ThreadRuntimeModeSetPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
@@ -506,6 +566,7 @@ export function projectEvent(
           {
             id: payload.messageId,
             role: payload.role,
+            ...(payload.source !== undefined ? { source: payload.source } : {}),
             text: payload.text,
             ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
             turnId: payload.turnId,

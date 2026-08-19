@@ -22,6 +22,7 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import { PendingWorkspaceHandoff, WorkspaceHandoffMessageSource } from "./workspaceHandoff.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -255,6 +256,7 @@ export type OrchestrationMessageRole = typeof OrchestrationMessageRole.Type;
 export const OrchestrationMessage = Schema.Struct({
   id: MessageId,
   role: OrchestrationMessageRole,
+  source: Schema.optional(WorkspaceHandoffMessageSource),
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   turnId: Schema.NullOr(TurnId),
@@ -386,6 +388,7 @@ export const OrchestrationThread = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  pendingWorkspaceHandoff: Schema.optional(Schema.NullOr(PendingWorkspaceHandoff)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -456,6 +459,7 @@ export const OrchestrationThreadShell = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  pendingWorkspaceHandoff: Schema.optional(Schema.NullOr(PendingWorkspaceHandoff)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -788,6 +792,34 @@ const ThreadRuntimeModeSetCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadWorkspaceHandoffRequestCommand = Schema.Struct({
+  type: Schema.Literal("thread.workspace-handoff.request"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  sourceTurnId: TurnId,
+  branch: TrimmedNonEmptyString,
+  worktreePath: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
+const ThreadWorkspaceHandoffApplyCommand = Schema.Struct({
+  type: Schema.Literal("thread.workspace-handoff.apply"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  sourceTurnId: TurnId,
+  messageId: MessageId,
+  createdAt: IsoDateTime,
+});
+
+const ThreadWorkspaceHandoffCancelCommand = Schema.Struct({
+  type: Schema.Literal("thread.workspace-handoff.cancel"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  sourceTurnId: TurnId,
+  reason: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
 const ThreadInteractionModeSetCommand = Schema.Struct({
   type: Schema.Literal("thread.interaction-mode.set"),
   commandId: CommandId,
@@ -829,6 +861,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
   message: Schema.Struct({
     messageId: MessageId,
     role: Schema.Literal("user"),
+    source: Schema.optional(WorkspaceHandoffMessageSource),
     text: Schema.String,
     attachments: Schema.Array(ChatAttachment),
   }),
@@ -1048,6 +1081,9 @@ const InternalOrchestrationCommand = Schema.Union([
   ThreadActivityAppendCommand,
   ThreadRevertCompleteCommand,
   ThreadTitleRegenerationCompleteCommand,
+  ThreadWorkspaceHandoffRequestCommand,
+  ThreadWorkspaceHandoffApplyCommand,
+  ThreadWorkspaceHandoffCancelCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
@@ -1073,6 +1109,9 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.unpinned",
   "thread.pin-reordered",
   "thread.meta-updated",
+  "thread.workspace-handoff-requested",
+  "thread.workspace-handoff-applied",
+  "thread.workspace-handoff-cancelled",
   "thread.runtime-mode-set",
   "thread.interaction-mode-set",
   "thread.message-sent",
@@ -1220,6 +1259,30 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 
+export const ThreadWorkspaceHandoffRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  sourceTurnId: TurnId,
+  branch: TrimmedNonEmptyString,
+  worktreePath: TrimmedNonEmptyString,
+  requestedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadWorkspaceHandoffAppliedPayload = Schema.Struct({
+  threadId: ThreadId,
+  sourceTurnId: TurnId,
+  branch: TrimmedNonEmptyString,
+  worktreePath: TrimmedNonEmptyString,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadWorkspaceHandoffCancelledPayload = Schema.Struct({
+  threadId: ThreadId,
+  sourceTurnId: TurnId,
+  reason: TrimmedNonEmptyString,
+  updatedAt: IsoDateTime,
+});
+
 export const ThreadRuntimeModeSetPayload = Schema.Struct({
   threadId: ThreadId,
   runtimeMode: RuntimeMode,
@@ -1238,6 +1301,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
   role: OrchestrationMessageRole,
+  source: Schema.optional(WorkspaceHandoffMessageSource),
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   turnId: Schema.NullOr(TurnId),
@@ -1418,6 +1482,21 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.meta-updated"),
     payload: ThreadMetaUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.workspace-handoff-requested"),
+    payload: ThreadWorkspaceHandoffRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.workspace-handoff-applied"),
+    payload: ThreadWorkspaceHandoffAppliedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.workspace-handoff-cancelled"),
+    payload: ThreadWorkspaceHandoffCancelledPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

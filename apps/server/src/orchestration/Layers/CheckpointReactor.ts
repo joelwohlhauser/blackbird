@@ -38,6 +38,7 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import { isGitRepository } from "../../git/Utils.ts";
 import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
 import * as WorkspaceEntries from "../../workspace/WorkspaceEntries.ts";
+import { WorkspaceHandoffService } from "../../workspace/WorkspaceHandoffService.ts";
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
@@ -66,9 +67,11 @@ function checkpointStatusFromRuntime(status: string | undefined): "ready" | "mis
   switch (status) {
     case "failed":
       return "error";
+    // This mapper is used only after captureCheckpoint has created a real Git
+    // ref. Interrupted turns are therefore usable checkpoints too; "missing"
+    // remains reserved for provider placeholders that still need capture.
     case "cancelled":
     case "interrupted":
-      return "missing";
     case "completed":
     default:
       return "ready";
@@ -88,6 +91,7 @@ const make = Effect.gen(function* () {
   const receiptBus = yield* RuntimeReceiptBus;
   const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
+  const workspaceHandoff = yield* WorkspaceHandoffService;
 
   const appendRevertFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -839,6 +843,16 @@ const make = Effect.gen(function* () {
       return;
     }
 
+    if (
+      event.type === "thread.session-set" &&
+      event.payload.session.activeTurnId === null &&
+      event.payload.session.status !== "running" &&
+      event.payload.session.status !== "starting"
+    ) {
+      yield* workspaceHandoff.applyReady(event.payload.threadId);
+      return;
+    }
+
     // When ProviderRuntimeIngestion creates a placeholder checkpoint (status "missing")
     // from a turn.diff.updated runtime event, capture the real git checkpoint to
     // replace it. The providerService.streamEvents PubSub does not reliably deliver
@@ -857,6 +871,7 @@ const make = Effect.gen(function* () {
           ),
         ),
       );
+      yield* workspaceHandoff.applyAfterCheckpoint(event.payload.threadId, event.payload.turnId);
     }
   });
 
@@ -883,6 +898,9 @@ const make = Effect.gen(function* () {
           ),
         ),
       );
+      if (turnId) {
+        yield* workspaceHandoff.applyAfterCheckpoint(event.threadId, turnId);
+      }
       return;
     }
   });
@@ -918,6 +936,7 @@ const make = Effect.gen(function* () {
         if (
           event.type !== "thread.turn-start-requested" &&
           event.type !== "thread.message-sent" &&
+          event.type !== "thread.session-set" &&
           event.type !== "thread.checkpoint-revert-requested" &&
           event.type !== "thread.turn-diff-completed"
         ) {
@@ -935,6 +954,8 @@ const make = Effect.gen(function* () {
         return worker.enqueue({ source: "runtime", event });
       }),
     );
+
+    yield* workspaceHandoff.recover;
   });
 
   return {

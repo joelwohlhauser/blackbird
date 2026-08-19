@@ -607,7 +607,9 @@ function useLocalDispatchState(input: {
 }) {
   const [localDispatch, setLocalDispatch] = useState<LocalDispatchSnapshot | null>(null);
   const latestUserMessageId =
-    input.activeThread?.messages.findLast((message) => message.role === "user")?.id ?? null;
+    input.activeThread?.messages.findLast(
+      (message) => message.role === "user" && message.source !== "workspace-handoff",
+    )?.id ?? null;
 
   const resetLocalDispatch = useCallback(() => {
     setLocalDispatch(null);
@@ -2780,7 +2782,12 @@ function ChatViewContent(props: ChatViewProps) {
     const byUserMessageId = new Map<MessageId, number>();
     for (let index = 0; index < timelineEntries.length; index += 1) {
       const entry = timelineEntries[index];
-      if (!entry || entry.kind !== "message" || entry.message.role !== "user") {
+      if (
+        !entry ||
+        entry.kind !== "message" ||
+        entry.message.role !== "user" ||
+        entry.message.source === "workspace-handoff"
+      ) {
         continue;
       }
 

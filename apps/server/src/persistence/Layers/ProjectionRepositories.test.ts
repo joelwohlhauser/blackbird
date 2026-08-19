@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId, ProviderInstanceId } from "@t3tools/contracts";
+import { ProjectId, ThreadId, ProviderInstanceId, TurnId } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -71,7 +71,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
     }),
   );
 
-  it.effect("stores JSON for thread model options", () =>
+  it.effect("stores JSON for thread model options and workspace handoffs", () =>
     Effect.gen(function* () {
       const threads = yield* ProjectionThreadRepository;
       const sql = yield* SqlClient.SqlClient;
@@ -88,6 +88,12 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         interactionMode: "default",
         branch: null,
         worktreePath: null,
+        pendingWorkspaceHandoff: {
+          sourceTurnId: TurnId.make("turn-handoff"),
+          branch: "eng-123",
+          worktreePath: "/tmp/eng-123",
+          requestedAt: "2026-03-24T00:00:00.000Z",
+        },
         latestTurnId: null,
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
@@ -132,6 +138,12 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         instanceId: ProviderInstanceId.make("claudeAgent"),
         model: "claude-opus-4-6",
       });
+      assert.deepStrictEqual(Option.getOrNull(persisted)?.pendingWorkspaceHandoff, {
+        sourceTurnId: "turn-handoff",
+        branch: "eng-123",
+        worktreePath: "/tmp/eng-123",
+        requestedAt: "2026-03-24T00:00:00.000Z",
+      });
     }),
   );
 
@@ -151,6 +163,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         interactionMode: "default",
         branch: null,
         worktreePath: null,
+        pendingWorkspaceHandoff: null,
         latestTurnId: null,
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-25T00:00:00.000Z",

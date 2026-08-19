@@ -77,6 +77,7 @@ export function resolveConfiguredWorktreePath(input: {
 export interface PrepareCreatedWorktreeInput {
   readonly projectCwd: string;
   readonly worktreePath: string;
+  readonly installDependencies?: boolean;
 }
 
 export class WorktreeLifecycle extends Context.Service<
@@ -275,7 +276,7 @@ export const make = Effect.gen(function* () {
         ),
       ),
     );
-    if (!settings.installWorktreeDependencies) return;
+    if (!(input.installDependencies ?? settings.installWorktreeDependencies)) return;
 
     yield* installDependencies(input.worktreePath).pipe(
       Effect.catch((cause) =>

@@ -33,6 +33,11 @@ import * as WorktreeLifecycle from "./WorktreeLifecycle.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 
+export interface CreateWorktreeOptions {
+  readonly installDependencies?: boolean;
+  readonly startFromOrigin?: boolean;
+}
+
 export class GitWorkflowService extends Context.Service<
   GitWorkflowService,
   {
@@ -65,6 +70,7 @@ export class GitWorkflowService extends Context.Service<
     ) => Effect.Effect<VcsListRefsResult, GitCommandError>;
     readonly createWorktree: (
       input: VcsCreateWorktreeInput,
+      options?: CreateWorktreeOptions,
     ) => Effect.Effect<VcsCreateWorktreeResult, GitCommandError>;
     readonly fetchRemote: (input: {
       readonly cwd: string;
@@ -257,13 +263,34 @@ export const make = Effect.gen(function* () {
 
   const createWorktree = Effect.fn("GitWorkflowService.createWorktree")(function* (
     input: VcsCreateWorktreeInput,
+    options?: CreateWorktreeOptions,
   ) {
     yield* ensureGitCommand("GitWorkflowService.createWorktree", input.cwd);
-    const resolvedInput = yield* worktreeLifecycle.resolveCreateInput(input);
+    let createInput = input;
+    if (
+      options?.startFromOrigin === true &&
+      (yield* git.remoteExists({ cwd: input.cwd, remoteName: "origin" }))
+    ) {
+      yield* git.fetchRemote({ cwd: input.cwd, remoteName: "origin" });
+      const remoteBase = yield* git.resolveRemoteTrackingCommit({
+        cwd: input.cwd,
+        refName: input.refName,
+        fallbackRemoteName: "origin",
+      });
+      createInput = {
+        ...input,
+        refName: remoteBase.commitSha,
+        ...(input.newRefName == null ? { baseRefName: remoteBase.remoteRefName } : {}),
+      };
+    }
+    const resolvedInput = yield* worktreeLifecycle.resolveCreateInput(createInput);
     const result = yield* git.createWorktree(resolvedInput);
     yield* worktreeLifecycle.prepareCreatedWorktree({
       projectCwd: input.cwd,
       worktreePath: result.worktree.path,
+      ...(options?.installDependencies !== undefined
+        ? { installDependencies: options.installDependencies }
+        : {}),
     });
     return result;
   });

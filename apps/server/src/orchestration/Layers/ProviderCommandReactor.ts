@@ -100,6 +100,7 @@ const FIRST_USER_CONTEXT_TRUNCATION_MARKER = "\n[First user message truncated]";
 
 type ThreadTitleMessage = {
   readonly role: "user" | "assistant" | "system";
+  readonly source?: "workspace-handoff" | undefined;
   readonly text: string;
   readonly attachments?: ReadonlyArray<ChatAttachment> | undefined;
 };
@@ -168,7 +169,8 @@ function formatThreadTitleContext(messages: ReadonlyArray<ThreadTitleMessage>): 
   readonly message: string;
   readonly attachments: ReadonlyArray<ChatAttachment>;
 } {
-  const recent = collectRecentThreadTitleContext(messages, MAX_THREAD_TITLE_CONTEXT_CHARS);
+  const visibleMessages = messages.filter((message) => message.source !== "workspace-handoff");
+  const recent = collectRecentThreadTitleContext(visibleMessages, MAX_THREAD_TITLE_CONTEXT_CHARS);
   if (!recent.truncated) {
     return {
       message: recent.context,
@@ -176,7 +178,7 @@ function formatThreadTitleContext(messages: ReadonlyArray<ThreadTitleMessage>): 
     };
   }
 
-  const firstUserMessage = messages.find(
+  const firstUserMessage = visibleMessages.find(
     (message) => message.role === "user" && formatThreadTitleSection(message),
   );
   const firstUserSection = firstUserMessage
@@ -1086,7 +1088,10 @@ const make = Effect.gen(function* () {
     }
 
     const isFirstUserMessageTurn =
-      thread.messages.filter((entry) => entry.role === "user").length === 1;
+      message.source !== "workspace-handoff" &&
+      thread.messages.filter(
+        (entry) => entry.role === "user" && entry.source !== "workspace-handoff",
+      ).length === 1;
     if (isFirstUserMessageTurn) {
       const project = yield* resolveProject(thread.projectId);
       const generationCwd =

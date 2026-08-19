@@ -241,6 +241,27 @@ function buildAssistantTimelineEntry(text: string) {
 }
 
 describe("MessagesTimeline", () => {
+  it("renders automatic workspace continuations as a compact handoff marker", () => {
+    const entry = buildUserTimelineEntry(
+      "Workspace switched to branch 'eng-123' at '/tmp/eng-123'. Continue the user's current task in this workspace.",
+    );
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        timelineEntries={[
+          {
+            ...entry,
+            message: { ...entry.message, source: "workspace-handoff" },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Switched workspace to eng-123");
+    expect(markup).not.toContain("Continue the user&#x27;s current task");
+    expect(markup).not.toContain("rounded-2xl bg-message");
+  });
+
   it("restores a saved reading offset instead of starting at the end", () => {
     const timelineEntries = [buildUserTimelineEntry("Hello")];
 
