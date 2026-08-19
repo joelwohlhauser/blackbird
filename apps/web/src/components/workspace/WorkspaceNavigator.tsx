@@ -172,7 +172,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
       data-workspace-navigator
     >
       <RightPanelResizeHandle handlers={resizeHandlers} />
-      <div className="workspace-topbar drag-region gap-0.5 px-2">
+      <div className="drag-region flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-0.5 px-2">
         <div
           className="flex min-w-0 items-center gap-0.5 [-webkit-app-region:no-drag]"
           role="tablist"
