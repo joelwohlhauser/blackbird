@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  isCloseWorkspaceTabShortcut,
   MAIN_CHAT_TAB_ID,
   PANEL_EDGE_DROP_ID,
   isNewWorkspaceTabShortcut,
@@ -46,6 +47,38 @@ describe("isNewWorkspaceTabShortcut", () => {
         ctrlKey: false,
         altKey: false,
         shiftKey: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("isCloseWorkspaceTabShortcut", () => {
+  it("matches Command/Ctrl+W without accepting modified variants", () => {
+    expect(
+      isCloseWorkspaceTabShortcut({
+        key: "w",
+        metaKey: true,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isCloseWorkspaceTabShortcut({
+        key: "W",
+        metaKey: false,
+        ctrlKey: true,
+        altKey: false,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isCloseWorkspaceTabShortcut({
+        key: "w",
+        metaKey: true,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: true,
       }),
     ).toBe(false);
   });

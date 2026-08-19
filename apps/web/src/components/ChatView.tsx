@@ -147,9 +147,11 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
+  CLOSE_WORKSPACE_TAB_EVENT,
   MAIN_CHAT_TAB_ID,
   NEW_WORKSPACE_TAB_EVENT,
   PANEL_EDGE_DROP_ID,
+  isCloseWorkspaceTabShortcut,
   isNewWorkspaceTabShortcut,
   resolveWorkspaceTabDrop,
   workspaceTabCollisionDetection,
@@ -1729,6 +1731,26 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const previewPanelOpen = activeRightPanelKind === "preview" && isPreviewSupportedInRuntime();
   const rightPanelOpen = rightPanelState.isOpen;
+  const activeWorkspaceContainerRef = useRef<WorkspaceTabContainer>(
+    rightPanelOpen ? "panel" : "main",
+  );
+  const previousActiveWorkspaceTabsRef = useRef<{
+    main: string | null;
+    panel: string | null;
+    thread: string | null;
+  }>({ main: null, panel: null, thread: null });
+  useEffect(() => {
+    const previous = previousActiveWorkspaceTabsRef.current;
+    const main = activeMainSurface?.id ?? null;
+    const panel = selectedRightPanelSurface?.id ?? null;
+    if (previous.thread !== activeThreadKey || !rightPanelOpen) {
+      activeWorkspaceContainerRef.current = rightPanelOpen && panel ? "panel" : "main";
+    } else {
+      if (main !== previous.main) activeWorkspaceContainerRef.current = "main";
+      if (panel !== previous.panel) activeWorkspaceContainerRef.current = "panel";
+    }
+    previousActiveWorkspaceTabsRef.current = { main, panel, thread: activeThreadKey };
+  }, [activeMainSurface?.id, activeThreadKey, rightPanelOpen, selectedRightPanelSurface?.id]);
   const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUseRightPanelSheet;
   const missingPreviewSurfaces = useMemo(
     () =>
@@ -3812,13 +3834,19 @@ function ChatViewContent(props: ChatViewProps) {
   const activateRightPanelSurface = useCallback(
     (surface: RightPanelSurface) => {
       if (!activeThreadRef) return;
+      activeWorkspaceContainerRef.current = rightPanelState.mainSurfaces.some(
+        (entry) => entry.id === surface.id,
+      )
+        ? "main"
+        : "panel";
       useRightPanelStore.getState().activateSurface(activeThreadRef, surface.id);
       applySurfaceActivationEffects(surface);
     },
-    [activeThreadRef, applySurfaceActivationEffects],
+    [activeThreadRef, applySurfaceActivationEffects, rightPanelState.mainSurfaces],
   );
   const activateMainChatTab = useCallback(() => {
     if (!activeThreadRef) return;
+    activeWorkspaceContainerRef.current = "main";
     useRightPanelStore.getState().activateMainChat(activeThreadRef);
   }, [activeThreadRef]);
   const activateWorkspaceTabSwitcherItem = useCallback(
@@ -4020,6 +4048,26 @@ function ChatViewContent(props: ChatViewProps) {
       syncActivePreviewSurface,
     ],
   );
+  const closeActiveWorkspaceTab = useCallback(
+    (container = activeWorkspaceContainerRef.current) => {
+      const surface =
+        container === "panel" && rightPanelOpen ? selectedRightPanelSurface : activeMainSurface;
+      if (!surface || attachedWorkspaceSurfaceIds.has(surface.id)) return;
+      closeRightPanelSurface(surface);
+    },
+    [
+      activeMainSurface,
+      attachedWorkspaceSurfaceIds,
+      closeRightPanelSurface,
+      rightPanelOpen,
+      selectedRightPanelSurface,
+    ],
+  );
+  useEffect(() => {
+    const closeActiveTab = () => closeActiveWorkspaceTab();
+    window.addEventListener(CLOSE_WORKSPACE_TAB_EVENT, closeActiveTab);
+    return () => window.removeEventListener(CLOSE_WORKSPACE_TAB_EVENT, closeActiveTab);
+  }, [closeActiveWorkspaceTab]);
   const surfacesInContainerOf = useCallback(
     (surface: RightPanelSurface): readonly RightPanelSurface[] =>
       rightPanelState.mainSurfaces.some((entry) => entry.id === surface.id)
@@ -5454,6 +5502,19 @@ function ChatViewContent(props: ChatViewProps) {
 
   useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {
+      if (isCloseWorkspaceTabShortcut(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) {
+          const container =
+            event.target instanceof Element &&
+            event.target.closest("[data-right-panel-tabbar], [data-right-panel-surface-content]")
+              ? "panel"
+              : activeWorkspaceContainerRef.current;
+          closeActiveWorkspaceTab(container);
+        }
+        return;
+      }
       if (preventRepeatedTerminalCloseShortcut(event, keybindings)) {
         event.stopPropagation();
         return;
@@ -5631,6 +5692,7 @@ function ChatViewContent(props: ChatViewProps) {
     terminalUiState.activeTerminalId,
     activeThreadId,
     closeTerminal,
+    closeActiveWorkspaceTab,
     closePanelTerminal,
     createNewTerminal,
     openOrAdvanceWorkspaceTabSwitcher,

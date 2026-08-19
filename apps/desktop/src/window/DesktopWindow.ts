@@ -542,12 +542,8 @@ export const make = Effect.gen(function* () {
       }
     });
 
-    // Capture Cmd+T in the focused desktop window so embedded surfaces cannot
-    // swallow the workspace's New Tab shortcut.
-    // Electron's windowMenu close role owns CmdOrCtrl+W. Holding the
-    // close-terminal shortcut can outlive the terminal that handled its first
-    // press, so reject repeats before they reach the native window accelerator.
-    // Deliberate presses still flow through the renderer or native menu.
+    // Capture workspace tab shortcuts before embedded surfaces or Electron's
+    // native Close Window accelerator can swallow them.
     // Chrome-style hold-to-quit: intercept the quit accelerator before the
     // native menu sees it and only quit after the shortcut is held. The
     // renderer shows the "Hold to Quit" hint via QUIT_SHORTCUT_CHANNEL.
@@ -589,10 +585,20 @@ export const make = Effect.gen(function* () {
         }
         return;
       }
-      if (input.type !== "keyDown" || !input.isAutoRepeat) return;
+      if (input.type !== "keyDown") return;
       const modifier = environment.platform === "darwin" ? input.meta : input.control;
-      if (modifier && !input.alt && !input.shift && input.key.toLowerCase() === "w") {
+      const otherModifier = environment.platform === "darwin" ? input.control : input.meta;
+      if (
+        modifier &&
+        !otherModifier &&
+        !input.alt &&
+        !input.shift &&
+        input.key.toLowerCase() === "w"
+      ) {
         event.preventDefault();
+        if (!input.isAutoRepeat) {
+          window.webContents.send(MENU_ACTION_CHANNEL, "close-workspace-tab");
+        }
       }
     });
 

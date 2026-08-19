@@ -496,11 +496,16 @@ describe("DesktopWindow", () => {
         };
         beforeInput(event, input);
         assert.isTrue(prevented);
+        assert.deepEqual(fakeWindow.send.mock.calls, []);
 
         prevented = false;
         beforeInput(event, { ...input, isAutoRepeat: false });
-        assert.isFalse(prevented);
+        assert.isTrue(prevented);
+        assert.deepEqual(fakeWindow.send.mock.calls, [
+          [MENU_ACTION_CHANNEL, "close-workspace-tab"],
+        ]);
 
+        fakeWindow.send.mockClear();
         prevented = false;
         beforeInput(event, { ...input, meta: false });
         assert.isFalse(prevented);

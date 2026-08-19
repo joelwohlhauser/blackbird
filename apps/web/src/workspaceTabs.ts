@@ -27,6 +27,18 @@ export const workspaceTabDragState = {
 };
 
 export const NEW_WORKSPACE_TAB_EVENT = "blackbird:new-workspace-tab";
+export const CLOSE_WORKSPACE_TAB_EVENT = "blackbird:close-workspace-tab";
+
+export function isCloseWorkspaceTabShortcut(event: {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}): boolean {
+  const commandOrControl = event.metaKey !== event.ctrlKey && (event.metaKey || event.ctrlKey);
+  return event.key.toLowerCase() === "w" && commandOrControl && !event.altKey && !event.shiftKey;
+}
 
 export function isNewWorkspaceTabShortcut(event: {
   key: string;

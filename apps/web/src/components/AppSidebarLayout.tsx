@@ -19,7 +19,7 @@ import {
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
-import { NEW_WORKSPACE_TAB_EVENT } from "../workspaceTabs";
+import { CLOSE_WORKSPACE_TAB_EVENT, NEW_WORKSPACE_TAB_EVENT } from "../workspaceTabs";
 import { useEnvironmentIdentificationMode, useLegacySidebarEnabled } from "../hooks/useSettings";
 import LegacyThreadSidebar from "./LegacySidebar";
 import ThreadSidebar from "./Sidebar";
@@ -304,6 +304,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       }
       if (action === "new-workspace-tab") {
         window.dispatchEvent(new Event(NEW_WORKSPACE_TAB_EVENT));
+        return;
+      }
+      if (action === "close-workspace-tab") {
+        window.dispatchEvent(new Event(CLOSE_WORKSPACE_TAB_EVENT));
       }
     });
 
