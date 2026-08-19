@@ -1172,7 +1172,10 @@ export default function DiffPanel({
   return (
     <DiffPanelShell mode={mode} header={fixedGitSelection ? null : headerRow}>
       {fixedFileBreadcrumbs.length > 0 ? (
-        <div className="surface-subheader px-3" data-surface-subheader>
+        <div
+          className="flex h-10 min-h-10 shrink-0 items-center border-b border-border/60 bg-background px-3"
+          data-surface-subheader
+        >
           <ScrollArea
             ref={fileBreadcrumbRef}
             hideScrollbars

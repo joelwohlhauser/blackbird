@@ -11,6 +11,7 @@ import { useResizableWidth } from "~/hooks/useResizableWidth";
 import { cn } from "~/lib/utils";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
+import { useAtomCommand } from "~/state/use-atom-command";
 import FileBrowserPanel from "~/components/files/FileBrowserPanel";
 import { DiffStatLabel, hasNonZeroStat } from "~/components/chat/DiffStatLabel";
 import { RightPanelResizeHandle } from "~/components/preview/RightPanelResizeHandle";
@@ -77,7 +78,10 @@ function NavigatorHeader(props: {
 }) {
   const stat = { additions: props.additions, deletions: props.deletions };
   return (
-    <div className="surface-subheader gap-2 px-2.5" data-surface-subheader>
+    <div
+      className="flex h-10 min-h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-background px-2.5"
+      data-surface-subheader
+    >
       <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
         {props.label}
       </span>
@@ -113,6 +117,10 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
     : null;
   const [pullRequestDiffWalk, setPullRequestDiffWalk] = useState(EMPTY_PULL_REQUEST_DIFF_WALK);
   const [pullRequestRefreshRequest, setPullRequestRefreshRequest] = useState(0);
+  const [pullRequestRefreshing, setPullRequestRefreshing] = useState(false);
+  const invalidatePullRequest = useAtomCommand(pullRequestEnvironment.invalidate, {
+    reportFailure: false,
+  });
   const currentPullRequestDiffWalk =
     pullRequestKey !== null && pullRequestDiffWalk.key === pullRequestKey
       ? pullRequestDiffWalk
@@ -163,6 +171,21 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
       ),
     [pullRequestFiles],
   );
+  const refreshPullRequest = async () => {
+    if (pullRequestRefreshing) return;
+    setPullRequestRefreshing(true);
+    try {
+      await invalidatePullRequest({
+        environmentId: props.environmentId,
+        input: props.pullRequestReference ? { reference: props.pullRequestReference } : {},
+      });
+      setPullRequestDiffWalk(EMPTY_PULL_REQUEST_DIFF_WALK);
+      setPullRequestRefreshRequest((request) => request + 1);
+      props.onRefreshPullRequest();
+    } finally {
+      setPullRequestRefreshing(false);
+    }
+  };
 
   return (
     <aside
@@ -266,21 +289,13 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
                         variant="ghost"
                         size="icon-xs"
                         aria-label="Refresh pull request"
-                        disabled={props.gitStatusPending || pullRequestDiffQuery.isPending}
-                        onClick={() => {
-                          setPullRequestDiffWalk(EMPTY_PULL_REQUEST_DIFF_WALK);
-                          setPullRequestRefreshRequest((request) => request + 1);
-                          props.onRefreshPullRequest();
-                        }}
+                        disabled={pullRequestRefreshing}
+                        onClick={() => void refreshPullRequest()}
                       />
                     }
                   >
                     <RefreshCwIcon
-                      className={cn(
-                        "size-3.5",
-                        (props.gitStatusPending || pullRequestDiffQuery.isPending) &&
-                          "animate-spin",
-                      )}
+                      className={cn("size-3.5", pullRequestRefreshing && "animate-spin")}
                     />
                   </TooltipTrigger>
                   <TooltipPopup side="left">Refresh pull request</TooltipPopup>
