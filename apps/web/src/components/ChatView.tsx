@@ -7296,7 +7296,10 @@ function ChatViewContent(props: ChatViewProps) {
       {activeThreadRef && isPreviewSupportedInRuntime() ? (
         <PreviewSessionPreloader threadRef={activeThreadRef} />
       ) : null}
-      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+      <div
+        className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+        data-preview-panel-resize-container
+      >
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
           {/* Top bar */}
           <header

@@ -32,6 +32,28 @@ const PREVIEW_PANEL_DEFAULT_WIDTH = 540;
  * sibling below its usable width and the composer overflowed.
  */
 const SIBLING_COLUMN_MIN_WIDTH = 360;
+const RESIZE_CONTAINER_ATTRIBUTE = "data-preview-panel-resize-container";
+
+interface ResizeContainerNode {
+  readonly parentElement: ResizeContainerNode | null;
+  hasAttribute(name: string): boolean;
+}
+
+export function findPreviewPanelResizeContainer(host: HTMLElement): HTMLElement | null;
+export function findPreviewPanelResizeContainer(
+  host: ResizeContainerNode,
+): ResizeContainerNode | null;
+export function findPreviewPanelResizeContainer(
+  host: ResizeContainerNode,
+): ResizeContainerNode | null {
+  const immediateParent = host.parentElement;
+  let current = immediateParent;
+  while (current) {
+    if (current.hasAttribute(RESIZE_CONTAINER_ATTRIBUTE)) return current;
+    current = current.parentElement;
+  }
+  return immediateParent;
+}
 
 export function getPreviewPanelMaxWidth(viewportWidth: number, containerWidth?: number): number {
   const fractionCap = Math.floor(viewportWidth * PREVIEW_PANEL_MAX_WIDTH_FRACTION);
@@ -130,7 +152,7 @@ function useClampedMaxWidth(hostRef: RefObject<HTMLDivElement | null>, enabled: 
   }, []);
   useLayoutEffect(() => {
     if (!enabled) return;
-    const parent = hostRef.current?.parentElement;
+    const parent = hostRef.current ? findPreviewPanelResizeContainer(hostRef.current) : null;
     if (!parent) return;
     // Measure before first paint: the persisted width must be clamped
     // against the row on the initial render, not one observer tick later
