@@ -2,20 +2,24 @@
 
 import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import { FILL_PREVIEW_VIEWPORT } from "@t3tools/contracts";
-import { useEffect, useMemo } from "react";
+import { useEffect, useEffectEvent, useMemo } from "react";
 
 import { isElectron } from "~/env";
 import { useTheme } from "~/hooks/useTheme";
 import { useActivePreviewSessions } from "~/previewStateStore";
+import { previewEnvironment } from "~/state/preview";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { readPreviewAnnotationTheme } from "./annotationTheme";
 import { useBrowserPointerStore } from "./browserPointerStore";
+import { addBrowserSurface } from "~/components/preview/addBrowserSurface";
 import { HostedBrowserWebview } from "./HostedBrowserWebview";
 import { previewRuntimeTabId } from "./previewRuntimeTabId";
 
 export function ElectronBrowserHost() {
   const { resolvedTheme } = useTheme();
   const previewByThreadKey = useActivePreviewSessions();
+  const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const sessions = useMemo(
     () =>
       Object.entries(previewByThreadKey).flatMap(([threadKey, previewState]) => {
@@ -75,6 +79,22 @@ export function ElectronBrowserHost() {
     return preview.onPointerEvent((event) => {
       useBrowserPointerStore.getState().apply(event);
     });
+  }, []);
+
+  const openLinkInNewTab = useEffectEvent((sourceRuntimeTabId: string, url: string) => {
+    const source = sessions.find((session) => session.runtimeTabId === sourceRuntimeTabId);
+    if (!source) return;
+    void addBrowserSurface({
+      threadRef: source.threadRef,
+      openPreview,
+      url,
+      sourceTabId: source.snapshot.tabId,
+    });
+  });
+  useEffect(() => {
+    const preview = window.desktopBridge?.preview;
+    if (!preview) return;
+    return preview.onOpenLinkInNewTab(openLinkInNewTab);
   }, []);
 
   if (!isElectron) return null;

@@ -110,7 +110,9 @@ A title-bar button toggles the normal right panel; there is no ⌥⌘B binding o
 maximize control.
 Control+Tab opens the tab switcher described above. Browser-backed tabs
 include navigation, refresh, URL, zoom, capture, and other appropriate
-browser controls.
+browser controls. Right-clicking a link can open it in a new workspace tab,
+open it in the default browser, or copy it. Selected text and editable fields
+offer the usual copy, cut, paste, and select-all actions.
 Command+T opens a **New Tab** page with the available Browser, Terminal,
 Diff, Linear, GitHub PR, Pull request, and Agents surfaces.
 

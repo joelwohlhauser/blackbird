@@ -57,4 +57,45 @@ describe("addBrowserSurface", () => {
       ).surfaces.map((surface) => surface.id),
     ).toEqual(["browser:tab-1", "browser:tab-2"]);
   });
+
+  it("opens a link beside its source browser tab", async () => {
+    const first = snapshot("tab-1");
+    const second = snapshot("tab-2");
+    applyPreviewServerSnapshot(threadRef, first);
+    const store = useRightPanelStore.getState();
+    store.openBrowser(threadRef, first.tabId);
+    store.moveSurface(threadRef, "browser:tab-1", { container: "main", index: 0 });
+    store.open(threadRef, "diff");
+    const openPreview = vi.fn(async (_input: PreviewOpenInput) => AsyncResult.success(second));
+
+    await addBrowserSurface({
+      threadRef,
+      openPreview: ({ input }) => openPreview(input),
+      url: "https://example.com/docs",
+      sourceTabId: first.tabId,
+    });
+
+    expect(openPreview).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      url: "https://example.com/docs",
+      viewport: FILL_PREVIEW_VIEWPORT,
+    });
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, threadRef),
+    ).toEqual({
+      isOpen: true,
+      activeSurfaceId: "diff",
+      surfaces: [{ id: "diff", kind: "diff" }],
+      activeMainSurfaceId: "browser:tab-2",
+      mainSurfaces: [
+        { id: "browser:tab-1", kind: "preview", resourceId: "tab-1" },
+        {
+          id: "browser:tab-2",
+          kind: "preview",
+          resourceId: "tab-2",
+          url: "https://example.com/docs",
+        },
+      ],
+    });
+  });
 });

@@ -1198,6 +1198,7 @@ export interface DesktopPreviewBridge {
   };
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;
+  onOpenLinkInNewTab: (listener: (sourceTabId: string, url: string) => void) => () => void;
 }
 
 export type ConfirmDialogVariant = "default" | "destructive";

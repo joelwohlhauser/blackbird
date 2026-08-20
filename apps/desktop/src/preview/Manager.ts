@@ -31,7 +31,15 @@ import type {
 } from "@t3tools/contracts";
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { normalizePreviewUrl } from "@t3tools/shared/preview";
-import { BrowserWindow, type Session, clipboard, nativeImage, shell, webContents } from "electron";
+import {
+  BrowserWindow,
+  Menu,
+  type Session,
+  clipboard,
+  nativeImage,
+  shell,
+  webContents,
+} from "electron";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -51,7 +59,11 @@ import * as Scope from "effect/Scope";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-import { PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL } from "../ipc/channels.ts";
+import {
+  PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL,
+  PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL,
+} from "../ipc/channels.ts";
+import { parseSafeExternalUrl } from "../electron/ElectronShell.ts";
 import * as BrowserSession from "./BrowserSession.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
@@ -438,6 +450,76 @@ export const isPreviewRefreshShortcut = (input: Electron.Input): boolean =>
   (input.meta || input.control) &&
   !input.shift &&
   !input.alt;
+
+export type PreviewContextMenuAction =
+  | "open-link-new-tab"
+  | "open-link-external"
+  | "copy-link"
+  | "copy-image"
+  | "cut"
+  | "copy"
+  | "paste"
+  | "select-all"
+  | "back"
+  | "forward"
+  | "reload";
+
+export type PreviewContextMenuEntry =
+  | { readonly kind: "separator" }
+  | {
+      readonly kind: "action";
+      readonly action: PreviewContextMenuAction;
+      readonly label: string;
+      readonly enabled: boolean;
+    };
+
+export function buildPreviewContextMenuEntries(input: {
+  readonly hasLink: boolean;
+  readonly hasImage: boolean;
+  readonly editable: boolean;
+  readonly canCut: boolean;
+  readonly canCopy: boolean;
+  readonly canPaste: boolean;
+  readonly canSelectAll: boolean;
+  readonly canGoBack: boolean;
+  readonly canGoForward: boolean;
+}): PreviewContextMenuEntry[] {
+  const entries: PreviewContextMenuEntry[] = [];
+  const appendSection = (section: PreviewContextMenuEntry[]) => {
+    if (section.length === 0) return;
+    if (entries.length > 0) entries.push({ kind: "separator" });
+    entries.push(...section);
+  };
+  const action = (
+    id: PreviewContextMenuAction,
+    label: string,
+    enabled = true,
+  ): PreviewContextMenuEntry => ({ kind: "action", action: id, label, enabled });
+
+  appendSection(
+    input.hasLink
+      ? [
+          action("open-link-new-tab", "Open Link in New Tab"),
+          action("open-link-external", "Open Link in Default Browser"),
+          action("copy-link", "Copy Link"),
+        ]
+      : [],
+  );
+  appendSection(input.hasImage ? [action("copy-image", "Copy Image")] : []);
+  appendSection([
+    ...(input.editable && input.canCut ? [action("cut", "Cut")] : []),
+    ...(input.canCopy ? [action("copy", "Copy")] : []),
+    ...(input.editable && input.canPaste ? [action("paste", "Paste")] : []),
+    ...(input.canSelectAll ? [action("select-all", "Select All")] : []),
+  ]);
+  appendSection([
+    action("back", "Back", input.canGoBack),
+    action("forward", "Forward", input.canGoForward),
+    action("reload", "Reload"),
+  ]);
+
+  return entries;
+}
 
 const isPreviewInputSignal = (value: unknown): value is PreviewInputSignal => {
   if (typeof value !== "object" || value === null || !("kind" in value)) return false;
@@ -1573,6 +1655,70 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       }
       runFork(forwardShortcut(event, input));
     };
+    const contextMenu = (event: Electron.Event, params: Electron.ContextMenuParams): void => {
+      event.preventDefault();
+      runFork(
+        Effect.gen(function* () {
+          const mainWindow = yield* Ref.get(mainWindowRef);
+          if (Option.isNone(mainWindow) || mainWindow.value.isDestroyed()) return;
+
+          const safeLinkUrl = Option.getOrNull(parseSafeExternalUrl(params.linkURL));
+          const linkProtocol = safeLinkUrl ? new URL(safeLinkUrl).protocol : null;
+          const linkUrl =
+            safeLinkUrl && (linkProtocol === "http:" || linkProtocol === "https:")
+              ? safeLinkUrl
+              : null;
+          const entries = buildPreviewContextMenuEntries({
+            hasLink: linkUrl !== null,
+            hasImage: params.mediaType === "image",
+            editable: params.isEditable,
+            canCut: params.editFlags.canCut,
+            canCopy: params.editFlags.canCopy,
+            canPaste: params.editFlags.canPaste,
+            canSelectAll: params.editFlags.canSelectAll,
+            canGoBack: wc.navigationHistory.canGoBack(),
+            canGoForward: wc.navigationHistory.canGoForward(),
+          });
+          const actions = {
+            "open-link-new-tab": () => {
+              if (!linkUrl) return;
+              mainWindow.value.webContents.send(
+                PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL,
+                tabId,
+                linkUrl,
+              );
+            },
+            "open-link-external": () => {
+              if (linkUrl) void shell.openExternal(linkUrl).catch(() => undefined);
+            },
+            "copy-link": () => {
+              if (linkUrl) clipboard.writeText(linkUrl);
+            },
+            "copy-image": () => wc.copyImageAt(params.x, params.y),
+            cut: () => wc.cut(),
+            copy: () => wc.copy(),
+            paste: () => wc.paste(),
+            "select-all": () => wc.selectAll(),
+            back: () => wc.navigationHistory.goBack(),
+            forward: () => wc.navigationHistory.goForward(),
+            reload: () => wc.reload(),
+          } satisfies Record<PreviewContextMenuAction, () => void>;
+          const template: Electron.MenuItemConstructorOptions[] = entries.map((entry) =>
+            entry.kind === "separator"
+              ? { type: "separator" }
+              : {
+                  label: entry.label,
+                  enabled: entry.enabled,
+                  click: actions[entry.action],
+                },
+          );
+
+          yield* attempt({ operation: "contextMenu", tabId, webContentsId: wc.id }, () => {
+            Menu.buildFromTemplate(template).popup({ window: mainWindow.value });
+          });
+        }).pipe(Effect.ignore),
+      );
+    };
     yield* Scope.addFinalizer(
       scope,
       attempt({ operation: "detachListeners", tabId, webContentsId: wc.id }, () => {
@@ -1585,6 +1731,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         wc.off("did-start-loading", sync);
         wc.off("did-stop-loading", sync);
         wc.off("did-fail-load", failed as never);
+        wc.off("context-menu", contextMenu);
         wc.off("before-input-event", beforeInput);
         wc.ipc.off(HUMAN_INPUT_CHANNEL, humanInput);
         wc.ipc.off(MOUSE_NAVIGATE_CHANNEL, mouseNavigate);
@@ -1600,6 +1747,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         wc.on("did-start-loading", sync);
         wc.on("did-stop-loading", sync);
         wc.on("did-fail-load", failed as never);
+        wc.on("context-menu", contextMenu);
         wc.ipc.on(HUMAN_INPUT_CHANNEL, humanInput);
         wc.ipc.on(MOUSE_NAVIGATE_CHANNEL, mouseNavigate);
         wc.setWindowOpenHandler(({ url }) => {

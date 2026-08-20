@@ -267,5 +267,21 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       return () =>
         ipcRenderer.removeListener(IpcChannels.PREVIEW_POINTER_EVENT_CHANNEL, wrappedListener);
     },
+    onOpenLinkInNewTab: (listener) => {
+      const wrappedListener = (
+        _event: Electron.IpcRendererEvent,
+        sourceTabId: unknown,
+        url: unknown,
+      ) => {
+        if (typeof sourceTabId !== "string" || typeof url !== "string") return;
+        listener(sourceTabId, url);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(
+          IpcChannels.PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL,
+          wrappedListener,
+        );
+    },
   },
 } satisfies DesktopBridge);

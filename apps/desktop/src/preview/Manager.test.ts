@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
+import { PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL } from "../ipc/channels.ts";
 import * as BrowserSession from "./BrowserSession.ts";
 import * as PreviewManager from "./Manager.ts";
 
@@ -58,37 +59,92 @@ describe("isPreviewRefreshShortcut", () => {
   });
 });
 
+describe("buildPreviewContextMenuEntries", () => {
+  const labels = (input: Parameters<typeof PreviewManager.buildPreviewContextMenuEntries>[0]) =>
+    PreviewManager.buildPreviewContextMenuEntries(input).flatMap((entry) =>
+      entry.kind === "action" ? [entry.label] : [],
+    );
+  const defaults = {
+    hasLink: false,
+    hasImage: false,
+    editable: false,
+    canCut: false,
+    canCopy: false,
+    canPaste: false,
+    canSelectAll: true,
+    canGoBack: false,
+    canGoForward: false,
+  };
+
+  it("offers common link actions", () => {
+    expect(labels({ ...defaults, hasLink: true })).toEqual([
+      "Open Link in New Tab",
+      "Open Link in Default Browser",
+      "Copy Link",
+      "Select All",
+      "Back",
+      "Forward",
+      "Reload",
+    ]);
+  });
+
+  it("offers copy for selected text and edit actions for inputs", () => {
+    expect(
+      labels({
+        ...defaults,
+        editable: true,
+        canCut: true,
+        canCopy: true,
+        canPaste: true,
+      }),
+    ).toEqual(["Cut", "Copy", "Paste", "Select All", "Back", "Forward", "Reload"]);
+  });
+});
+
 const {
   browserWindowConstructor,
+  buildFromTemplate,
   createFromPath,
   fromId,
   getFocusedWebContents,
+  menuPopup,
   mkdir,
+  openExternal,
   showItemInFolder,
   webviewSend,
   writeFile,
   writeImage,
+  writeText,
 } = vi.hoisted(() => ({
   browserWindowConstructor: vi.fn(),
+  buildFromTemplate: vi.fn(),
   createFromPath: vi.fn((): { readonly isEmpty: () => boolean } => ({ isEmpty: () => false })),
   fromId: vi.fn((_id?: number) => null),
   getFocusedWebContents: vi.fn(() => null),
+  menuPopup: vi.fn(),
   mkdir: vi.fn((_path: string) => undefined),
+  openExternal: vi.fn(async (_url: string) => undefined),
   showItemInFolder: vi.fn(),
   webviewSend: vi.fn(),
   writeFile: vi.fn((_path: string, _data: Uint8Array) => undefined),
   writeImage: vi.fn(),
+  writeText: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
   BrowserWindow: browserWindowConstructor,
+  Menu: {
+    buildFromTemplate,
+  },
   clipboard: {
     writeImage,
+    writeText,
   },
   nativeImage: {
     createFromPath,
   },
   shell: {
+    openExternal,
     showItemInFolder,
   },
   session: {
@@ -198,6 +254,7 @@ const makeSourcePng = (width = 1, height = 1): Buffer => {
 
 const makeFaviconWebContents = (options?: {
   readonly fetch?: (url: string, init?: RequestInit) => Promise<Response>;
+  readonly hostWebContents?: Electron.WebContents;
   readonly id?: number;
   readonly rasterize?: (code: string) => Promise<unknown>;
   readonly url?: string;
@@ -227,6 +284,7 @@ const makeFaviconWebContents = (options?: {
   const debuggerOff = vi.fn();
   const webContents = {
     id: options?.id ?? 42,
+    hostWebContents: options?.hostWebContents,
     isDestroyed: () => destroyed,
     getType: () => "webview",
     getURL: () => currentUrl,
@@ -317,13 +375,18 @@ const makeTestPictureInPictureWindow = (loadURL: () => Promise<void> = async () 
 describe("PreviewManager", () => {
   beforeEach(() => {
     browserWindowConstructor.mockReset();
+    buildFromTemplate.mockReset();
+    buildFromTemplate.mockReturnValue({ popup: menuPopup });
     fromId.mockClear();
     getFocusedWebContents.mockReset();
     getFocusedWebContents.mockReturnValue(null);
     mkdir.mockClear();
+    menuPopup.mockClear();
+    openExternal.mockClear();
     writeFile.mockClear();
     showItemInFolder.mockClear();
     writeImage.mockClear();
+    writeText.mockClear();
     createFromPath.mockClear();
     webviewSend.mockClear();
   });
@@ -795,6 +858,57 @@ describe("PreviewManager", () => {
         yield* Effect.promise(() => Promise.resolve());
         yield* settle(() => preview.loadURL.mock.calls.length === 1);
         expect(preview.loadURL).toHaveBeenCalledWith("https://sentry.io/issues/123");
+      }),
+    ),
+  );
+
+  effectIt.effect("shows a link menu and forwards new tabs to the workspace", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const send = vi.fn();
+        const hostWebContents = { send } as unknown as Electron.WebContents;
+        const preview = makeFaviconWebContents({ hostWebContents });
+        const mainWindow = {
+          isDestroyed: () => false,
+          once: vi.fn(),
+          webContents: hostWebContents,
+        } as never;
+        fromId.mockReturnValue(preview.webContents);
+        yield* manager.setMainWindow(mainWindow);
+        yield* manager.createTab("tab_context_menu");
+        yield* manager.registerWebview("tab_context_menu", 42);
+
+        const preventDefault = vi.fn();
+        preview.listeners.get("context-menu")?.(
+          { preventDefault } as never,
+          {
+            linkURL: "https://example.com/docs",
+            mediaType: "none",
+            isEditable: false,
+            x: 20,
+            y: 30,
+            editFlags: {
+              canCut: false,
+              canCopy: false,
+              canPaste: false,
+              canSelectAll: true,
+            },
+          } as never,
+        );
+        yield* settle(() => menuPopup.mock.calls.length === 1);
+
+        expect(preventDefault).toHaveBeenCalledOnce();
+        const template = buildFromTemplate.mock.calls.at(-1)?.[0] as
+          | Electron.MenuItemConstructorOptions[]
+          | undefined;
+        const openNewTab = template?.find((item) => item.label === "Open Link in New Tab");
+        expect(openNewTab?.click).toBeTypeOf("function");
+        openNewTab?.click?.({} as never, mainWindow, {} as never);
+        expect(send).toHaveBeenCalledWith(
+          PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL,
+          "tab_context_menu",
+          "https://example.com/docs",
+        );
       }),
     ),
   );
