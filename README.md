@@ -138,9 +138,11 @@ Useful shortcuts on macOS:
 - Command+Shift+B — toggle the workspace navigator
 - Command+Shift+G — open the workspace navigator on Changes
 - Command+Shift+H — open the workspace navigator on PR
-- Control+Tab / Control+Shift+Tab — tab switcher for the current chat's tabs
-  (falls through to the chat switcher when the chat has no extra tabs)
+- Control+Tab / Control+Shift+Tab — tab switcher for the current chat's tabs;
+  when the chat has no extra tabs, the shortcut does nothing
 - Command+T — open the New Tab page
+- Command+W closes the active workspace tab. On the chat tab, it settles the
+  thread and opens a fresh thread in the same project or Quick chats.
 
 ### Git worktree workflow
 

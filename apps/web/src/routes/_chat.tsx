@@ -303,17 +303,10 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
-      if (
-        command === "chat.switcher" ||
-        command === "rightPanel.nextTab" ||
-        command === "rightPanel.previousTab"
-      ) {
+      const chatSwitcherDirection = chatSwitcherDirectionForShortcut(command, event.shiftKey);
+      if (chatSwitcherDirection !== null) {
         const modifier: ChatSwitcherModifier = event.altKey ? "alt" : "control";
-        const direction: ChatSwitcherDirection = chatSwitcherDirectionForShortcut(
-          command,
-          event.shiftKey,
-        );
-        if (!openOrAdvanceChatSwitcher(modifier, direction)) return;
+        if (!openOrAdvanceChatSwitcher(modifier, chatSwitcherDirection)) return;
         event.preventDefault();
         event.stopPropagation();
         return;

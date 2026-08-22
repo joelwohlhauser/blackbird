@@ -42,9 +42,11 @@ describe("chat switcher", () => {
     expect(adjacentChatSwitcherIndex(3, 0, "previous")).toBe(2);
   });
 
-  it("cycles backward for Option-Shift-Tab", () => {
+  it("only handles the chat-switcher command", () => {
     expect(chatSwitcherDirectionForShortcut("chat.switcher", false)).toBe("next");
     expect(chatSwitcherDirectionForShortcut("chat.switcher", true)).toBe("previous");
+    expect(chatSwitcherDirectionForShortcut("rightPanel.nextTab", false)).toBeNull();
+    expect(chatSwitcherDirectionForShortcut("rightPanel.previousTab", true)).toBeNull();
   });
 
   it("cycles an open switcher in both directions while Option stays held", () => {

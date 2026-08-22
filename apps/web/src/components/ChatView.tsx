@@ -1292,7 +1292,7 @@ function ChatViewContent(props: ChatViewProps) {
   const threadSyncPhase = routeKind === "server" ? (props.threadSyncPhase ?? null) : null;
   const threadDetailLoading = threadSyncPhase === "loading";
   const handleNewThread = useNewThreadHandler();
-  const { archiveThread: archiveThreadAfterWorktreeDelete } = useThreadActions();
+  const { archiveThread: archiveThreadAfterWorktreeDelete, settleThread } = useThreadActions();
   const routeThreadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
@@ -1700,6 +1700,9 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const openGitHubPullRequestSurface = useGitHubPullRequestSurface(activeThreadRef);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
+  const activeThreadKeyRef = useRef(activeThreadKey);
+  activeThreadKeyRef.current = activeThreadKey;
+  const chatCloseInFlightThreadKeyRef = useRef<string | null>(null);
   const changeRequestSnapshotByKey = useAtomValue(threadChangeRequestSnapshotsAtom);
   const [timelineAnchor, setTimelineAnchor] = useState<{
     readonly threadKey: string | null;
@@ -3941,8 +3944,7 @@ function ChatViewContent(props: ChatViewProps) {
     [activateMainChatTab, activateRightPanelSurface],
   );
   // Ctrl+Tab tab switcher for the current chat's tabs. Opens only with two
-  // or more tabs; with just the chat tab the shortcut falls through to the
-  // chat switcher in the route layout.
+  // or more tabs. With just the chat tab, the shortcut does nothing.
   const openOrAdvanceWorkspaceTabSwitcher = useCallback(
     (direction: "next" | "previous"): boolean => {
       if (workspaceTabSwitcher) {
@@ -4146,11 +4148,57 @@ function ChatViewContent(props: ChatViewProps) {
       syncActivePreviewSurface,
     ],
   );
+  const settleChatAndOpenNewThread = useCallback(() => {
+    if (!isServerThread || !activeThreadRef || !activeProjectRef) return;
+    const threadKey = scopedThreadKey(activeThreadRef);
+    if (chatCloseInFlightThreadKeyRef.current === threadKey) return;
+    chatCloseInFlightThreadKeyRef.current = threadKey;
+
+    void (async () => {
+      let didSettle = false;
+      try {
+        const result = await settleThread(activeThreadRef);
+        if (result._tag === "Failure") {
+          if (!isAtomCommandInterrupted(result)) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Failed to settle thread",
+                description: chatActionErrorMessage(squashAtomCommandFailure(result)),
+              }),
+            );
+          }
+          return;
+        }
+        // A chat switch made while the command was in flight wins. Do not
+        // pull the user back into a fresh draft for a thread they left.
+        if (activeThreadKeyRef.current !== threadKey) return;
+        didSettle = true;
+        await handleNewThread(activeProjectRef);
+      } catch (error) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: didSettle ? "Failed to open new thread" : "Failed to settle thread",
+            description: chatActionErrorMessage(error),
+          }),
+        );
+      } finally {
+        if (chatCloseInFlightThreadKeyRef.current === threadKey) {
+          chatCloseInFlightThreadKeyRef.current = null;
+        }
+      }
+    })();
+  }, [activeProjectRef, activeThreadRef, handleNewThread, isServerThread, settleThread]);
   const closeActiveWorkspaceTab = useCallback(
     (container = activeWorkspaceContainerRef.current) => {
       const surface =
         container === "panel" && rightPanelOpen ? selectedRightPanelSurface : activeMainSurface;
-      if (!surface || attachedWorkspaceSurfaceIds.has(surface.id)) return;
+      if (!surface) {
+        if (container === "main") settleChatAndOpenNewThread();
+        return;
+      }
+      if (attachedWorkspaceSurfaceIds.has(surface.id)) return;
       closeRightPanelSurface(surface);
     },
     [
@@ -4159,6 +4207,7 @@ function ChatViewContent(props: ChatViewProps) {
       closeRightPanelSurface,
       rightPanelOpen,
       selectedRightPanelSurface,
+      settleChatAndOpenNewThread,
     ],
   );
   useEffect(() => {
@@ -5706,13 +5755,9 @@ function ChatViewContent(props: ChatViewProps) {
       }
 
       if (command === "rightPanel.nextTab" || command === "rightPanel.previousTab") {
-        if (
-          !openOrAdvanceWorkspaceTabSwitcher(command === "rightPanel.nextTab" ? "next" : "previous")
-        ) {
-          return;
-        }
         event.preventDefault();
         event.stopPropagation();
+        openOrAdvanceWorkspaceTabSwitcher(command === "rightPanel.nextTab" ? "next" : "previous");
         return;
       }
 

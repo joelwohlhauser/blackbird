@@ -5,18 +5,12 @@ export function chatSwitcherVisibilityDelayMs(modifier: ChatSwitcherModifier): n
   return modifier === "alt" ? 100 : 0;
 }
 
-export type ChatSwitcherShortcutCommand =
-  | "chat.switcher"
-  | "rightPanel.nextTab"
-  | "rightPanel.previousTab";
-
 export function chatSwitcherDirectionForShortcut(
-  command: ChatSwitcherShortcutCommand,
+  command: string | null,
   shiftKey: boolean,
-): ChatSwitcherDirection {
-  return command === "rightPanel.previousTab" || (command === "chat.switcher" && shiftKey)
-    ? "previous"
-    : "next";
+): ChatSwitcherDirection | null {
+  if (command !== "chat.switcher") return null;
+  return shiftKey ? "previous" : "next";
 }
 
 export function activeChatSwitcherDirection(input: {
