@@ -11,7 +11,7 @@ Run this workflow from the Blackbird repository root. Read the repository's `AGE
 
 1. Confirm `origin` points to `joelwohlhauser/blackbird`, `upstream` points to `pingdotgg/t3code`, and the current branch is `main`.
 2. Inspect `git status`. Do not fold unrelated uncommitted work into the sync. If the worktree is dirty and the changes are not clearly part of the current task, stop and ask Joel whether to commit them first.
-3. Fetch `upstream` and report the ahead/behind counts plus a short summary of upstream changes before merging.
+3. Fetch `upstream`, record the merge base between `main` and `upstream/main`, and report the ahead/behind counts before merging.
 
 ## Merge
 
@@ -37,5 +37,6 @@ Watch for these recurring hazards:
 3. Run formatting on touched files, focused tests for conflict resolutions and behavior changes, and scoped typechecks for affected packages. Do not run repo-wide checks unless Joel asks.
 4. Review the staged diff for accidental deletion of Blackbird features, branding drift, generated artifacts, and enabled CI behavior.
 5. Create the merge commit on `main` with a plain conventional title, then push `main` to `origin`.
+6. End with a short "What T3 added" summary based on the upstream commits and diff since the recorded merge base. Use 3-5 bullets covering only notable user-facing changes and meaningful fixes. Skip internal churn.
 
 Do not deploy the desktop app, update remote, open a pull request, or merge anything into `upstream` unless Joel asks separately.
