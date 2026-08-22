@@ -8,7 +8,7 @@ import {
   type PreviewViewportSetting,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { normalizePreviewUrl } from "@t3tools/shared/preview";
+import { resolveBrowserAddressInput } from "@t3tools/shared/preview";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -179,7 +179,7 @@ export function PreviewView({
   const handleSubmitUrl = useCallback(
     async (next: string) => {
       try {
-        const normalized = normalizePreviewUrl(next);
+        const normalized = resolveBrowserAddressInput(next);
         if (await navigateToResolvedUrl(normalized)) {
           recordVisitForThread(threadRef, normalized);
         }

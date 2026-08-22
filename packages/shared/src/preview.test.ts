@@ -6,6 +6,7 @@ import {
   newPreviewTabId,
   normalizePreviewUrl,
   PreviewUrlNormalizationError,
+  resolveBrowserAddressInput,
 } from "./preview.ts";
 
 describe("newPreviewTabId", () => {
@@ -107,5 +108,26 @@ describe("normalizePreviewUrl", () => {
         /user|password|access_token|secret|fragment/,
       );
     }
+  });
+});
+
+describe("resolveBrowserAddressInput", () => {
+  it.each([
+    ["weather", "https://www.google.com/search?q=weather"],
+    ["weather tomorrow", "https://www.google.com/search?q=weather+tomorrow"],
+    ["what is node.js", "https://www.google.com/search?q=what+is+node.js"],
+    ["hello@example.com", "https://www.google.com/search?q=hello%40example.com"],
+  ])("searches Google for %s", (input, expected) => {
+    expect(resolveBrowserAddressInput(input)).toBe(expected);
+  });
+
+  it.each([
+    ["example.com", "https://example.com/"],
+    ["example.com/docs?q=browser", "https://example.com/docs?q=browser"],
+    ["example.com/search?q=weather tomorrow", "https://example.com/search?q=weather%20tomorrow"],
+    ["localhost:5173", "http://localhost:5173/"],
+    ["https://example.com/path", "https://example.com/path"],
+  ])("navigates directly for %s", (input, expected) => {
+    expect(resolveBrowserAddressInput(input)).toBe(expected);
   });
 });

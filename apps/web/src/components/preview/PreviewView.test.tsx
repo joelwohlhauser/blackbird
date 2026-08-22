@@ -422,6 +422,19 @@ describe("PreviewView navigation", () => {
     });
   });
 
+  it("searches Google when the submitted value is not a URL", async () => {
+    renderToStaticMarkup(<PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" visible />);
+
+    mocks.submittedUrl?.("weather tomorrow");
+
+    await vi.waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith(
+        TEST_RUNTIME_TAB_ID,
+        "https://www.google.com/search?q=weather+tomorrow",
+      ),
+    );
+  });
+
   it("maps an empty-state localhost server onto the WSL host", async () => {
     mocks.showEmptyState = true;
     renderToStaticMarkup(

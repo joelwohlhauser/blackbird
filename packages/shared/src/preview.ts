@@ -29,6 +29,8 @@ export const LSOF_LOCAL_HOST_TOKENS: ReadonlySet<string> = new Set([
 ]);
 
 const LOOPBACK_PREFIX_PATTERN = /^(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])(?::|\/|$)/i;
+const EXPLICIT_URL_PATTERN = /^[A-Za-z][A-Za-z\d+.-]*:\/\//;
+const GOOGLE_SEARCH_URL = "https://www.google.com/search";
 
 export function isLoopbackHost(host: string): boolean {
   if (LOOPBACK_HOSTS.has(host)) return true;
@@ -106,4 +108,33 @@ export function normalizePreviewUrl(rawUrl: string): string {
     });
   }
   return parsed.href;
+}
+
+/** Resolve browser address-bar input to either a URL or a Google search. */
+export function resolveBrowserAddressInput(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return normalizePreviewUrl(input);
+
+  if (EXPLICIT_URL_PATTERN.test(trimmed) || looksLikeBrowserAddress(trimmed)) {
+    return normalizePreviewUrl(trimmed);
+  }
+
+  const searchUrl = new URL(GOOGLE_SEARCH_URL);
+  searchUrl.searchParams.set("q", trimmed);
+  return searchUrl.href;
+}
+
+function looksLikeBrowserAddress(input: string): boolean {
+  if (LOOPBACK_PREFIX_PATTERN.test(input)) return true;
+
+  try {
+    const parsed = new URL(`https://${input}`);
+    return (
+      parsed.username === "" &&
+      parsed.password === "" &&
+      (parsed.hostname.includes(".") || parsed.hostname.includes(":") || parsed.port !== "")
+    );
+  } catch {
+    return false;
+  }
 }
