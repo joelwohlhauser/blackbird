@@ -34,6 +34,7 @@ interface RightPanelTabsProps {
   pendingSurfaceIds: ReadonlySet<string>;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   desktopByTabId: Readonly<Record<string, DesktopPreviewOverlay>>;
+  previewRuntimeTabId?: ((tabId: string) => string) | undefined;
   terminalLabelsById: ReadonlyMap<string, string>;
   onActivate: (surface: RightPanelSurface) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
@@ -90,6 +91,34 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   agents: "Available from a thread.",
 } as const;
+
+type SurfaceShortcutEvent = Pick<
+  KeyboardEvent,
+  "altKey" | "ctrlKey" | "defaultPrevented" | "isComposing" | "key" | "metaKey"
+>;
+
+export function surfaceShortcutActionForKey<
+  const Action extends { available: boolean; shortcut: string },
+>(actions: readonly Action[], event: SurfaceShortcutEvent): Action | null {
+  if (event.defaultPrevented || event.isComposing) return null;
+  if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  return (
+    actions.find(
+      (action) => action.available && action.shortcut.toLowerCase() === event.key.toLowerCase(),
+    ) ?? null
+  );
+}
+
+export function surfaceShortcutTargetsTypingContext(
+  target: { closest(selectors: string): unknown } | null,
+): boolean {
+  return (
+    target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') !=
+    null
+  );
+}
+
+export { tabMuteMenuItem } from "./WorkspaceTabStrip";
 
 export function NewTabButton(props: { ariaLabel: string; onClick: () => void }) {
   return (
@@ -221,19 +250,11 @@ export function NewTabPage(props: {
   });
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const action = surfaceShortcutActionForKey(shortcutActionsRef.current, event);
+      if (!action) return;
       if (document.querySelector(LAUNCHER_SHORTCUT_BLOCKING_LAYERS)) return;
       const target = event.target;
-      if (target instanceof HTMLElement) {
-        if (target.closest("input, textarea, select")) return;
-        const editable = target.isContentEditable ? target : target.closest("[contenteditable]");
-        if (editable && (editable.textContent ?? "").trim().length > 0) return;
-      }
-      const action = shortcutActionsRef.current.find(
-        (candidate) => candidate.shortcut.toLowerCase() === event.key.toLowerCase(),
-      );
-      if (!action) return;
+      if (target instanceof Element && surfaceShortcutTargetsTypingContext(target)) return;
       event.preventDefault();
       event.stopPropagation();
       action.onClick();
@@ -387,6 +408,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           pendingSurfaceIds={props.pendingSurfaceIds}
           previewSessions={props.previewSessions}
           desktopByTabId={props.desktopByTabId}
+          {...(props.previewRuntimeTabId !== undefined
+            ? { previewRuntimeTabId: props.previewRuntimeTabId }
+            : {})}
           terminalLabelsById={props.terminalLabelsById}
           {...(props.pullRequestStatuses !== undefined
             ? { pullRequestStatuses: props.pullRequestStatuses }

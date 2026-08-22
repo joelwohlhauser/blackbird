@@ -19,6 +19,8 @@ import {
   MessageSquare,
   Plus,
   TerminalSquare,
+  Volume2,
+  VolumeOff,
   X,
 } from "lucide-react";
 import {
@@ -47,6 +49,7 @@ import {
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import { GitHubIcon, LinearIcon } from "./Icons";
 import { FaviconImage } from "./preview/PreviewFaviconIcon";
+import { previewBridge } from "./preview/previewBridge";
 
 export interface WorkspacePullRequestTabStatus {
   projectId: string;
@@ -193,7 +196,38 @@ export function SurfaceIcon({
   }
 }
 
-type TabContextMenuAction = "copy-path" | "close" | "close-others" | "close-to-right" | "close-all";
+type TabContextMenuAction =
+  | "copy-path"
+  | "toggle-mute"
+  | "close"
+  | "close-others"
+  | "close-to-right"
+  | "close-all";
+
+function previewTabIdOf(
+  surface: RightPanelSurface,
+  sessions: Readonly<Record<string, PreviewSessionSnapshot>>,
+): string | null {
+  if (surface.kind !== "preview" || !surface.resourceId) return null;
+  return sessions[surface.resourceId]?.tabId ?? null;
+}
+
+export function tabMuteMenuItem(input: {
+  overlay: DesktopPreviewOverlay | null;
+  canResolveRuntimeTabId: boolean;
+}): { label: string; disabled: boolean } {
+  return {
+    label: input.overlay?.audioMuted ? "Unmute tab" : "Mute tab",
+    disabled: input.overlay === null || !input.canResolveRuntimeTabId,
+  };
+}
+
+type TabAudioState = "none" | "audible" | "muted";
+
+function tabAudioState(overlay: DesktopPreviewOverlay | null): TabAudioState {
+  if (!overlay?.audible) return "none";
+  return overlay.audioMuted ? "muted" : "audible";
+}
 
 // Matches the Files/Changes/PR tabs in the workspace navigator (h-7, px-2,
 // text-xs font-medium), with a leading icon.
@@ -363,12 +397,18 @@ function WorkspaceSurfaceTab(props: {
   onMouseDown: (event: ReactMouseEvent) => void;
   onAuxClick: (event: ReactMouseEvent, surface: RightPanelSurface) => void;
   onContextMenu: (event: ReactMouseEvent, surface: RightPanelSurface) => void;
+  previewRuntimeTabId?: ((tabId: string) => string) | undefined;
 }) {
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
     id: props.surface.id,
     data: { type: "workspace-tab", container: props.container },
     disabled: { draggable: props.pinned },
   });
+  const previewTabId = previewTabIdOf(props.surface, props.previewSessions);
+  const audio = tabAudioState(previewTabId ? (props.desktopByTabId[previewTabId] ?? null) : null);
+  const audioRuntimeTabId = previewTabId
+    ? (props.previewRuntimeTabId?.(previewTabId) ?? null)
+    : null;
   return (
     <div
       ref={setNodeRef}
@@ -435,6 +475,28 @@ function WorkspaceSurfaceTab(props: {
           <X className="hidden size-3 group-hover/tab:block group-focus-visible/close:block" />
         </button>
       )}
+      {audio === "none" || !audioRuntimeTabId ? null : (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-muted"
+                aria-label={audio === "muted" ? `Unmute ${props.title}` : `Mute ${props.title}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void previewBridge
+                    ?.setAudioMuted(audioRuntimeTabId, audio !== "muted")
+                    .catch(() => undefined);
+                }}
+              />
+            }
+          >
+            {audio === "muted" ? <VolumeOff className="size-3" /> : <Volume2 className="size-3" />}
+          </TooltipTrigger>
+          <TooltipPopup>{audio === "muted" ? "Unmute tab" : "Mute tab"}</TooltipPopup>
+        </Tooltip>
+      )}
       <Tooltip>
         <TooltipTrigger
           render={
@@ -460,6 +522,7 @@ export interface WorkspaceTabStripProps {
   pendingSurfaceIds: ReadonlySet<string>;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   desktopByTabId: Readonly<Record<string, DesktopPreviewOverlay>>;
+  previewRuntimeTabId?: ((tabId: string) => string) | undefined;
   terminalLabelsById: ReadonlyMap<string, string>;
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
   /** Surface ids fixed beside the chat tab and protected from close/drag. */
@@ -499,6 +562,20 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       if (surface.kind === "file" || surface.kind === "file-diff") {
         items.push({ id: "copy-path", label: "Copy path" });
       }
+      const menuPreviewTabId = previewTabIdOf(surface, props.previewSessions);
+      const menuOverlay = menuPreviewTabId
+        ? (props.desktopByTabId[menuPreviewTabId] ?? null)
+        : null;
+      const menuMuted = menuOverlay?.audioMuted ?? false;
+      if (surface.kind === "preview") {
+        items.push({
+          id: "toggle-mute",
+          ...tabMuteMenuItem({
+            overlay: menuOverlay,
+            canResolveRuntimeTabId: props.previewRuntimeTabId !== undefined,
+          }),
+        });
+      }
       items.push(
         { id: "close", label: "Close" },
         {
@@ -528,6 +605,16 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
             props.onCopyFilePath(surface.relativePath);
           }
           break;
+        case "toggle-mute": {
+          const runtimeTabId =
+            menuPreviewTabId && menuOverlay
+              ? (props.previewRuntimeTabId?.(menuPreviewTabId) ?? null)
+              : null;
+          if (runtimeTabId) {
+            void previewBridge?.setAudioMuted(runtimeTabId, !menuMuted).catch(() => undefined);
+          }
+          break;
+        }
         case "close":
           props.onCloseSurface(surface);
           break;
@@ -617,6 +704,9 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       title={surfaceTitle(surface, props.previewSessions, props.terminalLabelsById)}
       previewSessions={props.previewSessions}
       desktopByTabId={props.desktopByTabId}
+      {...(props.previewRuntimeTabId !== undefined
+        ? { previewRuntimeTabId: props.previewRuntimeTabId }
+        : {})}
       theme={resolvedTheme}
       {...(props.pullRequestStatuses !== undefined
         ? { pullRequestStatuses: props.pullRequestStatuses }

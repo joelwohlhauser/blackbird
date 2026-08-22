@@ -5,6 +5,7 @@ import {
   FILL_PREVIEW_VIEWPORT,
   ThreadId,
 } from "@t3tools/contracts";
+import { act, Profiler } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   showEmptyState: false,
   chromeRenderCount: 0,
   browserSurfaceLayoutVersion: undefined as string | number | undefined,
+  loading: false,
   recordVisitForThread: vi.fn(),
 }));
 
@@ -96,10 +98,12 @@ vi.mock("~/previewStateStore", () => ({
         hasWebContents: true,
         canGoBack: false,
         canGoForward: false,
-        loading: false,
+        loading: mocks.loading,
         zoomFactor: 1,
         pictureInPicture: mocks.pictureInPicture,
         colorScheme: "system",
+        audioMuted: false,
+        audible: false,
         controller: "none",
       },
     },
@@ -250,6 +254,68 @@ const TEST_THREAD_REF = {
 } as const;
 const TEST_RUNTIME_TAB_ID = previewRuntimeTabId(TEST_THREAD_REF, null, "tab-1");
 
+// ReactDOM needs a host, but this unit suite intentionally has no DOM dependency.
+class TestNode {
+  parentNode: TestNode | null = null;
+  childNodes: TestNode[] = [];
+  readonly nodeName: string;
+  readonly tagName: string;
+  readonly namespaceURI = "http://www.w3.org/1999/xhtml";
+  readonly style = {};
+
+  constructor(
+    name: string,
+    readonly ownerDocument: TestNode | null = null,
+    readonly nodeType = 1,
+  ) {
+    this.nodeName = name.toUpperCase();
+    this.tagName = this.nodeName;
+  }
+
+  set textContent(_value: string) {
+    this.childNodes = [];
+  }
+
+  appendChild(child: TestNode) {
+    child.parentNode = this;
+    this.childNodes.push(child);
+    return child;
+  }
+
+  removeChild(child: TestNode) {
+    this.childNodes.splice(this.childNodes.indexOf(child), 1);
+    child.parentNode = null;
+    return child;
+  }
+
+  createElement(name: string) {
+    return new TestNode(name, this);
+  }
+
+  addEventListener() {}
+  removeEventListener() {}
+  setAttribute() {}
+}
+
+function installTestDom() {
+  const document = new TestNode("#document", null, 9);
+  const window = {
+    document,
+    HTMLIFrameElement: TestNode,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  vi.stubGlobal("document", document);
+  vi.stubGlobal("window", window);
+  vi.stubGlobal("HTMLIFrameElement", window.HTMLIFrameElement);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  return document;
+}
+
 describe("PreviewView navigation", () => {
   beforeEach(() => {
     mocks.navigate.mockClear();
@@ -270,7 +336,36 @@ describe("PreviewView navigation", () => {
     mocks.showEmptyState = false;
     mocks.chromeRenderCount = 0;
     mocks.browserSurfaceLayoutVersion = undefined;
+    mocks.loading = false;
     mocks.recordVisitForThread.mockClear();
+  });
+
+  it("does not rerender while loading time passes", async () => {
+    vi.useFakeTimers();
+    mocks.loading = true;
+    const document = installTestDom();
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(document.createElement("div") as unknown as Element);
+    const onRender = vi.fn();
+
+    try {
+      await act(() => {
+        root.render(
+          <Profiler id="preview" onRender={onRender}>
+            <PreviewView threadRef={TEST_THREAD_REF} tabId="tab-1" visible />
+          </Profiler>,
+        );
+      });
+      const initialRenderCount = onRender.mock.calls.length;
+
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+
+      expect(onRender).toHaveBeenCalledTimes(initialRenderCount);
+    } finally {
+      await act(() => root.unmount());
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
   });
 
   it.each([

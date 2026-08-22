@@ -9,7 +9,7 @@ import {
 import type { EnvironmentId, ProjectEntry, ProjectEntryKind } from "@t3tools/contracts";
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
-import { FilePlus2Icon, FolderPlusIcon } from "lucide-react";
+import { FilePlus2Icon, FolderPlusIcon, RotateCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -25,9 +25,11 @@ import {
 import { Input } from "~/components/ui/input";
 import { InputGroup, InputGroupInput } from "~/components/ui/input-group";
 import { toastManager } from "~/components/ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useComposerHandleContext } from "~/composerHandleContext";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { useTheme } from "~/hooks/useTheme";
+import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
 import { projectEnvironment } from "~/state/projects";
@@ -46,6 +48,7 @@ interface FileBrowserPanelProps {
   /** Bumped when the same path should be revealed again (e.g. re-opened from search). */
   selectedPathRevealId: number;
   onOpenFile: (relativePath: string) => void;
+  onRefreshSelectedFile?: () => void;
 }
 
 const TREE_UNSAFE_CSS = `
@@ -59,6 +62,27 @@ const TREE_UNSAFE_CSS = `
   }
   button[data-type='item'] { border-radius: 5px; }
 `;
+
+function RefreshFilesButton(props: { isPending: boolean; onRefresh: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Refresh workspace files"
+            onClick={props.onRefresh}
+          />
+        }
+      >
+        <RotateCw className={cn(props.isPending && "animate-spin")} />
+      </TooltipTrigger>
+      <TooltipPopup>{props.isPending ? "Refreshing…" : "Refresh files"}</TooltipPopup>
+    </Tooltip>
+  );
+}
 
 function treePath(entry: ProjectEntry): string {
   return entry.kind === "directory" ? `${entry.path}/` : entry.path;
@@ -99,6 +123,7 @@ export default function FileBrowserPanel({
   selectedPath,
   selectedPathRevealId,
   onOpenFile,
+  onRefreshSelectedFile,
 }: FileBrowserPanelProps) {
   const { resolvedTheme } = useTheme();
   const composerRef = useComposerHandleContext();
@@ -306,6 +331,10 @@ export default function FileBrowserPanel({
     }
     search.setValue(value);
   };
+  const handleRefresh = () => {
+    entriesQuery.refresh();
+    onRefreshSelectedFile?.();
+  };
 
   useEffect(() => {
     if (previousTreePathsRef.current === treePaths) return;
@@ -406,6 +435,7 @@ export default function FileBrowserPanel({
         className="flex h-10 min-h-10 shrink-0 items-center gap-1 border-b border-border/60 bg-background px-2"
         data-surface-subheader
       >
+        <RefreshFilesButton isPending={entriesQuery.isPending} onRefresh={handleRefresh} />
         <FileSearchField
           name="project-files-search"
           ariaLabel={`Search ${projectName} files`}

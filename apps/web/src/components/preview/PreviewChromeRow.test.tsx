@@ -9,7 +9,6 @@ describe("PreviewChromeRow", () => {
       <PreviewChromeRow
         url="https://example.com"
         loading={false}
-        loadProgress={0}
         canGoBack={false}
         canGoForward={false}
         refreshDisabled={false}
@@ -35,7 +34,6 @@ describe("PreviewChromeRow", () => {
       <PreviewChromeRow
         url=""
         loading={false}
-        loadProgress={0}
         canGoBack={false}
         canGoForward={false}
         refreshDisabled

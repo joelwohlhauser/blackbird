@@ -13,12 +13,18 @@ interface PanelLayoutControlsProps {
   terminalShortcutLabel: string | null;
   rightPanelAvailable: boolean;
   rightPanelOpen: boolean;
-  workspaceNavigatorAvailable: boolean;
-  workspaceNavigatorOpen: boolean;
+  workspaceNavigatorAvailable?: boolean;
+  workspaceNavigatorOpen?: boolean;
+  rightPanelShortcutLabel?: string | null;
+  rightPanelUnavailableLabel?: string;
+  /** Running and waiting subagents in this thread. */
+  liveAgentCount?: number;
   onToggleTerminal: () => void;
   onToggleRightPanel: () => void;
-  onToggleWorkspaceNavigator: () => void;
+  onToggleWorkspaceNavigator?: () => void;
 }
+
+const NOOP = () => undefined;
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
   showTerminalControl = true,
@@ -29,11 +35,14 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   terminalShortcutLabel,
   rightPanelAvailable,
   rightPanelOpen,
-  workspaceNavigatorAvailable,
-  workspaceNavigatorOpen,
+  workspaceNavigatorAvailable = false,
+  workspaceNavigatorOpen = false,
+  rightPanelShortcutLabel,
+  rightPanelUnavailableLabel = "Right panel is unavailable",
+  liveAgentCount = 0,
   onToggleTerminal,
   onToggleRightPanel,
-  onToggleWorkspaceNavigator,
+  onToggleWorkspaceNavigator = NOOP,
 }: PanelLayoutControlsProps) {
   return (
     <div
@@ -72,17 +81,35 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
                 className="shrink-0 [-webkit-app-region:no-drag]"
                 aria-pressed={rightPanelOpen}
                 onClick={onToggleRightPanel}
-                aria-label="Toggle right panel"
+                aria-label={
+                  liveAgentCount > 0
+                    ? `Toggle right panel, ${liveAgentCount} ${liveAgentCount === 1 ? "agent" : "agents"} working`
+                    : "Toggle right panel"
+                }
                 variant="ghost"
                 size="icon-xs"
                 disabled={!rightPanelAvailable}
               >
                 <PanelRightIcon className="size-3.5" />
+                {liveAgentCount > 0 ? (
+                  <span
+                    aria-hidden
+                    className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-info px-1 text-[9px] font-semibold tabular-nums text-white"
+                  >
+                    {liveAgentCount}
+                  </span>
+                ) : null}
               </Button>
             }
           />
           <TooltipPopup side="bottom">
-            {rightPanelAvailable ? "Toggle right panel" : "Right panel is unavailable"}
+            {rightPanelAvailable
+              ? `Toggle right panel${rightPanelShortcutLabel ? ` (${rightPanelShortcutLabel})` : ""}${
+                  liveAgentCount > 0
+                    ? ` · ${liveAgentCount} ${liveAgentCount === 1 ? "agent" : "agents"} working`
+                    : ""
+                }`
+              : rightPanelUnavailableLabel}
           </TooltipPopup>
         </Tooltip>
       ) : null}

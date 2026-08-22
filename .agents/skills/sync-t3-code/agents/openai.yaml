@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sync T3 Code"
+  short_description: "Merge upstream T3 Code into Blackbird safely"
+  default_prompt: "Sync Blackbird with the latest upstream T3 Code changes."
