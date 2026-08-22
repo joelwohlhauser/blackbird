@@ -10,7 +10,7 @@ import type { EnvironmentId, ProjectEntry, ProjectEntryKind } from "@t3tools/con
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { FilePlus2Icon, FolderPlusIcon, RotateCw } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -129,6 +129,7 @@ export default function FileBrowserPanel({
   const composerRef = useComposerHandleContext();
   const entriesQuery = useProjectEntriesQuery(environmentId, cwd);
   const createEntry = useAtomCommand(projectEnvironment.createEntry);
+  const createEntryFormId = useId();
   const entries = entriesQuery.data?.entries ?? [];
   const entryKinds = useMemo(
     () => new Map(entries.map((entry) => [entry.path, entry.kind] as const)),
@@ -486,14 +487,14 @@ export default function FileBrowserPanel({
         }}
       >
         <DialogPopup>
-          <form onSubmit={handleCreateEntry}>
-            <DialogHeader>
-              <DialogTitle>{createEntryKind === "file" ? "New file" : "New folder"}</DialogTitle>
-              <DialogDescription>
-                Enter a path relative to {projectName}. Parent folders are created automatically.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogPanel className="space-y-2">
+          <DialogHeader>
+            <DialogTitle>{createEntryKind === "file" ? "New file" : "New folder"}</DialogTitle>
+            <DialogDescription>
+              Enter a path relative to {projectName}. Parent folders are created automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <form id={createEntryFormId} className="space-y-2" onSubmit={handleCreateEntry}>
               <label className="grid gap-1.5 text-sm font-medium text-foreground">
                 Path
                 <Input
@@ -511,25 +512,25 @@ export default function FileBrowserPanel({
               {createEntryError ? (
                 <p className="text-xs leading-relaxed text-destructive">{createEntryError}</p>
               ) : null}
-            </DialogPanel>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isCreatingEntry}
-                onClick={closeCreateEntryDialog}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isCreatingEntry}>
-                {isCreatingEntry
-                  ? "Creating…"
-                  : createEntryKind === "file"
-                    ? "Create file"
-                    : "Create folder"}
-              </Button>
-            </DialogFooter>
-          </form>
+            </form>
+          </DialogPanel>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isCreatingEntry}
+              onClick={closeCreateEntryDialog}
+            >
+              Cancel
+            </Button>
+            <Button form={createEntryFormId} type="submit" disabled={isCreatingEntry}>
+              {isCreatingEntry
+                ? "Creating…"
+                : createEntryKind === "file"
+                  ? "Create file"
+                  : "Create folder"}
+            </Button>
+          </DialogFooter>
         </DialogPopup>
       </Dialog>
     </div>
