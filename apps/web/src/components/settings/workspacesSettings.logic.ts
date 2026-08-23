@@ -85,9 +85,9 @@ export function linearWorkspaceStatusLabel(
 ): { readonly label: string; readonly detail?: string; readonly tone: string } {
   if (!issueId) return { label: "No issue", tone: "text-muted-foreground" };
   if (pending) return { label: issueId, detail: "Checking status", tone: "text-muted-foreground" };
+  if (failed) return { label: issueId, detail: "Status unavailable", tone: "text-warning" };
   if (!configured)
     return { label: issueId, detail: "API key not configured", tone: "text-muted-foreground" };
-  if (failed) return { label: issueId, detail: "Status unavailable", tone: "text-warning" };
   if (!issue) return { label: issueId, detail: "Issue not found", tone: "text-muted-foreground" };
   const closed = issue.stateType === "completed" || issue.stateType === "canceled";
   return {

@@ -90,6 +90,9 @@ describe("workspace settings", () => {
         false,
       ).detail,
     ).toBe("Closed · Done");
+    expect(linearWorkspaceStatusLabel("AI-42", undefined, false, false, true).detail).toBe(
+      "Status unavailable",
+    );
   });
 
   it("sorts unused and oldest worktrees first by default", () => {

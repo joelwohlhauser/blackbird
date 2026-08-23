@@ -722,7 +722,7 @@ export function createServerEnvironmentAtoms<R, E>(
     linearIssueStatuses: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:linear-issue-statuses",
       tag: WS_METHODS.linearIssueStatuses,
-      staleTimeMs: 5 * 60_000,
+      staleTimeMs: 0,
     }),
     configProjection,
     welcome: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
