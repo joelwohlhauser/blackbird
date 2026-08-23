@@ -2,10 +2,16 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { ProjectId, type VcsRef } from "@t3tools/contracts";
 
-import { registeredProjectWorktrees, workspaceDirectorySize } from "./WorkspaceCleanupService.ts";
+import * as ProcessRunner from "../processRunner.ts";
+import {
+  parseDiskUsageKilobytes,
+  registeredProjectWorktrees,
+  workspaceDirectorySize,
+} from "./WorkspaceCleanupService.ts";
 
 it("keeps linked worktrees but omits the main checkout and unlinked branches", () => {
   const ref = (name: string, worktreePath: string | null): VcsRef => ({
@@ -39,7 +45,14 @@ it("keeps linked worktrees but omits the main checkout and unlinked branches", (
   ]);
 });
 
-it.layer(NodeServices.layer)("WorkspaceCleanupService", (it) => {
+it("parses disk usage reported in 1 KiB blocks", () => {
+  assert.equal(parseDiskUsageKilobytes("42\t/worktree\n"), 42 * 1024);
+  assert.isNull(parseDiskUsageKilobytes("not-a-size"));
+});
+
+it.layer(
+  Layer.merge(NodeServices.layer, ProcessRunner.layer.pipe(Layer.provide(NodeServices.layer))),
+)("WorkspaceCleanupService", (it) => {
   it.effect("measures files throughout a worktree", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -54,7 +67,8 @@ it.layer(NodeServices.layer)("WorkspaceCleanupService", (it) => {
 
       const size = yield* workspaceDirectorySize(root);
 
-      assert.isAtLeast(size, 10);
+      assert.isNotNull(size);
+      assert.isAtLeast(size ?? 0, 10);
     }),
   );
 });

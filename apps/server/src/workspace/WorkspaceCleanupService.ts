@@ -18,6 +18,7 @@ import {
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
+import * as ProcessRunner from "../processRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
 
 const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
@@ -44,33 +45,24 @@ const LinearGraphQlResponse = Schema.Struct({
   ),
 });
 
-function allocatedBytes(info: FileSystem.File.Info): number {
-  const bytes = Option.match(info.blocks, {
-    onNone: () => Number(info.size),
-    onSome: (blocks) => blocks * 512,
-  });
-  return Math.min(Math.max(0, bytes), Number.MAX_SAFE_INTEGER);
+export function parseDiskUsageKilobytes(output: string): number | null {
+  const kilobytes = Number.parseInt(output.trim().split(/\s+/, 1)[0] ?? "", 10);
+  if (!Number.isSafeInteger(kilobytes) || kilobytes < 0) return null;
+  return Math.min(kilobytes * 1024, Number.MAX_SAFE_INTEGER);
 }
 
 export const workspaceDirectorySize = Effect.fn("WorkspaceCleanupService.directorySize")(function* (
   root: string,
 ) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const entries = yield* fileSystem.readDirectory(root, { recursive: true });
-  const sizes = yield* Effect.forEach(
-    [root, ...entries.map((entry) => path.join(root, entry))],
-    (entry) =>
-      fileSystem.stat(entry).pipe(
-        Effect.map(allocatedBytes),
-        Effect.orElseSucceed(() => 0),
-      ),
-    { concurrency: 32 },
-  );
-  return Math.min(
-    sizes.reduce((total, size) => total + size, 0),
-    Number.MAX_SAFE_INTEGER,
-  );
+  const processRunner = yield* ProcessRunner.ProcessRunner;
+  const result = yield* processRunner.run({
+    command: "du",
+    args: ["-sk", root],
+    timeout: "15 seconds",
+    timeoutBehavior: "timedOutResult",
+    maxOutputBytes: 16 * 1024,
+  });
+  return result.code === 0 && !result.timedOut ? parseDiskUsageKilobytes(result.stdout) : null;
 });
 
 export function registeredProjectWorktrees(
@@ -111,15 +103,14 @@ export const make = Effect.gen(function* () {
   const git = yield* GitWorkflowService.GitWorkflowService;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const processRunner = yield* ProcessRunner.ProcessRunner;
   const settingsService = yield* ServerSettings.ServerSettingsService;
   const httpClient = yield* HttpClient.HttpClient;
 
   const directorySize = (root: string) =>
     workspaceDirectorySize(root).pipe(
-      Effect.provideService(FileSystem.FileSystem, fileSystem),
-      Effect.provideService(Path.Path, path),
-      Effect.option,
-      Effect.map(Option.getOrNull),
+      Effect.provideService(ProcessRunner.ProcessRunner, processRunner),
+      Effect.orElseSucceed(() => null),
     );
 
   const inspectWorktree = Effect.fn("WorkspaceCleanupService.inspectWorktree")(function* (
@@ -129,7 +120,9 @@ export const make = Effect.gen(function* () {
     const [sizeBytes, status] = yield* Effect.all(
       [
         directorySize(worktree.path),
-        git.localStatus({ cwd: worktree.path }).pipe(Effect.option, Effect.map(Option.getOrNull)),
+        git
+          .localStatus({ cwd: worktree.path })
+          .pipe(Effect.timeout("5 seconds"), Effect.option, Effect.map(Option.getOrNull)),
       ],
       { concurrency: 2 },
     );
@@ -153,7 +146,6 @@ export const make = Effect.gen(function* () {
               cwd: project.cwd,
               refKind: "local",
               worktreeOnly: true,
-              refresh: true,
               limit: 200,
             })
             .pipe(
@@ -168,15 +160,24 @@ export const make = Effect.gen(function* () {
                 }).pipe(Effect.as([])),
               ),
             ),
-        { concurrency: 2 },
+        { concurrency: 8 },
       );
       const uniqueWorktrees = new Map(
         discovered.flat().map((worktree) => [worktree.path, worktree] as const),
       );
-      const inspectedWorktrees = yield* Effect.forEach(uniqueWorktrees.values(), inspectWorktree, {
-        concurrency: 2,
-      });
-      const worktrees = inspectedWorktrees.flatMap((worktree) => (worktree ? [worktree] : []));
+      const registeredWorktrees = [...uniqueWorktrees.values()];
+      const worktrees = input.includeDetails
+        ? (yield* Effect.forEach(registeredWorktrees, inspectWorktree, {
+            concurrency: 8,
+          })).flatMap((worktree) => (worktree ? [worktree] : []))
+        : registeredWorktrees.map(
+            (worktree) =>
+              ({
+                ...worktree,
+                sizeBytes: null,
+                hasWorkingTreeChanges: null,
+              }) satisfies WorkspaceCleanupWorktree,
+          );
       return {
         worktrees: worktrees.toSorted(
           (left, right) =>
@@ -274,4 +275,6 @@ export const make = Effect.gen(function* () {
   return WorkspaceCleanupService.of({ list, linearIssueStatuses });
 });
 
-export const layer = Layer.effect(WorkspaceCleanupService, make);
+export const layer = Layer.effect(WorkspaceCleanupService, make).pipe(
+  Layer.provide(ProcessRunner.layer),
+);

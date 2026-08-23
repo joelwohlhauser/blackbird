@@ -115,6 +115,16 @@ export function WorkspacesSettingsPanel() {
           input: { projects: selectedProjects },
         }),
   );
+  const workspaceDetailsQuery = useEnvironmentQuery(
+    effectiveEnvironmentId === null ||
+      selectedEnvironment?.connection.phase !== "connected" ||
+      workspaceQuery.data === null
+      ? null
+      : serverEnvironment.workspaceCleanup({
+          environmentId: effectiveEnvironmentId,
+          input: { projects: selectedProjects, includeDetails: true },
+        }),
+  );
 
   const activeChats = useThreadShells().filter(
     (thread) => thread.environmentId === effectiveEnvironmentId,
@@ -128,22 +138,29 @@ export function WorkspacesSettingsPanel() {
 
   const rows = useMemo(
     () =>
-      (workspaceQuery.data?.worktrees ?? []).map((worktree) => {
-        const chatSummary = summarizeWorkspaceChats(worktree.path, chats);
-        return {
-          ...worktree,
-          chatSummary,
-          hasLiveTerminal: terminalSessions.some(
-            (terminal) =>
-              terminal.state.status !== "closed" &&
-              terminal.state.status !== "exited" &&
-              terminal.state.status !== "error" &&
-              workspacePathsMatch(terminal.state.summary?.worktreePath ?? null, worktree.path),
-          ),
-          issueId: linearIssueIdForWorkspace({ branch: worktree.branch, path: worktree.path }),
-        };
-      }),
-    [chats, terminalSessions, workspaceQuery.data?.worktrees],
+      (workspaceDetailsQuery.data?.worktrees ?? workspaceQuery.data?.worktrees ?? []).map(
+        (worktree) => {
+          const chatSummary = summarizeWorkspaceChats(worktree.path, chats);
+          return {
+            ...worktree,
+            chatSummary,
+            hasLiveTerminal: terminalSessions.some(
+              (terminal) =>
+                terminal.state.status !== "closed" &&
+                terminal.state.status !== "exited" &&
+                terminal.state.status !== "error" &&
+                workspacePathsMatch(terminal.state.summary?.worktreePath ?? null, worktree.path),
+            ),
+            issueId: linearIssueIdForWorkspace({ branch: worktree.branch, path: worktree.path }),
+          };
+        },
+      ),
+    [
+      chats,
+      terminalSessions,
+      workspaceDetailsQuery.data?.worktrees,
+      workspaceQuery.data?.worktrees,
+    ],
   );
   const issueIds = useMemo(
     () => [...new Set(rows.flatMap((row) => (row.issueId ? [row.issueId] : [])))],
@@ -190,6 +207,7 @@ export function WorkspacesSettingsPanel() {
       return;
     }
     workspaceQuery.refresh();
+    workspaceDetailsQuery.refresh();
     toastManager.add({
       type: "success",
       title: "Worktree deleted",
@@ -263,9 +281,10 @@ export function WorkspacesSettingsPanel() {
               size="icon-xs"
               variant="ghost-muted"
               aria-label="Refresh workspaces"
-              disabled={workspaceQuery.isPending}
+              disabled={workspaceQuery.isPending && workspaceQuery.data === null}
               onClick={() => {
                 workspaceQuery.refresh();
+                workspaceDetailsQuery.refresh();
                 linearQuery.refresh();
               }}
             >
@@ -281,10 +300,7 @@ export function WorkspacesSettingsPanel() {
           ) : workspaceQuery.error ? (
             <SettingsRow title="Could not load workspaces" description={workspaceQuery.error} />
           ) : workspaceQuery.isPending && workspaceQuery.data === null ? (
-            <SettingsRow
-              title="Loading workspaces"
-              description="Measuring registered worktrees and checking Git state."
-            />
+            <SettingsRow title="Loading workspaces" description="Finding registered worktrees." />
           ) : rows.length === 0 ? (
             <SettingsRow
               title="No worktrees"
@@ -330,7 +346,9 @@ export function WorkspacesSettingsPanel() {
                           </div>
                         </TableCell>
                         <TableCell className="font-mono tabular-nums">
-                          {formatWorkspaceStorageSize(row.sizeBytes)}
+                          {row.sizeBytes === null && workspaceDetailsQuery.isPending
+                            ? "Measuring…"
+                            : formatWorkspaceStorageSize(row.sizeBytes)}
                         </TableCell>
                         <TableCell className="tabular-nums">{row.chatSummary.count}</TableCell>
                         <TableCell>
@@ -341,7 +359,9 @@ export function WorkspacesSettingsPanel() {
                         </TableCell>
                         <TableCell>
                           {row.hasWorkingTreeChanges === null
-                            ? "Unavailable"
+                            ? workspaceDetailsQuery.isPending
+                              ? "Checking…"
+                              : "Unavailable"
                             : row.hasWorkingTreeChanges
                               ? "Changes"
                               : "Clean"}

@@ -11,6 +11,7 @@ export type WorkspaceCleanupProject = typeof WorkspaceCleanupProject.Type;
 
 export const WorkspaceCleanupListInput = Schema.Struct({
   projects: Schema.Array(WorkspaceCleanupProject).check(Schema.isMaxLength(200)),
+  includeDetails: Schema.optional(Schema.Boolean),
 });
 export type WorkspaceCleanupListInput = typeof WorkspaceCleanupListInput.Type;
 
