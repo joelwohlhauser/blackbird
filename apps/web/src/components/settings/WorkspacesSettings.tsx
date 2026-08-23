@@ -2,12 +2,18 @@ import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
 import {
+  ArrowDownIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  CheckIcon,
   CloudIcon,
   LaptopIcon,
+  MinusIcon,
   MonitorIcon,
   RefreshCwIcon,
   TerminalIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -33,6 +39,7 @@ import {
 } from "../ConnectionStatusDot";
 import { Button } from "../ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import {
   buildProviderEnvironmentOptions,
@@ -43,10 +50,85 @@ import {
   formatWorkspaceLastUsed,
   formatWorkspaceStorageSize,
   linearWorkspaceStatusLabel,
+  sortWorkspaceRows,
   summarizeWorkspaceChats,
   workspacePathBasename,
   workspacePathsMatch,
+  type WorkspaceSortDirection,
+  type WorkspaceSortKey,
 } from "./workspacesSettings.logic";
+
+interface WorkspaceSortState {
+  readonly key: WorkspaceSortKey;
+  readonly direction: WorkspaceSortDirection;
+}
+
+function SortableWorkspaceHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  readonly label: string;
+  readonly sortKey: WorkspaceSortKey;
+  readonly sort: WorkspaceSortState;
+  readonly onSort: (key: WorkspaceSortKey) => void;
+}) {
+  const active = sort.key === sortKey;
+  const Icon = active
+    ? sort.direction === "ascending"
+      ? ArrowUpIcon
+      : ArrowDownIcon
+    : ArrowUpDownIcon;
+  return (
+    <TableHead aria-sort={active ? sort.direction : "none"} className="p-0">
+      <button
+        type="button"
+        className="flex h-10 w-full items-center gap-1 px-2 text-left hover:text-foreground"
+        onClick={() => onSort(sortKey)}
+      >
+        {label}
+        <Icon className={cn("size-3", active ? "text-foreground" : "text-muted-foreground/60")} />
+      </button>
+    </TableHead>
+  );
+}
+
+function GitStatusIcon({
+  hasChanges,
+  pending,
+}: {
+  readonly hasChanges: boolean | null;
+  readonly pending: boolean;
+}) {
+  const status =
+    hasChanges === false
+      ? {
+          label: "Clean worktree. No uncommitted changes.",
+          Icon: CheckIcon,
+          tone: "text-success",
+        }
+      : hasChanges === true
+        ? { label: "Worktree has uncommitted changes.", Icon: XIcon, tone: "text-destructive" }
+        : pending
+          ? { label: "Checking Git status.", Icon: MinusIcon, tone: "text-muted-foreground" }
+          : { label: "Git status is unavailable.", Icon: XIcon, tone: "text-muted-foreground" };
+  const icon = (
+    <button
+      type="button"
+      aria-label={status.label}
+      className="flex size-6 cursor-help items-center justify-center rounded-md outline-hidden"
+    >
+      <status.Icon className={cn("size-4 stroke-[2.5]", status.tone)} aria-hidden />
+    </button>
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger render={icon} />
+      <TooltipPopup side="top">{status.label}</TooltipPopup>
+    </Tooltip>
+  );
+}
 
 function environmentIcon(environment: EnvironmentPresentation) {
   if (environment.entry.target._tag === "PrimaryConnectionTarget") return MonitorIcon;
@@ -74,6 +156,10 @@ export function WorkspacesSettingsPanel() {
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(
     primaryEnvironmentId,
   );
+  const [sort, setSort] = useState<WorkspaceSortState>({
+    key: "lastUsed",
+    direction: "ascending",
+  });
   const effectiveEnvironmentId = resolveSelectedProviderEnvironmentId(
     options,
     selectedEnvironmentId,
@@ -179,6 +265,40 @@ export function WorkspacesSettingsPanel() {
     () => new Map((linearQuery.data?.issues ?? []).map((issue) => [issue.issueId, issue])),
     [linearQuery.data?.issues],
   );
+  const sortedRows = useMemo(() => {
+    const sortableRows = rows.map((row) => {
+      const linear = linearWorkspaceStatusLabel(
+        row.issueId,
+        row.issueId ? issuesById.get(row.issueId) : undefined,
+        linearQuery.data?.configured ?? false,
+        linearQuery.isPending,
+        linearQuery.error !== null,
+      );
+      return {
+        ...row,
+        linear,
+        linearSortValue: `${linear.label} ${linear.detail ?? ""}`,
+        chatCount: row.chatSummary.count,
+        latestUpdatedAt: row.chatSummary.latestUpdatedAt,
+      };
+    });
+    return sortWorkspaceRows(sortableRows, sort.key, sort.direction);
+  }, [
+    issuesById,
+    linearQuery.data?.configured,
+    linearQuery.error,
+    linearQuery.isPending,
+    rows,
+    sort,
+  ]);
+
+  const toggleSort = (key: WorkspaceSortKey) => {
+    setSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === "ascending" ? "descending" : "ascending",
+    }));
+  };
 
   const removeWorktree = useAtomCommand(vcsEnvironment.removeWorktree, { reportFailure: false });
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
@@ -311,37 +431,57 @@ export function WorkspacesSettingsPanel() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Workspace</TableHead>
-                    <TableHead>Storage</TableHead>
-                    <TableHead>Chats</TableHead>
-                    <TableHead>Linear</TableHead>
-                    <TableHead>Git</TableHead>
-                    <TableHead>Last used</TableHead>
+                    <SortableWorkspaceHeader
+                      label="Workspace"
+                      sortKey="workspace"
+                      sort={sort}
+                      onSort={toggleSort}
+                    />
+                    <SortableWorkspaceHeader
+                      label="Storage"
+                      sortKey="storage"
+                      sort={sort}
+                      onSort={toggleSort}
+                    />
+                    <SortableWorkspaceHeader
+                      label="Chats"
+                      sortKey="chats"
+                      sort={sort}
+                      onSort={toggleSort}
+                    />
+                    <SortableWorkspaceHeader
+                      label="Linear"
+                      sortKey="linear"
+                      sort={sort}
+                      onSort={toggleSort}
+                    />
+                    <SortableWorkspaceHeader
+                      label="Git"
+                      sortKey="git"
+                      sort={sort}
+                      onSort={toggleSort}
+                    />
+                    <SortableWorkspaceHeader
+                      label="Last used"
+                      sortKey="lastUsed"
+                      sort={sort}
+                      onSort={toggleSort}
+                    />
                     <TableHead className="w-0">
                       <span className="sr-only">Actions</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((row) => {
-                    const linear = linearWorkspaceStatusLabel(
-                      row.issueId,
-                      row.issueId ? issuesById.get(row.issueId) : undefined,
-                      linearQuery.data?.configured ?? false,
-                      linearQuery.isPending,
-                      linearQuery.error !== null,
-                    );
+                  {sortedRows.map((row) => {
                     const deleting = deletingPath === row.path;
                     return (
                       <TableRow key={`${row.projectId}:${row.path}`}>
                         <TableCell className="max-w-80">
-                          <div className="truncate font-medium text-foreground" title={row.path}>
+                          <div className="truncate font-medium text-foreground">
                             {workspacePathBasename(row.path)}
                           </div>
-                          <div
-                            className="truncate text-[11px] text-muted-foreground"
-                            title={row.path}
-                          >
+                          <div className="truncate text-[11px] text-muted-foreground">
                             {row.projectTitle} · {row.branch}
                           </div>
                         </TableCell>
@@ -352,19 +492,20 @@ export function WorkspacesSettingsPanel() {
                         </TableCell>
                         <TableCell className="tabular-nums">{row.chatSummary.count}</TableCell>
                         <TableCell>
-                          <div className={cn("font-medium", linear.tone)}>{linear.label}</div>
-                          {linear.detail ? (
-                            <div className="text-[11px] text-muted-foreground">{linear.detail}</div>
+                          <div className={cn("font-medium", row.linear.tone)}>
+                            {row.linear.label}
+                          </div>
+                          {row.linear.detail ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              {row.linear.detail}
+                            </div>
                           ) : null}
                         </TableCell>
                         <TableCell>
-                          {row.hasWorkingTreeChanges === null
-                            ? workspaceDetailsQuery.isPending
-                              ? "Checking…"
-                              : "Unavailable"
-                            : row.hasWorkingTreeChanges
-                              ? "Changes"
-                              : "Clean"}
+                          <GitStatusIcon
+                            hasChanges={row.hasWorkingTreeChanges}
+                            pending={workspaceDetailsQuery.isPending}
+                          />
                         </TableCell>
                         <TableCell>
                           {formatWorkspaceLastUsed(row.chatSummary.latestUpdatedAt)}

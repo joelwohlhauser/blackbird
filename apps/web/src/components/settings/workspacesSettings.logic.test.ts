@@ -4,9 +4,11 @@ import {
   formatWorkspaceLastUsed,
   formatWorkspaceStorageSize,
   linearWorkspaceStatusLabel,
+  sortWorkspaceRows,
   summarizeWorkspaceChats,
   workspacePathBasename,
   workspacePathsMatch,
+  type WorkspaceSortableRow,
 } from "./workspacesSettings.logic";
 
 describe("workspace settings", () => {
@@ -88,5 +90,68 @@ describe("workspace settings", () => {
         false,
       ).detail,
     ).toBe("Closed · Done");
+  });
+
+  it("sorts unused and oldest worktrees first by default", () => {
+    const row = (path: string, overrides: Partial<WorkspaceSortableRow> = {}) => ({
+      path,
+      sizeBytes: 100,
+      hasWorkingTreeChanges: false,
+      chatCount: 1,
+      latestUpdatedAt: "2026-08-20T12:00:00.000Z",
+      linearSortValue: "AI-1 Open",
+      ...overrides,
+    });
+    const rows = [
+      row("/worktrees/newest", { latestUpdatedAt: "2026-08-23T12:00:00.000Z" }),
+      row("/worktrees/unused", { latestUpdatedAt: null }),
+      row("/worktrees/oldest", { latestUpdatedAt: "2026-01-01T12:00:00.000Z" }),
+    ];
+
+    expect(sortWorkspaceRows(rows, "lastUsed", "ascending").map(({ path }) => path)).toEqual([
+      "/worktrees/unused",
+      "/worktrees/oldest",
+      "/worktrees/newest",
+    ]);
+    expect(sortWorkspaceRows(rows, "lastUsed", "descending").map(({ path }) => path)).toEqual([
+      "/worktrees/newest",
+      "/worktrees/oldest",
+      "/worktrees/unused",
+    ]);
+  });
+
+  it("sorts every workspace column", () => {
+    const rows = [
+      {
+        path: "/worktrees/bravo",
+        sizeBytes: null,
+        hasWorkingTreeChanges: null,
+        chatCount: 1,
+        latestUpdatedAt: null,
+        linearSortValue: "AI-2 Open",
+      },
+      {
+        path: "/worktrees/alpha",
+        sizeBytes: 200,
+        hasWorkingTreeChanges: true,
+        chatCount: 3,
+        latestUpdatedAt: "2026-01-02T00:00:00.000Z",
+        linearSortValue: "AI-3 Closed",
+      },
+      {
+        path: "/worktrees/charlie",
+        sizeBytes: 100,
+        hasWorkingTreeChanges: false,
+        chatCount: 2,
+        latestUpdatedAt: "2026-01-01T00:00:00.000Z",
+        linearSortValue: "AI-1 Open",
+      },
+    ];
+
+    expect(sortWorkspaceRows(rows, "workspace", "ascending")[0]?.path).toBe("/worktrees/alpha");
+    expect(sortWorkspaceRows(rows, "storage", "ascending")[0]?.path).toBe("/worktrees/charlie");
+    expect(sortWorkspaceRows(rows, "chats", "descending")[0]?.path).toBe("/worktrees/alpha");
+    expect(sortWorkspaceRows(rows, "linear", "ascending")[0]?.path).toBe("/worktrees/charlie");
+    expect(sortWorkspaceRows(rows, "git", "ascending")[0]?.path).toBe("/worktrees/charlie");
   });
 });

@@ -7,6 +7,75 @@ export interface WorkspaceChatLike {
   readonly session?: { readonly status: string } | null;
 }
 
+export type WorkspaceSortKey = "workspace" | "storage" | "chats" | "linear" | "git" | "lastUsed";
+export type WorkspaceSortDirection = "ascending" | "descending";
+
+export interface WorkspaceSortableRow {
+  readonly path: string;
+  readonly sizeBytes: number | null;
+  readonly hasWorkingTreeChanges: boolean | null;
+  readonly chatCount: number;
+  readonly latestUpdatedAt: string | null;
+  readonly linearSortValue: string;
+}
+
+function compareText(left: string, right: string): number {
+  return left.localeCompare(right, undefined, { sensitivity: "base", numeric: true });
+}
+
+function compareNullableNumbers(left: number | null, right: number | null): number {
+  if (left === null) return right === null ? 0 : 1;
+  if (right === null) return -1;
+  return left - right;
+}
+
+export function sortWorkspaceRows<T extends WorkspaceSortableRow>(
+  rows: ReadonlyArray<T>,
+  key: WorkspaceSortKey,
+  direction: WorkspaceSortDirection,
+): ReadonlyArray<T> {
+  const multiplier = direction === "ascending" ? 1 : -1;
+  return rows.toSorted((left, right) => {
+    let comparison: number;
+    switch (key) {
+      case "workspace":
+        comparison = compareText(
+          workspacePathBasename(left.path),
+          workspacePathBasename(right.path),
+        );
+        break;
+      case "storage":
+        comparison = compareNullableNumbers(left.sizeBytes, right.sizeBytes);
+        if (left.sizeBytes === null || right.sizeBytes === null) return comparison;
+        break;
+      case "chats":
+        comparison = left.chatCount - right.chatCount;
+        break;
+      case "linear":
+        comparison = compareText(left.linearSortValue, right.linearSortValue);
+        break;
+      case "git": {
+        const gitRank = (value: boolean | null) => (value === false ? 0 : value === true ? 1 : 2);
+        comparison = gitRank(left.hasWorkingTreeChanges) - gitRank(right.hasWorkingTreeChanges);
+        if (left.hasWorkingTreeChanges === null || right.hasWorkingTreeChanges === null) {
+          return comparison;
+        }
+        break;
+      }
+      case "lastUsed": {
+        const timestamp = (value: string | null) => {
+          if (value === null) return Number.NEGATIVE_INFINITY;
+          const parsed = Date.parse(value);
+          return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+        };
+        comparison = timestamp(left.latestUpdatedAt) - timestamp(right.latestUpdatedAt);
+        break;
+      }
+    }
+    return comparison * multiplier || compareText(left.path, right.path);
+  });
+}
+
 export function linearWorkspaceStatusLabel(
   issueId: string | null,
   issue: LinearIssueStatus | undefined,
