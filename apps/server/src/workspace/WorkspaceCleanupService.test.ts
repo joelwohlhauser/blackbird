@@ -4,10 +4,12 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { ProjectId, type VcsRef } from "@t3tools/contracts";
 
 import * as ProcessRunner from "../processRunner.ts";
 import {
+  fetchLinearIssueStatuses,
   parseDiskUsageKilobytes,
   registeredProjectWorktrees,
   workspaceDirectorySize,
@@ -48,6 +50,65 @@ it("keeps linked worktrees but omits the main checkout and unlinked branches", (
 it("parses disk usage reported in 1 KiB blocks", () => {
   assert.equal(parseDiskUsageKilobytes("42\t/worktree\n"), 42 * 1024);
   assert.isNull(parseDiskUsageKilobytes("not-a-size"));
+});
+
+it.effect("keeps valid Linear statuses when another issue does not exist", () => {
+  let requestBody:
+    | {
+        readonly query: string;
+        readonly variables: unknown;
+      }
+    | undefined;
+  const httpClient = HttpClient.make((request) => {
+    const body = request.body._tag === "Uint8Array" ? request.body.body : new Uint8Array();
+    requestBody = JSON.parse(new TextDecoder().decode(body)) as typeof requestBody;
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        Response.json({
+          data: {
+            issues: {
+              nodes: [
+                {
+                  identifier: "AI-811",
+                  state: { name: "Grooming", type: "unstarted" },
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    );
+  });
+
+  return Effect.gen(function* () {
+    const issues = yield* fetchLinearIssueStatuses({
+      apiKey: "linear-api-key",
+      issueIds: ["AI-811", "NEXT-16"],
+    });
+
+    assert.deepEqual(issues, [
+      {
+        issueId: "AI-811",
+        stateName: "Grooming",
+        stateType: "unstarted",
+      },
+    ]);
+    assert.include(requestBody?.query, "issues(filter: $filter");
+    assert.notInclude(requestBody?.query, "issue(id:");
+    assert.deepEqual(requestBody?.variables, {
+      filter: {
+        or: [
+          {
+            and: [{ team: { key: { eq: "AI" } } }, { number: { eq: 811 } }],
+          },
+          {
+            and: [{ team: { key: { eq: "NEXT" } } }, { number: { eq: 16 } }],
+          },
+        ],
+      },
+    });
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
 });
 
 it.layer(

@@ -34,7 +34,13 @@ const LinearGraphQlIssue = Schema.Struct({
 
 const LinearGraphQlResponse = Schema.Struct({
   data: Schema.optional(
-    Schema.NullOr(Schema.Record(Schema.String, Schema.NullOr(LinearGraphQlIssue))),
+    Schema.NullOr(
+      Schema.Struct({
+        issues: Schema.Struct({
+          nodes: Schema.Array(LinearGraphQlIssue),
+        }),
+      }),
+    ),
   ),
   errors: Schema.optional(
     Schema.Array(
@@ -43,6 +49,60 @@ const LinearGraphQlResponse = Schema.Struct({
       }),
     ),
   ),
+});
+
+export const fetchLinearIssueStatuses = Effect.fn(
+  "WorkspaceCleanupService.fetchLinearIssueStatuses",
+)(function* (input: { readonly apiKey: string; readonly issueIds: ReadonlyArray<string> }) {
+  const httpClient = yield* HttpClient.HttpClient;
+  const filter = {
+    or: input.issueIds.map((issueId) => {
+      const separatorIndex = issueId.lastIndexOf("-");
+      return {
+        and: [
+          { team: { key: { eq: issueId.slice(0, separatorIndex) } } },
+          { number: { eq: Number(issueId.slice(separatorIndex + 1)) } },
+        ],
+      };
+    }),
+  };
+  const query = `
+    query WorkspaceIssues($filter: IssueFilter!) {
+      issues(filter: $filter, first: 200, includeArchived: true) {
+        nodes {
+          identifier
+          state { name type }
+        }
+      }
+    }
+  `;
+  const response = yield* HttpClientRequest.post(LINEAR_GRAPHQL_URL).pipe(
+    HttpClientRequest.setHeader("authorization", input.apiKey),
+    HttpClientRequest.acceptJson,
+    HttpClientRequest.bodyJsonUnsafe({
+      query,
+      variables: { filter },
+    }),
+    httpClient.execute,
+    Effect.flatMap(HttpClientResponse.filterStatusOk),
+    Effect.flatMap(HttpClientResponse.schemaBodyJson(LinearGraphQlResponse)),
+    Effect.timeout("15 seconds"),
+  );
+  const graphqlError = response.errors?.[0]?.message.trim();
+  if (graphqlError && !response.data) {
+    return yield* new WorkspaceCleanupError({
+      operation: "linear-status",
+      detail: graphqlError,
+    });
+  }
+
+  return (response.data?.issues.nodes ?? []).flatMap((issue) => {
+    const issueId = issue.identifier.trim().toUpperCase();
+    const stateName = issue.state?.name.trim();
+    const stateType = issue.state?.type.trim();
+    if (!issueId || !stateName || !stateType) return [];
+    return [{ issueId, stateName, stateType }];
+  });
 });
 
 export function parseDiskUsageKilobytes(output: string): number | null {
@@ -209,56 +269,9 @@ export const make = Effect.gen(function* () {
         return { configured: true, issues: [] } satisfies LinearIssueStatusesResult;
       }
 
-      const variableNames = issueIds.map((_, index) => `issue${index}`);
-      const query = `
-        query WorkspaceIssues(${variableNames.map((name) => `$${name}: String!`).join(", ")}) {
-          ${variableNames
-            .map(
-              (name) => `${name}: issue(id: $${name}) {
-                identifier
-                state { name type }
-              }`,
-            )
-            .join("\n")}
-        }
-      `;
-      const variables = Object.fromEntries(
-        variableNames.map((name, index) => [name, issueIds[index]]),
+      const issues = yield* fetchLinearIssueStatuses({ apiKey, issueIds }).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
       );
-      const response = yield* HttpClientRequest.post(LINEAR_GRAPHQL_URL).pipe(
-        HttpClientRequest.setHeader("authorization", apiKey),
-        HttpClientRequest.acceptJson,
-        HttpClientRequest.bodyJsonUnsafe({
-          query,
-          variables,
-        }),
-        httpClient.execute,
-        Effect.flatMap(HttpClientResponse.filterStatusOk),
-        Effect.flatMap(HttpClientResponse.schemaBodyJson(LinearGraphQlResponse)),
-        Effect.timeout("15 seconds"),
-      );
-      const graphqlError = response.errors?.[0]?.message.trim();
-      if (graphqlError && !response.data) {
-        return yield* new WorkspaceCleanupError({
-          operation: "linear-status",
-          detail: graphqlError,
-        });
-      }
-
-      const issues = Object.values(response.data ?? {}).flatMap((issue) => {
-        if (!issue) return [];
-        const issueId = issue.identifier.trim().toUpperCase();
-        const stateName = issue.state?.name.trim();
-        const stateType = issue.state?.type.trim();
-        if (!issueId || !stateName || !stateType) return [];
-        return [
-          {
-            issueId,
-            stateName,
-            stateType,
-          },
-        ];
-      });
       return { configured: true, issues } satisfies LinearIssueStatusesResult;
     },
     Effect.mapError((cause) =>
