@@ -655,6 +655,10 @@ export const ServerSettings = Schema.Struct({
   worktreesRoot: TrimmedNonEmptyString.pipe(
     Schema.withDecodingDefault(Effect.succeed("~/repositories/.worktrees")),
   ),
+  linearApiKey: Schema.Struct({
+    value: Schema.String,
+    valueRedacted: Schema.optional(Schema.Boolean),
+  }).pipe(Schema.withDecodingDefault(Effect.succeed({ value: "" }))),
   worktreeEnvFileMode: WorktreeEnvFileMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("link" as const satisfies WorktreeEnvFileMode)),
   ),
@@ -861,6 +865,12 @@ export const ServerSettingsPatch = Schema.Struct({
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   worktreesRoot: Schema.optionalKey(TrimmedNonEmptyString),
+  linearApiKey: Schema.optionalKey(
+    Schema.Struct({
+      value: Schema.String,
+      valueRedacted: Schema.optional(Schema.Boolean),
+    }),
+  ),
   worktreeEnvFileMode: Schema.optionalKey(WorktreeEnvFileMode),
   installWorktreeDependencies: Schema.optionalKey(Schema.Boolean),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),

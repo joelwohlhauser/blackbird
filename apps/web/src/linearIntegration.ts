@@ -7,6 +7,17 @@ export function linearIssueIdFromBranch(branch: string | null | undefined): stri
   return match?.[1]?.toUpperCase() ?? null;
 }
 
+export function linearIssueIdForWorkspace(input: {
+  readonly branch: string | null | undefined;
+  readonly path: string;
+}): string | null {
+  const fromBranch = linearIssueIdFromBranch(input.branch);
+  if (fromBranch) return fromBranch;
+
+  const normalizedPath = input.path.replace(/\\/g, "/").replace(/\/+$/, "");
+  return linearIssueIdFromBranch(normalizedPath.split("/").at(-1));
+}
+
 export function linearUrl(input: {
   readonly organizationSlug: string;
   readonly branch: string | null | undefined;

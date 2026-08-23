@@ -714,6 +714,16 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.serverGetUsageSummary,
       staleTimeMs: 60_000,
     }),
+    workspaceCleanup: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:workspace-cleanup",
+      tag: WS_METHODS.workspaceCleanupList,
+      staleTimeMs: 30_000,
+    }),
+    linearIssueStatuses: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:linear-issue-statuses",
+      tag: WS_METHODS.linearIssueStatuses,
+      staleTimeMs: 5 * 60_000,
+    }),
     configProjection,
     welcome: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:welcome",

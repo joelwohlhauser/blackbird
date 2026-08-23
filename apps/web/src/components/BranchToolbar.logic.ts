@@ -171,18 +171,6 @@ export function validateNewWorktreeBranchName(value: string): string | null {
   return null;
 }
 
-export function worktreeDeletionConfirmationMessage(input: {
-  branch: string | null;
-  path: string;
-  hasUncommittedChanges: boolean;
-}): string | null {
-  if (!input.hasUncommittedChanges) return null;
-  return [
-    `Delete the worktree for ${input.branch ?? input.path}?`,
-    "This worktree has uncommitted changes. Those changes will be permanently discarded.",
-  ].join("\n");
-}
-
 export function resolveCurrentWorkspaceLabel(activeWorktreePath: string | null): string {
   return activeWorktreePath ? "Current worktree" : resolveEnvModeLabel("local");
 }

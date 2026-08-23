@@ -15,7 +15,6 @@ import {
   resolveExistingWorktreeOptions,
   resolveExistingWorktreeSelectorState,
   resolveEnvModeLabel,
-  worktreeDeletionConfirmationMessage,
   resolveBranchTriggerLabel,
   resolveBranchToolbarPrBranch,
   resolveBranchToolbarValue,
@@ -29,33 +28,6 @@ import {
   shouldShowEnvironmentIndicator,
   validateNewWorktreeBranchName,
 } from "./BranchToolbar.logic";
-
-describe("worktreeDeletionConfirmationMessage", () => {
-  it("does not request confirmation for a clean worktree", () => {
-    expect(
-      worktreeDeletionConfirmationMessage({
-        branch: "feature/clean",
-        path: "/repo/.worktrees/feature-clean",
-        hasUncommittedChanges: false,
-      }),
-    ).toBeNull();
-  });
-
-  it("warns that uncommitted changes will be discarded", () => {
-    expect(
-      worktreeDeletionConfirmationMessage({
-        branch: "feature/dirty",
-        path: "/repo/.worktrees/feature-dirty",
-        hasUncommittedChanges: true,
-      }),
-    ).toBe(
-      [
-        "Delete the worktree for feature/dirty?",
-        "This worktree has uncommitted changes. Those changes will be permanently discarded.",
-      ].join("\n"),
-    );
-  });
-});
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
 const remoteEnvironmentId = EnvironmentId.make("environment-remote");

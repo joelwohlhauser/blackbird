@@ -179,9 +179,23 @@ an agent can explicitly skip it for a particular handoff. Agent-created
 worktrees also honor the environment's **Start from origin** default and launch
 the project's configured setup script, matching the composer workflow.
 
-An active worktree chat shows a **Delete it** action. Clean worktrees can be
-removed directly; dirty worktrees require confirmation. Removing the worktree
-also archives its associated chat.
+An active worktree chat shows a **Delete it** action. It removes the worktree
+directly, including when it has uncommitted changes, without a confirmation
+dialog. The chat keeps its branch, worktree path, archive state, and other
+metadata unchanged. If a normal workflow later creates a worktree at that
+exact path again, every associated chat can use it again.
+Deletion stays unavailable while an associated chat session or worktree
+terminal is live, so cleanup never stops either one as a side effect.
+
+**Settings → Workspaces** lists the existing registered worktrees on one
+selected environment at a time. Main checkouts are omitted. Each row shows the
+worktree's storage use, associated active and archived chat count, Git state,
+last chat activity, and the status of a Linear issue inferred from the branch
+or worktree folder name. Deleting a row removes only the worktree and makes the
+row disappear; it never archives or detaches chats. A Linear personal API key
+can be stored under **Settings → General → Linear**. The key stays in the
+server's secret store, while the existing organization slug continues to
+control Linear URLs opened in workspace tabs.
 
 ### Quick chats
 

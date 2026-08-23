@@ -49,6 +49,7 @@ describe("searchSettings", () => {
       "worktree-location",
       "worktree-environment-files",
       "worktree-dependencies",
+      "workspaces",
     ]);
     expect(searchSettings("glass").map((item) => item.id)).toEqual(["setting-glass-opacity"]);
     expect(searchSettings("pinned sites").map((item) => item.id)).toEqual(["pinned-sites"]);

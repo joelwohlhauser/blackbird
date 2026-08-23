@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { linearIssueIdFromBranch, linearUrl } from "./linearIntegration";
+import { linearIssueIdForWorkspace, linearIssueIdFromBranch, linearUrl } from "./linearIntegration";
 
 describe("Linear integration", () => {
   it.each([
@@ -13,6 +13,18 @@ describe("Linear integration", () => {
 
   it.each([null, "main", "feature/no-ticket"])("does not invent an issue id for %s", (branch) => {
     expect(linearIssueIdFromBranch(branch)).toBeNull();
+  });
+
+  it("uses the branch before falling back to the worktree folder", () => {
+    expect(
+      linearIssueIdForWorkspace({
+        branch: "feature/ENG-123-preferred",
+        path: "/repo/worktrees/OPS-42-fallback",
+      }),
+    ).toBe("ENG-123");
+    expect(
+      linearIssueIdForWorkspace({ branch: "feature/no-ticket", path: "/repo/worktrees/OPS-42" }),
+    ).toBe("OPS-42");
   });
 
   it("opens the issue when the branch contains an issue id", () => {

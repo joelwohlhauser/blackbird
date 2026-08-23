@@ -310,6 +310,7 @@ import {
   useThread,
   useThreadRefs,
   useThreadShell,
+  useThreadShells,
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
@@ -333,7 +334,6 @@ import {
   reusesExistingWorktree,
   resolveLocalCheckoutBranchMismatch,
   validateNewWorktreeBranchName,
-  worktreeDeletionConfirmationMessage,
   shouldShowComposerContextStrip,
   shouldShowEnvironmentIndicator,
 } from "./BranchToolbar.logic";
@@ -1292,7 +1292,7 @@ function ChatViewContent(props: ChatViewProps) {
   const threadSyncPhase = routeKind === "server" ? (props.threadSyncPhase ?? null) : null;
   const threadDetailLoading = threadSyncPhase === "loading";
   const handleNewThread = useNewThreadHandler();
-  const { archiveThread: archiveThreadAfterWorktreeDelete, settleThread } = useThreadActions();
+  const { settleThread } = useThreadActions();
   const routeThreadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
@@ -1314,9 +1314,6 @@ function ChatViewContent(props: ChatViewProps) {
     reportFailure: false,
   });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
-    reportFailure: false,
-  });
-  const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, {
     reportFailure: false,
   });
   const switchGitRef = useAtomCommand(vcsEnvironment.switchRef, {
@@ -1369,6 +1366,11 @@ function ChatViewContent(props: ChatViewProps) {
         : null,
   );
   const routeServerThreadShell = useThreadShell(routeKind === "server" ? routeThreadRef : null);
+  const threadShells = useThreadShells();
+  const environmentTerminalSessions = useKnownTerminalSessions({
+    environmentId,
+    threadId: null,
+  });
   const serverThread = useThread(routeThreadRef, {
     waitForShell: draftThread !== null,
   });
@@ -2949,14 +2951,6 @@ function ChatViewContent(props: ChatViewProps) {
   const hasTimelineTopBanner = Boolean(visibleThreadError) || visibleProviderStatus !== null;
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
-  const projectRootGitStatusQuery = useEnvironmentQuery(
-    activeProjectCwd === null || activeThreadWorktreePath === null
-      ? null
-      : vcsEnvironment.status({
-          environmentId,
-          input: { cwd: activeProjectCwd },
-        }),
-  );
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
   const workspaceNavigatorAvailable =
     !shouldUseRightPanelSheet &&
@@ -4923,6 +4917,20 @@ function ChatViewContent(props: ChatViewProps) {
   }, []);
 
   const activeWorktreePath = activeThread?.worktreePath ?? null;
+  const worktreeDeletionBlocked =
+    activeWorktreePath !== null &&
+    (environmentTerminalSessions.some(
+      (terminal) =>
+        (terminal.state.status === "starting" || terminal.state.status === "running") &&
+        terminal.state.summary?.worktreePath === activeWorktreePath,
+    ) ||
+      threadShells.some(
+        (thread) =>
+          thread.environmentId === environmentId &&
+          thread.worktreePath === activeWorktreePath &&
+          thread.session !== null &&
+          thread.session.status !== "stopped",
+      ));
   const [isDeletingWorktree, setIsDeletingWorktree] = useState(false);
   const handleDeleteActiveWorktree = useCallback(async () => {
     if (
@@ -4931,7 +4939,7 @@ function ChatViewContent(props: ChatViewProps) {
       !activeProjectCwd ||
       !activeWorktreePath ||
       !gitStatusQuery.data ||
-      !projectRootGitStatusQuery.data ||
+      worktreeDeletionBlocked ||
       isDeletingWorktree
     ) {
       return;
@@ -4939,18 +4947,6 @@ function ChatViewContent(props: ChatViewProps) {
 
     const worktreePath = activeWorktreePath;
     const worktreeBranch = activeThread.branch;
-    const hasUncommittedChanges = gitStatusQuery.data.hasWorkingTreeChanges;
-    const confirmationMessage = worktreeDeletionConfirmationMessage({
-      branch: worktreeBranch,
-      path: worktreePath,
-      hasUncommittedChanges,
-    });
-    if (confirmationMessage) {
-      const localApi = readLocalApi();
-      if (!localApi) return;
-      const confirmed = await localApi.dialogs.confirm(confirmationMessage);
-      if (!confirmed) return;
-    }
 
     setIsDeletingWorktree(true);
     setThreadError(activeThread.id, null);
@@ -4965,71 +4961,16 @@ function ChatViewContent(props: ChatViewProps) {
       );
     };
 
-    if (activeThread.session && activeThread.session.status !== "stopped") {
-      const stopResult = await stopThreadSession({
-        environmentId,
-        input: { threadId: activeThread.id },
-      });
-      if (stopResult._tag === "Failure") {
-        showFailure("Could not stop the thread", stopResult);
-        setIsDeletingWorktree(false);
-        return;
-      }
-    }
-
-    for (const terminalId of allocatableActiveTerminalIds) {
-      const closeResult = await closeTerminalMutation({
-        environmentId,
-        input: { threadId: activeThread.id, terminalId, deleteHistory: true },
-      });
-      if (closeResult._tag === "Failure") {
-        showFailure("Could not close a worktree terminal", closeResult);
-        setIsDeletingWorktree(false);
-        return;
-      }
-    }
-
-    const rootBranch = projectRootGitStatusQuery.data.refName;
-    const detachResult = await updateThreadMetadata({
-      environmentId,
-      input: {
-        threadId: activeThread.id,
-        branch: rootBranch,
-        worktreePath: null,
-      },
-    });
-    if (detachResult._tag === "Failure") {
-      showFailure("Could not detach the thread from its worktree", detachResult);
-      setIsDeletingWorktree(false);
-      return;
-    }
-
     const removeResult = await removeWorktree({
       environmentId,
       input: {
         cwd: activeProjectCwd,
         path: worktreePath,
-        force: hasUncommittedChanges,
+        force: true,
       },
     });
     if (removeResult._tag === "Failure") {
-      await updateThreadMetadata({
-        environmentId,
-        input: {
-          threadId: activeThread.id,
-          branch: worktreeBranch,
-          worktreePath,
-        },
-      });
       showFailure("Could not delete the worktree", removeResult);
-      setIsDeletingWorktree(false);
-      return;
-    }
-
-    projectRootGitStatusQuery.refresh();
-    const archiveResult = await archiveThreadAfterWorktreeDelete(routeThreadRef);
-    if (archiveResult._tag === "Failure") {
-      showFailure("Worktree deleted, but the chat could not be archived", archiveResult);
       setIsDeletingWorktree(false);
       return;
     }
@@ -5037,7 +4978,7 @@ function ChatViewContent(props: ChatViewProps) {
     toastManager.add(
       stackedThreadToast({
         type: "success",
-        title: "Worktree deleted and chat archived",
+        title: "Worktree deleted",
         description: worktreeBranch ?? worktreePath,
       }),
     );
@@ -5047,20 +4988,14 @@ function ChatViewContent(props: ChatViewProps) {
     activeProjectCwd,
     activeThread,
     activeWorktreePath,
-    allocatableActiveTerminalIds,
-    archiveThreadAfterWorktreeDelete,
-    closeTerminalMutation,
     environmentId,
     gitStatusQuery.data,
     isDeletingWorktree,
     isServerThread,
-    projectRootGitStatusQuery,
     removeWorktree,
-    routeThreadRef,
     scheduleComposerFocus,
     setThreadError,
-    stopThreadSession,
-    updateThreadMetadata,
+    worktreeDeletionBlocked,
   ]);
   const derivedEnvMode: DraftThreadEnvMode = resolveEffectiveEnvMode({
     activeWorktreePath,
@@ -7859,8 +7794,7 @@ function ChatViewContent(props: ChatViewProps) {
                                         onDeleteWorktreeRequest: () =>
                                           void handleDeleteActiveWorktree(),
                                         deleteWorktreeDisabled:
-                                          gitStatusQuery.data === null ||
-                                          projectRootGitStatusQuery.data === null,
+                                          gitStatusQuery.data === null || worktreeDeletionBlocked,
                                         deleteWorktreePending: isDeletingWorktree,
                                       }
                                     : {})}

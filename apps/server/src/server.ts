@@ -68,6 +68,7 @@ import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
+import * as WorkspaceCleanupService from "./workspace/WorkspaceCleanupService.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as WorkspaceHandoff from "./workspace/WorkspaceHandoffService.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
@@ -355,6 +356,11 @@ const WorkspaceLayerLive = Layer.mergeAll(
   WorkspaceFileSystemLayerLive,
 );
 
+const WorkspaceCleanupLayerLive = WorkspaceCleanupService.layer.pipe(
+  Layer.provideMerge(GitWorkflowLayerLive),
+  Layer.provideMerge(ServerSettingsLayerLive),
+);
+
 const ProjectFaviconResolverLayerLive = ProjectFaviconResolver.layer.pipe(
   Layer.provide(WorkspacePaths.layer),
   Layer.provide(T3ProjectFileLoader.layer),
@@ -408,7 +414,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   // no longer transitively provides it. Exposing it at the runtime level
   // keeps a single Live for all opencode consumers.
   Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
-  Layer.provideMerge(WorkspaceLayerLive),
+  Layer.provideMerge(Layer.mergeAll(WorkspaceLayerLive, WorkspaceCleanupLayerLive)),
   Layer.provideMerge(ProjectFaviconResolverLayerLive),
   Layer.provideMerge(RepositoryIdentityResolver.layer),
   Layer.provideMerge(ServerEnvironment.layer),

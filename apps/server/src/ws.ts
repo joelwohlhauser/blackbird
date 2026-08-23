@@ -94,6 +94,7 @@ import { issueAssetUrl } from "./assets/AssetAccess.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
+import * as WorkspaceCleanupService from "./workspace/WorkspaceCleanupService.ts";
 import { readWorkflowScript } from "./orchestration/workflowScriptQuery.ts";
 import * as WorkspacePaths from "./workspace/WorkspacePaths.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
@@ -441,6 +442,7 @@ const makeWsRpcLayer = (
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+      const workspaceCleanup = yield* WorkspaceCleanupService.WorkspaceCleanupService;
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
       const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
       const backgroundPolicy = yield* BackgroundPolicy.BackgroundPolicy;
@@ -1663,6 +1665,16 @@ const makeWsRpcLayer = (
                 { "rpc.aggregate": "server" },
               ),
             ),
+          ),
+        [WS_METHODS.workspaceCleanupList]: (input) =>
+          observeRpcEffect(WS_METHODS.workspaceCleanupList, workspaceCleanup.list(input), {
+            "rpc.aggregate": "workspace",
+          }),
+        [WS_METHODS.linearIssueStatuses]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.linearIssueStatuses,
+            workspaceCleanup.linearIssueStatuses(input),
+            { "rpc.aggregate": "linear" },
           ),
         [WS_METHODS.serverReportHostPowerState]: (input) =>
           observeRpcEffect(

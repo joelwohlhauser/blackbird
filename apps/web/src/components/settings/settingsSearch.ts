@@ -7,6 +7,7 @@ export type SettingsPath =
   | "/settings/providers"
   | "/settings/integrations"
   | "/settings/source-control"
+  | "/settings/workspaces"
   | "/settings/connections"
   | "/settings/archived";
 
@@ -31,6 +32,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
   "/settings/source-control": "Source Control",
+  "/settings/workspaces": "Workspaces",
   "/settings/connections": "Connections",
   "/settings/archived": "Archive",
 };
@@ -196,6 +198,16 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "linear-organization",
     title: "Linear organization",
     to: "/settings/general",
+  },
+  {
+    id: "linear-api-key",
+    title: "Linear API key",
+    to: "/settings/general",
+  },
+  {
+    id: "workspaces",
+    title: "Workspaces",
+    to: "/settings/workspaces",
   },
   {
     id: "diagnostics",
