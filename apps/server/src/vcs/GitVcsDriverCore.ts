@@ -2074,6 +2074,55 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       Effect.orElseSucceed(() => null),
     );
     if (currentUpstream) {
+      // A branch tracking a differently named ref was cut from it, the way
+      // `git checkout -b feature origin/dev` and our own worktree flow leave
+      // it. That upstream is the branch's base, not its publish target, and
+      // pushing HEAD onto it would write feature commits to a shared branch
+      // (bare `git push` refuses this under push.default=simple). The one
+      // same-repo tracking setup that legitimately differs is a git-mangled
+      // alias such as local `upstream/effect-atom` for my-org/upstream's
+      // `effect-atom`: the branch name ends in the upstream head while the
+      // upstream ref ends in the branch name.
+      const isAliasOfUpstreamHead =
+        branch === currentUpstream.branchName ||
+        (branch.endsWith(`/${currentUpstream.branchName}`) &&
+          currentUpstream.upstreamRef.endsWith(`/${branch}`));
+      if (!isAliasOfUpstreamHead) {
+        const publishRemoteName = yield* resolvePushRemoteName(cwd, branch).pipe(
+          Effect.orElseSucceed(() => null),
+        );
+        const remoteName = publishRemoteName ?? currentUpstream.remoteName;
+        const publishBranch = yield* resolvePublishBranchName(cwd, branch);
+        // `-u` retargets the upstream to the published branch, so keep the
+        // base recorded first; base resolution reads gh-merge-base before the
+        // upstream ref.
+        const configuredMergeBase = yield* runGitStdout(
+          "GitVcsDriver.pushCurrentBranch.readMergeBase",
+          cwd,
+          ["config", "--get", `branch.${branch}.gh-merge-base`],
+          true,
+        ).pipe(Effect.map((stdout) => stdout.trim()));
+        if (configuredMergeBase.length === 0) {
+          yield* runGit("GitVcsDriver.pushCurrentBranch.recordMergeBase", cwd, [
+            "config",
+            `branch.${branch}.gh-merge-base`,
+            currentUpstream.branchName,
+          ]);
+        }
+        yield* runGit(
+          "GitVcsDriver.pushCurrentBranch.pushOwnBranch",
+          cwd,
+          ["push", "-u", remoteName, `HEAD:refs/heads/${publishBranch}`],
+          { timeoutMs: null },
+        );
+        return {
+          status: "pushed" as const,
+          branch,
+          upstreamBranch: `${remoteName}/${publishBranch}`,
+          setUpstream: true,
+        };
+      }
+
       yield* runGit(
         "GitVcsDriver.pushCurrentBranch.pushUpstream",
         cwd,
@@ -2949,6 +2998,30 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       timeoutMs: WORKTREE_ADD_TIMEOUT_MS,
     });
 
+    // `git worktree add` leaves submodules empty, so a repo that keeps agent
+    // skills, tooling or source in one gets a worktree that is quietly missing
+    // them. Best-effort: the objects are usually already in the parent's
+    // `.git/modules`, but a first-ever clone needs the network, and failing to
+    // populate a submodule must not roll back the caller's thread.
+    const hasSubmodules = yield* fileSystem
+      .exists(path.join(worktreePath, ".gitmodules"))
+      .pipe(Effect.orElseSucceed(() => false));
+    if (hasSubmodules) {
+      yield* runGit("GitVcsDriver.createWorktree.updateSubmodules", worktreePath, [
+        "submodule",
+        "update",
+        "--init",
+        "--recursive",
+      ]).pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("worktree submodule checkout failed; submodule paths are empty", {
+            worktreePath,
+            cause,
+          }),
+        ),
+      );
+    }
+
     if (input.newRefName && input.baseRefName) {
       const remoteNames = yield* listRemoteNames(input.cwd).pipe(Effect.orElseSucceed(() => []));
       const parsedBaseRef = parseRemoteRefWithRemoteNames(
@@ -3160,7 +3233,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       args.push("--force");
     }
     args.push(input.path);
-
     const normalizedTargetPath = path.normalize(path.resolve(input.path));
     const canonicalTargetPath = yield* fileSystem
       .realPath(normalizedTargetPath)
@@ -3219,6 +3291,10 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       return;
     }
     const wasRegistered = registrationResult.success;
+    if (!wasRegistered && !(yield* pathExists(normalizedTargetPath))) {
+      yield* pruneWorktrees({ cwd: input.cwd });
+      return;
+    }
     const gitCommonDir = yield* resolveGitCommonDir(input.cwd);
     const linkedWorktreeMarker = yield* fileSystem
       .readFileString(path.join(normalizedTargetPath, ".git"))
@@ -3332,6 +3408,15 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         ),
       ),
     );
+  });
+
+  const pruneWorktrees: GitVcsDriver.GitVcsDriver["Service"]["pruneWorktrees"] = Effect.fn(
+    "pruneWorktrees",
+  )(function* (input) {
+    yield* executeGit("GitVcsDriver.pruneWorktrees", input.cwd, ["worktree", "prune"], {
+      timeoutMs: 15_000,
+      fallbackErrorDetail: "git worktree prune failed",
+    });
   });
 
   const renameBranch: GitVcsDriver.GitVcsDriver["Service"]["renameBranch"] = Effect.fn(
@@ -3530,6 +3615,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       withListRefsInvalidation(input.cwd, refreshCheckedOutBranch(input)),
     ensureRemote: (input) => withListRefsInvalidation(input.cwd, ensureRemote(input)),
     resolvePrimaryRemoteName,
+    resolveDefaultBranchName,
     fetchRemote: (input) => withListRefsInvalidation(input.cwd, fetchRemote(input)),
     remoteExists,
     resolveRemoteTrackingCommit,
@@ -3538,6 +3624,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       withListRefsInvalidation(input.cwd, fetchRemoteTrackingBranch(input)),
     setBranchUpstream: (input) => withListRefsInvalidation(input.cwd, setBranchUpstream(input)),
     removeWorktree: (input) => withListRefsInvalidation(input.cwd, removeWorktree(input)),
+    pruneWorktrees: (input) => withListRefsInvalidation(input.cwd, pruneWorktrees(input)),
     renameBranch: (input) => withListRefsInvalidation(input.cwd, renameBranch(input)),
     createRef: (input) => withListRefsInvalidation(input.cwd, createRef(input)),
     switchRef: (input) => withListRefsInvalidation(input.cwd, switchRef(input)),

@@ -14,7 +14,16 @@ import {
   TerminalIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { terminalStatusFromRunningIds, ThreadStatusLabel } from "./ThreadStatusIndicators";
+import {
+  ChangeRequestStatusIcon,
+  prStatusIndicator,
+  PrStatusTooltipContent,
+  resolveThreadPr,
+  terminalStatusFromRunningIds,
+  ThreadStatusLabel,
+  ThreadWorktreeIndicator,
+  useLinkedThreadPullRequest,
+} from "./ThreadStatusIndicators";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { useAtomValue } from "@effect/atom-react";
 import { autoAnimate } from "@formkit/auto-animate";
@@ -67,14 +76,20 @@ import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { isElectron } from "../env";
 import { useArchivedThreadSnapshots } from "../lib/archivedThreadsState";
+import { useTerminalFocus } from "../hooks/useTerminalFocus";
+import { useOpenPrLink } from "../lib/openPullRequestLink";
+import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { cn, isMacPlatform } from "../lib/utils";
 import {
   readThreadShell,
+  useProject,
   useProjects,
   useThreadShells,
   useThreadShellsForProjectRefs,
 } from "../state/entities";
+import { useEnvironmentQuery } from "../state/query";
+import { vcsEnvironment } from "../state/vcs";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { useThreadDiscoveredPorts } from "../portDiscoveryState";
@@ -376,6 +391,26 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
   const threadEnvironmentLabel = isRemoteThread
     ? (remoteEnvLabel ?? (isDesktopLocalThread ? "Local" : "Remote"))
     : null;
+  // For grouped projects, the thread may belong to a different environment
+  // than the representative project.  Look up the thread's own project cwd
+  // so git status (and thus PR detection) queries the correct path.
+  const threadProject = useProject(
+    useMemo(
+      () => scopeProjectRef(thread.environmentId, thread.projectId),
+      [thread.environmentId, thread.projectId],
+    ),
+  );
+  const threadProjectCwd = threadProject?.workspaceRoot ?? null;
+  const gitCwd = thread.worktreePath ?? threadProjectCwd ?? props.projectCwd;
+  const gitStatus = useEnvironmentQuery(
+    thread.linkedPullRequest == null && thread.branch != null && gitCwd !== null
+      ? vcsEnvironment.status({
+          environmentId: thread.environmentId,
+          input: { cwd: gitCwd },
+        })
+      : null,
+  );
+  const isHighlighted = isActive || isSelected;
   const handleOpenDiscoveredPort = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       const port = discoveredPorts[0];
@@ -409,6 +444,18 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
       lastVisitedAt,
     },
   });
+  const linkedPullRequestStatus = useLinkedThreadPullRequest(
+    thread.environmentId,
+    thread.linkedPullRequest,
+  );
+  const pr =
+    thread.linkedPullRequest == null
+      ? resolveThreadPr({ threadBranch: thread.branch, gitStatus: gitStatus.data })
+      : (linkedPullRequestStatus?.pr ?? null);
+  const prStatus = prStatusIndicator(
+    pr,
+    linkedPullRequestStatus?.sourceControlProvider ?? gitStatus.data?.sourceControlProvider,
+  );
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive = confirmingArchiveThreadKey === threadKey && !isThreadRunning;
   const threadMetaClassName = isConfirmingArchive
@@ -1467,6 +1514,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         return result;
       }
       const draftStore = useComposerDraftStore.getState();
+      releaseProjectDraftUploads(
+        memberProjectRef,
+        sidebarThreads
+          .filter(
+            (thread) =>
+              thread.environmentId === member.environmentId && thread.projectId === member.id,
+          )
+          .map((thread) => scopeThreadRef(thread.environmentId, thread.id)),
+      );
       const projectDraftThread = draftStore.getDraftThreadByProjectRef(memberProjectRef);
       if (projectDraftThread) {
         draftStore.clearDraftThread(projectDraftThread.draftId);
@@ -1474,7 +1530,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       draftStore.clearProjectDraftThreadId(memberProjectRef);
       return result;
     },
-    [deleteProject],
+    [deleteProject, sidebarThreads],
   );
 
   const handleRemoveProject = useCallback(

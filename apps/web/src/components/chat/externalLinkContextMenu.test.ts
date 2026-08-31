@@ -6,11 +6,20 @@ import {
   showExternalLinkContextMenu,
 } from "./externalLinkContextMenu";
 
-function createHarness(selection: "open-in-preview" | "open-external" | "copy-link" | null) {
+function createHarness(
+  selection:
+    | "open-in-preview"
+    | "open-external"
+    | "copy-link"
+    | "link-to-thread"
+    | "unlink-from-thread"
+    | null,
+) {
   const showContextMenu = vi.fn().mockResolvedValue(selection);
   const openInPreview = vi.fn().mockResolvedValue(undefined);
   const openExternal = vi.fn().mockResolvedValue(undefined);
   const copyLink = vi.fn().mockResolvedValue(undefined);
+  const updateThreadLink = vi.fn().mockResolvedValue(undefined);
   const reportFailure = vi.fn();
 
   return {
@@ -18,6 +27,7 @@ function createHarness(selection: "open-in-preview" | "open-external" | "copy-li
     openInPreview,
     openExternal,
     copyLink,
+    updateThreadLink,
     reportFailure,
   };
 }
@@ -130,6 +140,27 @@ describe("external chat link context menu", () => {
   });
 
   it.each([
+    ["link-to-thread", "Link to thread", true],
+    ["unlink-from-thread", "Unlink from thread", false],
+  ] as const)("offers and runs the %s action", async (action, label, linked) => {
+    const harness = createHarness(action);
+    const href = "https://github.com/pingdotgg/t3code/pull/42";
+
+    await showExternalLinkContextMenu({
+      href,
+      threadLinkAction: action,
+      position: { x: 1, y: 2 },
+      ...harness,
+    });
+
+    expect(harness.showContextMenu).toHaveBeenCalledWith(
+      expect.arrayContaining([{ id: action, label }]),
+      { x: 1, y: 2 },
+    );
+    expect(harness.updateThreadLink).toHaveBeenCalledWith(href, linked);
+  });
+
+  it.each([
     ["open-in-preview" as const, "openInPreview" as const],
     ["open-external" as const, "openExternal" as const],
   ])("preserves the %s action", async (selection, expectedCallback) => {
@@ -188,6 +219,21 @@ describe("external chat link context menu", () => {
     });
 
     expect(harness.reportFailure).toHaveBeenCalledWith(operation, cause);
+  });
+
+  it("reports a failed thread link action", async () => {
+    const harness = createHarness("link-to-thread");
+    const cause = new Error("thread update failed");
+    harness.updateThreadLink.mockRejectedValue(cause);
+
+    await showExternalLinkContextMenu({
+      href: "https://github.com/pingdotgg/t3code/pull/42",
+      threadLinkAction: "link-to-thread",
+      position: { x: 1, y: 2 },
+      ...harness,
+    });
+
+    expect(harness.reportFailure).toHaveBeenCalledWith("link-pull-request-to-thread", cause);
   });
 
   it.each([

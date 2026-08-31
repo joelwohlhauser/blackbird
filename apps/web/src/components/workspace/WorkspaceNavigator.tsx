@@ -62,6 +62,7 @@ interface WorkspaceNavigatorProps {
   gitStatus: VcsStatusResult | null;
   gitStatusError: string | null;
   gitStatusPending: boolean;
+  workspaceMutationId: string | null;
   activeTab: WorkspaceNavigatorTab;
   layoutControls: ReactNode;
   onRefreshPullRequest: () => void;
@@ -235,6 +236,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
             projectName={props.projectName}
             selectedPath={props.selectedPath}
             selectedPathRevealId={props.selectedPathRevealId}
+            workspaceMutationId={props.workspaceMutationId}
             onOpenFile={props.onOpenFile}
           />
         ) : props.activeTab === "changes" ? (
