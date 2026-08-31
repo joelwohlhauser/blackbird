@@ -36,7 +36,8 @@ Watch for these recurring hazards:
 2. Install dependencies only when the lockfile or package graph changed and the current checkout needs it.
 3. Run formatting on touched files, focused tests for conflict resolutions and behavior changes, and scoped typechecks for affected packages. Do not run repo-wide checks unless Joel asks.
 4. Review the staged diff for accidental deletion of Blackbird features, branding drift, generated artifacts, and enabled CI behavior.
-5. Create the merge commit on `main` with a plain conventional title, then push `main` to `origin`.
-6. End with a short "What T3 added" summary based on the upstream commits and diff since the recorded merge base. Use 3-5 bullets covering only notable user-facing changes and meaningful fixes. Skip internal churn.
+5. Perform a regression pass across every area affected by the merge. Review how upstream changes interact with Blackbird customizations, verify the affected user-visible behavior with the strongest permitted checks, and fix any confirmed regressions before committing. Repeat focused verification after each fix.
+6. Create the merge commit on `main` with a plain conventional title, then push `main` to `origin`.
+7. End with a short "What T3 added" summary based on the upstream commits and diff since the recorded merge base. Use 3-5 bullets covering only notable user-facing changes and meaningful fixes. Skip internal churn.
 
 Do not deploy the desktop app, update remote, open a pull request, or merge anything into `upstream` unless Joel asks separately.
