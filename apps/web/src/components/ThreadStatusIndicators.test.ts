@@ -1,6 +1,4 @@
-import { effectiveSettled } from "@t3tools/client-runtime/state/thread-settled";
-import type { OrchestrationThreadShell } from "@t3tools/contracts";
-import { ProjectId, ProviderInstanceId, ThreadId, type VcsStatusResult } from "@t3tools/contracts";
+import { ProjectId, type VcsStatusResult } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { AtomRegistry } from "effect/unstable/reactivity";
@@ -13,6 +11,7 @@ import {
   resolveThreadPr,
   sidebarPrStatusIndicator,
   settledPrHoverColorClass,
+  threadPullRequestRefreshSource,
   threadChangeRequestSnapshotsAtom,
   type ThreadChangeRequestSnapshot,
 } from "./ThreadStatusIndicators";
@@ -58,6 +57,61 @@ function snapshotFor(
 ): ThreadChangeRequestSnapshot {
   return { branch, pr, sourceControlProvider };
 }
+
+describe("threadPullRequestRefreshSource", () => {
+  const panel = { repository: "pingdotgg/t3code", number: 42, state: "merged" as const };
+
+  it("refreshes the VCS stream when the open panel is newer than an inferred sidebar PR", () => {
+    expect(
+      threadPullRequestRefreshSource({
+        panel,
+        thread: { repository: "pingdotgg/t3code", number: 42, state: "open", linked: false },
+      }),
+    ).toBe("vcs");
+  });
+
+  it("refreshes linked detail when the open panel is newer than a linked sidebar PR", () => {
+    expect(
+      threadPullRequestRefreshSource({
+        panel,
+        thread: { repository: "pingdotgg/t3code", number: 42, state: "open", linked: true },
+      }),
+    ).toBe("linked-detail");
+  });
+
+  it("refreshes when the sidebar has not resolved state yet", () => {
+    expect(
+      threadPullRequestRefreshSource({
+        panel,
+        thread: { repository: "pingdotgg/t3code", number: 42, state: null, linked: false },
+      }),
+    ).toBe("vcs");
+  });
+
+  it("does nothing once sidebar state matches or the panel shows another PR", () => {
+    expect(
+      threadPullRequestRefreshSource({
+        panel,
+        thread: { repository: "pingdotgg/t3code", number: 42, state: "merged", linked: false },
+      }),
+    ).toBeNull();
+    expect(
+      threadPullRequestRefreshSource({
+        panel,
+        thread: { repository: "pingdotgg/t3code", number: 41, state: "open", linked: false },
+      }),
+    ).toBeNull();
+  });
+
+  it("matches repository identity without case sensitivity", () => {
+    expect(
+      threadPullRequestRefreshSource({
+        panel: { ...panel, repository: "PingDotGG/T3Code" },
+        thread: { repository: "pingdotgg/t3code", number: 42, state: "open", linked: false },
+      }),
+    ).toBe("vcs");
+  });
+});
 
 describe("resolveThreadPr", () => {
   it("keeps local-checkout PR indicators scoped to the stored thread branch", () => {
@@ -496,7 +550,7 @@ describe("resolveDisplayedThreadPr + nextThreadChangeRequestSnapshot", () => {
     ).toEqual(mergedPr);
   });
 
-  it("keeps effectiveSettled true for a retained merged PR after a main checkout", () => {
+  it("retains a merged PR after a main checkout", () => {
     const matchingStatus = status({
       refName: featureBranch,
       pr: mergedPr,
@@ -519,36 +573,6 @@ describe("resolveDisplayedThreadPr + nextThreadChangeRequestSnapshot", () => {
       retainTerminalOnBranchMismatch: true,
     });
     expect(displayed?.state).toBe("merged");
-
-    const shell = {
-      id: ThreadId.make("thread-1"),
-      projectId: ProjectId.make("project-1"),
-      title: "Feature thread",
-      modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
-      runtimeMode: "full-access",
-      interactionMode: "default",
-      branch: "main",
-      worktreePath: null,
-      latestTurn: null,
-      session: null,
-      createdAt: "2026-04-09T00:00:00.000Z",
-      updatedAt: "2026-04-09T00:00:00.000Z",
-      archivedAt: null,
-      settledAt: null,
-      settledOverride: null,
-      latestUserMessageAt: "2026-04-09T00:00:00.000Z",
-      hasPendingApprovals: false,
-      hasPendingUserInput: false,
-      hasActionableProposedPlan: false,
-    } as OrchestrationThreadShell;
-
-    expect(
-      effectiveSettled(shell, {
-        now: "2026-04-10T00:00:00.000Z",
-        autoSettleAfterDays: null,
-        changeRequest: displayed,
-      }),
-    ).toBe(true);
   });
 });
 

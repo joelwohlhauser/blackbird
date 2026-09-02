@@ -17,7 +17,15 @@ import type {
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import {
   CheckIcon,
@@ -1431,7 +1439,7 @@ export default function GitActionsControl({
       const toastCta = actionResult.toast.cta;
       let toastActionProps: {
         children: string;
-        onClick: () => void;
+        onClick: (event: MouseEvent<HTMLButtonElement>) => void;
       } | null = null;
       if (toastCta.kind === "run_action") {
         toastActionProps = {

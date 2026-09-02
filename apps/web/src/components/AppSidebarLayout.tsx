@@ -1,6 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
+  lazy,
+  Suspense,
   useEffect,
   useRef,
   useState,
@@ -23,7 +25,6 @@ import { CLOSE_WORKSPACE_TAB_EVENT, NEW_WORKSPACE_TAB_EVENT } from "../workspace
 import { useEnvironmentIdentificationMode, useLegacySidebarEnabled } from "../hooks/useSettings";
 import LegacyThreadSidebar from "./LegacySidebar";
 import ThreadSidebar from "./Sidebar";
-import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import {
   resolveSidebarStageFocusRingOffsetClass,
@@ -55,6 +56,14 @@ const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "90px";
 const SIDEBAR_HOVER_REVEAL_EDGE_PX = 8;
 const SIDEBAR_HOVER_DISMISS_PADDING_PX = 12;
 const SIDEBAR_HOVER_DISMISS_DELAY_MS = 120;
+
+// The settings nav (and the Clerk profile surfaces behind it) only renders on
+// settings routes; lazy-loading it keeps that subtree out of the startup chunk.
+const SettingsSidebarNav = lazy(() =>
+  import("./settings/SettingsSidebarNav").then((module) => ({
+    default: module.SettingsSidebarNav,
+  })),
+);
 
 function subscribeToViewportWidth(onChange: () => void): () => void {
   window.addEventListener("resize", onChange);
@@ -352,7 +361,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         {isOnSettings ? (
           <>
             <SidebarChromeHeader isElectron={isElectron} />
-            <SettingsSidebarNav pathname={pathname} />
+            <Suspense fallback={null}>
+              <SettingsSidebarNav pathname={pathname} />
+            </Suspense>
           </>
         ) : legacySidebarEnabled ? (
           <LegacyThreadSidebar />
