@@ -583,6 +583,9 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Delete confirmation"]
         : []),
       ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? ["Quit shortcut"] : []),
+      ...(settings.notifyWhenAgentStops !== DEFAULT_UNIFIED_SETTINGS.notifyWhenAgentStops
+        ? ["Agent notifications"]
+        : []),
       ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
       ...getChangedBrowserSettingLabels(settings),
       ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
@@ -600,6 +603,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.appearanceContrast,
       settings.enableAgentBrowserAccess,
       settings.confirmQuit,
+      settings.notifyWhenAgentStops,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.confirmThreadUnpin,
@@ -733,6 +737,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       confirmThreadUnpin: DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin,
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
+      notifyWhenAgentStops: DEFAULT_UNIFIED_SETTINGS.notifyWhenAgentStops,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
@@ -2786,6 +2791,34 @@ export function GeneralSettingsPanel() {
                   ))}
                 </SelectPopup>
               </Select>
+            }
+          />
+        ) : null}
+
+        {isElectron ? (
+          <SettingsRow
+            {...searchableSetting("agent-notifications")}
+            description="Show a macOS notification when an agent finishes, fails, or waits for approval or input while Blackbird is not the active window."
+            resetAction={
+              settings.notifyWhenAgentStops !== DEFAULT_UNIFIED_SETTINGS.notifyWhenAgentStops ? (
+                <SettingResetButton
+                  label="agent notifications"
+                  onClick={() =>
+                    updateSettings({
+                      notifyWhenAgentStops: DEFAULT_UNIFIED_SETTINGS.notifyWhenAgentStops,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Switch
+                checked={settings.notifyWhenAgentStops}
+                onCheckedChange={(checked) =>
+                  updateSettings({ notifyWhenAgentStops: Boolean(checked) })
+                }
+                aria-label="Notify when an agent stops"
+              />
             }
           />
         ) : null}

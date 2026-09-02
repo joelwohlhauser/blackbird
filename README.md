@@ -50,6 +50,11 @@ through to the chat switcher. There is no Command-held numbered chat-jump
 hint overlay (the ⌘1–9 shortcuts still work quietly and appear in the command
 palette).
 
+**Settings → General → Agent notifications** (desktop only, off by default)
+posts a macOS notification whenever an agent stops — finished, failed, or
+waiting for approval or input — while Blackbird is not the active window.
+Clicking the notification opens that chat.
+
 ### Code and diff presentation
 
 Code rendering follows the VS Code **Dark Modern** look: matching typography,

@@ -23,6 +23,7 @@ const clientSettings: ClientSettings = {
   confirmThreadArchive: true,
   confirmThreadDelete: false,
   confirmThreadUnpin: false,
+  notifyWhenAgentStops: true,
   continueThreadsAfterServerUpdate: true,
   contextWindowMeterEnabled: false,
   dismissedProviderUpdateNotificationKeys: [],

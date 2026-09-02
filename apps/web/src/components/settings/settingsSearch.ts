@@ -277,6 +277,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
+    id: "agent-notifications",
+    title: "Agent notifications",
+    to: "/settings/general",
+    searchTerms: ["macos notification agent done finished stops approval input failed unfocused"],
+    desktopOnly: true,
+  },
+  {
     id: "text-generation-model",
     title: "Text generation model",
     to: "/settings/general",
