@@ -32,6 +32,7 @@ import { readT3ProjectFileDefaultThreadEnvMode } from "../lib/t3ProjectFileDefau
 import { primaryServerSettingsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
+import { isQuickChatsProject } from "../quickChats";
 import { useClientSettings } from "./useSettings";
 import { toastManager } from "../components/ui/toast";
 
@@ -104,9 +105,10 @@ export function useNewThreadHandler() {
       } = useComposerDraftStore.getState();
       const currentRouteTarget = getCurrentRouteTarget();
       // A new thread carries the user's working mode from the thread being
-      // viewed. The target project's configured model still wins; runtime and
-      // interaction modes carry independently. Branch, worktree, and env mode
-      // come from configured defaults unless the caller passes them explicitly.
+      // viewed when it belongs to the same logical project. Otherwise the
+      // target project's configured model wins. Runtime and interaction modes
+      // carry independently. Branch, worktree, and env mode come from
+      // configured defaults unless the caller passes them explicitly.
       const carrySourceShell =
         currentRouteTarget?.kind === "server"
           ? readThreadShell(currentRouteTarget.threadRef)
@@ -176,13 +178,33 @@ export function useNewThreadHandler() {
           candidate.id === projectRef.projectId &&
           candidate.environmentId === projectRef.environmentId,
       );
+      const logicalProjectKey = project
+        ? deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings)
+        : scopedProjectKey(projectRef);
+      const carrySourceProject = carrySourceShell
+        ? projects.find(
+            (candidate) =>
+              candidate.id === carrySourceShell.projectId &&
+              candidate.environmentId === carrySourceShell.environmentId,
+          )
+        : null;
+      const carrySourceLogicalProjectKey =
+        carrySourceDraft?.logicalProjectKey ??
+        (carrySourceProject
+          ? deriveLogicalProjectKeyFromSettings(carrySourceProject, projectGroupingSettings)
+          : null);
       const resolveModelSelectionOverride = (destinationDraftId: DraftId) =>
         resolveNewThreadModelSelectionOverride({
           projectDefaultSelection: project?.defaultModelSelection ?? null,
           carrySelection: carryModelSelection,
+          carrySelectionMatchesTargetProject: carrySourceLogicalProjectKey === logicalProjectKey,
           carrySourceDraftId:
             currentRouteTarget?.kind === "draft" ? currentRouteTarget.draftId : null,
           destinationDraftId,
+          // Quick chats have no project settings page. Their hidden project's
+          // creation-time model must not override the user's sticky composer
+          // choice forever.
+          ignoreProjectDefault: project ? isQuickChatsProject(project) : false,
         });
       // The shared resolver owns the priority order. The t3.json read is
       // skipped entirely when a higher-priority source decides, and its
@@ -200,9 +222,6 @@ export function useNewThreadHandler() {
           globalDefault: primaryServerSettings.defaultThreadEnvMode,
         });
       };
-      const logicalProjectKey = project
-        ? deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings)
-        : scopedProjectKey(projectRef);
       const hasBranchOption = options?.branch !== undefined;
       const hasWorktreePathOption = options?.worktreePath !== undefined;
       const hasEnvModeOption = options?.envMode !== undefined;
@@ -304,8 +323,8 @@ export function useNewThreadHandler() {
           }
           // Model intent: an explicit human pick always stands. Seeds and
           // legacy entries alike re-resolve here — sticky first, mirroring
-          // the mint-fresh path, then the project default or carried
-          // selection on top. This runs even when the draft is already open:
+          // the mint-fresh path, then the same-project carried selection or
+          // project default on top. This runs even when the draft is already open:
           // without it, a changed pin could never reach the draft the user
           // is looking at, because explicit picks are the only thing the
           // flag protects.
@@ -457,8 +476,8 @@ export function useNewThreadHandler() {
         applyStickyState(draftId);
         const modelSelectionOverride = resolveModelSelectionOverride(draftId);
         if (modelSelectionOverride) {
-          // Project defaults and carried selections both outrank global sticky
-          // state. The project default wins when both are present.
+          // A same-project composer choice wins over that project's configured
+          // default. Both outrank global sticky state.
           setModelSelection(draftId, modelSelectionOverride, { replaceOptions: true });
         }
         carryComposerContentTo(draftId);
