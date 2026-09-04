@@ -5,6 +5,7 @@ import {
   isQuickChatsProjectId,
   MessageId,
   type OrchestrationThread,
+  type ProjectId,
   type ThreadId,
   type TurnId,
   WorkspaceHandoffError,
@@ -17,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as path from "node:path";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -177,6 +179,92 @@ export const make = Effect.gen(function* () {
   const applyReady: WorkspaceHandoffServiceShape["applyReady"] = (threadId) =>
     settleThread(threadId, { type: "session" });
 
+  const runSetupScript = (
+    threadId: ThreadId,
+    projectId: ProjectId,
+    cwd: string,
+    worktreePath: string,
+  ) =>
+    setupScripts.runForThread({ threadId, projectId, projectCwd: cwd, worktreePath }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("Workspace handoff setup script failed to start.", {
+          threadId,
+          worktreePath,
+          cause: error,
+        }),
+      ),
+    );
+
+  // The worktree the chat moves to. An existing branch is reused: its current
+  // worktree when it already has one, otherwise a fresh worktree checking it
+  // out. Only an unknown branch is created from the base branch.
+  const resolveWorktree = Effect.fn("WorkspaceHandoffService.resolveWorktree")(function* (
+    threadId: ThreadId,
+    projectId: ProjectId,
+    cwd: string,
+    input: CreateWorktreeAndSwitchInput,
+  ) {
+    const settings = yield* serverSettings.getSettings;
+    const installDependencies =
+      input.installDependencies === undefined
+        ? {}
+        : { installDependencies: input.installDependencies };
+
+    const localRefs = yield* git.listRefs({
+      cwd,
+      query: input.branchName,
+      refKind: "local",
+      refresh: true,
+      limit: 100,
+    });
+    const existingBranch = localRefs.refs.find(
+      (ref) => ref.name === input.branchName && ref.isRemote !== true,
+    );
+
+    if (existingBranch?.worktreePath) {
+      if (path.resolve(existingBranch.worktreePath) === path.resolve(cwd)) {
+        return yield* new WorkspaceHandoffError({
+          operation: "resolve-worktree",
+          detail: `Branch '${input.branchName}' is checked out in the project's main checkout, so there is no worktree to switch to.`,
+        });
+      }
+      return { path: existingBranch.worktreePath, refName: existingBranch.name };
+    }
+
+    if (existingBranch) {
+      const created = yield* git.createWorktree(
+        { cwd, refName: existingBranch.name, path: null },
+        { startFromOrigin: false, ...installDependencies },
+      );
+      yield* runSetupScript(threadId, projectId, cwd, created.worktree.path);
+      return created.worktree;
+    }
+
+    const refs = input.baseBranch === undefined ? yield* git.listRefs({ cwd, limit: 100 }) : null;
+    const baseBranch =
+      input.baseBranch ??
+      refs?.refs.find((ref) => ref.isDefault)?.name ??
+      refs?.refs.find((ref) => ref.current)?.name;
+    if (!baseBranch) {
+      return yield* new WorkspaceHandoffError({
+        operation: "resolve-base-branch",
+        detail: "No default or current branch could be found for this repository.",
+      });
+    }
+    const created = yield* git.createWorktree(
+      {
+        cwd,
+        refName: baseBranch,
+        newRefName: input.branchName,
+        baseRefName: baseBranch,
+        path: null,
+      },
+      { startFromOrigin: settings.newWorktreesStartFromOrigin, ...installDependencies },
+    );
+    yield* runSetupScript(threadId, projectId, cwd, created.worktree.path);
+    return created.worktree;
+  });
+
   const request: WorkspaceHandoffServiceShape["request"] = Effect.fn(
     "WorkspaceHandoffService.request",
   )((threadId, input) =>
@@ -210,67 +298,23 @@ export const make = Effect.gen(function* () {
         });
       }
       const cwd = project.value.workspaceRoot;
-      const refs = input.baseBranch === undefined ? yield* git.listRefs({ cwd, limit: 100 }) : null;
-      const baseBranch =
-        input.baseBranch ??
-        refs?.refs.find((ref) => ref.isDefault)?.name ??
-        refs?.refs.find((ref) => ref.current)?.name;
-      if (!baseBranch) {
-        return yield* new WorkspaceHandoffError({
-          operation: "resolve-base-branch",
-          detail: "No default or current branch could be found for this repository.",
-        });
-      }
-
-      const settings = yield* serverSettings.getSettings;
-
-      const created = yield* git.createWorktree(
-        {
-          cwd,
-          refName: baseBranch,
-          newRefName: input.branchName,
-          baseRefName: baseBranch,
-          path: null,
-        },
-        {
-          startFromOrigin: settings.newWorktreesStartFromOrigin,
-          ...(input.installDependencies === undefined
-            ? {}
-            : { installDependencies: input.installDependencies }),
-        },
-      );
-      yield* setupScripts
-        .runForThread({
-          threadId,
-          projectId: thread.projectId,
-          projectCwd: cwd,
-          worktreePath: created.worktree.path,
-        })
-        .pipe(
-          Effect.catch((error) =>
-            Effect.logWarning("Workspace handoff setup script failed to start.", {
-              threadId,
-              worktreePath: created.worktree.path,
-              cause: error,
-            }),
-          ),
-        );
+      const worktree = yield* resolveWorktree(threadId, thread.projectId, cwd, input);
       const createdAt = yield* DateTime.now.pipe(Effect.map(DateTime.formatIso));
       yield* orchestration.dispatch({
         type: "thread.workspace-handoff.request",
         commandId: yield* commandId("workspace-handoff-request"),
         threadId,
         sourceTurnId,
-        branch: created.worktree.refName,
-        worktreePath: created.worktree.path,
+        branch: worktree.refName,
+        worktreePath: worktree.path,
         createdAt,
       });
-      yield* vcsStatus.refreshLocalStatus(created.worktree.path).pipe(Effect.ignore);
+      yield* vcsStatus.refreshLocalStatus(worktree.path).pipe(Effect.ignore);
 
       return {
         status: "handoff-scheduled" as const,
-        branch: created.worktree.refName,
-        worktreePath: created.worktree.path,
+        branch: worktree.refName,
+        worktreePath: worktree.path,
       };
     }).pipe(
       Effect.mapError((error) =>

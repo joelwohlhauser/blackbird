@@ -10,6 +10,8 @@ import {
   type OrchestrationProjectShell,
   type OrchestrationThread,
   type OrchestrationThreadShell,
+  type VcsListRefsResult,
+  type VcsStatusLocalResult,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -75,6 +77,31 @@ const project: OrchestrationProjectShell = {
   updatedAt: NOW,
 };
 
+const threadShellOf = (detail: OrchestrationThread): OrchestrationThreadShell => ({
+  ...detail,
+  latestUserMessageAt: null,
+  hasPendingApprovals: false,
+  hasPendingUserInput: false,
+  hasActionableProposedPlan: false,
+});
+
+const noRefs: VcsListRefsResult = {
+  refs: [],
+  isRepo: true,
+  hasPrimaryRemote: true,
+  nextCursor: null,
+  totalCount: 0,
+};
+
+const localStatus: VcsStatusLocalResult = {
+  isRepo: true,
+  hasPrimaryRemote: true,
+  isDefaultRef: false,
+  refName: "eng-123",
+  hasWorkingTreeChanges: false,
+  workingTree: { files: [], insertions: 0, deletions: 0 },
+};
+
 it.effect("creates the handoff on the owning environment's project root", () => {
   let projectedThread = thread;
   const threadShell = (): OrchestrationThreadShell => ({
@@ -100,23 +127,16 @@ it.effect("creates the handoff on the owning environment's project root", () => 
       getThreadDetailById: () => Effect.succeed(Option.some(projectedThread)),
       getProjectShellById: () => Effect.succeed(Option.some(project)),
     }),
-    Layer.mock(GitWorkflowService.GitWorkflowService)({ createWorktree }),
+    Layer.mock(GitWorkflowService.GitWorkflowService)({
+      createWorktree,
+      listRefs: () => Effect.succeed(noRefs),
+    }),
     Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
       runForThread: runSetupScript,
     }),
     ServerSettings.ServerSettingsService.layerTest({ newWorktreesStartFromOrigin: true }),
     Layer.mock(OrchestrationEngineService)({ dispatch }),
-    Layer.mock(VcsStatusBroadcaster)({
-      refreshLocalStatus: () =>
-        Effect.succeed({
-          isRepo: true,
-          hasPrimaryRemote: true,
-          isDefaultRef: false,
-          refName: "eng-123",
-          hasWorkingTreeChanges: false,
-          workingTree: { files: [], insertions: 0, deletions: 0 },
-        }),
-    }),
+    Layer.mock(VcsStatusBroadcaster)({ refreshLocalStatus: () => Effect.succeed(localStatus) }),
     NodeServices.layer,
   );
 
@@ -201,6 +221,138 @@ it.effect("creates the handoff on the owning environment's project root", () => 
     expect(dispatch).toHaveBeenLastCalledWith(
       expect.objectContaining({ type: "thread.workspace-handoff.apply", sourceTurnId }),
     );
+  }).pipe(Effect.provide(testLayer));
+});
+
+it.effect("switches to the existing worktree of a branch that already has one", () => {
+  const createWorktree = vi.fn(() => Effect.die("must not create a worktree"));
+  const runSetupScript = vi.fn(() => Effect.succeed({ status: "no-script" as const }));
+  const dispatch = vi.fn(() => Effect.succeed({ sequence: 1 }));
+  const testLayer = Layer.mergeAll(
+    Layer.mock(ProjectionSnapshotQuery)({
+      getThreadShellById: () => Effect.succeed(Option.some(threadShellOf(thread))),
+      getProjectShellById: () => Effect.succeed(Option.some(project)),
+    }),
+    Layer.mock(GitWorkflowService.GitWorkflowService)({
+      createWorktree,
+      listRefs: () =>
+        Effect.succeed({
+          ...noRefs,
+          refs: [
+            {
+              name: "eng-123",
+              current: false,
+              isDefault: false,
+              worktreePath: "/remote/worktrees/blackbird/eng-123",
+            },
+          ],
+          totalCount: 1,
+        }),
+    }),
+    Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
+      runForThread: runSetupScript,
+    }),
+    ServerSettings.ServerSettingsService.layerTest({ newWorktreesStartFromOrigin: true }),
+    Layer.mock(OrchestrationEngineService)({ dispatch }),
+    Layer.mock(VcsStatusBroadcaster)({ refreshLocalStatus: () => Effect.succeed(localStatus) }),
+    NodeServices.layer,
+  );
+
+  return Effect.gen(function* () {
+    const service = yield* make;
+    const result = yield* service.request(threadId, { branchName: "eng-123" });
+
+    expect(result).toEqual({
+      status: "handoff-scheduled",
+      branch: "eng-123",
+      worktreePath: "/remote/worktrees/blackbird/eng-123",
+    });
+    expect(createWorktree).not.toHaveBeenCalled();
+    expect(runSetupScript).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "thread.workspace-handoff.request",
+        branch: "eng-123",
+        worktreePath: "/remote/worktrees/blackbird/eng-123",
+      }),
+    );
+  }).pipe(Effect.provide(testLayer));
+});
+
+it.effect("checks out an existing branch into a new worktree instead of recreating it", () => {
+  const createWorktree = vi.fn(() =>
+    Effect.succeed({
+      worktree: { path: "/remote/worktrees/blackbird/eng-123", refName: "eng-123" },
+    }),
+  );
+  const runSetupScript = vi.fn(() => Effect.succeed({ status: "no-script" as const }));
+  const dispatch = vi.fn(() => Effect.succeed({ sequence: 1 }));
+  const testLayer = Layer.mergeAll(
+    Layer.mock(ProjectionSnapshotQuery)({
+      getThreadShellById: () => Effect.succeed(Option.some(threadShellOf(thread))),
+      getProjectShellById: () => Effect.succeed(Option.some(project)),
+    }),
+    Layer.mock(GitWorkflowService.GitWorkflowService)({
+      createWorktree,
+      listRefs: () =>
+        Effect.succeed({
+          ...noRefs,
+          refs: [{ name: "eng-123", current: false, isDefault: false, worktreePath: null }],
+          totalCount: 1,
+        }),
+    }),
+    Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
+      runForThread: runSetupScript,
+    }),
+    ServerSettings.ServerSettingsService.layerTest({ newWorktreesStartFromOrigin: true }),
+    Layer.mock(OrchestrationEngineService)({ dispatch }),
+    Layer.mock(VcsStatusBroadcaster)({ refreshLocalStatus: () => Effect.succeed(localStatus) }),
+    NodeServices.layer,
+  );
+
+  return Effect.gen(function* () {
+    const service = yield* make;
+    const result = yield* service.request(threadId, {
+      branchName: "eng-123",
+      installDependencies: false,
+    });
+
+    expect(result.worktreePath).toBe("/remote/worktrees/blackbird/eng-123");
+    expect(createWorktree).toHaveBeenCalledWith(
+      { cwd: "/remote/repos/blackbird", refName: "eng-123", path: null },
+      { installDependencies: false, startFromOrigin: false },
+    );
+    expect(runSetupScript).toHaveBeenCalledTimes(1);
+  }).pipe(Effect.provide(testLayer));
+});
+
+it.effect("refuses a branch that is checked out in the main checkout", () => {
+  const testLayer = Layer.mergeAll(
+    Layer.mock(ProjectionSnapshotQuery)({
+      getThreadShellById: () => Effect.succeed(Option.some(threadShellOf(thread))),
+      getProjectShellById: () => Effect.succeed(Option.some(project)),
+    }),
+    Layer.mock(GitWorkflowService.GitWorkflowService)({
+      listRefs: () =>
+        Effect.succeed({
+          ...noRefs,
+          refs: [
+            { name: "main", current: true, isDefault: true, worktreePath: project.workspaceRoot },
+          ],
+          totalCount: 1,
+        }),
+    }),
+    Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
+    ServerSettings.ServerSettingsService.layerTest(),
+    Layer.mock(OrchestrationEngineService)({}),
+    Layer.mock(VcsStatusBroadcaster)({}),
+    NodeServices.layer,
+  );
+
+  return Effect.gen(function* () {
+    const service = yield* make;
+    const error = yield* Effect.flip(service.request(threadId, { branchName: "main" }));
+    expect(error.operation).toBe("resolve-worktree");
   }).pipe(Effect.provide(testLayer));
 });
 

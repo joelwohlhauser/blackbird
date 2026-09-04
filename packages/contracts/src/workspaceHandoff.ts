@@ -15,18 +15,19 @@ export type PendingWorkspaceHandoff = typeof PendingWorkspaceHandoff.Type;
 
 export const CreateWorktreeAndSwitchInput = Schema.Struct({
   branchName: TrimmedNonEmptyString.annotate({
-    description: "Name of the new branch to create in the new worktree.",
+    description:
+      "Branch for the worktree. An existing local branch is reused: the chat switches to its current worktree, or a new worktree checks it out. Any other name creates a new branch.",
   }),
   baseBranch: Schema.optional(
     TrimmedNonEmptyString.annotate({
       description:
-        "Existing branch to create the new branch from. Defaults to the repository's default branch.",
+        "Existing branch to create a new branch from. Ignored when branchName already exists. Defaults to the repository's default branch.",
     }),
   ),
   installDependencies: Schema.optional(
     Schema.Boolean.annotate({
       description:
-        "Whether to install dependencies in the new worktree. Defaults to the environment setting, which is enabled by default.",
+        "Whether to install dependencies in a newly created worktree. Defaults to the environment setting, which is enabled by default. Ignored when switching to an existing worktree.",
     }),
   ),
 });
