@@ -36,6 +36,8 @@ The left sidebar includes:
 - lightweight status **dots only** — the status text lives in the tooltip and
   is never rendered next to the dot, and there is no per-chat PR-state icon;
 - consistent full-width folder and chat rows;
+- an optional compact mode (Settings → General → Thread details) that hides
+  each chat's third row with the worktree, branch, PR, and agent;
 - persistent open/closed state;
 - resizing while docked or while temporarily overlaid; and
 - edge-hover reveal when the sidebar is hidden, without reflowing the app.
@@ -179,8 +181,10 @@ New worktrees:
   project.
 
 Agents can start the same workflow from an active chat through Blackbird's MCP
-tool. The agent creates a named branch and worktree, the current turn finishes
-and is checkpointed, then the same thread automatically continues in the new
+tool. The agent names a branch: an existing branch is reused (the chat switches
+to its current worktree, or a new worktree checks it out), and an unknown
+branch is created with a new worktree. The current turn finishes and is
+checkpointed, then the same thread automatically continues in the new
 workspace. The composer branch label, Files and Changes navigator roots, and
 new workspace-backed tabs follow the new worktree. This works for local and
 remote environments and is available to Codex, Claude Code, Cursor, Grok, and

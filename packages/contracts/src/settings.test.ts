@@ -253,6 +253,14 @@ describe("ClientSettings sidebar", () => {
     );
   });
 
+  it("shows sidebar thread details by default and lets them be hidden", () => {
+    expect(decodeClientSettings({}).sidebarShowThreadDetails).toBe(true);
+    expect(
+      decodeClientSettingsPatch({ sidebarShowThreadDetails: false }).sidebarShowThreadDetails,
+    ).toBe(false);
+    expect(() => decodeClientSettingsPatch({ sidebarShowThreadDetails: "no" })).toThrow();
+  });
+
   it("keeps unpin confirmation opt-in and patchable", () => {
     expect(decodeClientSettings({}).confirmThreadUnpin).toBe(false);
     expect(decodeClientSettingsPatch({ confirmThreadUnpin: true }).confirmThreadUnpin).toBe(true);

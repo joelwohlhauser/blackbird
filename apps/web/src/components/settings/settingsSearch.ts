@@ -153,6 +153,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["combine matching repositories environments sidebar"],
   },
   {
+    id: "thread-details",
+    title: "Thread details",
+    to: "/settings/general",
+    searchTerms: ["sidebar compact branch worktree pull request agent third row hide"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",
