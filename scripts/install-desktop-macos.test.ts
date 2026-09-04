@@ -5,9 +5,23 @@ import {
   findSingleDmg,
   resolveInstalledAppPath,
   resolveLegacyInstalledAppPaths,
+  resolveSigningIdentity,
 } from "./install-desktop-macos.js";
 
 describe("macOS desktop installer", () => {
+  it("prefers an Apple-issued signing identity and falls back to ad-hoc", () => {
+    expect(
+      resolveSigningIdentity(
+        [
+          '  1) ABC123 "Blackbird Local Signing"',
+          '  2) DEF456 "Apple Development: developer@example.com (TEAM123456)"',
+          "     2 valid identities found",
+        ].join("\n"),
+      ),
+    ).toBe("Apple Development: developer@example.com (TEAM123456)");
+    expect(resolveSigningIdentity("     0 valid identities found")).toBe("-");
+  });
+
   it("targets the packaged product name in the configured Applications directory", () => {
     expect(resolveInstalledAppPath("/Applications", "Blackbird (Alpha)")).toBe(
       "/Applications/Blackbird (Alpha).app",

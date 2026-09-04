@@ -53,7 +53,9 @@ palette).
 **Settings → General → Agent notifications** (desktop only, off by default)
 posts a macOS notification whenever an agent stops — finished, failed, or
 waiting for approval or input — while Blackbird is not the active window.
-Clicking the notification opens that chat.
+Clicking the notification opens that chat. The
+installer's code-signing step makes this possible; see Development and
+deployment.
 
 ### Code and diff presentation
 
@@ -302,6 +304,14 @@ on the local Mac**, not deploy a website. Run:
 ```bash
 pnpm deploy:desktop
 ```
+
+The installer code-signs the staged app before installing it. Notification
+Center refuses apps that only carry Electron's raw linker signature, which is
+what an unsigned electron-builder build ships, so the agent notifications
+feature depends on this step. The installer prefers a Developer ID or Apple
+Development identity from the login keychain, whose stable identity lets the
+notification permission survive redeploys, and otherwise signs ad-hoc, which
+works but resets the permission on every deploy.
 
 The deployment script builds the replacement first. Only after the new build
 is ready does it close a running Blackbird app, install the new macOS app, and

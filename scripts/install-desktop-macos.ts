@@ -120,6 +120,22 @@ export function resolveLegacyInstalledAppPaths(applicationsDir: string): readonl
   );
 }
 
+/**
+ * Notification Center refuses apps that only carry Electron's linker
+ * signature (code identifier "Electron", no sealed resources), which is what
+ * electron-builder ships for unsigned builds. Any real signature fixes that;
+ * an Apple-issued identity from the keychain (Developer ID or Apple
+ * Development) is preferred because its designated requirement stays stable
+ * across rebuilds, so the notification permission survives redeploys. Falls
+ * back to ad-hoc signing ("-") when the keychain has none.
+ */
+export function resolveSigningIdentity(findIdentityOutput: string): string {
+  const match = findIdentityOutput.match(
+    /"((?:Developer ID Application|Apple Development): [^"]+)"/u,
+  );
+  return match?.[1] ?? "-";
+}
+
 export function findSingleDmg(entries: readonly string[]): string {
   const images = entries.filter((entry) => entry.toLowerCase().endsWith(".dmg"));
   if (images.length !== 1) {
@@ -182,6 +198,16 @@ async function installDesktopApp(): Promise<void> {
     await run("ditto", [bundledApp, stagedApp]);
     await run("hdiutil", ["detach", mountDir]);
     mounted = false;
+
+    const signingIdentity = resolveSigningIdentity(
+      await output("security", ["find-identity", "-v", "-p", "codesigning"]),
+    );
+    console.log(
+      signingIdentity === "-"
+        ? "[desktop-install] No Apple signing identity in the keychain; signing ad-hoc (notification permission resets on each deploy)."
+        : `[desktop-install] Signing with "${signingIdentity}"...`,
+    );
+    await run("codesign", ["--force", "--deep", "--sign", signingIdentity, stagedApp]);
 
     // Keep the currently installed app available throughout the expensive build
     // and staging work. Only close it once the replacement is ready for the
