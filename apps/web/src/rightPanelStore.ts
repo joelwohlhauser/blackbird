@@ -8,7 +8,11 @@
  * workspace paths, and diff/files remain singleton surfaces.
  */
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { PreviewSessionSnapshot, ScopedThreadRef } from "@t3tools/contracts";
+import type {
+  ChatFileAttachment,
+  PreviewSessionSnapshot,
+  ScopedThreadRef,
+} from "@t3tools/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -54,12 +58,15 @@ export type RightPanelSurface =
       headRef: string | null;
     }
   | {
-      id: `file:${string}`;
+      id: `file:${string}` | `attachment:${string}`;
       kind: "file";
       /** Workspace-relative, or absolute for a host file outside the workspace. */
       relativePath: string;
       revealLine: number | null;
       revealRequestId: number;
+      /** Present when the file lives in the thread's attachment store rather
+          than at a workspace or host path. */
+      attachment?: ChatFileAttachment;
     }
   | {
       /**
@@ -168,6 +175,7 @@ interface RightPanelStoreState {
     baseRef?: string | null,
     headRef?: string | null,
   ) => void;
+  openAttachment: (ref: ScopedThreadRef, attachment: ChatFileAttachment) => void;
   openPullRequest: (
     ref: ScopedThreadRef,
     target: { environmentId?: string; projectId: string; repository: string; number: number },
@@ -283,6 +291,15 @@ const fileDiffSurface = (
   scope,
   baseRef,
   headRef,
+});
+
+const attachmentSurface = (attachment: ChatFileAttachment): RightPanelSurface => ({
+  id: `attachment:${attachment.id}`,
+  kind: "file",
+  relativePath: attachment.name,
+  revealLine: null,
+  revealRequestId: 0,
+  attachment,
 });
 
 const terminalSurface = (terminalId: string): RightPanelSurface => ({
@@ -829,6 +846,18 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             ),
           ),
         })),
+      openAttachment: (ref, attachment) =>
+        set((state) => ({
+          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+            const withoutStandaloneExplorer = current.surfaces.filter(
+              (surface) => surface.kind !== "files",
+            );
+            return upsertSurface(
+              { ...current, surfaces: withoutStandaloneExplorer },
+              attachmentSurface(attachment),
+            );
+          }),
+        })),
       openTerminal: (ref, terminalId) =>
         set((state) => ({
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
@@ -1293,7 +1322,9 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
             if (workspaceAvailable) return current;
             const isWorkspaceSurface = (surface: RightPanelSurface) =>
-              surface.kind === "files" || surface.kind === "file" || surface.kind === "file-diff";
+              surface.kind === "files" ||
+              surface.kind === "file-diff" ||
+              (surface.kind === "file" && surface.attachment === undefined);
             const surfaces = current.surfaces.filter((surface) => !isWorkspaceSurface(surface));
             const mainSurfaces = current.mainSurfaces.filter(
               (surface) => !isWorkspaceSurface(surface),

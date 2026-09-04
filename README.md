@@ -7,6 +7,9 @@ not to become a separate general-purpose product; it is to keep T3 Code's
 architecture and updates while layering Joel's preferred coding workflow and
 desktop experience on top.
 
+Blackbird works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and
+Google Antigravity.
+
 The repository has two remotes:
 
 - `origin` — the private `joelwohlhauser/blackbird` repository

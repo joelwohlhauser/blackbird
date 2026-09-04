@@ -211,6 +211,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       assert.equal(defaultsByCommand.get("workspaceNavigator.toggle"), "mod+shift+b");
       assert.equal(defaultsByCommand.get("workspaceNavigator.changes"), "mod+shift+g");
       assert.equal(defaultsByCommand.get("workspaceNavigator.pullRequest"), "mod+shift+h");
+      assert.equal(defaultsByCommand.get("rightPanel.close"), "mod+w");
       assert.equal(defaultsByCommand.get("terminal.splitVertical"), "mod+shift+d");
       assert.equal(defaultsByCommand.get("modelPicker.jump.1"), "mod+1");
       assert.equal(defaultsByCommand.get("modelPicker.jump.9"), "mod+9");

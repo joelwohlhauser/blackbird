@@ -1,4 +1,4 @@
-import type { PreviewSessionSnapshot } from "@t3tools/contracts";
+import type { EnvironmentId, PreviewSessionSnapshot } from "@t3tools/contracts";
 import { Bot, FileDiff, GitPullRequest, Globe2, Plus, TerminalSquare } from "lucide-react";
 import {
   type ElementType,
@@ -24,12 +24,15 @@ import { GitHubIcon, LinearIcon } from "./Icons";
 interface RightPanelTabsProps {
   mode: PreviewPanelMode;
   maximized?: boolean;
+  open?: boolean;
   /** Forwarded to PreviewPanelShell so this surface persists its own width. */
   widthStorageKey?: string;
   /** Forwarded to PreviewPanelShell as the initial width before a user resize. */
   defaultWidth?: number;
   layoutControls?: ReactNode;
   surfaces: readonly RightPanelSurface[];
+  /** Fallback environment for surfaces that do not carry their own. */
+  environmentId: EnvironmentId | null;
   activeSurfaceId: string | null;
   pendingSurfaceIds: ReadonlySet<string>;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
@@ -385,6 +388,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     <PreviewPanelShell
       mode={props.mode}
       {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
+      {...(props.open !== undefined ? { open: props.open } : {})}
       {...(props.widthStorageKey !== undefined ? { widthStorageKey: props.widthStorageKey } : {})}
       {...(props.defaultWidth !== undefined ? { defaultWidth: props.defaultWidth } : {})}
     >
@@ -429,6 +433,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           <NewTabButton ariaLabel="New panel tab" onClick={props.onOpenNewTab} />
         ) : null}
         {props.layoutControls}
+        {ownsDesktopTitleBar ? (
+          <span
+            aria-hidden
+            className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]"
+          />
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col" data-right-panel-surface-content>
         {props.activeSurfaceId === null ? (

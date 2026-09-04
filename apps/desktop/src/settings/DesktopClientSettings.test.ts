@@ -14,11 +14,18 @@ import * as DesktopClientSettings from "./DesktopClientSettings.ts";
 
 const clientSettings: ClientSettings = {
   appearanceContrast: 100,
-  browserDefaultViewport: { _tag: "preset", width: 1024, height: 600, presetId: "nest-hub" },
+  browserDefaultViewport: {
+    _tag: "preset",
+    width: 1024,
+    height: 600,
+    presetId: "nest-hub",
+  },
   browserDefaultZoomFactor: 1.25,
   browserDefaultAppearance: "dark",
   browserRecordingFrameRate: 60,
   browserAutoShowFloatingPreview: false,
+  browserProfiles: [{ id: "work", name: "Work", kind: "persistent" }],
+  browserDefaultProfileId: "work",
   confirmQuit: "double-click",
   confirmThreadArchive: true,
   confirmThreadDelete: false,
@@ -26,8 +33,11 @@ const clientSettings: ClientSettings = {
   notifyWhenAgentStops: true,
   continueThreadsAfterServerUpdate: true,
   contextWindowMeterEnabled: false,
+  composerCollapseOnBlur: false,
+  composerCollapseOnScroll: true,
   dismissedProviderUpdateNotificationKeys: [],
   diffIgnoreWhitespace: true,
+  diffLayout: "stacked",
   environmentIdentificationMode: "artwork",
   externalLinkOpenMode: "ask",
   favorites: [],
@@ -44,7 +54,9 @@ const clientSettings: ClientSettings = {
   linearOrganizationSlug: "acme",
   pinnedSitesEnabled: false,
   pinnedSites: [],
+  panelAnimationDurationMs: 0,
   planModeEnabled: false,
+  proactivePanelsEnabled: true,
   showSkillsInSlashMenu: false,
   providerModelPreferences: {},
   sidebarAutoSettleAfterDays: 3,
@@ -142,7 +154,9 @@ describe("DesktopClientSettings", () => {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         const fileSystem = yield* FileSystem.FileSystem;
         const settings = yield* DesktopClientSettings.DesktopClientSettings;
-        yield* fileSystem.makeDirectory(environment.clientSettingsPath, { recursive: true });
+        yield* fileSystem.makeDirectory(environment.clientSettingsPath, {
+          recursive: true,
+        });
 
         const error = yield* settings.set(clientSettings).pipe(Effect.flip);
         assert.instanceOf(error, DesktopClientSettings.DesktopClientSettingsWriteError);
@@ -165,7 +179,9 @@ describe("DesktopClientSettings", () => {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         const fileSystem = yield* FileSystem.FileSystem;
         const settings = yield* DesktopClientSettings.DesktopClientSettings;
-        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.makeDirectory(environment.stateDir, {
+          recursive: true,
+        });
         yield* fileSystem.writeFileString(
           environment.clientSettingsPath,
           `{
@@ -189,7 +205,9 @@ describe("DesktopClientSettings", () => {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         const fileSystem = yield* FileSystem.FileSystem;
         const settings = yield* DesktopClientSettings.DesktopClientSettings;
-        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.makeDirectory(environment.stateDir, {
+          recursive: true,
+        });
         yield* fileSystem.writeFileString(
           environment.clientSettingsPath,
           `{
@@ -214,7 +232,9 @@ describe("DesktopClientSettings", () => {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         const fileSystem = yield* FileSystem.FileSystem;
         const settings = yield* DesktopClientSettings.DesktopClientSettings;
-        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.makeDirectory(environment.stateDir, {
+          recursive: true,
+        });
         yield* fileSystem.writeFileString(environment.clientSettingsPath, "{}\n");
 
         assert.deepEqual(yield* settings.get, Option.some(yield* decodeClientSettingsJson("{}")));
@@ -228,7 +248,9 @@ describe("DesktopClientSettings", () => {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         const fileSystem = yield* FileSystem.FileSystem;
         const settings = yield* DesktopClientSettings.DesktopClientSettings;
-        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.makeDirectory(environment.stateDir, {
+          recursive: true,
+        });
         yield* fileSystem.writeFileString(environment.clientSettingsPath, "{not-json");
 
         assert.isTrue(Option.isNone(yield* settings.get));

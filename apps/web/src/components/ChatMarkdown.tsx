@@ -120,7 +120,7 @@ import { LRUCache } from "../lib/lruCache";
 import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { useTheme } from "../hooks/useTheme";
-import { getClientSettings } from "../hooks/useSettings";
+import { getClientSettings, useClientSettings } from "../hooks/useSettings";
 import {
   chatMarkdownClipboardPayload,
   serializeTableElementToCsv,
@@ -1275,7 +1275,6 @@ function ChatMarkdownVideo(props: {
   readonly mediaIdentity?: string | undefined;
   readonly actionsSource?: MediaActionSource | undefined;
   readonly onRetry?: (() => Promise<void>) | undefined;
-  readonly onImageExpand?: ((preview: ExpandedImagePreview) => void) | undefined;
 }) {
   return (
     <MediaVideoPlayer
@@ -1297,27 +1296,6 @@ function ChatMarkdownVideo(props: {
       )}
       onRetry={props.onRetry}
       actionsSource={props.actionsSource}
-      onExpand={
-        props.onImageExpand
-          ? (src) => {
-              props.onImageExpand?.({
-                images: [
-                  {
-                    src,
-                    name: props.alt || "video",
-                    type: "video",
-                    autoPlay: false,
-                    ...(props.originalUrl ? { originalUrl: props.originalUrl } : {}),
-                    ...(props.actionsSource
-                      ? { actionsSource: { ...props.actionsSource, src } }
-                      : {}),
-                  },
-                ],
-                index: 0,
-              });
-            }
-          : undefined
-      }
     />
   );
 }
@@ -1379,7 +1357,6 @@ export const ChatMarkdownAssetImage = memo(function ChatMarkdownAssetImage(props
         style={props.style}
         mediaIdentity={JSON.stringify([props.environmentId, props.resource, props.srcFragment])}
         onRetry={refreshAssetUrl}
-        onImageExpand={props.onImageExpand}
         actionsSource={actionsSource}
       />
     );
@@ -2144,6 +2121,9 @@ function ChatMarkdown({
     event.clipboardData.setData("text/html", payload.html);
   }, []);
   const openChangeRequestLink = useOpenChangeRequestLink(threadRef);
+  // Subscribed rather than read at click time: the anchor has to decide
+  // synchronously whether to intercept its `_blank`, and a subscription is what
+  // makes a persisted "app" apply once settings hydrate after launch.
   const resolveThreadPullRequest = useCallback(
     (href: string): ThreadLinkedPullRequest | null => {
       if (
@@ -2513,6 +2493,7 @@ function ChatMarkdown({
                         { operation: "open-link-in-preview", target },
                         result.cause,
                       );
+                      await api.shell.openExternal(target);
                     }
                   },
                   openExternal: (target) => api.shell.openExternal(target),
@@ -2664,7 +2645,6 @@ function ChatMarkdown({
                 copyMarkdown={copyMarkdown}
                 originalUrl={originalUrl}
                 style={authoredSizeStyle}
-                onImageExpand={imageExpand}
                 actionsSource={actionsSource}
               />
             );

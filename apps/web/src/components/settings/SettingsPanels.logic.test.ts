@@ -256,7 +256,9 @@ describe("getChangedBrowserSettingLabels", () => {
     expect(
       getChangedBrowserSettingLabels({
         ...DEFAULT_UNIFIED_SETTINGS,
-        browserDefaultViewport: { ...DEFAULT_UNIFIED_SETTINGS.browserDefaultViewport },
+        browserDefaultViewport: {
+          ...DEFAULT_UNIFIED_SETTINGS.browserDefaultViewport,
+        },
       }),
     ).toEqual([]);
   });

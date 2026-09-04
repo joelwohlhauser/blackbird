@@ -50,8 +50,9 @@ import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { useWorkspaceMutationRefresh } from "../hooks/useWorkspaceMutationRefresh";
 import { useProject, useThread } from "../state/entities";
 import { resolveThreadRouteRef } from "../threadRoutes";
-import { useClientSettings } from "../hooks/useSettings";
+import { useClientSettings, useUpdateClientSettings } from "../hooks/useSettings";
 import { formatShortTimestamp } from "../timestampFormat";
+import { DiffFilePathCopyButton } from "./DiffFilePathCopyButton";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/AnnotatableCodeView";
@@ -343,8 +344,8 @@ export default function DiffPanel({
   const { resolvedTheme } = useTheme();
   const settings = useClientSettings();
   const [initialGitScope] = useState(initialGitScopeProp);
-  const diffRenderMode = useDiffPanelStore((state) => state.diffRenderMode);
-  const setDiffRenderMode = useDiffPanelStore((state) => state.setDiffRenderMode);
+  const diffLayout = settings.diffLayout;
+  const updateClientSettings = useUpdateClientSettings();
   const [wordWrap, setWordWrap] = useState(settings.wordWrap);
   const [diffIgnoreWhitespace, setDiffIgnoreWhitespace] = useState(settings.diffIgnoreWhitespace);
   const [baseRefQuery, setBaseRefQuery] = useState("");
@@ -797,6 +798,29 @@ export default function DiffPanel({
     selectedFileRevealRequestId,
   ]);
 
+  // Held as state so the scroll runs after a collapsed file has been drawn open again; scrolling
+  // in the same tick would land on the folded header's position.
+  const [treeReveal, setTreeReveal] = useState<{ fileKey: string; id: number } | null>(null);
+  useEffect(() => {
+    if (treeReveal === null) return;
+    codeViewRef.current?.scrollTo({ type: "item", id: treeReveal.fileKey, align: "start" });
+  }, [treeReveal]);
+  const revealDiffFile = useCallback(
+    (filePath: string) => {
+      const file = codeViewFiles.find((candidate) => candidate.filePath === filePath);
+      if (!file) return;
+      if (file.collapsed) {
+        setCollapsedDiffFiles((current) => {
+          const next = new Set(current.scopeKey === collapseScopeKey ? current.fileKeys : []);
+          next.delete(file.fileKey);
+          return { scopeKey: collapseScopeKey, fileKeys: next };
+        });
+      }
+      setTreeReveal((current) => ({ fileKey: file.fileKey, id: (current?.id ?? 0) + 1 }));
+    },
+    [codeViewFiles, collapseScopeKey],
+  );
+
   const openDiffFile = useCallback(
     (filePath: string) => {
       openDiffFilePrimaryAction({
@@ -1128,11 +1152,11 @@ export default function DiffPanel({
         <ToggleGroup
           className="shrink-0 gap-1"
           size="sm"
-          value={[diffRenderMode]}
+          value={[diffLayout]}
           onValueChange={(value) => {
             const next = value[0];
             if (next === "stacked" || next === "split") {
-              setDiffRenderMode(next);
+              updateClientSettings({ diffLayout: next });
             }
           }}
         >
@@ -1321,6 +1345,9 @@ export default function DiffPanel({
                   sectionId={reviewSectionId}
                   sectionTitle={reviewSectionTitle}
                   composerDraftTarget={composerDraftTarget}
+                  renderHeaderFilenameSuffix={(fileDiff) => (
+                    <DiffFilePathCopyButton filePath={resolveFileDiffPath(fileDiff)} />
+                  )}
                   renderHeaderPrefix={(fileDiff, fileKey, collapsed) => {
                     const filePath = resolveFileDiffPath(fileDiff);
                     return (
@@ -1358,7 +1385,7 @@ export default function DiffPanel({
                   options={{
                     diffStyle: fixedGitSelection
                       ? "unified"
-                      : diffRenderMode === "split"
+                      : diffLayout === "split"
                         ? "split"
                         : "unified",
                     lineDiffType: "none",

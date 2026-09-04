@@ -1,7 +1,7 @@
 import type { LocalApi, PreviewSessionSnapshot, ScopedThreadRef } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
   openTerminalLinkInPreview,
@@ -20,6 +20,19 @@ vi.mock("~/rightPanelStore", () => ({
   },
 }));
 
+const browserDefaultsMocks = vi.hoisted(() => ({ resolve: vi.fn() }));
+
+vi.mock("~/browser/browserDefaults", () => ({
+  resolveBrowserDefaults: browserDefaultsMocks.resolve,
+  browserDefaultOpenViewport: (defaults: { viewport: unknown }) => defaults.viewport,
+  browserDefaultOpenProfileId: (defaults: { profileId: string }) => defaults.profileId,
+}));
+
+const hydratedDefaults = {
+  viewport: { _tag: "fixed", width: 1280, height: 720 } as const,
+  profileId: "work",
+};
+
 const threadRef = {
   environmentId: "local" as ScopedThreadRef["environmentId"],
   threadId: "thread-1" as ScopedThreadRef["threadId"],
@@ -33,6 +46,11 @@ const snapshot: PreviewSessionSnapshot = {
   canGoForward: false,
   updatedAt: "2026-06-20T00:00:00.000Z",
 };
+
+beforeEach(() => {
+  browserDefaultsMocks.resolve.mockReset();
+  browserDefaultsMocks.resolve.mockResolvedValue(hydratedDefaults);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -58,6 +76,15 @@ describe("openTerminalLinkInPreview", () => {
 
     expect(showContextMenu).not.toHaveBeenCalled();
     expect(openPreview).toHaveBeenCalledOnce();
+    expect(openPreview).toHaveBeenCalledWith({
+      environmentId: threadRef.environmentId,
+      input: {
+        threadId: threadRef.threadId,
+        url: "http://localhost:3000/docs",
+        viewport: hydratedDefaults.viewport,
+        profileId: hydratedDefaults.profileId,
+      },
+    });
     expect(fallbackToBrowser).not.toHaveBeenCalled();
   });
 

@@ -62,6 +62,11 @@ interface Props {
    * to mount the three-dot menu (hard reload, devtools, zoom, clear data).
    */
   trailingActions?: ReactNode;
+  /**
+   * Slot between the nav buttons and the URL input. The preview view uses it
+   * to name the tab's browser profile, which is otherwise invisible.
+   */
+  leadingActions?: ReactNode;
 }
 
 const NOOP = () => {};
@@ -93,6 +98,7 @@ export function PreviewChromeRow({
   pickDisabled,
   pickDisabledReason,
   trailingActions,
+  leadingActions,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState(url);
@@ -173,6 +179,8 @@ export function PreviewChromeRow({
             <TooltipPopup>{loading ? "Loading…" : "Refresh"}</TooltipPopup>
           </Tooltip>
         </div>
+
+        {leadingActions}
 
         <InputGroup variant="ghost" className="group/address h-7 flex-1">
           <Tooltip>

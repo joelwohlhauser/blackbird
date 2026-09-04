@@ -63,6 +63,7 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "workspaceNavigator.toggle",
   "workspaceNavigator.changes",
   "workspaceNavigator.pullRequest",
+  "rightPanel.close",
   "diff.toggle",
   "preview.toggle",
   "preview.refresh",

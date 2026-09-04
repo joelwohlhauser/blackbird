@@ -2,14 +2,16 @@ import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
-import { ThreadEnvMode } from "./environment.ts";
+import { ForwardCompatibleNullable, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
+import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
+import { EnvironmentMachineKind, ThreadEnvMode } from "./environment.ts";
 import {
   DEFAULT_TEXT_GENERATION_MODEL,
   DEFAULT_TEXT_GENERATION_REASONING_EFFORT,
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./orchestration.ts";
+import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
   DEFAULT_PREVIEW_APPEARANCE,
   DEFAULT_PREVIEW_ZOOM_FACTOR,
@@ -29,6 +31,10 @@ import {
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
 export const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
+
+export const DiffLayout = Schema.Literals(["stacked", "split"]);
+export type DiffLayout = typeof DiffLayout.Type;
+export const DEFAULT_DIFF_LAYOUT: DiffLayout = "stacked";
 
 export const SidebarProjectSortOrder = Schema.Literals(["updated_at", "created_at", "manual"]);
 export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
@@ -79,10 +85,23 @@ export const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
 export const MIN_APPEARANCE_CONTRAST = 50;
 export const MAX_APPEARANCE_CONTRAST = 200;
 export const AppearanceContrast = Schema.Int.check(
-  Schema.isBetween({ minimum: MIN_APPEARANCE_CONTRAST, maximum: MAX_APPEARANCE_CONTRAST }),
+  Schema.isBetween({
+    minimum: MIN_APPEARANCE_CONTRAST,
+    maximum: MAX_APPEARANCE_CONTRAST,
+  }),
 );
 export type AppearanceContrast = typeof AppearanceContrast.Type;
 export const DEFAULT_APPEARANCE_CONTRAST: AppearanceContrast = 100;
+export const MIN_PANEL_ANIMATION_DURATION_MS = 0;
+export const MAX_PANEL_ANIMATION_DURATION_MS = 400;
+export const PanelAnimationDurationMs = Schema.Int.check(
+  Schema.isBetween({
+    minimum: MIN_PANEL_ANIMATION_DURATION_MS,
+    maximum: MAX_PANEL_ANIMATION_DURATION_MS,
+  }),
+);
+export type PanelAnimationDurationMs = typeof PanelAnimationDurationMs.Type;
+export const DEFAULT_PANEL_ANIMATION_DURATION_MS: PanelAnimationDurationMs = 0;
 /**
  * Font size preferences, in CSS pixels. The ranges are deliberately narrow:
  * the interface size scales every rem-based dimension in the app, so the
@@ -91,7 +110,10 @@ export const DEFAULT_APPEARANCE_CONTRAST: AppearanceContrast = 100;
 export const MIN_INTERFACE_FONT_SIZE = 12;
 export const MAX_INTERFACE_FONT_SIZE = 20;
 export const InterfaceFontSize = Schema.Int.check(
-  Schema.isBetween({ minimum: MIN_INTERFACE_FONT_SIZE, maximum: MAX_INTERFACE_FONT_SIZE }),
+  Schema.isBetween({
+    minimum: MIN_INTERFACE_FONT_SIZE,
+    maximum: MAX_INTERFACE_FONT_SIZE,
+  }),
 );
 export type InterfaceFontSize = typeof InterfaceFontSize.Type;
 export const DEFAULT_INTERFACE_FONT_SIZE: InterfaceFontSize = 16;
@@ -99,7 +121,10 @@ export const DEFAULT_INTERFACE_FONT_SIZE: InterfaceFontSize = 16;
 export const MIN_PROMPT_FONT_SIZE = 12;
 export const MAX_PROMPT_FONT_SIZE = 20;
 export const PromptFontSize = Schema.Int.check(
-  Schema.isBetween({ minimum: MIN_PROMPT_FONT_SIZE, maximum: MAX_PROMPT_FONT_SIZE }),
+  Schema.isBetween({
+    minimum: MIN_PROMPT_FONT_SIZE,
+    maximum: MAX_PROMPT_FONT_SIZE,
+  }),
 );
 export type PromptFontSize = typeof PromptFontSize.Type;
 export const DEFAULT_PROMPT_FONT_SIZE: PromptFontSize = 14;
@@ -107,7 +132,10 @@ export const DEFAULT_PROMPT_FONT_SIZE: PromptFontSize = 14;
 export const MIN_CODE_FONT_SIZE = 10;
 export const MAX_CODE_FONT_SIZE = 18;
 export const CodeFontSize = Schema.Int.check(
-  Schema.isBetween({ minimum: MIN_CODE_FONT_SIZE, maximum: MAX_CODE_FONT_SIZE }),
+  Schema.isBetween({
+    minimum: MIN_CODE_FONT_SIZE,
+    maximum: MAX_CODE_FONT_SIZE,
+  }),
 );
 export type CodeFontSize = typeof CodeFontSize.Type;
 export const DEFAULT_CODE_FONT_SIZE: CodeFontSize = 13;
@@ -115,7 +143,10 @@ export const DEFAULT_CODE_FONT_SIZE: CodeFontSize = 13;
 export const MIN_TERMINAL_FONT_SIZE = 8;
 export const MAX_TERMINAL_FONT_SIZE = 20;
 export const TerminalFontSize = Schema.Int.check(
-  Schema.isBetween({ minimum: MIN_TERMINAL_FONT_SIZE, maximum: MAX_TERMINAL_FONT_SIZE }),
+  Schema.isBetween({
+    minimum: MIN_TERMINAL_FONT_SIZE,
+    maximum: MAX_TERMINAL_FONT_SIZE,
+  }),
 );
 export type TerminalFontSize = typeof TerminalFontSize.Type;
 export const DEFAULT_TERMINAL_FONT_SIZE: TerminalFontSize = 12;
@@ -189,10 +220,14 @@ export const BROWSER_RECORDING_FRAME_RATES = [30, 60] as const;
 export const BrowserRecordingFrameRate = Schema.Literals(BROWSER_RECORDING_FRAME_RATES);
 export type BrowserRecordingFrameRate = typeof BrowserRecordingFrameRate.Type;
 export const DEFAULT_BROWSER_RECORDING_FRAME_RATE: BrowserRecordingFrameRate = 30;
-
 export const ClientSettingsSchema = Schema.Struct({
   appearanceContrast: AppearanceContrast.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_APPEARANCE_CONTRAST)),
+  ),
+  // Panel motion defaults to zero because width and height transitions cause
+  // layout work on every frame, which is noticeable on lower-power clients.
+  panelAnimationDurationMs: PanelAnimationDurationMs.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANEL_ANIMATION_DURATION_MS)),
   ),
   browserDefaultViewport: PreviewViewportSetting.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_VIEWPORT)),
@@ -207,13 +242,25 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_RECORDING_FRAME_RATE)),
   ),
   /**
-   * Whether an agent opening a preview pops the floating mini player into
+   * Whether an agent using a preview pops the floating mini player into
    * view. Only applies when the agent didn't ask either way — an explicit
    * `open`/`show` on `preview_open` still wins, since that is the agent
    * deliberately showing or hiding its work.
    */
   browserAutoShowFloatingPreview: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW)),
+  ),
+  /**
+   * User-created browser profiles. The built-in Default and Incognito profiles
+   * are synthesized by `resolveBrowserProfiles`, not stored here, so they
+   * cannot be renamed away or deleted.
+   */
+  browserProfiles: Schema.Array(BrowserProfile).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  /** Profile new tabs open under. Falls back to Default if it no longer exists. */
+  browserDefaultProfileId: BrowserProfileId.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_BROWSER_PROFILE_ID)),
   ),
   // Desktop-only. Boolean values from older settings files decode to their
   // equivalent mode and encode back as the canonical string value.
@@ -232,6 +279,7 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   diffIgnoreWhitespace: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  diffLayout: DiffLayout.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_DIFF_LAYOUT))),
   environmentIdentificationMode: EnvironmentIdentificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE)),
   ),
@@ -300,6 +348,11 @@ export const ClientSettingsSchema = Schema.Struct({
   legacySidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   pinnedSitesEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   pinnedSites: Schema.Array(PinnedSite).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  // Desktop resting composer. Each trigger that settles an existing thread's
+  // composer into its single-line layout can be turned off on its own.
+  composerCollapseOnBlur: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  composerCollapseOnScroll: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  proactivePanelsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   showSkillsInSlashMenu: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   sidebarAutoSettleAfterDays: Schema.NullOr(SidebarAutoSettleAfterDays).pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS)),
@@ -344,13 +397,20 @@ const makeBinaryPathSetting = (fallback: string) =>
     Schema.withDecodingDefault(Effect.succeed(fallback)),
   );
 
-export type ProviderSettingsFormControl = "text" | "password" | "textarea" | "switch";
+export type ProviderSettingsFormControl = "text" | "password" | "textarea" | "switch" | "select";
+
+export interface ProviderSettingsFormOption {
+  readonly value: string;
+  readonly label: string;
+}
 
 export interface ProviderSettingsFormAnnotation {
   readonly control?: ProviderSettingsFormControl | undefined;
   readonly placeholder?: string | undefined;
   readonly hidden?: boolean | undefined;
   readonly clearWhenEmpty?: "omit" | "persist" | undefined;
+  /** Choices for a `select` control. The first entry is the default. */
+  readonly options?: ReadonlyArray<ProviderSettingsFormOption> | undefined;
 }
 
 export interface ProviderSettingsFormSchemaAnnotation {
@@ -463,7 +523,10 @@ export const ClaudeSettings = makeProviderSettingsSchema(
         title: "CLAUDE_CONFIG_DIR path",
         description:
           "Custom Claude home and config directory. Keeps .claude.json and .claude separate.",
-        providerSettingsForm: { placeholder: "~/.claude", clearWhenEmpty: "omit" },
+        providerSettingsForm: {
+          placeholder: "~/.claude",
+          clearWhenEmpty: "omit",
+        },
       }),
     ),
     customModels: Schema.Array(Schema.String).pipe(
@@ -513,7 +576,10 @@ export const CursorSettings = makeProviderSettingsSchema(
       Schema.annotateKey({
         title: "Binary path",
         description: "Path to the Cursor agent binary.",
-        providerSettingsForm: { placeholder: "cursor-agent", clearWhenEmpty: "omit" },
+        providerSettingsForm: {
+          placeholder: "cursor-agent",
+          clearWhenEmpty: "omit",
+        },
       }),
     ),
     apiEndpoint: TrimmedString.pipe(
@@ -563,6 +629,100 @@ export const GrokSettings = makeProviderSettingsSchema(
   },
 );
 export type GrokSettings = typeof GrokSettings.Type;
+
+/**
+ * Antigravity ACP auth methods. Personal and Enterprise open a Google sign-in
+ * in the browser. The API key and Agent Platform methods take credentials from
+ * the instance config and never open a browser.
+ */
+export const ANTIGRAVITY_AUTH_METHODS = [
+  { value: "oauth-personal", label: "Google account" },
+  { value: "oauth-business", label: "Gemini Enterprise" },
+  { value: "gemini-api-key", label: "Gemini API key" },
+  { value: "agent-platform", label: "Agent Platform (Vertex AI)" },
+] as const satisfies ReadonlyArray<ProviderSettingsFormOption>;
+export const AntigravityAuthMethod = Schema.Literals(
+  ANTIGRAVITY_AUTH_METHODS.map((method) => method.value),
+);
+export type AntigravityAuthMethod = typeof AntigravityAuthMethod.Type;
+
+export const AntigravitySettings = makeProviderSettingsSchema(
+  {
+    enabled: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(false)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    authMethod: AntigravityAuthMethod.pipe(
+      Schema.withDecodingDefault(Effect.succeed("oauth-personal" as const)),
+      Schema.annotateKey({
+        title: "Sign-in method",
+        description:
+          "Google account uses your Antigravity subscription. Gemini Enterprise needs a GCP project and location. API key and Agent Platform bill the credential you enter.",
+        providerSettingsForm: {
+          control: "select",
+          options: ANTIGRAVITY_AUTH_METHODS,
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    apiKey: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "API key",
+        description:
+          "Gemini API key, or a Vertex AI express key for Agent Platform. Stored in plain text on this environment.",
+        providerSettingsForm: {
+          control: "password",
+          placeholder: "Optional",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    gcpProject: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "GCP project",
+        description:
+          "Required for Gemini Enterprise. Agent Platform uses it when no API key is set.",
+        providerSettingsForm: {
+          placeholder: "my-project-id",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    gcpLocation: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "GCP location",
+        description: "Region for Gemini Enterprise or Agent Platform, such as us-central1.",
+        providerSettingsForm: {
+          placeholder: "us-central1",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    binaryPath: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Binary path",
+        description:
+          "Optional path to the official Antigravity ACP executable. Leave empty for automatic selection.",
+        providerSettingsForm: {
+          placeholder: "Automatic",
+          clearWhenEmpty: "persist",
+        },
+      }),
+    ),
+    customModels: Schema.Array(Schema.String).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+  },
+  {
+    order: ["authMethod", "apiKey", "gcpProject", "gcpLocation", "binaryPath"],
+  },
+);
+export type AntigravitySettings = typeof AntigravitySettings.Type;
 
 export const OpenCodeSettings = makeProviderSettingsSchema(
   {
@@ -615,6 +775,21 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
   },
 );
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
+
+/**
+ * A read-only quota source outside this environment's provider CLIs. The
+ * only kind today is a CLIProxyAPI hub, whose management API reports the
+ * windows of every pooled account. The key travels in settings for now, like
+ * provider environment secrets; it is redacted before reaching a client.
+ */
+export const UsageLimitSourceConfig = Schema.Struct({
+  kind: Schema.Literal("cliproxy"),
+  label: Schema.optional(TrimmedNonEmptyString),
+  url: TrimmedNonEmptyString,
+  managementKey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type UsageLimitSourceConfig = typeof UsageLimitSourceConfig.Type;
 
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -736,6 +911,16 @@ export const ServerSettings = Schema.Struct({
   defaultThemeSetAt: Schema.String.check(Schema.isMaxLength(64)).pipe(
     Schema.withDecodingDefault(Effect.succeed("")),
   ),
+  /**
+   * The icon clients draw for this environment. Null means "use what the
+   * server detected" (`environment.platform.machine`), falling back to a
+   * generic server. Lives on the server, not the client, so every device
+   * sees the same machine. A kind picked on a newer server decodes as null
+   * here rather than failing the whole settings snapshot for an older client.
+   */
+  environmentIcon: ForwardCompatibleNullable(EnvironmentMachineKind).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   defaultThreadEnvMode: ThreadEnvMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("local" as const satisfies ThreadEnvMode)),
   ),
@@ -789,6 +974,7 @@ export const ServerSettings = Schema.Struct({
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     grok: GrokSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+    antigravity: AntigravitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   // New driver-agnostic instance map. Keyed by `ProviderInstanceId`; values
   // are `ProviderInstanceConfig` envelopes. The driver-specific config blob
@@ -799,6 +985,11 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  // Keyed by a user-chosen id so a source keeps its rows across edits. Entries
+  // this build cannot decode round-trip untouched, as provider instances do.
+  usageLimitSources: Schema.Record(UsageLimitSourceId, UsageLimitSourceConfig).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -934,6 +1125,16 @@ const GrokSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const AntigravitySettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  authMethod: Schema.optionalKey(AntigravityAuthMethod),
+  apiKey: Schema.optionalKey(TrimmedString),
+  gcpProject: Schema.optionalKey(TrimmedString),
+  gcpLocation: Schema.optionalKey(TrimmedString),
+  binaryPath: Schema.optionalKey(TrimmedString),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
 const OpenCodeSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(TrimmedString),
@@ -960,6 +1161,7 @@ export const ServerSettingsPatch = Schema.Struct({
   automaticGitFetchInterval: Schema.optionalKey(Schema.DurationFromMillis),
   providerHealthRefreshInterval: Schema.optionalKey(Schema.DurationFromMillis),
   backgroundActivityProfile: Schema.optionalKey(BackgroundActivityProfile),
+  environmentIcon: Schema.optionalKey(Schema.NullOr(EnvironmentMachineKind)),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   worktreesRoot: Schema.optionalKey(TrimmedNonEmptyString),
@@ -994,6 +1196,7 @@ export const ServerSettingsPatch = Schema.Struct({
       cursor: Schema.optionalKey(CursorSettingsPatch),
       grok: Schema.optionalKey(GrokSettingsPatch),
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
+      antigravity: Schema.optionalKey(AntigravitySettingsPatch),
     }),
   ),
   // Whole-map replacement for the new instance config. Patching individual
@@ -1001,16 +1204,25 @@ export const ServerSettingsPatch = Schema.Struct({
   // patches risk leaving driver-specific config in a half-merged state.
   // The web UI sends a fully-formed map every time it edits this field.
   providerInstances: Schema.optionalKey(Schema.Record(ProviderInstanceId, ProviderInstanceConfig)),
+  // Per-entry, unlike `providerInstances`: a client only ever adds or removes
+  // one source, and sending the whole map races another edit that has not
+  // echoed back yet. `null` removes; the server merges into its current map.
+  usageLimitSources: Schema.optionalKey(
+    Schema.Record(UsageLimitSourceId, Schema.NullOr(UsageLimitSourceConfig)),
+  ),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
 export const ClientSettingsPatch = Schema.Struct({
   appearanceContrast: Schema.optionalKey(AppearanceContrast),
+  panelAnimationDurationMs: Schema.optionalKey(PanelAnimationDurationMs),
   browserDefaultViewport: Schema.optionalKey(PreviewViewportSetting),
   browserDefaultZoomFactor: Schema.optionalKey(PreviewZoomFactor),
   browserDefaultAppearance: Schema.optionalKey(PreviewAppearancePreference),
   browserRecordingFrameRate: Schema.optionalKey(BrowserRecordingFrameRate),
   browserAutoShowFloatingPreview: Schema.optionalKey(Schema.Boolean),
+  browserProfiles: Schema.optionalKey(Schema.Array(BrowserProfile)),
+  browserDefaultProfileId: Schema.optionalKey(BrowserProfileId),
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
   notifyWhenAgentStops: Schema.optionalKey(Schema.Boolean),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
@@ -1018,6 +1230,7 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmThreadUnpin: Schema.optionalKey(Schema.Boolean),
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
+  diffLayout: Schema.optionalKey(DiffLayout),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   externalLinkOpenMode: Schema.optionalKey(ExternalLinkOpenMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
@@ -1054,6 +1267,9 @@ export const ClientSettingsPatch = Schema.Struct({
   ),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   contextWindowMeterEnabled: Schema.optionalKey(Schema.Boolean),
+  composerCollapseOnBlur: Schema.optionalKey(Schema.Boolean),
+  composerCollapseOnScroll: Schema.optionalKey(Schema.Boolean),
+  proactivePanelsEnabled: Schema.optionalKey(Schema.Boolean),
   showSkillsInSlashMenu: Schema.optionalKey(Schema.Boolean),
   legacySidebarEnabled: Schema.optionalKey(Schema.Boolean),
   pinnedSitesEnabled: Schema.optionalKey(Schema.Boolean),
