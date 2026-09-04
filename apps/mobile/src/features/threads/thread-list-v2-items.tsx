@@ -884,7 +884,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             sidebarPane ? "px-3" : "px-5",
           )}
         >
-          {props.project ? (
+          {props.project?.faviconPath ? (
             <View className="opacity-40">
               <ProjectFavicon
                 environmentId={thread.environmentId}

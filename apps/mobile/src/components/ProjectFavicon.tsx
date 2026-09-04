@@ -1,4 +1,3 @@
-import { SymbolView } from "./AppSymbol";
 import { Image } from "expo-image";
 import { useLayoutEffect, useMemo, useState } from "react";
 import { View } from "react-native";
@@ -19,7 +18,6 @@ import {
 /* ─── Component ──────────────────────────────────────────────────────── */
 export function ProjectFavicon(props: {
   readonly environmentId: EnvironmentId;
-  readonly open?: boolean;
   readonly size?: number;
   readonly projectTitle: string;
   readonly workspaceRoot?: string | null;
@@ -28,14 +26,16 @@ export function ProjectFavicon(props: {
   const size = props.size ?? 42;
   const faviconUrl = useAssetUrl(
     props.environmentId,
-    props.workspaceRoot === null || props.workspaceRoot === undefined
+    !props.workspaceRoot || !props.faviconPath
       ? null
       : {
           _tag: "project-favicon",
           cwd: props.workspaceRoot,
-          ...(props.faviconPath ? { path: props.faviconPath } : {}),
+          path: props.faviconPath,
         },
   );
+  if (!props.faviconPath) return null;
+
   const renderableFaviconUrl = isProjectFaviconFallbackUrl(faviconUrl) ? null : faviconUrl;
   const cacheKey =
     renderableFaviconUrl && props.workspaceRoot
@@ -47,7 +47,6 @@ export function ProjectFavicon(props: {
       key={cacheKey}
       cacheKey={cacheKey}
       faviconUrl={renderableFaviconUrl}
-      open={props.open}
       projectTitle={props.projectTitle}
       size={size}
     />
@@ -57,7 +56,6 @@ export function ProjectFavicon(props: {
 function ProjectFaviconImage(props: {
   readonly cacheKey: string | null;
   readonly faviconUrl: string | null;
-  readonly open?: boolean;
   readonly projectTitle: string;
   readonly size: number;
 }) {
@@ -90,16 +88,6 @@ function ProjectFaviconImage(props: {
         justifyContent: "center",
       }}
     >
-      {/* Folder icon fallback (matches web's FolderIcon) */}
-      {!showImage ? (
-        <SymbolView
-          name={{ ios: "folder.fill", android: props.open ? "folder_open" : "folder" }}
-          size={props.size * 0.78}
-          tintColorClassName={"accent-icon-subtle"}
-          type="monochrome"
-        />
-      ) : null}
-
       {/* Favicon image (hidden until loaded) */}
       {requestIsActive ? (
         <Image

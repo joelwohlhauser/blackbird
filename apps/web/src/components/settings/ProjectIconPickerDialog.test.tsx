@@ -39,13 +39,13 @@ vi.mock("../ui/toggle-group", () => ({
 import { ProjectIconPickerDialog } from "./ProjectIconPickerDialog";
 
 describe("ProjectIconPickerDialog", () => {
-  it("shows icons first and selects them for an automatic project", () => {
+  it("defaults to no icon", () => {
     const markup = renderToStaticMarkup(
       <ProjectIconPickerDialog current={null} open onOpenChange={() => {}} onSelect={() => {}} />,
     );
 
-    expect(markup).toContain('data-current="lucide"');
-    expect(markup.indexOf(">Icons<")).toBeLessThan(markup.indexOf(">Emoji<"));
-    expect(markup).toContain('aria-label="Icon color"');
+    expect(markup).toContain('data-current="none"');
+    expect(markup).toContain(">None<");
+    expect(markup).toContain("This project will not show an icon.");
   });
 });

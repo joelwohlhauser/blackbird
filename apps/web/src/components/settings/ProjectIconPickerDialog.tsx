@@ -42,10 +42,10 @@ export function ProjectIconPickerDialog({
   readonly current: ProjectIconOverride | null;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly onSelect: (icon: ProjectIconOverride) => void;
+  readonly onSelect: (icon: ProjectIconOverride | null) => void;
 }) {
-  const [mode, setMode] = useState<"lucide" | "emoji">(
-    current?.kind === "emoji" ? "emoji" : "lucide",
+  const [mode, setMode] = useState<"none" | "lucide" | "emoji">(
+    current === null ? "none" : current.kind,
   );
   const [iconName, setIconName] = useState<IconName>(
     current?.kind === "lucide" ? (current.name as IconName) : DEFAULT_ICON,
@@ -60,7 +60,7 @@ export function ProjectIconPickerDialog({
 
   useEffect(() => {
     if (open && !previousOpenRef.current) {
-      setMode(current?.kind === "emoji" ? "emoji" : "lucide");
+      setMode(current === null ? "none" : current.kind);
       setIconName(current?.kind === "lucide" ? (current.name as IconName) : DEFAULT_ICON);
       setColor(current?.kind === "lucide" ? current.color : DEFAULT_COLOR);
       setEmoji(current?.kind === "emoji" ? current.emoji : "💻");
@@ -74,7 +74,11 @@ export function ProjectIconPickerDialog({
   const selectedColorClassName = projectIconColorClassName(color);
   const save = () => {
     onSelect(
-      mode === "lucide" ? { kind: "lucide", name: iconName, color } : { kind: "emoji", emoji },
+      mode === "none"
+        ? null
+        : mode === "lucide"
+          ? { kind: "lucide", name: iconName, color }
+          : { kind: "emoji", emoji },
     );
     onOpenChange(false);
   };
@@ -84,7 +88,7 @@ export function ProjectIconPickerDialog({
       <DialogPopup className="w-full sm:w-[32rem]">
         <DialogHeader>
           <DialogTitle>Choose project icon</DialogTitle>
-          <DialogDescription>Pick any Lucide icon and color, or use an emoji.</DialogDescription>
+          <DialogDescription>Use no icon, a Lucide icon and color, or an emoji.</DialogDescription>
         </DialogHeader>
         <DialogPanel className="flex min-h-0 flex-col gap-4">
           <ToggleGroup
@@ -93,14 +97,19 @@ export function ProjectIconPickerDialog({
             value={[mode]}
             onValueChange={(next) => {
               const value = next[0];
-              if (value === "lucide" || value === "emoji") setMode(value);
+              if (value === "none" || value === "lucide" || value === "emoji") setMode(value);
             }}
           >
+            <Toggle value="none">None</Toggle>
             <Toggle value="lucide">Icons</Toggle>
             <Toggle value="emoji">Emoji</Toggle>
           </ToggleGroup>
 
-          {mode === "lucide" ? (
+          {mode === "none" ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              This project will not show an icon.
+            </p>
+          ) : mode === "lucide" ? (
             <>
               <div>
                 <div className="mb-2 text-xs font-medium text-muted-foreground">Color</div>
@@ -197,7 +206,7 @@ export function ProjectIconPickerDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={save}>Save icon</Button>
+          <Button onClick={save}>Save</Button>
         </DialogFooter>
       </DialogPopup>
     </Dialog>

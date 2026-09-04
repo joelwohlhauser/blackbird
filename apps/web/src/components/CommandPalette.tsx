@@ -183,7 +183,6 @@ function projectFavicon(project: Project) {
     <ProjectFavicon
       environmentId={project.environmentId}
       cwd={project.workspaceRoot}
-      projectName={project.title}
       faviconPath={project.faviconPath}
       projectIcon={project.projectIcon}
       className="size-4"

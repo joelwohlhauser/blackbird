@@ -356,7 +356,7 @@ the merge relationship is useful for the next update.
 Detailed user and contributor documentation lives in [docs/](./docs), including:
 
 - [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Customize a project icon](./docs/user/project-settings.md)
+- [Customize or hide a project icon](./docs/user/project-settings.md)
 - [Remote access](./docs/user/remote-access.md)
 - [Keeping app and server in sync](./docs/user/updating.md)
 - [Source control integrations](./docs/user/source-control.md)

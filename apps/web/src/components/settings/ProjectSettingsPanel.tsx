@@ -841,7 +841,7 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
                 ? `${projectIcon.name} · ${projectIcon.color}`
                 : projectIcon?.kind === "emoji"
                   ? projectIcon.emoji
-                  : (faviconPath ?? "Automatic")
+                  : (faviconPath ?? "None")
             }
             resetAction={
               faviconPath !== null || projectIcon !== null ? (
@@ -857,7 +857,6 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
                 <ProjectFavicon
                   environmentId={representative.environmentId}
                   cwd={representative.workspaceRoot}
-                  projectName={representative.title}
                   faviconPath={faviconPath}
                   projectIcon={projectIcon}
                   className="size-6"

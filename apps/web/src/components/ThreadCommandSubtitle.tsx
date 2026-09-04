@@ -73,7 +73,6 @@ export function ThreadCommandSubtitle(props: {
             <ProjectFavicon
               environmentId={props.environmentId}
               cwd={props.projectCwd}
-              projectName={projectLabel}
               faviconPath={props.projectFaviconPath}
               projectIcon={props.projectIcon}
               className="size-3 shrink-0"

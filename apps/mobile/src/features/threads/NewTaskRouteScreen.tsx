@@ -283,15 +283,17 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                     onPress={() => void selectProject(selectionTarget)}
                     className="flex-row items-center gap-3 bg-card px-4 py-3.5"
                   >
-                    <View className="h-7 w-7 items-center justify-center">
-                      <ProjectFavicon
-                        environmentId={scope.representative.environmentId}
-                        faviconPath={scope.representative.faviconPath}
-                        size={20}
-                        projectTitle={scope.title}
-                        workspaceRoot={scope.representative.workspaceRoot}
-                      />
-                    </View>
+                    {scope.representative.faviconPath ? (
+                      <View className="h-7 w-7 items-center justify-center">
+                        <ProjectFavicon
+                          environmentId={scope.representative.environmentId}
+                          faviconPath={scope.representative.faviconPath}
+                          size={20}
+                          projectTitle={scope.title}
+                          workspaceRoot={scope.representative.workspaceRoot}
+                        />
+                      </View>
+                    ) : null}
                     <View className="min-w-0 flex-1">
                       <Text className="text-base leading-snug font-t3-bold">{scope.title}</Text>
                       <Text

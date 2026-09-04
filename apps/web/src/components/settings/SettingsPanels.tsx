@@ -3449,7 +3449,6 @@ export function ArchivedThreadsPanel() {
               <ProjectFavicon
                 environmentId={project.environmentId}
                 cwd={project.cwd}
-                projectName={project.name}
                 faviconPath={project.faviconPath}
                 projectIcon={project.projectIcon}
               />

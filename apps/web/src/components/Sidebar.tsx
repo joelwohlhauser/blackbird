@@ -307,7 +307,6 @@ function SidebarThreadTooltip({
               <ProjectFavicon
                 environmentId={thread.environmentId}
                 cwd={projectCwd ?? ""}
-                projectName={projectTitle ?? ""}
                 faviconPath={projectFaviconPath}
                 projectIcon={projectIcon}
                 className="size-3 shrink-0"
@@ -547,7 +546,6 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
             <ProjectFavicon
               environmentId={session.environmentId}
               cwd={props.projectCwd ?? ""}
-              projectName={props.projectTitle ?? ""}
               faviconPath={props.projectFaviconPath}
               projectIcon={props.projectIcon}
               className="size-4 shrink-0"
@@ -1290,7 +1288,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               <ProjectFavicon
                 environmentId={thread.environmentId}
                 cwd={props.projectCwd ?? ""}
-                projectName={props.projectTitle ?? ""}
                 faviconPath={props.projectFaviconPath}
                 projectIcon={props.projectIcon}
                 className="size-4"
@@ -1445,7 +1442,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
               <ProjectFavicon
                 environmentId={thread.environmentId}
                 cwd={props.projectCwd ?? ""}
-                projectName={props.projectTitle ?? ""}
                 faviconPath={props.projectFaviconPath}
                 projectIcon={props.projectIcon}
                 className="size-4 shrink-0"
@@ -1740,7 +1736,6 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
           <ProjectFavicon
             environmentId={thread.environmentId}
             cwd={props.projectCwd ?? ""}
-            projectName={props.projectTitle ?? ""}
             faviconPath={props.projectFaviconPath}
             projectIcon={props.projectIcon}
             className="size-4 shrink-0"
@@ -3595,7 +3590,6 @@ export default function Sidebar() {
                         <ProjectFavicon
                           environmentId={scopedProjectGroup.environmentId}
                           cwd={scopedProjectGroup.workspaceRoot}
-                          projectName={scopedProjectGroup.displayName}
                           faviconPath={scopedProjectGroup.faviconPath}
                           className="size-4 shrink-0"
                         />
@@ -3651,7 +3645,6 @@ export default function Sidebar() {
                                 <ProjectFavicon
                                   environmentId={project.environmentId}
                                   cwd={project.workspaceRoot}
-                                  projectName={project.displayName}
                                   faviconPath={project.faviconPath}
                                   className="size-4 shrink-0"
                                 />
