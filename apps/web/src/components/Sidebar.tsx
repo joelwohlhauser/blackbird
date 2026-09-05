@@ -49,6 +49,7 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GitBranchIcon,
+  MessageCirclePlusIcon,
   PinIcon,
   PlusIcon,
   SearchIcon,
@@ -100,6 +101,7 @@ import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore"
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useStartQuickChat } from "../hooks/useStartQuickChat";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";
@@ -1928,6 +1930,7 @@ export default function Sidebar() {
     },
   });
   const newThreadContext = useHandleNewThread();
+  const startQuickChat = useStartQuickChat();
   const openAddProjectCommandPalette = useCallback(
     () => openCommandPalette({ open: "add-project" }),
     [],
@@ -3564,18 +3567,8 @@ export default function Sidebar() {
     [isMobile, newThreadContext, projectGroups.length, setOpenMobile],
   );
 
-  // The button mirrors chat.new: in multi-project setups both route through
-  // the command palette's "New thread in..." picker, and in single-project
-  // setups both create immediately. In multi-project setups the label is only
-  // the picker's shortcut: falling back to chat.newLocal would advertise the
-  // same shortcut for both the picker and direct create. In single-project
-  // setups both commands create directly, so chat.newLocal is a valid
-  // fallback. The second tooltip line (multi-project only) advertises
-  // shift+click and its keyboard twin chat.newLocal for direct create.
-  const newThreadShortcutLabel =
-    shortcutLabelForCommand(keybindings, "chat.new") ??
-    (projectGroups.length <= 1 ? shortcutLabelForCommand(keybindings, "chat.newLocal") : undefined);
-  const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
+  const newThreadShortcutLabel = shortcutLabelForCommand(keybindings, "chat.new");
+  const quickChatShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
   return (
     <>
       <SidebarChromeHeader isElectron={isElectron} />
@@ -3588,95 +3581,109 @@ export default function Sidebar() {
             <SidebarPinnedSites className="px-[var(--sidebar-content-inset)] pt-[var(--sidebar-content-inset)] pb-0" />
             <SidebarGroup className="relative z-[1] gap-1 p-[var(--sidebar-content-inset)]">
               <div className="flex items-center gap-1">
-                <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
-                  <SearchIcon className="size-4 shrink-0 text-sidebar-muted-foreground/80" />
-                  <Input
-                    ref={threadSearchInputRef}
-                    nativeInput
-                    unstyled
-                    type="search"
-                    value={threadSearchQuery}
-                    onChange={(event) => {
-                      setThreadSearchQuery(event.currentTarget.value);
-                      setActiveSearchResultIndex(0);
-                    }}
-                    onKeyDown={handleThreadSearchKeyDown}
-                    placeholder="Search"
-                    aria-label="Search threads"
-                    role="combobox"
-                    aria-autocomplete="list"
-                    aria-expanded={isSearchingThreads && threadSearchResults.length > 0}
-                    aria-controls={
-                      isSearchingThreads && threadSearchResults.length > 0
-                        ? "sidebar-thread-search-results"
-                        : undefined
-                    }
-                    aria-activedescendant={
-                      isSearchingThreads && threadSearchResults[activeSearchResultIndex]
-                        ? `sidebar-thread-search-result-${activeSearchResultIndex}`
-                        : undefined
-                    }
-                    className="min-w-0 flex-1 [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:p-0 [&_[data-slot=input]]:leading-normal [&_[data-slot=input]]:text-sm [&_[data-slot=input]]:font-medium [&_[data-slot=input]]:text-sidebar-foreground [&_[data-slot=input]]:placeholder:text-sidebar-muted-foreground"
-                  />
-                  {isSearchingThreads ? (
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      className="size-5 shrink-0 rounded-sm text-sidebar-muted-foreground hover:bg-sidebar-control-surface hover:text-sidebar-foreground"
-                      aria-label="Clear thread search"
-                      onClick={() => {
-                        clearThreadSearch();
-                        threadSearchInputRef.current?.focus();
-                      }}
-                    >
-                      <XIcon className="size-3" />
-                    </Button>
-                  ) : null}
-                </div>
-                <div className="shrink-0">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <SidebarMenuButton
-                          size="icon"
-                          type="button"
-                          className="relative focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-                          onClick={handleNewThreadClick}
-                          disabled={projects.length === 0}
-                          aria-label="New thread"
-                        />
-                      }
-                    >
-                      <SquarePenIcon />
-                      <span
-                        className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
-                        aria-hidden="true"
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <SidebarMenuButton
+                        type="button"
+                        className="min-w-0 flex-1 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                        onClick={handleNewThreadClick}
+                        disabled={projects.length === 0}
                       />
-                    </TooltipTrigger>
-                    <TooltipPopup side="right">
+                    }
+                  >
+                    <SquarePenIcon />
+                    <span>New chat</span>
+                  </TooltipTrigger>
+                  <TooltipPopup side="right">
+                    <span className="flex flex-col gap-0.5">
+                      <span>
+                        {newThreadShortcutLabel
+                          ? `New chat (${newThreadShortcutLabel})`
+                          : "New chat"}
+                      </span>
                       {projectGroups.length > 1 ? (
-                        <span className="flex flex-col gap-0.5">
-                          <span>
-                            {newThreadShortcutLabel
-                              ? `New thread (${newThreadShortcutLabel})`
-                              : "New thread"}
-                          </span>
-                          <span className="text-muted-foreground">
-                            New thread in current project: Shift+click
-                            {newThreadInProjectShortcutLabel
-                              ? ` (${newThreadInProjectShortcutLabel})`
-                              : ""}
-                          </span>
+                        <span className="text-muted-foreground">
+                          New chat in current project: Shift+click
                         </span>
-                      ) : newThreadShortcutLabel ? (
-                        `New thread (${newThreadShortcutLabel})`
-                      ) : (
-                        "New thread"
-                      )}
-                    </TooltipPopup>
-                  </Tooltip>
-                </div>
+                      ) : null}
+                    </span>
+                  </TooltipPopup>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <SidebarMenuButton
+                        size="icon"
+                        type="button"
+                        className="relative shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                        aria-label="New quick chat"
+                        disabled={primaryEnvironmentId === null}
+                        onClick={() => {
+                          if (isMobile) setOpenMobile(false);
+                          void startQuickChat();
+                        }}
+                      />
+                    }
+                  >
+                    <MessageCirclePlusIcon />
+                    <span
+                      className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
+                      aria-hidden="true"
+                    />
+                  </TooltipTrigger>
+                  <TooltipPopup side="right">
+                    {quickChatShortcutLabel
+                      ? `Quick chat (${quickChatShortcutLabel})`
+                      : "Quick chat"}
+                  </TooltipPopup>
+                </Tooltip>
+              </div>
+              <div className="flex h-8 min-w-0 items-center gap-[var(--sidebar-control-gap)] rounded-md px-[var(--sidebar-row-content-inset)] py-1.5 text-sm font-medium text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
+                <SearchIcon className="size-4 shrink-0 text-sidebar-muted-foreground/80" />
+                <Input
+                  ref={threadSearchInputRef}
+                  nativeInput
+                  unstyled
+                  type="search"
+                  value={threadSearchQuery}
+                  onChange={(event) => {
+                    setThreadSearchQuery(event.currentTarget.value);
+                    setActiveSearchResultIndex(0);
+                  }}
+                  onKeyDown={handleThreadSearchKeyDown}
+                  placeholder="Search"
+                  aria-label="Search threads"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={isSearchingThreads && threadSearchResults.length > 0}
+                  aria-controls={
+                    isSearchingThreads && threadSearchResults.length > 0
+                      ? "sidebar-thread-search-results"
+                      : undefined
+                  }
+                  aria-activedescendant={
+                    isSearchingThreads && threadSearchResults[activeSearchResultIndex]
+                      ? `sidebar-thread-search-result-${activeSearchResultIndex}`
+                      : undefined
+                  }
+                  className="min-w-0 flex-1 [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:p-0 [&_[data-slot=input]]:leading-normal [&_[data-slot=input]]:text-sm [&_[data-slot=input]]:font-medium [&_[data-slot=input]]:text-sidebar-foreground [&_[data-slot=input]]:placeholder:text-sidebar-muted-foreground/80 [&_[data-slot=input]]:placeholder:opacity-100"
+                />
+                {isSearchingThreads ? (
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    className="size-5 shrink-0 rounded-sm text-sidebar-muted-foreground hover:bg-sidebar-control-surface hover:text-sidebar-foreground"
+                    aria-label="Clear thread search"
+                    onClick={() => {
+                      clearThreadSearch();
+                      threadSearchInputRef.current?.focus();
+                    }}
+                  >
+                    <XIcon className="size-3" />
+                  </Button>
+                ) : null}
               </div>
               {projectGroups.length > 0 ? (
                 <div className="flex items-center gap-1">
@@ -3700,7 +3707,7 @@ export default function Sidebar() {
                       render={
                         <SidebarMenuButton
                           aria-label="Filter threads by project"
-                          className="min-w-0 flex-1 ps-[calc(var(--sidebar-row-content-inset)-1px)] focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                          className="min-w-0 flex-1 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
                         />
                       }
                     >

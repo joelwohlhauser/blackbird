@@ -25,6 +25,8 @@ panels that reveal tools without dominating the conversation.
 
 The left sidebar includes:
 
+- a top **New chat** action and a separate **Quick chat** button in sidebar v2,
+  above the search field and project filter;
 - a dedicated, collapsible **Quick chats** section above Projects;
 - an optional, collapsible **Pinned sites** section for persistent full-window browser views;
 - a collapsible **Projects** section with local and remote copies grouped under
