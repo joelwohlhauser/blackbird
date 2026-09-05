@@ -286,7 +286,7 @@ function Sidebar({
         <div
           className={cn(
             "relative w-(--sidebar-width) bg-transparent",
-            "[[data-panel-animations=true]_&]:transition-[width] [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
+            "[[data-sidebar-animations=true]_&]:motion-safe:transition-[width] [[data-sidebar-animations=true]_&]:motion-safe:duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",
             "motion-reduce:transition-none",
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
@@ -299,7 +299,7 @@ function Sidebar({
         <div
           className={cn(
             "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) group-data-[collapsible=offcanvas]:opacity-0 group-data-[transient-open=true]:z-40 group-data-[transient-open=true]:opacity-100! group-data-[transient-open=true]:shadow-2xl md:flex",
-            "[[data-panel-animations=true]_&]:transition-[left,right,width,opacity] [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out motion-reduce:transition-none",
+            "[[data-sidebar-animations=true]_&]:motion-safe:transition-[left,right,width,opacity] [[data-sidebar-animations=true]_&]:motion-safe:duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] group-data-[transient-open=true]:left-0!"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] group-data-[transient-open=true]:right-0!",
@@ -610,7 +610,7 @@ function SidebarRail({
             className={cn(
               /* disable pointer events only when offcanvas sidebar is collapsed, that's when the rail sits over the native scrollbar on windows and linux. icon mode stays fully clickable. */
               "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
-              "[[data-panel-animations=true]_&]:transition-all [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
+              "[[data-sidebar-animations=true]_&]:motion-safe:transition-all [[data-sidebar-animations=true]_&]:motion-safe:duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
               "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
               !transientOpen &&
                 "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",

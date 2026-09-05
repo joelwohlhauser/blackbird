@@ -340,6 +340,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       <SidebarProvider
         className="h-dvh! min-h-0!"
         data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
+        // Blackbird's sidebar motion stays enabled independently of optional panel animations.
+        data-sidebar-animations={panelAnimationsSuppressed ? "false" : "true"}
         open={sidebarOpen}
         onOpenChange={handleSidebarOpenChange}
         style={sidebarProviderStyle}
