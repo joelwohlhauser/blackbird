@@ -753,6 +753,23 @@ describe("rightPanelStore", () => {
     ).toMatchObject({ url: "https://example.com/new" });
   });
 
+  it("persists Home instead of restoring the previous URL after restart", () => {
+    useRightPanelStore.getState().openBrowser(refA, "tab-home", "https://example.com/old");
+    useRightPanelStore.getState().syncPreviewSurfaceUrls(refA, {
+      "tab-home": {
+        threadId: "thread-A",
+        tabId: "tab-home",
+        navStatus: { _tag: "Idle" },
+        canGoBack: true,
+        canGoForward: false,
+        updatedAt: "2026-08-03T12:00:00.000Z",
+      },
+    });
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces[0],
+    ).toMatchObject({ url: null });
+  });
+
   it("tracks Linear as a singleton backed by a browser session", () => {
     useRightPanelStore.getState().openBrowser(refA, "linear-tab");
     useRightPanelStore.getState().openLinear(refA, "linear-tab");

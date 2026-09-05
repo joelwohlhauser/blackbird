@@ -134,23 +134,93 @@ function sshRunnerLogFields(runner: RemoteT3RunnerOptions | undefined) {
   return { runner: "default" };
 }
 
+// Cache selection and installation share a lock. Recently selected builds get a
+// grace period for the gap between returning their path and starting the server.
+function remotePackageCacheScript(archiveId: string): string {
+  if (!/^[a-f0-9]{64}$/u.test(archiveId)) {
+    throw new Error("Remote package archive id must be a SHA-256 digest.");
+  }
+  return `set -eu
+PARENT_DIR="$HOME/.t3/blackbird-server"
+INSTALL_ROOT="$PARENT_DIR/${archiveId}"
+ENTRY_PATH="$INSTALL_ROOT/node_modules/t3/dist/bin.mjs"
+mkdir -p "$PARENT_DIR"
+CACHE_PRUNE_AVAILABLE=0
+# Other hosts keep the existing install behavior without unsafe cleanup.
+if [ -d /proc/1 ] && command -v flock >/dev/null 2>&1; then
+  exec 8> "$PARENT_DIR/.cache.lock"
+  flock -x 8
+  CACHE_PRUNE_AVAILABLE=1
+fi
+
+prune_packages() (
+  [ "$CACHE_PRUNE_AVAILABLE" = 1 ] || exit 0
+  process_paths=$(ps -ax -o args=) || exit 0
+  process_paths="$process_paths
+$(readlink /proc/[0-9]*/cwd 2>/dev/null || true)"
+  previous=""
+  previous_stamp=""
+  for candidate in "$PARENT_DIR"/*; do
+    [ -d "$candidate" ] && [ ! -L "$candidate" ] || continue
+    name=\${candidate##*/}
+    [ "\${#name}" = 64 ] || continue
+    case "$name" in *[!a-f0-9]*) continue ;; esac
+    [ "$candidate" != "$INSTALL_ROOT" ] || continue
+    [ -f "$candidate/node_modules/t3/dist/bin.mjs" ] || continue
+    stamp="$candidate/.last-used"
+    [ -f "$stamp" ] || stamp="$candidate"
+    if [ -z "$previous" ] || [ "$stamp" -nt "$previous_stamp" ]; then
+      previous="$candidate"
+      previous_stamp="$stamp"
+    fi
+  done
+  for candidate in "$PARENT_DIR"/*; do
+    [ -d "$candidate" ] && [ ! -L "$candidate" ] || continue
+    name=\${candidate##*/}
+    [ "\${#name}" = 64 ] || continue
+    case "$name" in *[!a-f0-9]*) continue ;; esac
+    [ "$candidate" != "$INSTALL_ROOT" ] && [ "$candidate" != "$previous" ] || continue
+    [ -f "$candidate/node_modules/t3/dist/bin.mjs" ] || continue
+    # Preserve service aliases such as current, plus processes launched by path or cwd.
+    linked=0
+    for alias in "$PARENT_DIR"/*; do
+      [ -L "$alias" ] || continue
+      if [ "$(readlink -f "$alias")" = "$candidate" ]; then linked=1; break; fi
+    done
+    [ "$linked" = 0 ] || continue
+    printf '%s\\n' "$process_paths" | grep -qF -- "$candidate" && continue
+    if [ -f "$candidate/.last-used" ] && find "$candidate/.last-used" -mmin -10 -print | grep -q .; then
+      continue
+    fi
+    rm -rf -- "$candidate"
+  done
+)
+
+select_package() {
+  [ -f "$ENTRY_PATH" ] || return 1
+  touch "$INSTALL_ROOT/.last-used"
+  prune_packages || printf '%s\\n' 'Could not prune old Blackbird server packages.' >&2
+  printf '%s\\n' "$ENTRY_PATH"
+}
+`;
+}
+
+export function buildRemotePackageProbeScript(archiveId: string): string {
+  return `${remotePackageCacheScript(archiveId)}
+if [ -f "$ENTRY_PATH" ]; then select_package; fi
+`;
+}
+
 export function buildRemotePackageInstallScript(input: {
   readonly archiveBase64: string;
   readonly archiveId: string;
 }): string {
-  if (!/^[a-f0-9]{64}$/u.test(input.archiveId)) {
-    throw new Error("Remote package archive id must be a SHA-256 digest.");
-  }
-
-  return `set -eu
-INSTALL_ROOT="$HOME/.t3/blackbird-server/${input.archiveId}"
-ENTRY_PATH="$INSTALL_ROOT/node_modules/t3/dist/bin.mjs"
+  return `${remotePackageCacheScript(input.archiveId)}
 if [ -f "$ENTRY_PATH" ]; then
-  printf '%s\\n' "$ENTRY_PATH"
+  select_package
   exit 0
 fi
 
-PARENT_DIR="$HOME/.t3/blackbird-server"
 TEMP_ROOT="$PARENT_DIR/.${input.archiveId}.installing-$$"
 ARCHIVE_PATH="$TEMP_ROOT/blackbird-server.tgz"
 BASE64_PATH="$TEMP_ROOT/blackbird-server.tgz.base64"
@@ -175,7 +245,7 @@ npm install --omit=dev --no-audit --no-fund --prefix "$TEMP_ROOT" "$ARCHIVE_PATH
 rm -f "$ARCHIVE_PATH"
 rm -rf "$INSTALL_ROOT"
 mv "$TEMP_ROOT" "$INSTALL_ROOT"
-printf '%s\\n' "$ENTRY_PATH"
+select_package
 `;
 }
 
@@ -1418,7 +1488,6 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
       ),
     );
     const archiveId = NodeCrypto.createHash("sha256").update(archive).digest("hex");
-    const expectedEntryPath = `$HOME/.t3/blackbird-server/${archiveId}/node_modules/t3/dist/bin.mjs`;
     const probe = yield* runWithSshAuth({
       key: input.key,
       target: input.target,
@@ -1426,7 +1495,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
         runSshCommand(input.target, {
           ...authOptions,
           remoteCommandArgs: ["sh", "-s"],
-          stdin: `set -eu\nENTRY_PATH=\"${expectedEntryPath}\"\nif [ -f \"$ENTRY_PATH\" ]; then printf '%s\\n' \"$ENTRY_PATH\"; fi\n`,
+          stdin: buildRemotePackageProbeScript(archiveId),
         }),
     });
     let remoteEntryPath = getLastNonEmptyOutputLine(probe.stdout);

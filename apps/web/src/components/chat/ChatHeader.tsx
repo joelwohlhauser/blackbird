@@ -14,6 +14,8 @@ import ProjectScriptsControl, {
 } from "../ProjectScriptsControl";
 import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
 import { cn } from "~/lib/utils";
+import { isElectron } from "../../env";
+import { ChatNotificationToggle } from "./ChatNotificationToggle";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -92,6 +94,11 @@ export const ChatHeader = memo(function ChatHeader({
             onAddScript={onAddProjectScript}
             onUpdateScript={onUpdateProjectScript}
             onDeleteScript={onDeleteProjectScript}
+          />
+        ) : null}
+        {isElectron ? (
+          <ChatNotificationToggle
+            threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
           />
         ) : null}
         {showProjectActions && activeProjectName && !isGitRepo ? (

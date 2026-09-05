@@ -1,5 +1,9 @@
 import * as React from "react";
-import { defaultAnimateLayoutChanges, type AnimateLayoutChanges } from "@dnd-kit/sortable";
+import {
+  arrayMove,
+  defaultAnimateLayoutChanges,
+  type AnimateLayoutChanges,
+} from "@dnd-kit/sortable";
 import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import {
@@ -278,15 +282,13 @@ export function isSidebarNestedLinkClick(target: EventTarget | null): boolean {
   return nodeClosest(parent, "a[href]") !== null;
 }
 
-// Shift+click on the new thread button creates directly in the current
-// project, skipping the command palette's project picker. With a single
-// project there is nothing to pick, so a plain click already creates
-// immediately and the modifier changes nothing.
+// New chats default to the current project. Shift+click opens the project
+// picker when there is more than one project to choose from.
 export function shouldCreateNewThreadInCurrentProject(
   shiftKey: boolean,
   projectGroupCount: number,
 ): boolean {
-  return shiftKey || projectGroupCount <= 1;
+  return !shiftKey || projectGroupCount <= 1;
 }
 
 export function orderItemsByPreferredIds<TItem, TId>(input: {
@@ -333,6 +335,25 @@ export function getSidebarThreadIdsToPrewarm<TThreadId>(
   limit = SIDEBAR_THREAD_PREWARM_LIMIT,
 ): TThreadId[] {
   return visibleThreadIds.slice(0, Math.max(0, limit));
+}
+
+// Move only visible rows, leaving chats hidden by the project filter or a
+// different shelf in their existing slots in the saved order.
+export function reorderSidebarThreads(
+  threadOrder: readonly string[],
+  visibleThreadKeys: readonly string[],
+  draggedKey: string,
+  targetKey: string,
+): readonly string[] {
+  const visibleKeys = new Set(visibleThreadKeys);
+  const visibleOrder = threadOrder.filter((key) => visibleKeys.has(key));
+  const fromIndex = visibleOrder.indexOf(draggedKey);
+  const toIndex = visibleOrder.indexOf(targetKey);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return threadOrder;
+
+  const reordered = arrayMove(visibleOrder, fromIndex, toIndex);
+  let visibleIndex = 0;
+  return threadOrder.map((key) => (visibleKeys.has(key) ? reordered[visibleIndex++]! : key));
 }
 
 export function resolveAdjacentThreadId<T>(input: {

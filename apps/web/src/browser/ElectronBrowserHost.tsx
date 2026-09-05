@@ -12,6 +12,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 
 import { readPreviewAnnotationTheme } from "./annotationTheme";
 import { useBrowserPointerStore } from "./browserPointerStore";
+import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
 import { addBrowserSurface } from "~/components/preview/addBrowserSurface";
 import { HostedBrowserWebview } from "./HostedBrowserWebview";
 import { previewRuntimeTabId } from "./previewRuntimeTabId";
@@ -97,6 +98,11 @@ export function ElectronBrowserHost() {
     const preview = window.desktopBridge?.preview;
     if (!preview) return;
     return preview.onOpenLinkInNewTab(openLinkInNewTab);
+  }, []);
+  useEffect(() => {
+    const preview = window.desktopBridge?.preview;
+    if (!preview) return;
+    return preview.onFocusUrl((tabId) => dispatchPreviewAction("focus-url", tabId));
   }, []);
 
   if (!isElectron) return null;

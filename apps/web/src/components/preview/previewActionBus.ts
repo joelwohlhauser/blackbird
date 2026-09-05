@@ -15,16 +15,29 @@ export type PreviewAction =
 
 const EVENT_NAME = "t3code:preview-action";
 
-export function dispatchPreviewAction(action: PreviewAction): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<PreviewAction>(EVENT_NAME, { detail: action }));
+interface PreviewActionEvent {
+  action: PreviewAction;
+  runtimeTabId?: string | undefined;
 }
 
-export function subscribePreviewAction(listener: (action: PreviewAction) => void): () => void {
+export function dispatchPreviewAction(action: PreviewAction, runtimeTabId?: string): void {
+  if (typeof window === "undefined") return;
+  const focusedTabId = document.activeElement?.closest<HTMLElement>("[data-preview-runtime-tab-id]")
+    ?.dataset.previewRuntimeTabId;
+  window.dispatchEvent(
+    new CustomEvent<PreviewActionEvent>(EVENT_NAME, {
+      detail: { action, runtimeTabId: runtimeTabId ?? focusedTabId },
+    }),
+  );
+}
+
+export function subscribePreviewAction(
+  listener: (action: PreviewAction, runtimeTabId?: string) => void,
+): () => void {
   if (typeof window === "undefined") return () => {};
   const handler = (event: Event) => {
-    const detail = (event as CustomEvent<PreviewAction>).detail;
-    if (typeof detail === "string") listener(detail);
+    const detail = (event as CustomEvent<PreviewActionEvent>).detail;
+    listener(detail.action, detail.runtimeTabId);
   };
   window.addEventListener(EVENT_NAME, handler);
   return () => window.removeEventListener(EVENT_NAME, handler);

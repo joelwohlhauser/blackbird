@@ -541,6 +541,65 @@ describe("PreviewManager", () => {
     webviewSend.mockClear();
   });
 
+  effectIt.effect("focuses the address bar of the browser that receives Command+L", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const preview = makeFaviconWebContents();
+        const host = { focus: vi.fn(), send: vi.fn() };
+        Object.assign(preview.webContents, { hostWebContents: host });
+        fromId.mockReturnValue(preview.webContents);
+        yield* manager.setMainWindow({
+          isDestroyed: () => false,
+          once: vi.fn(),
+          webContents: host,
+        } as never);
+        yield* manager.createTab("tab-address");
+        yield* manager.registerWebview("tab-address", 42);
+        const beforeInput = preview.listeners.get("before-input-event")!;
+        for (const control of [false, true]) {
+          const preventDefault = vi.fn();
+          beforeInput(
+            { preventDefault } as never,
+            {
+              type: "keyDown",
+              key: "l",
+              meta: !control,
+              control,
+              shift: false,
+              alt: false,
+            } as never,
+          );
+          yield* Effect.yieldNow;
+          expect(preventDefault).toHaveBeenCalledOnce();
+          expect(host.send).toHaveBeenLastCalledWith("desktop:preview-focus-url", "tab-address");
+        }
+        expect(host.focus).toHaveBeenCalledTimes(2);
+      }),
+    ),
+  );
+
+  effectIt.effect("returns an existing browser to the empty Home page", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const preview = makeFaviconWebContents();
+        fromId.mockReturnValue(preview.webContents);
+        const states: PreviewManager.PreviewTabState[] = [];
+        yield* manager.subscribeStateChanges((_tabId, state) =>
+          Effect.sync(() => {
+            states.push(state);
+          }),
+        );
+        yield* manager.createTab("tab-home");
+        yield* manager.registerWebview("tab-home", 42);
+        yield* manager.navigate("tab-home", "about:blank");
+        expect(preview.loadURL).toHaveBeenLastCalledWith("about:blank");
+        preview.listeners.get("did-navigate")?.();
+        yield* Effect.yieldNow;
+        expect(states.at(-1)?.navStatus.kind).toBe("Idle");
+      }),
+    ),
+  );
+
   effectIt.effect("keeps preview shortcuts out of the host window", () =>
     withManager((manager) =>
       Effect.gen(function* () {

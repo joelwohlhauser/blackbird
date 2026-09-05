@@ -1930,16 +1930,16 @@ function AssistantChangedFilesSectionInner({
     (store) => store.threadChangedFilesExpandedById[routeThreadKey]?.[turnSummary.turnId],
   );
   const setExpanded = useUiStateStore((store) => store.setThreadChangedFilesExpanded);
-  const allDirectoriesExpanded = persistedExpanded ?? false;
+  const expanded = persistedExpanded ?? false;
 
   return (
     <ChangedFilesCard
       turnId={turnSummary.turnId}
       files={checkpointFiles}
-      allDirectoriesExpanded={allDirectoriesExpanded}
+      expanded={expanded}
       resolvedTheme={resolvedTheme}
-      onToggleAllDirectories={() =>
-        setExpanded(routeThreadKey, turnSummary.turnId, !allDirectoriesExpanded)
+      onExpandedChange={(nextExpanded) =>
+        setExpanded(routeThreadKey, turnSummary.turnId, nextExpanded)
       }
       onOpenTurnDiff={onOpenTurnDiff}
     />

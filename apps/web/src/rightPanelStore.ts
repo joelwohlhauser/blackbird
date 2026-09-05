@@ -1265,8 +1265,8 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                 return surface;
               }
               const snapshot = sessions[surface.resourceId];
-              if (!snapshot || snapshot.navStatus._tag === "Idle") return surface;
-              const url = snapshot.navStatus.url;
+              if (!snapshot) return surface;
+              const url = snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
               if (surface.url === url) return surface;
               changed = true;
               return { ...surface, url };

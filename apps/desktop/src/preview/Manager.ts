@@ -63,6 +63,7 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import {
   PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL,
+  PREVIEW_FOCUS_URL_CHANNEL,
   PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL,
 } from "../ipc/channels.ts";
 import { parseSafeExternalUrl } from "../electron/ElectronShell.ts";
@@ -1927,6 +1928,26 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     };
     const beforeInput = (event: Electron.Event, input: Electron.Input): void => {
+      if (
+        input.type === "keyDown" &&
+        input.key.toLowerCase() === "l" &&
+        (input.meta || input.control) &&
+        !input.shift &&
+        !input.alt
+      ) {
+        event.preventDefault();
+        runFork(
+          Effect.gen(function* () {
+            const mainWindow = yield* Ref.get(mainWindowRef);
+            if (Option.isNone(mainWindow) || mainWindow.value.isDestroyed()) return;
+            yield* attempt({ operation: "shortcut.focusUrl", tabId, webContentsId: wc.id }, () => {
+              mainWindow.value.webContents.focus();
+              mainWindow.value.webContents.send(PREVIEW_FOCUS_URL_CHANNEL, tabId);
+            });
+          }).pipe(Effect.ignore),
+        );
+        return;
+      }
       if (isPreviewRefreshShortcut(input)) {
         event.preventDefault();
         runFork(
@@ -2389,7 +2410,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
 
   const navigate = Effect.fn("PreviewManager.navigate")(function* (tabId: string, rawUrl: string) {
     const url = yield* attempt({ operation: "navigate.normalizeUrl", tabId }, () =>
-      normalizePreviewUrl(rawUrl),
+      rawUrl === "about:blank" ? rawUrl : normalizePreviewUrl(rawUrl),
     );
     const updatedAt = yield* currentIso;
     const pending = yield* SynchronizedRef.modify(tabsRef, (tabs) => {

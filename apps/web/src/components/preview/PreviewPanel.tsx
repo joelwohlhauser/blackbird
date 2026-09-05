@@ -15,6 +15,7 @@ interface Props {
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
   showChrome?: boolean;
+  homeUrl?: string | null;
   layoutVersion?: string | number;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
@@ -29,6 +30,7 @@ export function PreviewPanel({
   configuredUrls,
   visible,
   showChrome,
+  homeUrl,
   layoutVersion,
   onSendAnnotation,
 }: Props) {
@@ -51,6 +53,7 @@ export function PreviewPanel({
         {...(tabId !== undefined ? { tabId } : {})}
         configuredUrls={configuredUrls}
         visible={visible}
+        {...(homeUrl !== undefined ? { homeUrl } : {})}
         {...(showChrome !== undefined ? { showChrome } : {})}
         {...(layoutVersion !== undefined ? { layoutVersion } : {})}
         {...(onSendAnnotation ? { onSendAnnotation } : {})}

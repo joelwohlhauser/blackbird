@@ -8411,7 +8411,7 @@ export default function ChatView(props: ChatViewProps) {
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}
             pullRequestAvailable={pullRequestSurfaceAvailable}
-            agentsAvailable
+            agentsAvailable={agentPanelModel.hasAgents}
             liveAgentCount={agentPanelModel.liveCount}
           />
         );
@@ -8442,6 +8442,16 @@ export default function ChatView(props: ChatViewProps) {
               mode="embedded"
               threadRef={activeThreadRef}
               tabId={surface.resourceId}
+              homeUrl={
+                attachedWorkspaceSurfaceIds.has(surface.id)
+                  ? surface.kind === "github-pr"
+                    ? (githubPullRequest?.url ?? null)
+                    : linearUrl({
+                        organizationSlug: linearOrganizationSlug,
+                        branch: attachedBranch,
+                      })
+                  : null
+              }
               visible
               layoutVersion={
                 showWorkspaceNavigator ? "workspace-navigator-open" : "workspace-navigator-closed"
@@ -9174,7 +9184,7 @@ export default function ChatView(props: ChatViewProps) {
               diffAvailable={isServerThread && isGitRepo}
               filesAvailable={activeProject !== null}
               pullRequestAvailable={pullRequestSurfaceAvailable}
-              agentsAvailable
+              agentsAvailable={agentPanelModel.hasAgents}
               liveAgentCount={agentPanelModel.liveCount}
             >
               {rightPanelContent}
@@ -9260,7 +9270,7 @@ export default function ChatView(props: ChatViewProps) {
               diffAvailable={isServerThread && isGitRepo}
               filesAvailable={activeProject !== null}
               pullRequestAvailable={pullRequestSurfaceAvailable}
-              agentsAvailable
+              agentsAvailable={agentPanelModel.hasAgents}
               liveAgentCount={agentPanelModel.liveCount}
             >
               {rightPanelContent}

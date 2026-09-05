@@ -1,7 +1,7 @@
-import type { DesktopPreviewTabState } from "@t3tools/contracts";
+import { ThreadId, type DesktopPreviewTabState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { projectDesktopState } from "./usePreviewBridge";
+import { buildReportInput, projectDesktopState } from "./usePreviewBridge";
 
 const favicon = {
   dataUrl: "data:image/png;base64,AAAA",
@@ -46,5 +46,27 @@ describe("projectDesktopState", () => {
       ).favicon,
     ).toBeNull();
     expect(projectDesktopState(state({ kind: "Idle" })).favicon).toBeNull();
+  });
+});
+
+describe("returning Home", () => {
+  const input = {
+    threadId: ThreadId.make("thread-1"),
+    tabId: "tab-1",
+    state: state({ kind: "Idle" }),
+    lastReportedKind: "Success" as const,
+    lastReportedUrl: "https://example.com",
+  };
+  it("reports a live browser returning to its start page and preserves Back", () => {
+    const result = buildReportInput({ ...input, state: { ...input.state, canGoBack: true } });
+    expect(result?.input).toMatchObject({ navStatus: { _tag: "Idle" }, canGoBack: true });
+    expect(result?.lastReportedKind).toBe("Idle");
+  });
+  it("does not reset server navigation when the browser is first attached, closed, or already home", () => {
+    expect(buildReportInput({ ...input, lastReportedKind: null })).toBeNull();
+    expect(buildReportInput({ ...input, lastReportedKind: "Idle" })).toBeNull();
+    expect(
+      buildReportInput({ ...input, state: { ...input.state, webContentsId: null } }),
+    ).toBeNull();
   });
 });

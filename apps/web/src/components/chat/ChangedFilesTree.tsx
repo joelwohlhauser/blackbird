@@ -1,19 +1,12 @@
 import { type TurnId } from "@t3tools/contracts";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useId, useMemo, useState } from "react";
 import { type TurnDiffFileChange } from "../../types";
 import {
   buildTurnDiffTree,
   summarizeTurnDiffStats,
   type TurnDiffTreeNode,
 } from "../../lib/turnDiffTree";
-import {
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
-  ChevronRightIcon,
-  FileDiffIcon,
-  FolderIcon,
-  FolderClosedIcon,
-} from "lucide-react";
+import { ChevronRightIcon, FileDiffIcon, FolderIcon, FolderClosedIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { PierreEntryIcon } from "./PierreEntryIcon";
@@ -25,33 +18,40 @@ const EMPTY_DIRECTORY_OVERRIDES: Record<string, boolean> = {};
 export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   turnId: TurnId;
   files: ReadonlyArray<TurnDiffFileChange>;
-  allDirectoriesExpanded: boolean;
+  expanded: boolean;
   resolvedTheme: "light" | "dark";
-  onToggleAllDirectories: () => void;
+  onExpandedChange: (expanded: boolean) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
 }) {
-  const {
-    turnId,
-    files,
-    allDirectoriesExpanded,
-    resolvedTheme,
-    onToggleAllDirectories,
-    onOpenTurnDiff,
-  } = props;
+  const { turnId, files, expanded, resolvedTheme, onExpandedChange, onOpenTurnDiff } = props;
   const summaryStat = useMemo(() => summarizeTurnDiffStats(files), [files]);
-  const hasDirectories = files.some((file) => /[/\\]/.test(file.path));
+  const treeId = useId();
 
   return (
     <div
-      className="@container/changed-files mt-4 rounded-lg bg-secondary dark:bg-input/20"
-      data-changed-files-state="tree"
+      className="mt-4 rounded-lg bg-secondary dark:bg-input/20"
+      data-changed-files-state={expanded ? "tree" : "collapsed"}
     >
       <div
         data-changed-files-header=""
-        className="sticky top-2 z-10 flex items-center justify-between gap-2 rounded-t-lg bg-secondary px-3 py-2 dark:bg-[color-mix(in_srgb,var(--input)_20%,var(--background))]"
+        className={cn(
+          "sticky top-2 z-10 flex items-center gap-2 rounded-lg bg-secondary px-2 py-1.5 dark:bg-[color-mix(in_srgb,var(--input)_20%,var(--background))]",
+          expanded && "rounded-b-none",
+        )}
       >
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-foreground">
-          <span>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={treeId}
+          data-scroll-anchor-ignore
+          onClick={() => onExpandedChange(!expanded)}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-foreground hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronRightIcon
+            aria-hidden
+            className={cn("size-3.5 shrink-0", expanded && "rotate-90")}
+          />
+          <span className="truncate">
             {files.length} changed file{files.length === 1 ? "" : "s"}
           </span>
           {hasNonZeroStat(summaryStat) && (
@@ -59,65 +59,40 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
               additions={summaryStat.additions}
               deletions={summaryStat.deletions}
               layout="inline"
-              className="text-xs leading-4"
+              className="shrink-0 text-xs leading-4"
             />
           )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {hasDirectories && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost-muted"
-                    aria-label={
-                      allDirectoriesExpanded ? "Collapse all folders" : "Expand all folders"
-                    }
-                    data-scroll-anchor-ignore
-                    onClick={onToggleAllDirectories}
-                  />
-                }
-              >
-                {allDirectoriesExpanded ? (
-                  <ChevronsDownUpIcon className="size-3" />
-                ) : (
-                  <ChevronsUpDownIcon className="size-3" />
-                )}
-              </TooltipTrigger>
-              <TooltipPopup side="top">
-                {allDirectoriesExpanded ? "Collapse all folders" : "Expand all folders"}
-              </TooltipPopup>
-            </Tooltip>
-          )}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="ghost-muted"
-                  aria-label="Open diff"
-                  onClick={() => onOpenTurnDiff(turnId, files[0]?.path)}
-                />
-              }
-            >
-              <FileDiffIcon className="size-3" />
-              <span className="hidden @[24rem]/changed-files:inline">Open diff</span>
-            </TooltipTrigger>
-            <TooltipPopup side="top">Open the full diff</TooltipPopup>
-          </Tooltip>
-        </div>
+        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost-muted"
+                className="shrink-0"
+                aria-label="Open diff"
+                onClick={() => onOpenTurnDiff(turnId, files[0]?.path)}
+              />
+            }
+          >
+            <FileDiffIcon className="size-3" />
+            <span>Open diff</span>
+          </TooltipTrigger>
+          <TooltipPopup side="top">Open the full diff</TooltipPopup>
+        </Tooltip>
       </div>
-      <ChangedFilesTree
-        key={`${turnId}:${allDirectoriesExpanded}`}
-        turnId={turnId}
-        files={files}
-        allDirectoriesExpanded={allDirectoriesExpanded}
-        resolvedTheme={resolvedTheme}
-        onOpenTurnDiff={onOpenTurnDiff}
-      />
+      {expanded && (
+        <div id={treeId}>
+          <ChangedFilesTree
+            turnId={turnId}
+            files={files}
+            allDirectoriesExpanded
+            resolvedTheme={resolvedTheme}
+            onOpenTurnDiff={onOpenTurnDiff}
+          />
+        </div>
+      )}
     </div>
   );
 });

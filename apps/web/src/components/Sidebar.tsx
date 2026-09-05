@@ -140,6 +140,7 @@ import {
   isSidebarNestedLinkClick,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
+  reorderSidebarThreads,
   planPinnedReorder,
   reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
@@ -254,6 +255,10 @@ function WorkingDuration(props: { startedAt: string | null }) {
     </span>
   );
 }
+
+const SIDEBAR_THREAD_ORDER_KEY = "blackbird:sidebar-thread-order:v1";
+const SidebarThreadOrderSchema = Schema.Array(Schema.String);
+const EMPTY_THREAD_ORDER: readonly string[] = [];
 
 const EMPTY_PROVIDER_ENTRIES: ReadonlyMap<string, ProviderInstanceEntry> = new Map();
 
@@ -453,19 +458,19 @@ function SnoozePopoverButton(props: {
   );
 }
 
-// Subset of useSortable applied to a pinned card's root <li>. Listeners go
+// Subset of useSortable applied to a chat card's root <li>. Listeners go
 // on the whole card (no dedicated handle): the pointer sensor's distance
 // constraint keeps plain clicks working, and we skip dnd-kit's aria
 // attributes since there is no keyboard sensor and the card body already
 // carries its own button semantics.
-type SortablePinnedRowBag = Pick<
+type SortableThreadRowBag = Pick<
   ReturnType<typeof useSortable>,
   "listeners" | "setNodeRef" | "transform" | "transition" | "isDragging"
 >;
 
-function SortablePinnedThreadRow(props: {
+function SortableThreadRow(props: {
   id: string;
-  children: (bag: SortablePinnedRowBag) => ReactNode;
+  children: (bag: SortableThreadRowBag) => ReactNode;
 }) {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: props.id,
@@ -734,7 +739,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // Present only on pinned cards whose server supports reordering: dnd-kit
   // sortable bag applied to the card root so the whole card drags (the
   // pointer sensor's distance constraint keeps plain clicks working).
-  sortable?: SortablePinnedRowBag | undefined;
+  sortable?: SortableThreadRowBag | undefined;
   // Compact wake countdown ("2h") for rows in the snoozed shelf.
   snoozeWakeLabelText: string | null;
   // When a snooze ended (timer or early wake); drives the Woke pill until
@@ -2231,6 +2236,12 @@ export default function Sidebar() {
     [openProjectSettings],
   );
 
+  const [manualThreadOrder, setManualThreadOrder] = useLocalStorage(
+    SIDEBAR_THREAD_ORDER_KEY,
+    EMPTY_THREAD_ORDER,
+    SidebarThreadOrderSchema,
+  );
+
   // Settled threads stay in the live shell stream (settled ≠ archived), so
   // the partition works directly off live shells: no archived-snapshot
   // merging, no optimistic holds. Archived threads remain hidden here —
@@ -2295,7 +2306,11 @@ export default function Sidebar() {
           )
           .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
       ),
-      activeThreads: sortThreadsForSidebar(active),
+      activeThreads: orderItemsByPreferredIds({
+        items: sortThreadsForSidebar(active),
+        preferredIds: manualThreadOrder,
+        getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      }),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozedThreads: snoozed.toSorted(
         (left, right) =>
@@ -2305,7 +2320,7 @@ export default function Sidebar() {
       settledThreads: sortSettledThreadsForSidebar(settled),
       snoozeNow: preciseNow,
     };
-  }, [nowMinute, scopedProjectKeys, serverConfigs, snoozeWakeTick, threads]);
+  }, [manualThreadOrder, nowMinute, scopedProjectKeys, serverConfigs, snoozeWakeTick, threads]);
 
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
@@ -2751,7 +2766,7 @@ export default function Sidebar() {
   // win) and ANY membership change (new pin, unpin, snooze/wake) also
   // release it: the override can't say where members it never saw belong,
   // and holding it would launder a stale order into later drags.
-  const pinnedDndSensors = useSensors(
+  const threadDndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
   const [optimisticPinnedOrder, setOptimisticPinnedOrder] = useState<{
@@ -2848,6 +2863,26 @@ export default function Sidebar() {
       })();
     },
     [confirmAndUnpinThread],
+  );
+
+  const handleActiveDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const draggedKey = String(event.active.id);
+      const targetKey = event.over === null ? null : String(event.over.id);
+      if (targetKey === null || draggedKey === targetKey) return;
+      const visibleKeys = activeThreads.map((thread) =>
+        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      );
+      setManualThreadOrder((currentOrder) => {
+        const allKeys = orderItemsByPreferredIds({
+          items: sortThreadsForSidebar(threads.filter((thread) => thread.archivedAt === null)),
+          preferredIds: currentOrder,
+          getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        }).map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)));
+        return reorderSidebarThreads(allKeys, visibleKeys, draggedKey, targetKey);
+      });
+    },
+    [activeThreads, setManualThreadOrder, threads],
   );
 
   const handlePinnedDragEnd = useCallback(
@@ -3548,9 +3583,6 @@ export default function Sidebar() {
   // for multi-project setups.
   const handleNewThreadClick = useCallback(
     (event?: ReactMouseEvent) => {
-      // One project: nothing to pick, create immediately. Shift+click creates
-      // directly in the current project even with several projects, skipping
-      // the palette picker.
       if (shouldCreateNewThreadInCurrentProject(event?.shiftKey ?? false, projectGroups.length)) {
         if (isMobile) setOpenMobile(false);
         void startNewThreadFromContext({
@@ -3603,9 +3635,7 @@ export default function Sidebar() {
                           : "New chat"}
                       </span>
                       {projectGroups.length > 1 ? (
-                        <span className="text-muted-foreground">
-                          New chat in current project: Shift+click
-                        </span>
+                        <span className="text-muted-foreground">Choose project: Shift+click</span>
                       ) : null}
                     </span>
                   </TooltipPopup>
@@ -3907,7 +3937,7 @@ export default function Sidebar() {
                   const renderThreadRow = (
                     thread: EnvironmentThreadShell,
                     section: "pinned" | "active" | "snoozed" | "settled",
-                    sortable?: SortablePinnedRowBag,
+                    sortable?: SortableThreadRowBag,
                   ) => {
                     const threadKey = scopedThreadKey(
                       scopeThreadRef(thread.environmentId, thread.id),
@@ -4039,7 +4069,7 @@ export default function Sidebar() {
                     pinnedThreads.length > 0 ? (
                       <li key="pinned-dnd" className="list-none">
                         <DndContext
-                          sensors={pinnedDndSensors}
+                          sensors={threadDndSensors}
                           collisionDetection={closestCenter}
                           modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
                           onDragEnd={handlePinnedDragEnd}
@@ -4065,9 +4095,9 @@ export default function Sidebar() {
                                   return renderThreadRow(thread, "pinned");
                                 }
                                 return (
-                                  <SortablePinnedThreadRow key={threadKey} id={threadKey}>
+                                  <SortableThreadRow key={threadKey} id={threadKey}>
                                     {(bag) => renderThreadRow(thread, "pinned", bag)}
-                                  </SortablePinnedThreadRow>
+                                  </SortableThreadRow>
                                 );
                               })}
                             </ul>
@@ -4086,8 +4116,41 @@ export default function Sidebar() {
                       />,
                     );
                   }
-                  for (const thread of activeThreads) {
-                    items.push(renderThreadRow(thread, "active"));
+                  if (activeThreads.length > 0) {
+                    items.push(
+                      <li key="active-dnd" className="list-none">
+                        <DndContext
+                          sensors={threadDndSensors}
+                          collisionDetection={closestCenter}
+                          modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+                          onDragEnd={handleActiveDragEnd}
+                        >
+                          <SortableContext
+                            items={activeThreads.map((thread) =>
+                              scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+                            )}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            <ul
+                              role="list"
+                              aria-label="Active threads"
+                              className="flex flex-col gap-px"
+                            >
+                              {activeThreads.map((thread) => {
+                                const threadKey = scopedThreadKey(
+                                  scopeThreadRef(thread.environmentId, thread.id),
+                                );
+                                return (
+                                  <SortableThreadRow key={threadKey} id={threadKey}>
+                                    {(bag) => renderThreadRow(thread, "active", bag)}
+                                  </SortableThreadRow>
+                                );
+                              })}
+                            </ul>
+                          </SortableContext>
+                        </DndContext>
+                      </li>,
+                    );
                   }
                   // Snoozed shelf: between the inbox and Settled — out of the
                   // way, never gone. The header always renders while anything

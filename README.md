@@ -26,7 +26,8 @@ panels that reveal tools without dominating the conversation.
 The left sidebar includes:
 
 - a top **New chat** action and a separate **Quick chat** button in sidebar v2,
-  above the search field and project filter;
+  above the search field and project filter. New chat uses the current project;
+  Shift-click opens the project picker;
 - a dedicated, collapsible **Quick chats** section above Projects;
 - an optional, collapsible **Pinned sites** section for persistent full-window browser views;
 - a collapsible **Projects** section with local and remote copies grouped under
@@ -34,7 +35,8 @@ The left sidebar includes:
   icon marks expanded projects without a favicon);
 - section header actions (new quick chat, sort/options, add project) that stay
   hidden until the header row is hovered or focused;
-- manual drag-and-drop chat ordering within a project;
+- manual drag-and-drop chat ordering within a project and across the main chat
+  list in sidebar v2, saved locally and preserved when filtering by project;
 - lightweight status **dots only** — the status text lives in the tooltip and
   is never rendered next to the dot, and there is no per-chat PR-state icon;
 - consistent full-width folder and chat rows;
@@ -60,11 +62,16 @@ palette).
 **Settings → General → Agent notifications** (desktop only, off by default)
 posts a macOS notification whenever an agent stops — finished, failed, or
 waiting for approval or input — while Blackbird is not the active window.
+The bell beside **Add action** enables or disables notifications for that chat,
+overriding the global setting. Each chat's choice is saved locally.
 Clicking the notification opens that chat. The
 installer's code-signing step makes this possible; see Development and
 deployment.
 
 ### Code and diff presentation
+
+Changed files in chat start as a single summary row. Expand the left chevron
+to see the files, or use **Open diff** to open the full diff.
 
 Code rendering follows the VS Code **Dark Modern** look: matching typography,
 spacing, syntax colors, editor background, line highlighting, and diff
@@ -128,7 +135,9 @@ browser controls. Right-clicking a link can open it in a new workspace tab,
 open it in the default browser, or copy it. Selected text and editable fields
 offer the usual copy, cut, paste, and select-all actions.
 Command+T opens a **New Tab** page with the available Browser, Terminal,
-Diff, Linear, GitHub PR, Pull request, and Agents surfaces.
+Diff, Linear, GitHub PR, Pull request, and Agents surfaces. Agents is disabled until the chat has subagents.
+
+Choosing Browser focuses the address bar immediately. Command+L focuses and selects the address while browsing. Home returns pinned GitHub PR and Linear tabs to their linked page; other browser tabs return to the browser start page.
 
 The second surface is the narrow, independently resizable **workspace
 navigator**, also referred to as the new right sidebar or sidepanel. It has

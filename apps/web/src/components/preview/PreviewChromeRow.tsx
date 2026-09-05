@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Camera,
   ExternalLink,
+  House,
   MousePointerClick,
   PictureInPicture2,
   RotateCw,
@@ -31,11 +32,13 @@ interface Props {
   refreshDisabled: boolean;
   zoomDisabled: boolean;
   inputDisabled?: boolean | undefined;
+  autoFocus?: boolean;
   /** Bumping this value re-focuses and selects the URL input. */
   focusUrlNonce?: number | undefined;
   onBack: () => void;
   onForward: () => void;
   onRefresh: () => void;
+  onHome?: (() => void) | undefined;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onSubmit: (url: string) => void;
@@ -79,10 +82,12 @@ export function PreviewChromeRow({
   refreshDisabled,
   zoomDisabled,
   inputDisabled,
+  autoFocus = false,
   focusUrlNonce,
   onBack,
   onForward,
   onRefresh,
+  onHome,
   onZoomIn,
   onZoomOut,
   onSubmit,
@@ -105,10 +110,15 @@ export function PreviewChromeRow({
   const [inputFocused, setInputFocused] = useState(false);
 
   useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
+
+  useEffect(() => {
     if (focusUrlNonce == null) return;
     const node = inputRef.current;
     if (!node) return;
     node.focus();
+    node.select();
   }, [focusUrlNonce]);
 
   const submit = (event?: FormEvent | KeyboardEvent) => {
@@ -178,6 +188,24 @@ export function PreviewChromeRow({
             </TooltipTrigger>
             <TooltipPopup>{loading ? "Loading…" : "Refresh"}</TooltipPopup>
           </Tooltip>
+          {onHome ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={onHome}
+                    aria-label="Home"
+                    type="button"
+                  />
+                }
+              >
+                <House />
+              </TooltipTrigger>
+              <TooltipPopup>Home</TooltipPopup>
+            </Tooltip>
+          ) : null}
         </div>
 
         {leadingActions}

@@ -132,13 +132,12 @@ export function projectDesktopState(state: DesktopPreviewTabState): DesktopPrevi
  * Decide whether a state change warrants an RPC to the server, and shape
  * the report payload.
  *
- * - Idle never reports — the tab is post-close or pre-load and the server
- *   already knows the canonical state from `open` / `closed`.
+ * - Idle reports when a live page returns Home, but not before first load or after close.
  * - We dedupe on (kind, url): consecutive Loading→Loading→Loading for the
  *   same URL collapses to a single RPC, ditto Success.
  * - LoadFailed always reports (the server uses it to emit `failed`).
  */
-function buildReportInput(args: {
+export function buildReportInput(args: {
   readonly threadId: ThreadId;
   readonly tabId: string;
   readonly state: DesktopPreviewTabState;
@@ -151,7 +150,21 @@ function buildReportInput(args: {
 } | null {
   const { threadId, tabId, state, lastReportedUrl, lastReportedKind } = args;
   const status = state.navStatus;
-  if (status.kind === "Idle") return null;
+  if (status.kind === "Idle") {
+    if (state.webContentsId === null || lastReportedKind === null || lastReportedKind === "Idle")
+      return null;
+    return {
+      input: {
+        threadId,
+        tabId,
+        navStatus: { _tag: "Idle" },
+        canGoBack: state.canGoBack,
+        canGoForward: state.canGoForward,
+      },
+      lastReportedUrl: "",
+      lastReportedKind: "Idle",
+    };
+  }
 
   // Skip if we've already reported the same kind+url. LoadFailed always
   // reports (rapid duplicate failures are unusual and worth surfacing).

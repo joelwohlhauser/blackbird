@@ -167,7 +167,7 @@ describe("ssh tunnel scripts", () => {
       archiveId,
     });
 
-    assert.include(script, `$HOME/.t3/blackbird-server/${archiveId}`);
+    assert.include(script, `INSTALL_ROOT="$PARENT_DIR/${archiveId}"`);
     assert.include(script, "YmxhY2tiaXJk");
     assert.include(script, "npm install --omit=dev --no-audit --no-fund");
     assert.include(script, "node_modules/t3/dist/bin.mjs");

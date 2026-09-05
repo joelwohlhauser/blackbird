@@ -3,8 +3,8 @@ import { create } from "zustand";
 import { normalizeProjectPathForComparison } from "./lib/projectPaths";
 
 export const PERSISTED_STATE_KEY = "t3code:ui-state:v1";
-// Version 1 stored card visibility, not folder expansion.
-const THREAD_CHANGED_FILES_EXPANSION_VERSION = 2;
+// Version 2 stored folder expansion. Cards now start collapsed independently.
+const THREAD_CHANGED_FILES_EXPANSION_VERSION = 3;
 const LEGACY_PERSISTED_STATE_KEYS = [
   "t3code:renderer-state:v8",
   "t3code:renderer-state:v7",

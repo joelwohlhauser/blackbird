@@ -92,7 +92,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   terminal: "Available when a project is open.",
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
-  agents: "Available from a thread.",
+  agents: "No agents in this chat yet.",
 } as const;
 
 type SurfaceShortcutEvent = Pick<
@@ -130,7 +130,7 @@ export function NewTabButton(props: { ariaLabel: string; onClick: () => void }) 
         render={
           <button
             type="button"
-            className="relative inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground [-webkit-app-region:no-drag] hover:bg-accent hover:text-foreground"
+            className="relative inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground [-webkit-app-region:no-drag] hover:bg-accent hover:text-foreground"
             aria-label={props.ariaLabel}
             onClick={props.onClick}
           />

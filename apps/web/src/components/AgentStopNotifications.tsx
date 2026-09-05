@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { AGENT_STOP_LABELS, diffAgentStops } from "../agentStopNotifications";
 import { useClientSettings } from "../hooks/useSettings";
+import { useThreadNotificationPreferences } from "../hooks/useThreadNotificationPreferences";
 import { isQuickChatsProject } from "../quickChats";
 import { useProjects, useThreadShells } from "../state/entities";
 import { buildThreadRouteParams } from "../threadRoutes";
@@ -16,13 +17,14 @@ import { buildThreadRouteParams } from "../threadRoutes";
  */
 export function AgentStopNotifications() {
   const enabled = useClientSettings((settings) => settings.notifyWhenAgentStops);
+  const [preferences] = useThreadNotificationPreferences();
   const shells = useThreadShells();
   const projects = useProjects();
   const navigate = useNavigate();
   const seenStopKeysRef = useRef<ReadonlyMap<string, string | null> | null>(null);
 
   useEffect(() => {
-    if (!enabled || typeof Notification === "undefined") {
+    if (typeof Notification === "undefined") {
       seenStopKeysRef.current = null;
       return;
     }
@@ -31,17 +33,19 @@ export function AgentStopNotifications() {
     if (stops.length === 0 || document.hasFocus()) return;
 
     for (const { shell, kind } of stops) {
+      const threadRef = scopeThreadRef(shell.environmentId, shell.id);
+      const threadKey = scopedThreadKey(threadRef);
+      if (!(preferences[threadKey] ?? enabled)) continue;
       const project = projects.find(
         (candidate) =>
           candidate.environmentId === shell.environmentId && candidate.id === shell.projectId,
       );
       const projectTitle = project && !isQuickChatsProject(project) ? project.title : "Quick chat";
-      const threadRef = scopeThreadRef(shell.environmentId, shell.id);
       try {
         const notification = new Notification(shell.title, {
           body: `${AGENT_STOP_LABELS[kind]} · ${projectTitle}`,
           // One live notification per thread: a newer stop replaces the older one.
-          tag: scopedThreadKey(threadRef),
+          tag: threadKey,
         });
         notification.addEventListener("click", () => {
           window.focus();
@@ -54,7 +58,7 @@ export function AgentStopNotifications() {
         // Notification Center can refuse (permission denied); nothing to recover.
       }
     }
-  }, [enabled, navigate, projects, shells]);
+  }, [enabled, navigate, preferences, projects, shells]);
 
   return null;
 }

@@ -17,6 +17,7 @@ import {
   isSidebarNestedLinkClick,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
+  reorderSidebarThreads,
   resolveProjectStatusIndicator,
   resolveThreadRowClassName,
   resolveSidebarThreadStatus,
@@ -368,17 +369,55 @@ describe("isSidebarNestedLinkClick", () => {
 });
 
 describe("shouldCreateNewThreadInCurrentProject", () => {
-  it("creates directly on shift+click in a multi-project setup", () => {
-    expect(shouldCreateNewThreadInCurrentProject(true, 2)).toBe(true);
+  it("opens the picker on shift+click in a multi-project setup", () => {
+    expect(shouldCreateNewThreadInCurrentProject(true, 2)).toBe(false);
   });
 
-  it("opens the picker on a plain click in a multi-project setup", () => {
-    expect(shouldCreateNewThreadInCurrentProject(false, 2)).toBe(false);
+  it("creates directly on a plain click in a multi-project setup", () => {
+    expect(shouldCreateNewThreadInCurrentProject(false, 2)).toBe(true);
   });
 
   it("creates directly on any click with a single project", () => {
     expect(shouldCreateNewThreadInCurrentProject(false, 1)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(true, 1)).toBe(true);
+  });
+});
+
+describe("reorderSidebarThreads", () => {
+  it("moves chats up and down in the main list", () => {
+    const keys = ["local:a", "local:b", "remote:a"];
+    const reordered = reorderSidebarThreads(keys, keys, "remote:a", "local:a");
+    expect(reordered).toEqual(["remote:a", "local:a", "local:b"]);
+    expect(reorderSidebarThreads(reordered, reordered, "remote:a", "local:b")).toEqual(keys);
+  });
+
+  it("preserves hidden chats when reordering a filtered project", () => {
+    const keys = ["hidden:a", "local:a", "hidden:b", "local:b", "hidden:c"];
+    const reordered = reorderSidebarThreads(keys, ["local:a", "local:b"], "local:b", "local:a");
+    expect(reordered).toEqual(["hidden:a", "local:b", "hidden:b", "local:a", "hidden:c"]);
+    // The same preference restores the global list and the filtered view.
+    expect(
+      orderItemsByPreferredIds({
+        items: keys,
+        preferredIds: reordered,
+        getId: (key) => key,
+      }),
+    ).toEqual(reordered);
+    expect(
+      orderItemsByPreferredIds({
+        items: ["local:a", "local:b"],
+        preferredIds: reordered,
+        getId: (key) => key,
+      }),
+    ).toEqual(["local:b", "local:a"]);
+  });
+
+  it("ignores canceled, stale, or cross-section drop targets", () => {
+    const keys = ["pinned:a", "local:a", "local:b"];
+    const visible = ["local:a", "local:b"];
+    expect(reorderSidebarThreads(keys, visible, "local:a", "local:a")).toBe(keys);
+    expect(reorderSidebarThreads(keys, visible, "missing", "local:b")).toBe(keys);
+    expect(reorderSidebarThreads(keys, visible, "local:a", "pinned:a")).toBe(keys);
   });
 });
 

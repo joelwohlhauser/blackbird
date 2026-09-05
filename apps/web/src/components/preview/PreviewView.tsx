@@ -75,6 +75,7 @@ interface Props {
   configuredUrls?: ReadonlyArray<string> | undefined;
   visible: boolean;
   showChrome?: boolean;
+  homeUrl?: string | null;
   layoutVersion?: string | number;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
@@ -101,6 +102,7 @@ export function PreviewView({
   configuredUrls,
   visible,
   showChrome = true,
+  homeUrl,
   layoutVersion,
   onSendAnnotation,
 }: Props) {
@@ -682,7 +684,8 @@ export function PreviewView({
   // URL-aware handler regardless of whether the panel is currently mounted.
   useEffect(() => {
     if (!visible) return;
-    return subscribePreviewAction((action) => {
+    return subscribePreviewAction((action, targetTabId) => {
+      if (targetTabId && targetTabId !== runtimeTabId) return;
       switch (action) {
         case "refresh":
           handleRefresh();
@@ -703,12 +706,13 @@ export function PreviewView({
           return;
       }
     });
-  }, [handleRefresh, handleResetZoom, handleZoomIn, handleZoomOut, visible]);
+  }, [handleRefresh, handleResetZoom, handleZoomIn, handleZoomOut, visible, runtimeTabId]);
 
   return (
     <div
       className="flex min-h-0 flex-1 flex-col bg-background"
       data-thread-key={scopedThreadKey(threadRef)}
+      data-preview-runtime-tab-id={runtimeTabId ?? undefined}
     >
       {showChrome ? (
         <PreviewChromeRow
@@ -719,9 +723,17 @@ export function PreviewView({
           refreshDisabled={refreshDisabled}
           zoomDisabled={!previewBridge || !runtimeTabId}
           focusUrlNonce={focusUrlNonce}
+          autoFocus={visible && showEmptyState}
           onBack={handleBack}
           onForward={handleForward}
           onRefresh={handleRefresh}
+          onHome={
+            previewBridge && runtimeTabId
+              ? () => {
+                  void previewBridge?.navigate(runtimeTabId, homeUrl ?? "about:blank");
+                }
+              : undefined
+          }
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onSubmit={(next) => void handleSubmitUrl(next)}
