@@ -1,9 +1,17 @@
-import type { PreviewOpenInput, PreviewSessionSnapshot, ScopedThreadRef } from "@t3tools/contracts";
+import {
+  DEFAULT_BROWSER_PROFILE_ID,
+  DEFAULT_CLIENT_SETTINGS,
+  FILL_PREVIEW_VIEWPORT,
+  type PreviewOpenInput,
+  type PreviewSessionSnapshot,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { resetPreviewStateForTests } from "~/previewStateStore";
 import { selectThreadRightPanelState, useRightPanelStore } from "~/rightPanelStore";
+import { __setClientSettingsForTests } from "~/hooks/useSettings";
 
 import { addLinearSurface } from "./addLinearSurface";
 
@@ -13,6 +21,7 @@ const threadRef = {
 };
 
 beforeEach(() => {
+  __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
   resetPreviewStateForTests();
   useRightPanelStore.setState({ byThreadKey: {} });
 });
@@ -43,6 +52,8 @@ describe("addLinearSurface", () => {
     expect(openPreview).toHaveBeenCalledWith({
       threadId: "thread-1",
       url: "https://linear.app/acme/issue/ENG-123/",
+      viewport: FILL_PREVIEW_VIEWPORT,
+      profileId: DEFAULT_BROWSER_PROFILE_ID,
     });
     expect(
       selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, threadRef),

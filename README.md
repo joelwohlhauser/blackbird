@@ -365,3 +365,5 @@ Detailed user and contributor documentation lives in [docs/](./docs), including:
 - [Keeping app and server in sync](./docs/user/updating.md)
 - [Source control integrations](./docs/user/source-control.md)
 - [Internal architecture overview](./docs/internals/overview.md)
+- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
+- [Run the Blackbird server as a background service](./docs/user/background-service.md)

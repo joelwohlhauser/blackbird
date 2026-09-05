@@ -4,7 +4,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 
-import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
+import type { BrowserSettingsReadError, OpenPreviewMutation } from "~/browser/openFileInPreview";
 import { useRightPanelStore } from "~/rightPanelStore";
 
 import { openPreviewSession } from "./openPreviewSession";
@@ -15,7 +15,7 @@ export async function addLinearSurface<E>(input: {
   readonly openPreview: OpenPreviewMutation<E>;
   readonly url: string;
   readonly pinned?: boolean;
-}): Promise<AtomCommandResult<void, E>> {
+}): Promise<AtomCommandResult<void, E | BrowserSettingsReadError>> {
   const result = await openPreviewSession({
     openPreview: input.openPreview,
     threadRef: input.threadRef,

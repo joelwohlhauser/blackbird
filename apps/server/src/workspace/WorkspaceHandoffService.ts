@@ -17,8 +17,8 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as path from "node:path";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -48,6 +48,7 @@ export class WorkspaceHandoffService extends Context.Service<
 >()("t3/workspace/WorkspaceHandoffService") {}
 
 export const make = Effect.gen(function* () {
+  const path = yield* Path.Path;
   const crypto = yield* Crypto.Crypto;
   const git = yield* GitWorkflowService.GitWorkflowService;
   const orchestration = yield* OrchestrationEngineService;

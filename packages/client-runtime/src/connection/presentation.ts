@@ -2,7 +2,7 @@ import type { ServerConfig } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 
 import type { ConnectionCatalogEntry } from "./catalog.ts";
-import type { NetworkStatus, SupervisorConnectionState } from "./model.ts";
+import type { SupervisorConnectionState } from "./model.ts";
 
 export type EnvironmentConnectionPhase =
   | "available"
@@ -105,7 +105,6 @@ export function connectionCatalogDisplayUrl(entry: ConnectionCatalogEntry): stri
         : null;
   }
 }
-
 export function connectionCatalogLabel(entry: ConnectionCatalogEntry): string {
   if (
     entry.target._tag === "SshConnectionTarget" &&
@@ -116,26 +115,4 @@ export function connectionCatalogLabel(entry: ConnectionCatalogEntry): string {
     if (alias.length > 0) return alias;
   }
   return entry.target.label;
-}
-
-export function connectionPhaseMessage(
-  phase: EnvironmentConnectionPhase,
-  label: string,
-  networkStatus: NetworkStatus,
-): string {
-  if (networkStatus === "offline" || phase === "offline") {
-    return "You are offline";
-  }
-  switch (phase) {
-    case "available":
-      return "Available";
-    case "connecting":
-      return `Connecting to ${label}...`;
-    case "reconnecting":
-      return `Reconnecting to ${label}...`;
-    case "connected":
-      return "Connected";
-    case "error":
-      return "Connection failed";
-  }
 }

@@ -8,8 +8,6 @@ import {
 } from "@t3tools/contracts";
 import {
   formatShortcutLabel,
-  isChatNewShortcut,
-  isChatNewLocalShortcut,
   isDiffToggleShortcut,
   modelPickerJumpCommandForIndex,
   modelPickerJumpIndexFromCommand,
@@ -21,7 +19,6 @@ import {
   isTerminalSplitVerticalShortcut,
   isTerminalToggleShortcut,
   resolveShortcutCommand,
-  shouldShowModelPickerJumpHints,
   shortcutLabelForCommand,
   terminalDeleteShortcutData,
   terminalNavigationShortcutData,
@@ -569,47 +566,36 @@ describe("model picker navigation helpers", () => {
     assert.strictEqual(modelPickerJumpIndexFromCommand("modelPicker.jump.3"), 2);
     assert.isNull(modelPickerJumpIndexFromCommand("thread.jump.1"));
   });
-
-  it("shows jump hints only while the model picker context is active", () => {
-    assert.isFalse(
-      shouldShowModelPickerJumpHints(event({ metaKey: true }), DEFAULT_BINDINGS, {
-        platform: "MacIntel",
-        context: { modelPickerOpen: false },
-      }),
-    );
-    assert.isTrue(
-      shouldShowModelPickerJumpHints(event({ metaKey: true }), DEFAULT_BINDINGS, {
-        platform: "MacIntel",
-        context: { modelPickerOpen: true },
-      }),
-    );
-  });
 });
 
 describe("chat/editor shortcuts", () => {
   it("matches chat.new shortcut", () => {
-    assert.isTrue(
-      isChatNewShortcut(event({ key: "o", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "o", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
       }),
+      "chat.new",
     );
-    assert.isTrue(
-      isChatNewShortcut(event({ key: "o", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "o", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
       }),
+      "chat.new",
     );
   });
 
   it("matches chat.newLocal shortcut", () => {
-    assert.isTrue(
-      isChatNewLocalShortcut(event({ key: "n", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "n", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
       }),
+      "chat.newLocal",
     );
-    assert.isTrue(
-      isChatNewLocalShortcut(event({ key: "n", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "n", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
       }),
+      "chat.newLocal",
     );
   });
 
@@ -764,11 +750,12 @@ describe("cross-command precedence", () => {
         context: { terminalFocus: true },
       }),
     );
-    assert.isFalse(
-      isChatNewShortcut(event({ key: "n", metaKey: true }), keybindings, {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "n", metaKey: true }), keybindings, {
         platform: "MacIntel",
         context: { terminalFocus: true },
       }),
+      "terminal.new",
     );
     assert.isFalse(
       isTerminalNewShortcut(event({ key: "n", metaKey: true }), keybindings, {
@@ -776,11 +763,12 @@ describe("cross-command precedence", () => {
         context: { terminalFocus: false },
       }),
     );
-    assert.isTrue(
-      isChatNewShortcut(event({ key: "n", metaKey: true }), keybindings, {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "n", metaKey: true }), keybindings, {
         platform: "MacIntel",
         context: { terminalFocus: false },
       }),
+      "chat.new",
     );
   });
 
@@ -800,11 +788,12 @@ describe("cross-command precedence", () => {
         context: { terminalFocus: true },
       }),
     );
-    assert.isTrue(
-      isChatNewShortcut(event({ key: "n", ctrlKey: true }), keybindings, {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "n", ctrlKey: true }), keybindings, {
         platform: "Linux",
         context: { terminalFocus: true },
       }),
+      "chat.new",
     );
   });
 });

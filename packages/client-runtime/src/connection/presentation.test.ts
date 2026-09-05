@@ -16,7 +16,6 @@ import {
 import {
   connectionCatalogDisplayUrl,
   connectionCatalogLabel,
-  connectionPhaseMessage,
   connectionStatusText,
   connectionStatusTitle,
   presentEnvironmentConnection,
@@ -149,10 +148,6 @@ describe("connection presentation", () => {
       error: "Relay connection timed out.",
       traceId: "trace-retry",
     });
-  });
-
-  it("gives offline status precedence in global messaging", () => {
-    expect(connectionPhaseMessage("connected", TARGET.label, "offline")).toBe("You are offline");
   });
 
   it("combines reconnect progress with the latest failure", () => {

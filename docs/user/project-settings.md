@@ -1,8 +1,9 @@
-# Customize a project icon
+# Project settings
 
+Open **Settings → Projects** and select a project to change its preferences.
 Projects do not show an icon by default.
 
-To choose a different icon or emoji:
+## Project icons
 
 1. Open **Settings** and select **Projects**.
 2. Select the project.
@@ -18,10 +19,9 @@ checkout in the project group. To return to the default, select **None**.
 
 ## Keep the default branch current
 
-Turn on **Automatically pull** in a project's settings to keep its default-branch checkout current.
-T3 Code checks in the background and when the server starts. It uses the branch's configured
-upstream and only performs a fast-forward pull when the checkout has no working-tree changes,
-untracked files, or local commits.
+Enable **Automatically pull** to keep the default-branch checkout up to date with its configured
+upstream.
 
-The pull is skipped if the checkout is on another branch, has no upstream, or contains local work.
-Pull failures do not prevent the server from starting.
+Blackbird only pulls when it can fast-forward and the checkout has no changed files, untracked files,
+or local commits. It skips checkouts on another branch or without an upstream. If a checkout has
+local work, resolve it yourself before automatic pulls can resume.

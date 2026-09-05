@@ -798,29 +798,6 @@ export default function DiffPanel({
     selectedFileRevealRequestId,
   ]);
 
-  // Held as state so the scroll runs after a collapsed file has been drawn open again; scrolling
-  // in the same tick would land on the folded header's position.
-  const [treeReveal, setTreeReveal] = useState<{ fileKey: string; id: number } | null>(null);
-  useEffect(() => {
-    if (treeReveal === null) return;
-    codeViewRef.current?.scrollTo({ type: "item", id: treeReveal.fileKey, align: "start" });
-  }, [treeReveal]);
-  const revealDiffFile = useCallback(
-    (filePath: string) => {
-      const file = codeViewFiles.find((candidate) => candidate.filePath === filePath);
-      if (!file) return;
-      if (file.collapsed) {
-        setCollapsedDiffFiles((current) => {
-          const next = new Set(current.scopeKey === collapseScopeKey ? current.fileKeys : []);
-          next.delete(file.fileKey);
-          return { scopeKey: collapseScopeKey, fileKeys: next };
-        });
-      }
-      setTreeReveal((current) => ({ fileKey: file.fileKey, id: (current?.id ?? 0) + 1 }));
-    },
-    [codeViewFiles, collapseScopeKey],
-  );
-
   const openDiffFile = useCallback(
     (filePath: string) => {
       openDiffFilePrimaryAction({
@@ -981,7 +958,6 @@ export default function DiffPanel({
           selectedGitSource?.baseRef && (
             <div
               className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden text-xs text-muted-foreground"
-              title={`${selectedGitSource.headRef ?? "HEAD"} → ${selectedGitSource.baseRef}`}
               aria-label={`Comparing ${selectedGitSource.headRef ?? "HEAD"} against ${selectedGitSource.baseRef}`}
             >
               <span className="min-w-0 max-w-48 truncate">
@@ -1079,7 +1055,7 @@ export default function DiffPanel({
                             ) : choice.remote ? (
                               <span
                                 className="flex justify-end text-muted-foreground"
-                                title="Remote only"
+                                aria-label="Remote only"
                               >
                                 <CheckIcon aria-hidden="true" className="size-3" />
                               </span>
@@ -1150,8 +1126,9 @@ export default function DiffPanel({
           </Tooltip>
         )}
         <ToggleGroup
-          className="shrink-0 gap-1"
-          size="sm"
+          aria-label="Diff layout"
+          className="shrink-0"
+          variant="segmented"
           value={[diffLayout]}
           onValueChange={(value) => {
             const next = value[0];
@@ -1160,10 +1137,10 @@ export default function DiffPanel({
             }
           }}
         >
-          <Toggle aria-label="Stacked diff view" value="stacked" variant="ghost">
+          <Toggle aria-label="Stacked diff view" value="stacked">
             <Rows3Icon className="size-3.5" />
           </Toggle>
-          <Toggle aria-label="Split diff view" value="split" variant="ghost">
+          <Toggle aria-label="Split diff view" value="split">
             <Columns2Icon className="size-3.5" />
           </Toggle>
         </ToggleGroup>
@@ -1244,7 +1221,7 @@ export default function DiffPanel({
                         ? "font-medium text-foreground"
                         : "text-muted-foreground",
                     )}
-                    title={crumb.path || activeProject?.title}
+                    aria-label={crumb.path || activeProject?.title}
                   >
                     {crumb.label}
                   </span>
