@@ -22,7 +22,6 @@ import {
   type ReviewDiffPreviewResult,
   type ReviewDiffFileContentsInput,
   type ReviewDiffFileContentsResult,
-  type VcsInitInput,
   type VcsListRefsInput,
   type VcsListRefsResult,
   type VcsPullResult,
@@ -334,7 +333,6 @@ export class GitVcsDriver extends Context.Service<
     readonly switchRef: (
       input: VcsSwitchRefInput,
     ) => Effect.Effect<VcsSwitchRefResult, GitCommandError>;
-    readonly initRepo: (input: VcsInitInput) => Effect.Effect<void, GitCommandError>;
     readonly listLocalBranchNames: (cwd: string) => Effect.Effect<string[], GitCommandError>;
   }
 >()("t3/vcs/GitVcsDriver") {}
@@ -654,12 +652,6 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
     return relativePaths.filter((relativePath) => !ignoredPaths.has(relativePath));
   });
 
-  const initRepository: VcsDriver.VcsDriver["Service"]["initRepository"] = (input) =>
-    gitCommand(vcsProcess, "GitVcsDriver.initRepository", input.cwd, ["init"], {
-      timeoutMs: 10_000,
-      maxOutputBytes: 64 * 1024,
-    }).pipe(Effect.asVoid);
-
   const resolveHeadCommit = (cwd: string) =>
     execute({
       operation: "GitVcsDriver.checkpoints.resolveHeadCommit",
@@ -926,7 +918,6 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
     listWorkspaceFiles,
     listRemotes,
     filterIgnoredPaths,
-    initRepository,
   };
 });
 

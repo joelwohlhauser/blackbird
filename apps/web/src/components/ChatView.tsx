@@ -208,7 +208,6 @@ import { previewRuntimeTabId } from "../browser/previewRuntimeTabId";
 import { BrowserSettingsReadError } from "../browser/openFileInPreview";
 import { addBrowserSurface } from "./preview/addBrowserSurface";
 import { useGitHubPullRequestSurface } from "./preview/useGitHubPullRequestSurface";
-import { addGitHubPullRequestSurface } from "./preview/addGitHubPullRequestSurface";
 import { addLinearSurface } from "./preview/addLinearSurface";
 import { closePreviewSession } from "./preview/closePreviewSession";
 import { openPreviewSession } from "./preview/openPreviewSession";
@@ -3253,14 +3252,6 @@ export default function ChatView(props: ChatViewProps) {
   const attachedBranch =
     activeThread?.branch ?? draftThread?.branch ?? gitStatusQuery.data?.refName ?? null;
   const attachedLinearIssueId = linearIssueIdFromBranch(attachedBranch);
-  const attachedWorkspaceSurfaceIds = useMemo(
-    () =>
-      new Set<string>([
-        ...(attachedLinearIssueId ? ["linear"] : []),
-        ...(githubPullRequest ? ["github-pr"] : []),
-      ]),
-    [attachedLinearIssueId, githubPullRequest],
-  );
   const linearOrganizationSlug = useClientSettings((settings) => settings.linearOrganizationSlug);
   useWorkspaceMutationRefresh({
     enabled: gitStatusCwd !== null,
@@ -4143,53 +4134,30 @@ export default function ChatView(props: ChatViewProps) {
     openGitHubPullRequestSurface(githubPullRequest.url);
   }, [githubPullRequest, openGitHubPullRequestSurface]);
   useEffect(() => {
-    if (!activeThreadRef || !isPreviewSupportedInRuntime()) return;
+    if (!activeThreadRef || !attachedLinearIssueId || !isPreviewSupportedInRuntime()) return;
 
     const threadKey = scopedThreadKey(activeThreadRef);
     const surfaces = [...rightPanelState.mainSurfaces, ...rightPanelState.surfaces];
-    const ensureAttachedSurface = (
-      surfaceId: "linear" | "github-pr",
-      openSurface: () => Promise<unknown>,
-    ) => {
-      const existing = surfaces.find((surface) => surface.id === surfaceId);
-      if (existing) {
-        useRightPanelStore.getState().pinDedicatedSurface(activeThreadRef, surfaceId);
-        return;
-      }
-      const inFlightKey = `${threadKey}:${surfaceId}`;
-      if (attachedSurfaceOpenInFlightRef.current.has(inFlightKey)) return;
-      attachedSurfaceOpenInFlightRef.current.add(inFlightKey);
-      void openSurface().finally(() => {
-        useRightPanelStore.getState().pinDedicatedSurface(activeThreadRef, surfaceId);
-        attachedSurfaceOpenInFlightRef.current.delete(inFlightKey);
-      });
-    };
-
-    if (attachedLinearIssueId) {
-      ensureAttachedSurface("linear", () =>
-        addLinearSurface({
-          threadRef: activeThreadRef,
-          openPreview,
-          url: linearUrl({ organizationSlug: linearOrganizationSlug, branch: attachedBranch }),
-          pinned: true,
-        }),
-      );
+    if (surfaces.some((surface) => surface.id === "linear")) {
+      useRightPanelStore.getState().pinDedicatedSurface(activeThreadRef, "linear");
+      return;
     }
-    if (githubPullRequest) {
-      ensureAttachedSurface("github-pr", () =>
-        addGitHubPullRequestSurface({
-          threadRef: activeThreadRef,
-          openPreview,
-          url: githubPullRequest.url,
-          pinned: true,
-        }),
-      );
-    }
+    const inFlightKey = `${threadKey}:linear`;
+    if (attachedSurfaceOpenInFlightRef.current.has(inFlightKey)) return;
+    attachedSurfaceOpenInFlightRef.current.add(inFlightKey);
+    void addLinearSurface({
+      threadRef: activeThreadRef,
+      openPreview,
+      url: linearUrl({ organizationSlug: linearOrganizationSlug, branch: attachedBranch }),
+      pinned: true,
+    }).finally(() => {
+      useRightPanelStore.getState().pinDedicatedSurface(activeThreadRef, "linear");
+      attachedSurfaceOpenInFlightRef.current.delete(inFlightKey);
+    });
   }, [
     activeThreadRef,
     attachedBranch,
     attachedLinearIssueId,
-    githubPullRequest,
     linearOrganizationSlug,
     openPreview,
     rightPanelState.mainSurfaces,
@@ -4279,6 +4247,50 @@ export default function ChatView(props: ChatViewProps) {
     (linkedThreadPullRequest === null && gitStatusQuery.data?.refName === activeThread?.branch
       ? (gitStatusQuery.data?.pr ?? null)
       : null);
+  const activeThreadPullRequestReference = useMemo(
+    () =>
+      supportsPullRequests &&
+      activeThreadPr !== null &&
+      threadRepository !== null &&
+      activeProject !== null
+        ? {
+            projectId: linkedThreadPullRequest?.projectId ?? activeProject.id,
+            repository: threadRepository,
+            number: activeThreadPr.number,
+          }
+        : null,
+    [
+      supportsPullRequests,
+      activeThreadPr,
+      threadRepository,
+      activeProject,
+      linkedThreadPullRequest?.projectId,
+    ],
+  );
+  const pullRequestSurfaceAvailable = activeThreadPullRequestReference !== null;
+  const attachedWorkspaceSurfaceIds = useMemo(
+    () =>
+      new Set<string>([
+        ...(attachedLinearIssueId ? ["linear"] : []),
+        ...(activeThreadPullRequestReference
+          ? [pullRequestSurface(activeThreadPullRequestReference).id]
+          : []),
+      ]),
+    [attachedLinearIssueId, activeThreadPullRequestReference],
+  );
+  useEffect(() => {
+    if (!activeThreadRef || !activeThreadPullRequestReference) return;
+    useRightPanelStore
+      .getState()
+      .openPullRequest(activeThreadRef, activeThreadPullRequestReference, {
+        pinned: true,
+      });
+  }, [
+    activeThreadRef,
+    activeThreadPullRequestReference,
+    rightPanelState.mainSurfaces,
+    rightPanelState.surfaces,
+  ]);
   const linkedThreadPullRequestKey = linkedThreadPullRequest
     ? JSON.stringify([
         linkedThreadPullRequest.projectId,
@@ -4820,6 +4832,24 @@ export default function ChatView(props: ChatViewProps) {
       syncActivePreviewSurface,
     ],
   );
+  useEffect(() => {
+    const preview = window.desktopBridge?.preview;
+    if (!preview || !resolvePreviewRuntimeTabId) return;
+    return preview.onCloseTabRequested((runtimeTabId) => {
+      const surface = [...rightPanelState.mainSurfaces, ...rightPanelState.surfaces].find(
+        (entry) =>
+          (entry.kind === "preview" || entry.kind === "linear" || entry.kind === "github-pr") &&
+          entry.resourceId !== null &&
+          resolvePreviewRuntimeTabId(entry.resourceId) === runtimeTabId,
+      );
+      if (surface) closeRightPanelSurface(surface);
+    });
+  }, [
+    closeRightPanelSurface,
+    resolvePreviewRuntimeTabId,
+    rightPanelState.mainSurfaces,
+    rightPanelState.surfaces,
+  ]);
   const settleChatAndOpenNewThread = useCallback(() => {
     if (!isServerThread || !activeThreadRef || !activeProjectRef) return;
     const threadKey = scopedThreadKey(activeThreadRef);
@@ -5992,18 +6022,6 @@ export default function ChatView(props: ChatViewProps) {
       openProjectPullRequest(activeThreadPr.number);
     }
   }, [activeThreadRef, linkedThreadPullRequest, activeThreadPr, openProjectPullRequest]);
-  const activeThreadPullRequestReference =
-    supportsPullRequests &&
-    activeThreadPr !== null &&
-    threadRepository !== null &&
-    activeProject !== null
-      ? {
-          projectId: linkedThreadPullRequest?.projectId ?? activeProject.id,
-          repository: threadRepository,
-          number: activeThreadPr.number,
-        }
-      : null;
-  const pullRequestSurfaceAvailable = activeThreadPullRequestReference !== null;
   const supportsSettlement = serverConfig?.environment.capabilities.threadSettlement === true;
   const supportsSnooze = serverConfig?.environment.capabilities.threadSnooze === true;
   const supportsPinning = serverConfig?.environment.capabilities.threadPinning === true;
@@ -8864,8 +8882,6 @@ export default function ChatView(props: ChatViewProps) {
             <ChatHeader
               activeThreadEnvironmentId={activeThread.environmentId}
               activeThreadId={activeThread.id}
-              {...(routeKind === "draft" && draftId ? { draftId } : {})}
-              activeProjectName={activeProject?.title}
               activeProjectCwd={activeProject?.workspaceRoot ?? null}
               activeProjectScripts={activeProjectScripts}
               showProjectActions={!isQuickChat}
@@ -8875,8 +8891,6 @@ export default function ChatView(props: ChatViewProps) {
               keybindings={keybindings}
               rightPanelOpen={rightPanelOpen}
               workspaceNavigatorOpen={showWorkspaceNavigator}
-              isGitRepo={isGitRepo}
-              gitCwd={gitCwd}
               leading={mainTabStrip}
               onRunProjectScript={runProjectScript}
               onAddProjectScript={saveProjectScript}
@@ -9222,8 +9236,20 @@ export default function ChatView(props: ChatViewProps) {
                       </ComposerSurface.Shell>
                       <div
                         aria-hidden
-                        className="h-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
-                      />
+                        className="pointer-events-none relative mx-auto h-[calc(env(safe-area-inset-bottom)+1rem)] w-full max-w-3xl sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]"
+                      >
+                        {!isDraftHeroState && (
+                          <div
+                            className={cn(
+                              "absolute inset-x-0 bottom-0 -z-1 bg-background",
+                              // Cover the shell's bottom curves and the context strip down to the chat edge.
+                              showComposerContextStrip
+                                ? "-top-[calc(2.25rem+1.375rem)] sm:-top-[calc(2rem+1.375rem)]"
+                                : "-top-[22px]",
+                            )}
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

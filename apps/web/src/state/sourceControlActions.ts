@@ -30,7 +30,6 @@ import { useAtomCommand } from "./use-atom-command";
 import { vcsActionManager, vcsEnvironment } from "./vcs";
 
 export type SourceControlActionKind =
-  | "init"
   | "pull"
   | "publishRepository"
   | "runStackedAction"
@@ -56,7 +55,6 @@ interface SourceControlActionState<
 }
 
 const ACTION_OPERATION = {
-  init: "init",
   pull: "pull",
   publishRepository: "publish_repository",
   runStackedAction: "run_change_request",
@@ -136,29 +134,6 @@ export function useSourceControlActionRunning(
     state.operation !== null &&
     kinds.some((kind) => ACTION_OPERATION[kind] === state.operation)
   );
-}
-
-export function useVcsInitAction(scope: SourceControlActionScope) {
-  const init = useAtomCommand(vcsEnvironment.init, { reportFailure: false });
-  const action = useCallback(async () => {
-    const target = resolveScope(scope);
-    if (target === null) {
-      return AsyncResult.failure<never, VcsActionUnavailableError>(
-        Cause.fail(
-          new VcsActionUnavailableError({
-            operation: "init",
-            environmentId: scope.environmentId,
-            cwd: scope.cwd,
-          }),
-        ),
-      );
-    }
-    return init({
-      environmentId: target.environmentId,
-      input: { cwd: target.cwd },
-    });
-  }, [init, scope]);
-  return useAction({ kind: "init", label: "Initializing repository", scope, action });
 }
 
 export function useVcsPullAction(scope: SourceControlActionScope) {

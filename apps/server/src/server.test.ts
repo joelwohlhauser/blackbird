@@ -155,7 +155,6 @@ import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
 import * as VcsDriver from "./vcs/VcsDriver.ts";
 import * as VcsStatusBroadcaster from "./vcs/VcsStatusBroadcaster.ts";
 import * as VcsDriverRegistry from "./vcs/VcsDriverRegistry.ts";
-import * as VcsProvisioningService from "./vcs/VcsProvisioningService.ts";
 import * as VcsProcess from "./vcs/VcsProcess.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import * as WorktreeLifecycle from "./git/WorktreeLifecycle.ts";
@@ -623,7 +622,6 @@ const buildAppUnderTest = (options?: {
           },
         }),
       filterIgnoredPaths: (_cwd, relativePaths) => Effect.succeed(relativePaths),
-      initRepository: () => Effect.void,
       ...options?.layers?.vcsDriver,
     };
     const vcsDriverRegistryLayer = Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
@@ -712,9 +710,6 @@ const buildAppUnderTest = (options?: {
           prepareCreatedWorktree: () => Effect.void,
         }),
       ),
-    );
-    const vcsProvisioningLayer = VcsProvisioningService.layer.pipe(
-      Layer.provide(vcsDriverRegistryLayer),
     );
     const reviewLayer = options?.layers?.reviewService
       ? Layer.mock(ReviewService.ReviewService)({
@@ -905,7 +900,6 @@ const buildAppUnderTest = (options?: {
       Layer.provide(gitVcsDriverLayer),
       Layer.provide(gitWorkflowLayer),
       Layer.provide(reviewLayer),
-      Layer.provide(vcsProvisioningLayer),
       Layer.provide(
         Layer.mock(SourceControlRepositoryService.SourceControlRepositoryService)({
           ...options?.layers?.sourceControlRepositoryService,
@@ -7677,14 +7671,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           client[WS_METHODS.vcsSwitchRef]({
             cwd: "/tmp/repo",
             refName: "main",
-          }),
-        ),
-      );
-
-      yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
-          client[WS_METHODS.vcsInit]({
-            cwd: "/tmp/repo",
           }),
         ),
       );

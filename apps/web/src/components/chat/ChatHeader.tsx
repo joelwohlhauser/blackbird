@@ -6,8 +6,6 @@ import {
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { memo, type ReactNode } from "react";
-import GitActionsControl from "../GitActionsControl";
-import { type DraftId } from "~/composerDraftStore";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
   type ProjectScriptActionResult,
@@ -20,8 +18,6 @@ import { ChatNotificationToggle } from "./ChatNotificationToggle";
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
   activeThreadId: ThreadId;
-  draftId?: DraftId;
-  activeProjectName: string | undefined;
   activeProjectCwd: string | null;
   activeProjectScripts: ReadonlyArray<ProjectScript> | undefined;
   showProjectActions: boolean;
@@ -29,8 +25,6 @@ interface ChatHeaderProps {
   keybindings: ResolvedKeybindingsConfig;
   rightPanelOpen: boolean;
   workspaceNavigatorOpen: boolean;
-  isGitRepo: boolean;
-  gitCwd: string | null;
   /** Leading header content: the main-area tab strip with the chat tab. */
   leading: ReactNode;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -45,8 +39,6 @@ interface ChatHeaderProps {
 export const ChatHeader = memo(function ChatHeader({
   activeThreadEnvironmentId,
   activeThreadId,
-  draftId,
-  activeProjectName,
   activeProjectCwd,
   activeProjectScripts,
   showProjectActions,
@@ -54,8 +46,6 @@ export const ChatHeader = memo(function ChatHeader({
   keybindings,
   rightPanelOpen,
   workspaceNavigatorOpen,
-  isGitRepo,
-  gitCwd,
   leading,
   onRunProjectScript,
   onAddProjectScript,
@@ -99,14 +89,6 @@ export const ChatHeader = memo(function ChatHeader({
         {isElectron ? (
           <ChatNotificationToggle
             threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
-          />
-        ) : null}
-        {showProjectActions && activeProjectName && !isGitRepo ? (
-          <GitActionsControl
-            gitCwd={gitCwd}
-            activeThreadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
-            placement="header"
-            {...(draftId ? { draftId } : {})}
           />
         ) : null}
       </div>

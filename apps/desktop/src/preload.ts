@@ -312,6 +312,17 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       return () =>
         ipcRenderer.removeListener(IpcChannels.PREVIEW_POINTER_EVENT_CHANNEL, wrappedListener);
     },
+    onCloseTabRequested: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, tabId: unknown) => {
+        if (typeof tabId === "string") listener(tabId);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_CLOSE_TAB_REQUESTED_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(
+          IpcChannels.PREVIEW_CLOSE_TAB_REQUESTED_CHANNEL,
+          wrappedListener,
+        );
+    },
     onFocusUrl: (listener) => {
       const wrappedListener = (_event: Electron.IpcRendererEvent, tabId: unknown) => {
         if (typeof tabId === "string") listener(tabId);

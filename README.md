@@ -28,6 +28,7 @@ The left sidebar includes:
 - a top **New chat** action and a separate **Quick chat** button in sidebar v2,
   above the search field and project filter. New chat uses the current project;
   Shift-click opens the project picker;
+- Command+N on the new-chat page opens the project picker. Blackbird does not offer repository initialization; add an existing Git repository to use Git actions;
 - a dedicated, collapsible **Quick chats** section above Projects;
 - an optional, collapsible **Pinned sites** section for persistent full-window browser views;
 - a collapsible **Projects** section with local and remote copies grouped under
@@ -111,12 +112,7 @@ renames the chat, replacing the old header title text — the project name is
 gone from the header), never scrolls out of view, and cannot be closed or
 moved to the panel.
 
-When the chat branch identifies a Linear issue or has a detected GitHub pull
-request, those browser-backed tabs are created automatically and pinned beside
-the chat tab. They stay visible, cannot be closed or moved, and disappear from
-the pinned set when the branch no longer identifies that issue or PR. Their
-browser sessions preload when the chat opens, so selecting either tab does not
-start a cold page load.
+When the chat branch identifies a Linear issue or has a detected pull request, a Linear browser tab and the built-in PR tab are created automatically and pinned beside the chat tab. They stay visible, cannot be closed or moved, and disappear from the pinned set when the chat no longer identifies that issue or PR. The Linear browser session preloads when the chat opens. GitHub browser tabs remain available from New Tab.
 
 Tabs are draggable: reorder them within a container or drag them between the
 chat area and the right panel. Dragging toward the chat column's right edge

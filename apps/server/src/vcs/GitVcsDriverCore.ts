@@ -3587,12 +3587,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     },
   );
 
-  const initRepo: GitVcsDriver.GitVcsDriver["Service"]["initRepo"] = (input) =>
-    executeGit("GitVcsDriver.initRepo", input.cwd, ["init"], {
-      timeoutMs: 10_000,
-      fallbackErrorDetail: "git init failed",
-    }).pipe(Effect.asVoid);
-
   const listLocalBranchNames: GitVcsDriver.GitVcsDriver["Service"]["listLocalBranchNames"] = (
     cwd,
   ) =>
@@ -3626,20 +3620,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         ]),
       ),
     );
-  const initRepoWithListRefsInvalidation: GitVcsDriver.GitVcsDriver["Service"]["initRepo"] = (
-    input,
-  ) =>
-    initRepo(input).pipe(
-      Effect.ensuring(
-        Effect.gen(function* () {
-          const cacheKey = normalizeRepositoryPathsCacheKey(input.cwd);
-          yield* Cache.invalidate(repositoryPathsRefreshCache, cacheKey);
-          yield* Cache.invalidate(repositoryPathsCache, cacheKey);
-          yield* invalidateListRefsSnapshot(input.cwd).pipe(Effect.ignore);
-        }),
-      ),
-    );
-
   return GitVcsDriver.GitVcsDriver.of({
     execute,
     status,
@@ -3680,7 +3660,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     renameBranch: (input) => withListRefsInvalidation(input.cwd, renameBranch(input)),
     createRef: (input) => withListRefsInvalidation(input.cwd, createRef(input)),
     switchRef: (input) => withListRefsInvalidation(input.cwd, switchRef(input)),
-    initRepo: initRepoWithListRefsInvalidation,
     listLocalBranchNames,
   });
 });

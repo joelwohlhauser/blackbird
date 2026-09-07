@@ -124,7 +124,7 @@ const initRepoWithCommit = (
 > =>
   Effect.gen(function* () {
     const driver = yield* GitVcsDriver.GitVcsDriver;
-    yield* driver.initRepo({ cwd });
+    yield* driver.execute({ operation: "test.init", cwd, args: ["init"] });
     yield* git(cwd, ["config", "user.email", "test@test.com"]);
     yield* git(cwd, ["config", "user.name", "Test"]);
     yield* writeTextFile(cwd, "README.md", "# test\n");
@@ -319,7 +319,7 @@ it.effect("coalesces concurrent ref pages into one repository snapshot", () =>
           timeoutMs: 10_000,
         });
 
-      yield* driver.initRepo({ cwd });
+      yield* driver.execute({ operation: "test.init", cwd, args: ["init"] });
       yield* runGit(["config", "user.email", "test@test.com"]);
       yield* runGit(["config", "user.name", "Test"]);
       yield* writeTextFile(cwd, "README.md", "# test\n");
@@ -641,7 +641,7 @@ it.effect("backs off failed upstream refreshes across linked worktrees", () =>
           timeoutMs: 10_000,
         });
 
-      yield* driver.initRepo({ cwd });
+      yield* driver.execute({ operation: "test.init", cwd, args: ["init"] });
       yield* runGit(cwd, ["config", "user.email", "test@test.com"]);
       yield* runGit(cwd, ["config", "user.name", "Test"]);
       yield* writeTextFile(cwd, "README.md", "# test\n");
@@ -747,7 +747,7 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
         const driver = yield* GitVcsDriver.GitVcsDriver;
-        yield* driver.initRepo({ cwd });
+        yield* driver.execute({ operation: "test.init", cwd, args: ["init"] });
 
         const secret = "secret-token-value";
         const error = yield* driver
@@ -802,7 +802,7 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         const notAWorktree = pathService.join(cwd, "not-a-worktree");
         yield* fileSystem.makeDirectory(notAWorktree);
         const driver = yield* GitVcsDriver.GitVcsDriver;
-        yield* driver.initRepo({ cwd });
+        yield* driver.execute({ operation: "test.init", cwd, args: ["init"] });
 
         const error = yield* driver.removeWorktree({ cwd, path: notAWorktree }).pipe(Effect.flip);
 
@@ -862,7 +862,7 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
         const fileSystem = yield* FileSystem.FileSystem;
         const unrelatedPath = pathService.join(cwd, "unrelated-directory");
         const driver = yield* GitVcsDriver.GitVcsDriver;
-        yield* driver.initRepo({ cwd });
+        yield* driver.execute({ operation: "test.init", cwd, args: ["init"] });
         yield* writeTextFile(
           unrelatedPath,
           ".git",
@@ -1319,7 +1319,7 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
         const driver = yield* GitVcsDriver.GitVcsDriver;
-        yield* driver.initRepo({ cwd });
+        yield* driver.execute({ operation: "test.init", cwd, args: ["init"] });
         const initialBranch = yield* git(cwd, ["symbolic-ref", "--short", "HEAD"]);
 
         const status = yield* driver.statusDetailsRemote(cwd, { refreshUpstream: false });
@@ -1517,7 +1517,7 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();
         const driver = yield* GitVcsDriver.GitVcsDriver;
-        yield* driver.initRepo({ cwd });
+        yield* driver.execute({ operation: "test.init", cwd, args: ["init"] });
         yield* git(cwd, ["config", "user.email", "test@test.com"]);
         yield* git(cwd, ["config", "user.name", "Test"]);
         yield* writeTextFile(cwd, "initial.ts", "// first file\n");

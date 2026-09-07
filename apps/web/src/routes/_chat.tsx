@@ -9,7 +9,7 @@ import {
 import { useAtomValue } from "@effect/atom-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { isCommandPaletteOpen } from "../commandPaletteBus";
+import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { resolveThreadStatusPill, type ThreadStatusPill } from "../components/Sidebar.logic";
 import { ThreadStatusLabel } from "../components/ThreadStatusIndicators";
 import {
@@ -87,6 +87,9 @@ function LastChatRoutePersistence() {
 
 function ChatRouteGlobalShortcuts() {
   const navigate = useNavigate();
+  const isNewChatPage = useLocation({
+    select: ({ pathname }) => pathname === "/" || pathname.startsWith("/draft/"),
+  });
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
   const selectedThreadKeysSize = useThreadSelectionStore((state) => state.selectedThreadKeys.size);
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread, routeThreadRef } =
@@ -237,6 +240,20 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
+      if (
+        isNewChatPage &&
+        event.key.toLowerCase() === "n" &&
+        event.metaKey !== event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.isComposing
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) openCommandPalette({ open: "new-thread-in" });
+        return;
+      }
+
       if (chatSwitcher !== null) {
         const activeSwitcherDirection = activeChatSwitcherDirection({
           modifier: chatSwitcher.modifier,
@@ -360,6 +377,7 @@ function ChatRouteGlobalShortcuts() {
     handleNewThread,
     keybindings,
     defaultProjectRef,
+    isNewChatPage,
     previewOpen,
     routeThreadRef,
     selectedThreadKeysSize,

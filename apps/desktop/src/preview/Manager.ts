@@ -62,6 +62,7 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import {
+  PREVIEW_CLOSE_TAB_REQUESTED_CHANNEL,
   PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL,
   PREVIEW_FOCUS_URL_CHANNEL,
   PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL,
@@ -1920,14 +1921,56 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         }).pipe(Effect.ignore),
       );
     };
+    const updateEditingMenuShortcuts = (target: Electron.WebContents, input: Electron.Input) => {
+      const key = input.key.toLowerCase();
+      const modifier = hostPlatform === "darwin" ? input.meta : input.control;
+      const otherModifier = hostPlatform === "darwin" ? input.control : input.meta;
+      const isEditingShortcut =
+        input.type === "keyDown" &&
+        modifier &&
+        !otherModifier &&
+        !input.alt &&
+        (input.shift
+          ? key === "z"
+          : ["a", "c", "v", "x", "z"].includes(key) || (hostPlatform !== "darwin" && key === "y"));
+      // macOS editing commands need native menu accelerators. Allow only those
+      // so browser input cannot close the host window or change the app's zoom.
+      target.setIgnoreMenuShortcuts(!isEditingShortcut);
+    };
     // A popup opens with Electron's default handler, so the page inside it could
     // otherwise spawn native windows without limit. Nothing in an OAuth flow
     // opens a second popup, so the chain stops at the first one.
     const windowCreated = (window: Electron.BrowserWindow): void => {
       window.webContents.setIgnoreMenuShortcuts(true);
+      window.webContents.on("before-input-event", (_event, input) => {
+        updateEditingMenuShortcuts(window.webContents, input);
+      });
       window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     };
     const beforeInput = (event: Electron.Event, input: Electron.Input): void => {
+      updateEditingMenuShortcuts(wc, input);
+      if (
+        input.type === "keyDown" &&
+        input.key.toLowerCase() === "w" &&
+        (hostPlatform === "darwin" ? input.meta && !input.control : input.control && !input.meta) &&
+        !input.shift &&
+        !input.alt
+      ) {
+        event.preventDefault();
+        if (input.isAutoRepeat) return;
+        runFork(
+          Effect.gen(function* () {
+            const mainWindow = yield* Ref.get(mainWindowRef);
+            if (Option.isNone(mainWindow) || mainWindow.value.isDestroyed()) return;
+            // The renderer owns tab cleanup and pinned-tab rules. Identify the
+            // guest explicitly because the two workspace containers can both be visible.
+            yield* attempt({ operation: "shortcut.closeTab", tabId, webContentsId: wc.id }, () => {
+              mainWindow.value.webContents.send(PREVIEW_CLOSE_TAB_REQUESTED_CHANNEL, tabId);
+            });
+          }).pipe(Effect.ignore),
+        );
+        return;
+      }
       if (
         input.type === "keyDown" &&
         input.key.toLowerCase() === "l" &&
@@ -2045,7 +2088,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     const install = Effect.fn("PreviewManager.installWebContentsListeners")(function* () {
       yield* attempt({ operation: "attachListeners", tabId, webContentsId: wc.id }, () => {
         // Preview input belongs to the page, including keys injected through CDP.
-        // Never let it invoke the host application's menu accelerators.
+        // Only native editing shortcuts opt into menu accelerators during input.
         wc.setIgnoreMenuShortcuts(true);
         wc.on("did-start-navigation", navigationStarted);
         wc.on("did-navigate", syncNavigation);

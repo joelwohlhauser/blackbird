@@ -199,6 +199,49 @@ describe("rightPanelStore", () => {
     expect(useRightPanelStore.getState().byThreadKey).toBe(stableState);
   });
 
+  it.each([false, true])(
+    "pins the built-in PR without changing focus with panel open=%s",
+    (panelOpen) => {
+      const store = useRightPanelStore.getState();
+      if (panelOpen) store.open(refA, "diff");
+      const before = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      const revision = store.getUserActionRevision(refA);
+
+      store.openPullRequest(refA, linkedPullRequest, { pinned: true });
+      store.openLinear(refA, "linear-tab", null, { pinned: true });
+
+      const pinned = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      expect(pinned.mainSurfaces.map((surface) => surface.id)).toEqual([
+        "linear",
+        linkedPullRequest.id,
+      ]);
+      expect(pinned.mainSurfaces[1]).toEqual(linkedPullRequest);
+      expect(pinned.isOpen).toBe(before.isOpen);
+      expect(pinned.activeSurfaceId).toBe(before.activeSurfaceId);
+      expect(pinned.activeMainSurfaceId).toBe(before.activeMainSurfaceId);
+      expect(store.getUserActionRevision(refA)).toBe(revision);
+
+      store.activateSurface(refA, linkedPullRequest.id);
+      const stableState = useRightPanelStore.getState().byThreadKey;
+      store.openPullRequest(refA, linkedPullRequest, { pinned: true });
+      expect(useRightPanelStore.getState().byThreadKey).toBe(stableState);
+    },
+  );
+
+  it("reuses a built-in PR already open in the panel when attaching it to the chat", () => {
+    const store = useRightPanelStore.getState();
+    store.open(refA, "diff");
+    store.openPullRequest(refA, linkedPullRequest);
+    const revision = store.getUserActionRevision(refA);
+    store.openPullRequest(refA, linkedPullRequest, { pinned: true });
+
+    const pinned = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(pinned.mainSurfaces).toEqual([linkedPullRequest]);
+    expect(pinned.surfaces).toEqual([completedDiff]);
+    expect(pinned.activeSurfaceId).toBe("diff");
+    expect(store.getUserActionRevision(refA)).toBe(revision);
+  });
+
   it("cycles surfaces in both directions with wraparound", () => {
     const surfaces = [
       { id: "diff", kind: "diff" },

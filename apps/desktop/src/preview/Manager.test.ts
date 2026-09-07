@@ -600,6 +600,109 @@ describe("PreviewManager", () => {
     ),
   );
 
+  effectIt.effect("allows native editing shortcuts in browser tabs and popups", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const preview = makeFaviconWebContents();
+        fromId.mockReturnValue(preview.webContents);
+        yield* manager.createTab("tab-editing");
+        yield* manager.registerWebview("tab-editing", 42);
+
+        const popup = makeFaviconWebContents();
+        preview.listeners.get("did-create-window")!({ webContents: popup.webContents } as never);
+        for (const target of [preview, popup]) {
+          const beforeInput = target.listeners.get("before-input-event");
+          expect(beforeInput).toBeDefined();
+          for (const key of ["c", "x", "v", "a", "z"]) {
+            const preventDefault = vi.fn();
+            const input = {
+              type: "keyDown",
+              key,
+              meta: true,
+              control: false,
+              shift: false,
+              alt: false,
+            };
+            beforeInput!({ preventDefault } as never, input as never);
+            const ignoreMenu = (target.webContents as Electron.WebContents).setIgnoreMenuShortcuts;
+            expect(ignoreMenu).toHaveBeenLastCalledWith(false);
+            expect(preventDefault).not.toHaveBeenCalled();
+
+            for (const override of [
+              { type: "keyUp" },
+              { meta: false },
+              { control: true },
+              { alt: true },
+              { key: "w" },
+              { key: "," },
+              { key: "+" },
+            ]) {
+              beforeInput!({ preventDefault } as never, { ...input, ...override } as never);
+              expect(ignoreMenu).toHaveBeenLastCalledWith(true);
+            }
+            beforeInput!({ preventDefault } as never, { ...input, shift: true } as never);
+            expect(ignoreMenu).toHaveBeenLastCalledWith(key !== "z");
+          }
+        }
+      }),
+    ),
+  );
+
+  effectIt.effect("requests closing the browser tab that receives Command+W only once", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const preview = makeFaviconWebContents();
+        const host = { send: vi.fn() };
+        Object.assign(preview.webContents, { hostWebContents: host });
+        fromId.mockReturnValue(preview.webContents);
+        yield* manager.setMainWindow({
+          isDestroyed: () => false,
+          once: vi.fn(),
+          webContents: host,
+        } as never);
+        yield* manager.createTab("tab-close");
+        yield* manager.registerWebview("tab-close", 42);
+        const beforeInput = preview.listeners.get("before-input-event")!;
+        const input = {
+          type: "keyDown",
+          key: "W",
+          meta: true,
+          control: false,
+          shift: false,
+          alt: false,
+          isAutoRepeat: false,
+        };
+        const preventDefault = vi.fn();
+        beforeInput({ preventDefault } as never, input as never);
+        yield* Effect.yieldNow;
+        expect(preventDefault).toHaveBeenCalledOnce();
+        expect(host.send).toHaveBeenCalledExactlyOnceWith(
+          "desktop:preview-close-tab-requested",
+          "tab-close",
+        );
+
+        beforeInput({ preventDefault } as never, { ...input, isAutoRepeat: true } as never);
+        yield* Effect.yieldNow;
+        expect(preventDefault).toHaveBeenCalledTimes(2);
+        expect(host.send).toHaveBeenCalledOnce();
+
+        for (const override of [
+          { type: "keyUp" },
+          { meta: false },
+          { control: true },
+          { shift: true },
+          { alt: true },
+        ]) {
+          preventDefault.mockClear();
+          beforeInput({ preventDefault } as never, { ...input, ...override } as never);
+          yield* Effect.yieldNow;
+          expect(preventDefault).not.toHaveBeenCalled();
+          expect(host.send).toHaveBeenCalledOnce();
+        }
+      }),
+    ),
+  );
+
   effectIt.effect("keeps preview shortcuts out of the host window", () =>
     withManager((manager) =>
       Effect.gen(function* () {
@@ -621,7 +724,7 @@ describe("PreviewManager", () => {
         ).toHaveBeenCalledWith(true);
         const beforeInput = preview.listeners.get("before-input-event")!;
         for (const control of [false, true]) {
-          for (const key of ["k", ",", "w", "j", "q", "+", "a", "c", "v", "x"]) {
+          for (const key of ["k", ",", "j", "q", "+", "a", "c", "v", "x"]) {
             for (const type of ["keyDown", "keyUp"]) {
               const preventDefault = vi.fn();
               beforeInput(
@@ -654,7 +757,7 @@ describe("PreviewManager", () => {
 
         const setIgnoreMenuShortcuts = vi.fn();
         preview.listeners.get("did-create-window")!({
-          webContents: { setIgnoreMenuShortcuts, setWindowOpenHandler: vi.fn() },
+          webContents: { setIgnoreMenuShortcuts, setWindowOpenHandler: vi.fn(), on: vi.fn() },
         } as never);
         expect(setIgnoreMenuShortcuts).toHaveBeenCalledWith(true);
       }),

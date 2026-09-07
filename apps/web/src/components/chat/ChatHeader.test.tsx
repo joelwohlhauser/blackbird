@@ -2,9 +2,6 @@ import type { EnvironmentId, ResolvedKeybindingsConfig, ThreadId } from "@t3tool
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-vi.mock("../GitActionsControl", () => ({
-  default: () => <button type="button">Initialize Git</button>,
-}));
 vi.mock("../ProjectScriptsControl", () => ({
   default: () => <button type="button">Add action</button>,
 }));
@@ -23,13 +20,11 @@ function renderHeader(
   showProjectActions: boolean,
   rightPanelOpen = false,
   workspaceNavigatorOpen = false,
-  isGitRepo = false,
 ) {
   return renderToStaticMarkup(
     <ChatHeader
       activeThreadEnvironmentId={"local" as EnvironmentId}
       activeThreadId={"thread-1" as ThreadId}
-      activeProjectName="Quick chats"
       activeProjectCwd="~"
       activeProjectScripts={[]}
       showProjectActions={showProjectActions}
@@ -37,8 +32,6 @@ function renderHeader(
       keybindings={EMPTY_KEYBINDINGS}
       rightPanelOpen={rightPanelOpen}
       workspaceNavigatorOpen={workspaceNavigatorOpen}
-      isGitRepo={isGitRepo}
-      gitCwd="~"
       leading={<span>Chat tab strip</span>}
       onRunProjectScript={() => {}}
       onAddProjectScript={async () => undefined as never}
@@ -49,26 +42,17 @@ function renderHeader(
 }
 
 describe("ChatHeader project actions", () => {
-  it("hides Add action and Initialize Git for Quick Chats", () => {
+  it("hides project actions for Quick Chats", () => {
     const html = renderHeader(false);
 
     expect(html).toContain("Chat tab strip");
     expect(html).not.toContain("Add action");
-    expect(html).not.toContain("Initialize Git");
   });
 
   it("keeps project actions available for regular project chats", () => {
     const html = renderHeader(true);
 
     expect(html).toContain("Add action");
-    expect(html).toContain("Initialize Git");
-  });
-
-  it("moves repository Git actions out of the chat header", () => {
-    const html = renderHeader(true, false, false, true);
-
-    expect(html).toContain("Add action");
-    expect(html).not.toContain("Initialize Git");
   });
 
   it("reserves room for panel toggles while both right panels are closed", () => {

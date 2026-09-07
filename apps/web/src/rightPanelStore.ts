@@ -192,6 +192,7 @@ interface RightPanelStoreState {
   openPullRequest: (
     ref: ScopedThreadRef,
     target: { environmentId?: string; projectId: string; repository: string; number: number },
+    options?: { pinned?: boolean },
   ) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   splitTerminal: (
@@ -482,7 +483,11 @@ const openDedicatedBrowserSurface = (
 };
 
 const dedicatedSurfaceRank = (surface: RightPanelSurface): number =>
-  surface.kind === "linear" ? 0 : surface.kind === "github-pr" ? 1 : 2;
+  surface.kind === "linear"
+    ? 0
+    : surface.kind === "github-pr" || surface.kind === "pull-request"
+      ? 1
+      : 2;
 
 /**
  * Keeps an attached Linear/PR surface beside the chat tab without stealing
@@ -491,10 +496,14 @@ const dedicatedSurfaceRank = (surface: RightPanelSurface): number =>
  */
 const pinDedicatedSurface = (
   current: ThreadRightPanelState,
-  surfaceId: "linear" | "github-pr",
+  surfaceId: "linear" | "github-pr" | PullRequestSurface["id"],
 ): ThreadRightPanelState => {
   const surface = findSurface(current, (entry) => entry.id === surfaceId);
-  if (!surface || (surface.kind !== "linear" && surface.kind !== "github-pr")) return current;
+  if (
+    !surface ||
+    (surface.kind !== "linear" && surface.kind !== "github-pr" && surface.kind !== "pull-request")
+  )
+    return current;
 
   const surfaces = current.surfaces.filter((entry) => entry.id !== surfaceId);
   const mainSurfaces = [
@@ -521,7 +530,7 @@ const pinDedicatedSurface = (
 const pinDedicatedSurfaceWithoutActivation = (
   current: ThreadRightPanelState,
   opened: ThreadRightPanelState,
-  surfaceId: "linear" | "github-pr",
+  surfaceId: "linear" | "github-pr" | PullRequestSurface["id"],
 ): ThreadRightPanelState => {
   const pinned = pinDedicatedSurface(opened, surfaceId);
   const isOpen = current.isOpen && pinned.surfaces.length > 0;
@@ -855,11 +864,22 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             pinDedicatedSurface(current, surfaceId),
           ),
         })),
-      openPullRequest: (ref, target) =>
+      openPullRequest: (ref, target, options) =>
         set((state) => ({
-          ...userAction(state, scopedThreadKey(ref), (current) => {
-            return upsertSurface(current, pullRequestSurface(target));
-          }),
+          ...(options?.pinned ? automaticUpdate : userAction)(
+            state,
+            scopedThreadKey(ref),
+            (current) => {
+              const surface = pullRequestSurface(target);
+              if (options?.pinned && findSurface(current, (entry) => entry.id === surface.id)) {
+                return pinDedicatedSurface(current, surface.id);
+              }
+              const opened = upsertSurface(current, surface);
+              return options?.pinned
+                ? pinDedicatedSurfaceWithoutActivation(current, opened, surface.id)
+                : opened;
+            },
+          ),
         })),
       openFile: (ref, relativePath, line) =>
         set((state) => ({

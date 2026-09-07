@@ -40,9 +40,10 @@ const previewSessionSyncAtom = Atom.family((threadKey: string) => {
   return Atom.make((get) => {
     let disposed = false;
     let eventsVersion = 0;
+    let listRefreshStarted = false;
 
     const reconcileSessions = (result: Atom.Type<typeof sessionsAtom>) => {
-      if (!AsyncResult.isSuccess(result)) return;
+      if (!listRefreshStarted || !AsyncResult.isSuccess(result) || result.waiting) return;
       reconcilePreviewServerSessions(threadRef, result.value);
     };
 
@@ -78,9 +79,10 @@ const previewSessionSyncAtom = Atom.family((threadKey: string) => {
     });
     queueMicrotask(() => {
       if (disposed) return;
-      // The cached list can predate an automation-created tab. Keep the local
-      // snapshot visible until an authoritative refresh arrives instead of
-      // reconciling against a stale empty result when the panel first mounts.
+      // Cached and stale-while-refreshing lists can omit live tabs created since
+      // the last read. Applying them unmounts the guest before the fresh list
+      // restores it, reloading the page when the user returns to the chat.
+      listRefreshStarted = true;
       get.refresh(sessionsAtom);
       if (eventsVersion === 0) applyLatestEvent(initialEvent);
     });

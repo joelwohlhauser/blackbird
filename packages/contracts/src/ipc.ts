@@ -3,7 +3,6 @@ import type {
   VcsCreateRefResult,
   VcsCreateWorktreeInput,
   VcsCreateWorktreeResult,
-  VcsInitInput,
   VcsListRefsInput,
   VcsListRefsResult,
   VcsPullInput,
@@ -1257,6 +1256,7 @@ export interface DesktopPreviewBridge {
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;
   onFocusUrl: (listener: (tabId: string) => void) => () => void;
+  onCloseTabRequested: (listener: (tabId: string) => void) => () => void;
   onOpenLinkInNewTab: (listener: (sourceTabId: string, url: string) => void) => () => void;
 }
 
@@ -1360,7 +1360,6 @@ export interface EnvironmentApi {
     removeWorktree: (input: VcsRemoveWorktreeInput) => Promise<void>;
     createRef: (input: VcsCreateRefInput) => Promise<VcsCreateRefResult>;
     switchRef: (input: VcsSwitchRefInput) => Promise<VcsSwitchRefResult>;
-    init: (input: VcsInitInput) => Promise<void>;
     pull: (input: VcsPullInput) => Promise<VcsPullResult>;
     refreshStatus: (input: VcsStatusInput) => Promise<VcsStatusResult>;
     onStatus: (

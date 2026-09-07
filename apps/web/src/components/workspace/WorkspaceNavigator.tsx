@@ -246,7 +246,6 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
                 <GitActionsControl
                   gitCwd={props.cwd}
                   activeThreadRef={props.activeThreadRef}
-                  placement="changes"
                   {...(props.draftId ? { draftId: props.draftId } : {})}
                 />
               </div>
