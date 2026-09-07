@@ -1,16 +1,17 @@
 import type { EnvironmentId, ProjectIconOverride } from "@t3tools/contracts";
 import {
-  getProjectFaviconCacheKey,
+  getProjectFaviconResourceKey,
   isProjectFaviconFallbackUrl,
 } from "@t3tools/shared/projectFavicon";
 import { FolderCodeIcon } from "lucide-react";
 import type { IconName } from "lucide-react/dynamic";
 import { lazy, Suspense, useState } from "react";
 import { useAssetUrlState } from "../assets/assetUrls";
+import { useAtomValue } from "@effect/atom-react";
+import { projectFaviconUrlAtom } from "../state/assets";
 import { projectIconColorClassName } from "../projectIconColors";
 import { cn } from "~/lib/utils";
 
-const loadedProjectFaviconSrcs = new Map<string, string>();
 const DynamicIcon = lazy(() =>
   import("lucide-react/dynamic").then((module) => ({
     default: module.DynamicIcon,
@@ -28,8 +29,7 @@ export function ProjectFavicon(input: {
   projectIcon?: ProjectIconOverride | null | undefined;
   className?: string | undefined;
 }) {
-  const state = useProjectFaviconAsset(input);
-  const src = state._tag === "Success" ? state.url : null;
+  const src = useAtomValue(projectFaviconUrlAtom(input));
   if (input.projectIcon?.kind === "emoji") {
     return <ProjectEmojiIcon className={input.className} emoji={input.projectIcon.emoji} />;
   }
@@ -54,11 +54,9 @@ export function ProjectFavicon(input: {
   }
   if (!input.faviconPath || !src || isProjectFaviconFallbackUrl(src)) return null;
 
-  const cacheKey = getProjectFaviconCacheKey(input.environmentId, input.cwd, src);
+  const cacheKey = getProjectFaviconResourceKey(input.environmentId, input.cwd, input.faviconPath);
 
-  return (
-    <ProjectFaviconImage key={cacheKey} cacheKey={cacheKey} src={src} className={input.className} />
-  );
+  return <ProjectFaviconImage key={cacheKey} src={src} className={input.className} />;
 }
 
 export function useProjectFaviconAsset(input: {
@@ -93,22 +91,17 @@ function ProjectEmojiIcon({
 }
 
 function ProjectFaviconImage({
-  cacheKey,
   src,
   className,
 }: {
-  readonly cacheKey: string;
   readonly src: string;
   readonly className?: string | undefined;
 }) {
-  const [displayedSrc, setDisplayedSrc] = useState<string | null>(
-    () => loadedProjectFaviconSrcs.get(cacheKey) ?? null,
+  const [displayedSrc, setDisplayedSrc] = useState<string | null>(() =>
+    src.startsWith("data:image/") ? src : null,
   );
   const isLoading = displayedSrc !== src;
   const handleLoadError = (failedSrc: string) => {
-    if (loadedProjectFaviconSrcs.get(cacheKey) === failedSrc) {
-      loadedProjectFaviconSrcs.delete(cacheKey);
-    }
     setDisplayedSrc((currentSrc) => (currentSrc === failedSrc ? null : currentSrc));
   };
 
@@ -128,7 +121,6 @@ function ProjectFaviconImage({
           alt=""
           className="hidden"
           onLoad={() => {
-            loadedProjectFaviconSrcs.set(cacheKey, src);
             setDisplayedSrc(src);
           }}
           onError={() => handleLoadError(src)}

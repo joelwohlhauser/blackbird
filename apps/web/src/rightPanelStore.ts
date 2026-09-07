@@ -146,6 +146,19 @@ export function resolveAdjacentRightPanelSurface(
 interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
   workspaceNavigatorOpenByThreadKey: Record<string, true>;
+  /** Session-only count of user panel choices per thread. Automatic updates do not advance it. */
+  userActionRevisionByThreadKey: Record<string, number>;
+  getUserActionRevision: (ref: ScopedThreadRef) => number;
+  /**
+   * Open a surface on behalf of the app, not the user. Refused when the user
+   * made a panel choice after `expectedUserActionRevision` was read.
+   */
+  openProactive: (
+    ref: ScopedThreadRef,
+    surface: Extract<RightPanelSurface, { kind: "diff" | "pull-request" }>,
+    expectedUserActionRevision: number,
+  ) => boolean;
+
   open: (
     ref: ScopedThreadRef,
     kind: Exclude<
@@ -695,14 +708,63 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
   return { byThreadKey, workspaceNavigatorOpenByThreadKey };
 }
 
+// User choices supersede pending automatic panel requests. Restored and
+// pinned attachments reconcile resources without taking over that choice.
+const automaticUpdate = (
+  state: RightPanelStoreState,
+  threadKey: string,
+  updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
+): Partial<RightPanelStoreState> => ({
+  byThreadKey: updateThread(state.byThreadKey, threadKey, updater),
+});
+
+const userAction = (
+  state: RightPanelStoreState,
+  threadKey: string,
+  updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
+): Partial<RightPanelStoreState> => ({
+  byThreadKey: updateThread(state.byThreadKey, threadKey, updater),
+  userActionRevisionByThreadKey: {
+    ...state.userActionRevisionByThreadKey,
+    [threadKey]: (state.userActionRevisionByThreadKey[threadKey] ?? 0) + 1,
+  },
+});
+
 export const useRightPanelStore = create<RightPanelStoreState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       byThreadKey: {},
       workspaceNavigatorOpenByThreadKey: {},
+      userActionRevisionByThreadKey: {},
+      getUserActionRevision: (ref) =>
+        get().userActionRevisionByThreadKey[scopedThreadKey(ref)] ?? 0,
+      openProactive: (ref, surface, expectedUserActionRevision) => {
+        let opened = false;
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          if (
+            (state.userActionRevisionByThreadKey[threadKey] ?? 0) !== expectedUserActionRevision
+          ) {
+            return state;
+          }
+          // A linked PR takes priority over a completed-turn diff. Manual actions
+          // always apply, and later user choices reject both proactive requests.
+          if (
+            surface.kind === "diff" &&
+            (selectActiveRightPanel(state.byThreadKey, ref) === "pull-request" ||
+              selectActiveMainSurface(state.byThreadKey, ref)?.kind === "pull-request")
+          ) {
+            return state;
+          }
+          opened = true;
+          return automaticUpdate(state, threadKey, (current) => upsertSurface(current, surface));
+        });
+        return opened;
+      },
+
       open: (ref, kind) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             if (kind === "preview") {
               const existing = findSurface(current, (surface) => surface.kind === "preview");
               return upsertSurface(current, existing ?? browserSurface(null));
@@ -712,7 +774,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       openBrowser: (ref, tabId, url) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const surface = browserSurface(tabId, url);
             if (!tabId) return upsertSurface(current, surface);
             if (surfaceContainer(current, surface.id)) {
@@ -751,49 +813,57 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       openLinear: (ref, tabId, url, options) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
-            const surface: RightPanelSurface = {
-              id: "linear",
-              kind: "linear",
-              resourceId: tabId,
-              ...(url !== undefined ? { url } : {}),
-            };
-            const opened = openDedicatedBrowserSurface(current, surface, tabId);
-            return options?.pinned
-              ? pinDedicatedSurfaceWithoutActivation(current, opened, "linear")
-              : opened;
-          }),
+          ...(options?.pinned ? automaticUpdate : userAction)(
+            state,
+            scopedThreadKey(ref),
+            (current) => {
+              const surface: RightPanelSurface = {
+                id: "linear",
+                kind: "linear",
+                resourceId: tabId,
+                ...(url !== undefined ? { url } : {}),
+              };
+              const opened = openDedicatedBrowserSurface(current, surface, tabId);
+              return options?.pinned
+                ? pinDedicatedSurfaceWithoutActivation(current, opened, "linear")
+                : opened;
+            },
+          ),
         })),
       openGitHubPullRequest: (ref, tabId, url, options) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
-            const surface: RightPanelSurface = {
-              id: "github-pr",
-              kind: "github-pr",
-              resourceId: tabId,
-              ...(url !== undefined ? { url } : {}),
-            };
-            const opened = openDedicatedBrowserSurface(current, surface, tabId);
-            return options?.pinned
-              ? pinDedicatedSurfaceWithoutActivation(current, opened, "github-pr")
-              : opened;
-          }),
+          ...(options?.pinned ? automaticUpdate : userAction)(
+            state,
+            scopedThreadKey(ref),
+            (current) => {
+              const surface: RightPanelSurface = {
+                id: "github-pr",
+                kind: "github-pr",
+                resourceId: tabId,
+                ...(url !== undefined ? { url } : {}),
+              };
+              const opened = openDedicatedBrowserSurface(current, surface, tabId);
+              return options?.pinned
+                ? pinDedicatedSurfaceWithoutActivation(current, opened, "github-pr")
+                : opened;
+            },
+          ),
         })),
       pinDedicatedSurface: (ref, surfaceId) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
+          ...automaticUpdate(state, scopedThreadKey(ref), (current) =>
             pinDedicatedSurface(current, surfaceId),
           ),
         })),
       openPullRequest: (ref, target) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             return upsertSurface(current, pullRequestSurface(target));
           }),
         })),
       openFile: (ref, relativePath, line) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const base = withoutSurfaces(current, (surface) => surface.kind === "files");
             const surfaceId = `file:${relativePath}` as const;
             const isExistingFileSurface = (
@@ -834,7 +904,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       openDiffFile: (ref, scope, relativePath, baseRef, headRef) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
+          ...userAction(state, scopedThreadKey(ref), (current) =>
             upsertSurface(
               current,
               fileDiffSurface(
@@ -848,7 +918,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       openAttachment: (ref, attachment) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const withoutStandaloneExplorer = current.surfaces.filter(
               (surface) => surface.kind !== "files",
             );
@@ -860,13 +930,13 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       openTerminal: (ref, terminalId) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
+          ...userAction(state, scopedThreadKey(ref), (current) =>
             upsertSurface(current, terminalSurface(terminalId)),
           ),
         })),
       splitTerminal: (ref, surfaceId, terminalId, direction = "horizontal") =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const container = surfaceContainer(current, surfaceId);
             if (!container) return current;
             const splitSurface = (surface: RightPanelSurface): RightPanelSurface => {
@@ -898,7 +968,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       activateTerminal: (ref, surfaceId, terminalId) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const container = surfaceContainer(current, surfaceId);
             if (!container) return current;
             const withActiveTerminal = (surface: RightPanelSurface): RightPanelSurface =>
@@ -923,7 +993,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       closeTerminal: (ref, surfaceId, terminalId) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const container = surfaceContainer(current, surfaceId);
             if (!container) return current;
             const containerSurfaces =
@@ -976,7 +1046,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       activateSurface: (ref, surfaceId) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const container = surfaceContainer(current, surfaceId);
             if (container === "main") return { ...current, activeMainSurfaceId: surfaceId };
             if (container === "panel") {
@@ -987,7 +1057,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       activateMainChat: (ref) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
+          ...userAction(state, scopedThreadKey(ref), (current) =>
             current.activeMainSurfaceId === null
               ? current
               : { ...current, activeMainSurfaceId: null },
@@ -995,7 +1065,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       moveSurface: (ref, surfaceId, target) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const source = surfaceContainer(current, surfaceId);
             if (!source) return current;
             if (source === target.container) {
@@ -1052,7 +1122,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       closeSurface: (ref, surfaceId) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const container = surfaceContainer(current, surfaceId);
             if (container === "main") {
               const index = current.mainSurfaces.findIndex((surface) => surface.id === surfaceId);
@@ -1090,7 +1160,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       closeOtherSurfaces: (ref, surfaceId) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const container = surfaceContainer(current, surfaceId);
             if (container === "main") {
               const surface = current.mainSurfaces.find((entry) => entry.id === surfaceId)!;
@@ -1113,7 +1183,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       closeSurfacesToRight: (ref, surfaceId) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const container = surfaceContainer(current, surfaceId);
             if (container === "main") {
               const index = current.mainSurfaces.findIndex((surface) => surface.id === surfaceId);
@@ -1143,7 +1213,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       closeAllSurfaces: (ref, container = "panel") =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             if (container === "main") {
               return current.mainSurfaces.length === 0
                 ? current
@@ -1355,19 +1425,19 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         })),
       show: (ref) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
+          ...userAction(state, scopedThreadKey(ref), (current) =>
             current.isOpen ? current : { ...current, isOpen: true },
           ),
         })),
       close: (ref) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) =>
+          ...userAction(state, scopedThreadKey(ref), (current) =>
             current.isOpen ? { ...current, isOpen: false } : current,
           ),
         })),
       toggleVisibility: (ref) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => ({
+          ...userAction(state, scopedThreadKey(ref), (current) => ({
             ...current,
             isOpen: !current.isOpen,
           })),
@@ -1388,7 +1458,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         }),
       toggle: (ref, kind) =>
         set((state) => ({
-          byThreadKey: updateThread(state.byThreadKey, scopedThreadKey(ref), (current) => {
+          ...userAction(state, scopedThreadKey(ref), (current) => {
             const active = current.surfaces.find(
               (surface) => surface.id === current.activeSurfaceId,
             );
@@ -1408,10 +1478,18 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           const { [threadKey]: _removedPanel, ...restPanels } = state.byThreadKey;
           const { [threadKey]: _removedNavigator, ...restNavigators } =
             state.workspaceNavigatorOpenByThreadKey;
-          if (_removedPanel === undefined && _removedNavigator === undefined) return state;
+          const { [threadKey]: _removedRevision, ...restRevisions } =
+            state.userActionRevisionByThreadKey;
+          if (
+            _removedPanel === undefined &&
+            _removedNavigator === undefined &&
+            _removedRevision === undefined
+          )
+            return state;
           return {
             byThreadKey: restPanels,
             workspaceNavigatorOpenByThreadKey: restNavigators,
+            userActionRevisionByThreadKey: restRevisions,
           };
         }),
     }),

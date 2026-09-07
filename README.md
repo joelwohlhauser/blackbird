@@ -35,8 +35,7 @@ The left sidebar includes:
   icon marks expanded projects without a favicon);
 - section header actions (new quick chat, sort/options, add project) that stay
   hidden until the header row is hovered or focused;
-- manual drag-and-drop chat ordering within a project and across the main chat
-  list in sidebar v2, saved locally and preserved when filtering by project;
+- manual drag-and-drop chat ordering within a project, saved locally; sidebar v2 saves active and pinned order on the server and supports dragging between sections;
 - lightweight status **dots only** — the status text lives in the tooltip and
   is never rendered next to the dot, and there is no per-chat PR-state icon;
 - consistent full-width folder and chat rows;
@@ -67,6 +66,12 @@ overriding the global setting. Each chat's choice is saved locally.
 Clicking the notification opens that chat. The
 installer's code-signing step makes this possible; see Development and
 deployment.
+
+### Shared project settings and multiple machines
+
+Settings → Projects supports defaults across projects and connected machines, with per-project overrides for models, workspaces, automatic pulls, browser access, and actions. New chats can automatically choose among eligible connected machines using load balancing. Usage limits can be pooled across provider accounts and machines, and `/usage-limits` opens the usage view.
+
+Async agent questions can be dismissed without sending an answer. On mobile, several new-task drafts can coexist, pending messages stay visible while attachments upload, and new chats can start on an existing branch.
 
 ### Code and diff presentation
 
