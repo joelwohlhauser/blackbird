@@ -64,6 +64,7 @@ import { useProjects } from "~/state/entities";
 import { useEnvironments } from "~/state/environments";
 import { useEnvironmentQuery } from "~/state/query";
 import { useLiveRefresh } from "~/hooks/useLiveRefresh";
+import { usePullRequestStateChange } from "./usePullRequestStateChange";
 import {
   pullRequestEnvironment,
   usePullRequestTurnRefresh,
@@ -714,14 +715,7 @@ export function PullRequestDetailPanel({
     }
     activityRevision.current = next;
   }, [activityQuery.refresh, coreDetail, tabScopeKey]);
-  useLayoutEffect(() => {
-    if (!resolvedCoreDetail) return;
-    onStateChange?.({
-      repository: resolvedCoreDetail.repository,
-      number: resolvedCoreDetail.number,
-      state: resolvedCoreDetail.state,
-    });
-  }, [onStateChange, resolvedCoreDetail]);
+  usePullRequestStateChange(resolvedCoreDetail, onStateChange);
   // Reuse activity and diff until core detail reports a changed revision. Keyed by
   // the pull request rather than by the panel, because this one panel shows a different pull
   // request every time it is opened.

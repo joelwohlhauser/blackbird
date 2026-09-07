@@ -63,6 +63,29 @@ export function getComposerPromptInjectionState(prompt: string): ComposerPromptI
   return isClaudeUltrathinkPrompt(prompt) ? "ultrathink" : "none";
 }
 
+export function getToggledComposerServiceTierOptions(input: ComposerProviderStateInput) {
+  const caps = getProviderModelCapabilities(
+    input.models,
+    input.model,
+    input.provider,
+    input.planModeEnabled,
+  );
+  const descriptors = getProviderOptionDescriptors({ caps, selections: input.modelOptions });
+  const tier = descriptors.find(
+    (descriptor) => descriptor.id === "serviceTier" && descriptor.type === "select",
+  );
+  if (tier?.type !== "select") return null;
+  const standard = tier.options.find((option) => option.label === "Standard");
+  const fast = tier.options.find((option) => option.label === "Fast");
+  if (!standard || !fast) return null;
+
+  const value = getProviderOptionCurrentValue(tier) === fast.id ? standard.id : fast.id;
+  return [
+    ...(input.modelOptions ?? []).filter((option) => option.id !== tier.id),
+    { id: tier.id, value },
+  ];
+}
+
 export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {
   const {
     provider,

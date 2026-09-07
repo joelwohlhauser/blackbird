@@ -185,6 +185,7 @@ import {
 import {
   getComposerPromptInjectionState,
   getComposerProviderState,
+  getToggledComposerServiceTierOptions,
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
 } from "./composerProviderState";
@@ -1406,6 +1407,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           })
       : null);
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
+  const setProviderModelOptions = useComposerDraftStore((store) => store.setProviderModelOptions);
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
   const removeComposerDraftImage = useComposerDraftStore((store) => store.removeImage);
@@ -4677,6 +4679,36 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     <form
       ref={composerFormRef}
       onSubmit={submitComposer}
+      onKeyDownCapture={(event) => {
+        if (
+          event.key !== "." ||
+          !event.metaKey ||
+          event.ctrlKey ||
+          event.altKey ||
+          event.shiftKey ||
+          event.nativeEvent.isComposing ||
+          !(event.target instanceof Node) ||
+          !event.currentTarget.contains(event.target)
+        ) {
+          return;
+        }
+        const nextOptions = getToggledComposerServiceTierOptions({
+          provider: selectedProvider,
+          model: selectedModel,
+          models: selectedProviderModels,
+          modelOptions: composerModelOptions?.[selectedInstanceId],
+          planModeEnabled: settings.planModeEnabled,
+        });
+        if (!nextOptions) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        setProviderModelOptions(composerDraftTarget, selectedProvider, nextOptions, {
+          instanceId: selectedInstanceId,
+          model: selectedModel,
+          persistSticky: true,
+        });
+      }}
       onPointerDownCapture={(event) => {
         const target = event.target;
         if (isInsideRestingComposerControlScope(target)) return;

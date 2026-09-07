@@ -163,6 +163,7 @@ to the current chat and survive chat switches/restarts.
 
 Useful shortcuts on macOS:
 
+- Command+. toggles Standard/Fast service tier while the composer is focused, on start pages and in chats, for models that offer both tiers.
 - Command+Shift+B — toggle the workspace navigator
 - Command+Shift+G — open the workspace navigator on Changes
 - Command+Shift+H — open the workspace navigator on PR

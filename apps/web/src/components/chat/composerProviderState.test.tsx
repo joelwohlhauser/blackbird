@@ -8,6 +8,7 @@ import {
 import {
   getComposerPromptInjectionState,
   getComposerProviderState,
+  getToggledComposerServiceTierOptions,
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
 } from "./composerProviderState";
@@ -60,6 +61,55 @@ const ULTRATHINK_FRAME_CLASSES = {
   composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.07)_inset]",
   modelPickerIconClassName: "ultrathink-chroma",
 } as const;
+
+describe("getToggledComposerServiceTierOptions", () => {
+  const tiers = selectDescriptor("serviceTier", [
+    { id: "default", label: "Standard", isDefault: true },
+    { id: "priority", label: "Fast" },
+    { id: "flex", label: "Flex" },
+  ]);
+  const input = {
+    provider: PROVIDER,
+    model: MODEL,
+    models: modelWith([tiers]),
+    modelOptions: undefined,
+    planModeEnabled: true,
+  };
+
+  it("toggles the default Standard tier to Fast", () => {
+    expect(getToggledComposerServiceTierOptions(input)).toEqual(
+      selections(["serviceTier", "priority"]),
+    );
+  });
+
+  it.each(["default", "priority", "flex"])(
+    "toggles from %s while preserving other selected options",
+    (currentTier) => {
+      expect(
+        getToggledComposerServiceTierOptions({
+          ...input,
+          modelOptions: selections(["effort", "high"], ["serviceTier", currentTier]),
+        }),
+      ).toEqual(
+        selections(
+          ["effort", "high"],
+          ["serviceTier", currentTier === "priority" ? "default" : "priority"],
+        ),
+      );
+    },
+  );
+
+  it.each([
+    { descriptors: [] },
+    { descriptors: [booleanDescriptor("fastMode")] },
+    { descriptors: [selectDescriptor("serviceTier", [{ id: "default", label: "Standard" }])] },
+    { descriptors: [selectDescriptor("serviceTier", [{ id: "priority", label: "Fast" }])] },
+  ])("ignores models without both service tiers: $descriptors", ({ descriptors }) => {
+    expect(
+      getToggledComposerServiceTierOptions({ ...input, models: modelWith(descriptors) }),
+    ).toBeNull();
+  });
+});
 
 describe("getComposerProviderState", () => {
   it("derives a stable prompt injection state for ordinary prompt edits", () => {
