@@ -59,10 +59,10 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
                 onClick={onToggleTerminal}
                 aria-label="Toggle terminal drawer"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 disabled={!terminalAvailable}
               >
-                <PanelBottomIcon className="size-3.5" />
+                <PanelBottomIcon className="size-4" />
               </Button>
             }
           />
@@ -87,10 +87,10 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
                     : "Toggle right panel"
                 }
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 disabled={!rightPanelAvailable}
               >
-                <PanelRightIcon className="size-3.5" />
+                <PanelRightIcon className="size-4" />
                 {liveAgentCount > 0 ? (
                   <span
                     aria-hidden
@@ -123,10 +123,10 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
                 onClick={onToggleWorkspaceNavigator}
                 aria-label="Toggle workspace navigator"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 disabled={!workspaceNavigatorAvailable}
               >
-                <PanelRightDashedIcon className="size-3.5" />
+                <PanelRightDashedIcon className="size-4" />
               </Button>
             }
           />
