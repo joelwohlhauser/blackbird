@@ -1,9 +1,4 @@
-/**
- * Ctrl+Tab tab switcher for the tabs inside the current chat, mirroring the
- * Option+Tab chat switcher: a quick tap switches to the adjacent tab without
- * showing UI, holding Ctrl reveals the overlay after a short delay, repeated
- * Tab presses advance (Shift reverses), and releasing Ctrl commits.
- */
+/** Ctrl+Tab cycles workspace tabs; holding Ctrl reveals the overlay, and releasing it commits. */
 import type { PreviewSessionSnapshot } from "@t3tools/contracts";
 import { MessageSquare } from "lucide-react";
 import { useEffect, useRef } from "react";
@@ -26,6 +21,16 @@ export interface WorkspaceTabSwitcherItem {
 export interface WorkspaceTabSwitcherState {
   readonly items: ReadonlyArray<WorkspaceTabSwitcherItem>;
   readonly selectedIndex: number;
+}
+
+export function adjacentWorkspaceTabIndex(
+  itemCount: number,
+  currentIndex: number,
+  direction: "next" | "previous",
+): number {
+  if (itemCount <= 1) return 0;
+  const delta = direction === "next" ? 1 : -1;
+  return (currentIndex + delta + itemCount) % itemCount;
 }
 
 export function buildWorkspaceTabSwitcherItems(input: {

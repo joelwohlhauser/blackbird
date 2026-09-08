@@ -1,4 +1,5 @@
 import { assert, describe, it } from "vite-plus/test";
+import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
 
 import {
   type KeybindingCommand,
@@ -177,7 +178,7 @@ const DEFAULT_BINDINGS = compile([
       altKey: true,
       modKey: false,
     },
-    command: "chat.switcher",
+    command: "thread.next",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   {
@@ -189,7 +190,7 @@ const DEFAULT_BINDINGS = compile([
       altKey: true,
       modKey: false,
     },
-    command: "chat.switcher",
+    command: "thread.previous",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   { shortcut: modShortcut("o"), command: "editor.openFavorite" },
@@ -599,24 +600,31 @@ describe("chat/editor shortcuts", () => {
     );
   });
 
-  it("matches Option-Tab in both directions for the chat switcher", () => {
+  it("matches Option-Tab to the next sidebar chat and Shift-Option-Tab to the previous chat", () => {
     assert.strictEqual(
-      resolveShortcutCommand(event({ key: "Tab", altKey: true }), DEFAULT_BINDINGS, {
+      resolveShortcutCommand(event({ key: "Tab", altKey: true }), DEFAULT_RESOLVED_KEYBINDINGS, {
         platform: "MacIntel",
         context: { terminalFocus: false },
       }),
-      "chat.switcher",
+      "thread.next",
     );
     assert.strictEqual(
       resolveShortcutCommand(
         event({ key: "Tab", altKey: true, shiftKey: true }),
-        DEFAULT_BINDINGS,
+        DEFAULT_RESOLVED_KEYBINDINGS,
         {
           platform: "MacIntel",
           context: { terminalFocus: false },
         },
       ),
-      "chat.switcher",
+      "thread.previous",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "Tab", altKey: true }), DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: true },
+      }),
+      null,
     );
   });
 

@@ -1062,6 +1062,8 @@ export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
+  /** Native window focus, including embedded browser pages and popup windows. */
+  isAppFocused?: () => boolean;
   /** The desktop client's OS platform, read from Electron's preload process. */
   getClientPlatform?: () => string;
   /**

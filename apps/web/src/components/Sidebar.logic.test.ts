@@ -672,6 +672,13 @@ describe("resolveAdjacentThreadId", () => {
         direction: "previous",
       }),
     ).toBeNull();
+    expect(
+      resolveAdjacentThreadId({
+        threadIds: threads,
+        currentThreadId: threads[2] ?? null,
+        direction: "next",
+      }),
+    ).toBeNull();
   });
 });
 

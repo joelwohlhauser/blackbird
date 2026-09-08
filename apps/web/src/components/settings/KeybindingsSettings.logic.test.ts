@@ -137,7 +137,6 @@ describe("KeybindingsSettings.logic", () => {
   it("formats static and project script command labels", () => {
     expect(commandLabel("commandPalette.toggle")).toBe("Command Palette: Toggle");
     expect(commandLabel("chat.newLocal")).toBe("New Quick Chat");
-    expect(commandLabel("chat.switcher")).toBe("Chat Switcher");
     expect(commandLabel("rightPanel.nextTab")).toBe("Right Panel: Next Tab");
     expect(commandLabel("rightPanel.previousTab")).toBe("Right Panel: Previous Tab");
     expect(commandLabel("workspaceNavigator.toggle")).toBe("Toggle Files Sidebar");
@@ -172,8 +171,9 @@ describe("KeybindingsSettings.logic", () => {
     ] satisfies ResolvedKeybindingsConfig);
 
     expect(options).toEqual(
-      expect.arrayContaining(["chat.new", "rightPanel.toggleMaximized", "script.setup-db.run"]),
+      expect.arrayContaining(["chat.new", "thread.next", "thread.previous", "script.setup-db.run"]),
     );
+    expect(options).not.toContain("chat.switcher");
   });
 
   it("reports unknown when variables without rejecting parseable expressions", () => {

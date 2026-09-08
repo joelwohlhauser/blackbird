@@ -46,18 +46,9 @@ The left sidebar includes:
 - resizing while docked or while temporarily overlaid; and
 - edge-hover reveal when the sidebar is hidden, without reflowing the app.
 
-Option+Tab behaves like an application switcher for recent chats. Holding
-Option and pressing Tab repeatedly moves forward; adding Shift moves backward.
-A quick tap switches immediately, while the visual switcher appears only after
-about 100 ms and includes chat status. Command+Shift+N opens the Quick-chat
-start page.
+Option+Tab immediately opens the chat below the current one in the left sidebar; Shift+Option+Tab opens the chat above. Navigation follows the displayed order, stops at either end, and shows no switcher overlay. Command+Shift+N opens the Quick-chat start page.
 
-Control+Tab is the analogous **tab switcher** for the tabs inside the current
-chat (the pinned chat tab, main-area tabs, and right-panel tabs). It only
-engages when the chat has two or more tabs; otherwise Control+Tab falls
-through to the chat switcher. There is no Command-held numbered chat-jump
-hint overlay (the ⌘1–9 shortcuts still work quietly and appear in the command
-palette).
+Control+Tab opens the **tab switcher** for tabs inside the current chat (the pinned chat tab, main-area tabs, and right-panel tabs). It only engages when the chat has two or more tabs. There is no Command-held numbered chat-jump hint overlay (the ⌘1–9 shortcuts still work quietly and appear in the command palette).
 
 **Settings → General → Agent notifications** (desktop only, off by default)
 posts a macOS notification whenever an agent stops — finished, failed, or

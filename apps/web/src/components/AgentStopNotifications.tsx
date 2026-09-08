@@ -30,7 +30,9 @@ export function AgentStopNotifications() {
     }
     const { next, stops } = diffAgentStops(seenStopKeysRef.current, shells);
     seenStopKeysRef.current = next;
-    if (stops.length === 0 || document.hasFocus()) return;
+    if (stops.length === 0) return;
+    // The chat document loses focus when an embedded browser page receives it.
+    if (window.desktopBridge?.isAppFocused?.() ?? document.hasFocus()) return;
 
     for (const { shell, kind } of stops) {
       const threadRef = scopeThreadRef(shell.environmentId, shell.id);

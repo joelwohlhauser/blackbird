@@ -13,6 +13,7 @@ import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import {
   getLocalEnvironmentBootstraps,
   getWindowFullscreenState,
+  isAppFocused,
   pickProjectFavicon,
 } from "./window.ts";
 
@@ -151,6 +152,24 @@ describe("getWindowFullscreenState", () => {
       ),
     );
   });
+});
+
+describe("isAppFocused", () => {
+  it.effect("checks native focus even when falling back to the main window", () =>
+    Effect.gen(function* () {
+      for (const focused of [true, false]) {
+        const window = { isFocused: () => focused } as Electron.BrowserWindow;
+        const result = yield* isAppFocused.handler().pipe(
+          Effect.provide(
+            Layer.mock(ElectronWindow.ElectronWindow)({
+              focusedMainOrFirst: Effect.succeed(Option.some(window)),
+            }),
+          ),
+        );
+        assert.equal(result, focused);
+      }
+    }),
+  );
 });
 
 describe("pickProjectFavicon", () => {

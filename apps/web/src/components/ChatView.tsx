@@ -193,12 +193,12 @@ import {
 } from "../workspaceTabs";
 import { WorkspaceTabDragPreview, WorkspaceTabStrip } from "./WorkspaceTabStrip";
 import {
+  adjacentWorkspaceTabIndex,
   buildWorkspaceTabSwitcherItems,
   WorkspaceTabSwitcherOverlay,
   type WorkspaceTabSwitcherItem,
   type WorkspaceTabSwitcherState,
 } from "./WorkspaceTabSwitcher";
-import { adjacentChatSwitcherIndex } from "../chatSwitcher";
 import {
   isPreviewSupportedInRuntime,
   setActivePreviewTab,
@@ -4634,7 +4634,7 @@ export default function ChatView(props: ChatViewProps) {
       if (workspaceTabSwitcher) {
         setWorkspaceTabSwitcher({
           items: workspaceTabSwitcher.items,
-          selectedIndex: adjacentChatSwitcherIndex(
+          selectedIndex: adjacentWorkspaceTabIndex(
             workspaceTabSwitcher.items.length,
             workspaceTabSwitcher.selectedIndex,
             direction,
@@ -4661,7 +4661,7 @@ export default function ChatView(props: ChatViewProps) {
       );
       setWorkspaceTabSwitcher({
         items,
-        selectedIndex: adjacentChatSwitcherIndex(items.length, currentIndex, direction),
+        selectedIndex: adjacentWorkspaceTabIndex(items.length, currentIndex, direction),
       });
       return true;
     },

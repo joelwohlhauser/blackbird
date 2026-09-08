@@ -278,9 +278,6 @@ export function commandLabel(command: KeybindingCommand): string {
   if (raw === "chat.newLocal") {
     return "New Quick Chat";
   }
-  if (raw === "chat.switcher") {
-    return "Chat Switcher";
-  }
   if (raw === "rightPanel.nextTab") {
     return "Right Panel: Next Tab";
   }

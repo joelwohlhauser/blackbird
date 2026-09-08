@@ -4139,6 +4139,8 @@ export default function Sidebar() {
       };
       const traversalDirection = threadTraversalDirectionFromCommand(command);
       if (traversalDirection !== null) {
+        event.preventDefault();
+        event.stopPropagation();
         navigateToThreadKey(
           resolveAdjacentThreadId({
             threadIds: orderedThreadKeys,

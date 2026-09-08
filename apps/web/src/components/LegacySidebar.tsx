@@ -3677,6 +3677,8 @@ export default function Sidebar() {
       });
       const traversalDirection = threadTraversalDirectionFromCommand(command);
       if (traversalDirection !== null) {
+        event.preventDefault();
+        event.stopPropagation();
         const targetThreadKey = resolveAdjacentThreadId({
           threadIds: orderedSidebarThreadKeys,
           currentThreadId: routeThreadKey,
@@ -3690,8 +3692,6 @@ export default function Sidebar() {
           return;
         }
 
-        event.preventDefault();
-        event.stopPropagation();
         navigateToThread(scopeThreadRef(targetThread.environmentId, targetThread.id));
         return;
       }

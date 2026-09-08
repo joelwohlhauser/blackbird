@@ -153,4 +153,16 @@ describe("per-chat desktop notifications", () => {
     await render();
     expect(state.notify).not.toHaveBeenCalled();
   });
+
+  it.each([true, false])(
+    "uses native app focus (%s) when the chat document has no focus",
+    async (appFocused) => {
+      state.enabled = true;
+      Object.assign(window, { desktopBridge: { isAppFocused: () => appFocused } });
+      await render();
+      state.shells = shells(true);
+      await render();
+      expect(state.notify).toHaveBeenCalledTimes(appFocused ? 0 : 2);
+    },
+  );
 });
