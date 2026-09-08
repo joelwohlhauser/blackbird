@@ -63,7 +63,9 @@ deployment.
 
 Settings → Projects supports defaults across projects and connected machines, with per-project overrides for models, workspaces, automatic pulls, browser access, and actions. New chats can automatically choose among eligible connected machines using load balancing. Usage limits can be pooled across provider accounts and machines, and `/usage-limits` opens the usage view.
 
-Async agent questions can be dismissed without sending an answer. On mobile, several new-task drafts can coexist, pending messages stay visible while attachments upload, and new chats can start on an existing branch.
+Async agent questions accept file attachments and can be dismissed without sending an answer. Dropping files onto a sidebar chat opens it and adds the files to its composer without sending. On mobile, several new-task drafts can coexist, pending messages stay visible while attachments upload, and new chats can start on an existing branch.
+
+Desktop window capture is available in Settings → SnapShots and is off by default. Once enabled, its shortcut attaches the current window to your draft with the app name, window title, and optional app text. Markdown images open as a gallery with previous/next navigation.
 
 ### Code and diff presentation
 

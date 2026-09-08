@@ -78,6 +78,8 @@ import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { cn, isMacPlatform } from "../lib/utils";
+import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
+import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
 import {
   readThreadShell,
   useProjects,
@@ -303,7 +305,7 @@ interface SidebarThreadRowProps {
     threadRef: ScopedThreadRef,
     orderedProjectThreadKeys: readonly string[],
   ) => void;
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  navigateToThread: (threadRef: ScopedThreadRef) => Promise<void>;
   handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
   handleThreadContextMenu: (
     threadRef: ScopedThreadRef,
@@ -320,6 +322,7 @@ interface SidebarThreadRowProps {
   isManualThreadSorting: boolean;
   dragInProgressRef: React.RefObject<boolean>;
   suppressClickAfterDragRef: React.RefObject<boolean>;
+  onFileDropThreads: (threadRef: ScopedThreadRef, files: File[]) => void;
 }
 
 const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
@@ -348,6 +351,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isManualThreadSorting,
     dragInProgressRef,
     suppressClickAfterDragRef,
+    onFileDropThreads,
     thread,
   } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
@@ -362,6 +366,23 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     isDragging: isThreadDragging,
     isOver: isThreadDragOver,
   } = useSortable({ id: threadKey, disabled: !isManualThreadSorting });
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
+  const fileDropHandlers = useMemo(
+    () =>
+      makeWorkspaceFileDropHandlers({
+        setDragActive: setIsFileDragOver,
+        addFiles: (files) => {
+          onFileDropThreads(threadRef, files);
+        },
+      }),
+    [onFileDropThreads, threadRef],
+  );
+  useEffect(() => {
+    if (!isFileDragOver) return;
+    const clearFileDrag = () => setIsFileDragOver(false);
+    window.addEventListener("dragend", clearFileDrag);
+    return () => window.removeEventListener("dragend", clearFileDrag);
+  }, [isFileDragOver]);
   const { leaseLiveStatus, rowRef } = useSidebarRowSubscriptionLease(isActive);
   const setRowNodeRef = useCallback(
     (node: HTMLLIElement | null) => {
@@ -666,6 +687,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       }}
       className="w-full"
       data-thread-item
+      {...fileDropHandlers}
       onMouseLeave={handleMouseLeave}
       onBlurCapture={handleBlurCapture}
       onPointerDownCapture={handleRowPointerDownCapture}
@@ -690,6 +712,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               ? "before:bg-sidebar-row-selected hover:before:bg-sidebar-row-active"
               : "hover:before:bg-sidebar-row-hover",
           alignWithProjectLabel ? "pl-6 pr-2" : "pl-3.5 pr-2",
+          isFileDragOver && "ring-1 ring-inset ring-primary/70",
           isManualThreadSorting && "cursor-grab active:cursor-grabbing",
           isThreadDragging && "z-20 opacity-80",
           isThreadDragOver && !isThreadDragging && "ring-1 ring-primary/40",
@@ -879,7 +902,8 @@ interface SidebarProjectThreadListProps {
     threadRef: ScopedThreadRef,
     orderedProjectThreadKeys: readonly string[],
   ) => void;
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  navigateToThread: (threadRef: ScopedThreadRef) => Promise<void>;
+  onFileDropThreads: (threadRef: ScopedThreadRef, files: File[]) => void;
   handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
   handleThreadContextMenu: (
     threadRef: ScopedThreadRef,
@@ -929,6 +953,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     attachThreadListAutoAnimateRef,
     handleThreadClick,
     navigateToThread,
+    onFileDropThreads,
     handleMultiSelectContextMenu,
     handleThreadContextMenu,
     clearSelection,
@@ -1006,6 +1031,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
               confirmArchiveButtonRefs={confirmArchiveButtonRefs}
               handleThreadClick={handleThreadClick}
               navigateToThread={navigateToThread}
+              onFileDropThreads={onFileDropThreads}
               handleMultiSelectContextMenu={handleMultiSelectContextMenu}
               handleThreadContextMenu={handleThreadContextMenu}
               clearSelection={clearSelection}
@@ -1153,6 +1179,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     (settings) => settings.sidebarThreadPreviewCount,
   );
   const router = useRouter();
+  const queuePendingFileDrop = useSidebarPendingFileDropStore((s) => s.queuePendingFileDrop);
+  const clearPendingFileDrop = useSidebarPendingFileDropStore((s) => s.clearPendingFileDrop);
   const { isMobile, setOpenMobile } = useSidebar();
   const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
   const setProjectExpanded = useUiStateStore((state) => state.setProjectExpanded);
@@ -1830,12 +1858,31 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (isMobile) {
         setOpenMobile(false);
       }
-      void router.navigate({
+      return router.navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(threadRef),
       });
     },
     [clearSelection, isMobile, router, setOpenMobile, setSelectionAnchor],
+  );
+  const handleThreadFileDrop = useCallback(
+    async (threadRef: ScopedThreadRef, files: File[]) => {
+      const dropId = queuePendingFileDrop({ threadRef, files });
+      const targetPathname = router.buildLocation({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(threadRef),
+      }).pathname;
+      if (targetPathname === router.state.location.pathname) return;
+      try {
+        await navigateToThread(threadRef);
+        if (targetPathname !== router.state.location.pathname) {
+          clearPendingFileDrop(dropId);
+        }
+      } catch {
+        clearPendingFileDrop(dropId);
+      }
+    },
+    [clearPendingFileDrop, navigateToThread, queuePendingFileDrop, router],
   );
 
   const handleThreadClick = useCallback(
@@ -2341,11 +2388,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             onKeyDown={handleProjectButtonKeyDown}
             onContextMenu={handleProjectButtonContextMenu}
           >
-            <ProjectFavicon
-              environmentId={project.environmentId}
-              cwd={project.workspaceRoot}
-              faviconPath={project.faviconPath}
-            />
+            <ProjectFavicon project={project} />
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <span className="truncate text-sm font-medium text-sidebar-foreground/85">
                 {project.displayName}
@@ -2431,6 +2474,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
         handleThreadClick={handleThreadClick}
         navigateToThread={navigateToThread}
+        onFileDropThreads={handleThreadFileDrop}
         handleMultiSelectContextMenu={handleMultiSelectContextMenu}
         handleThreadContextMenu={handleThreadContextMenu}
         clearSelection={clearSelection}

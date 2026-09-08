@@ -52,7 +52,7 @@ export const LinearIssueStatusesResult = Schema.Struct({
 });
 export type LinearIssueStatusesResult = typeof LinearIssueStatusesResult.Type;
 
-export class WorkspaceCleanupError extends Schema.TaggedErrorClass<WorkspaceCleanupError>()(
+export class WorkspaceCleanupError extends Schema.TaggedError<WorkspaceCleanupError>()(
   "WorkspaceCleanupError",
   {
     operation: Schema.Literals(["list", "linear-status"]),

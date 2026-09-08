@@ -40,7 +40,7 @@ export const CreateWorktreeAndSwitchResult = Schema.Struct({
 });
 export type CreateWorktreeAndSwitchResult = typeof CreateWorktreeAndSwitchResult.Type;
 
-export class WorkspaceHandoffError extends Schema.TaggedErrorClass<WorkspaceHandoffError>()(
+export class WorkspaceHandoffError extends Schema.TaggedError<WorkspaceHandoffError>()(
   "WorkspaceHandoffError",
   {
     operation: TrimmedNonEmptyString,

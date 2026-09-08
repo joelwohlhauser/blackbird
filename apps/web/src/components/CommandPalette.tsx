@@ -98,7 +98,11 @@ import {
 import { onOpenCommandPalette } from "../commandPaletteBus";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
+import {
+  PULL_REQUESTS_PANEL_REF,
+  selectActiveRightPanel,
+  useRightPanelStore,
+} from "../rightPanelStore";
 import { getLatestThreadForProject, sortThreads } from "../lib/threadSort";
 import {
   cn,
@@ -175,15 +179,7 @@ import type { Project } from "../types";
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 
 function projectFavicon(project: Project) {
-  return (
-    <ProjectFavicon
-      environmentId={project.environmentId}
-      cwd={project.workspaceRoot}
-      faviconPath={project.faviconPath}
-      projectIcon={project.projectIcon}
-      className="size-4"
-    />
-  );
+  return <ProjectFavicon project={project} className="size-4" />;
 }
 
 function getEnvironmentBrowsePlatform(os: string | null | undefined): string {
@@ -603,17 +599,25 @@ function OpenCommandPaletteDialog(props: {
     () => projects.filter((project) => !isQuickChatsProject(project)),
     [projects],
   );
-  const openPanelPullRequestUrl = useOpenPanelPullRequestUrl(
-    activeThread ? scopeThreadRef(activeThread.environmentId, activeThread.id) : null,
-  );
+  const referenceThreadRef =
+    pathname === "/pull-requests"
+      ? environments.some(
+          (environment) => environment.serverConfig?.environment.capabilities.pullRequests === true,
+        )
+        ? PULL_REQUESTS_PANEL_REF
+        : null
+      : activeThread
+        ? scopeThreadRef(activeThread.environmentId, activeThread.id)
+        : null;
+  const openPanelPullRequestUrl = useOpenPanelPullRequestUrl(referenceThreadRef);
   const activeThreadReferenceCopyTarget =
-    activeThread == null
+    referenceThreadRef === null || (pathname === "/pull-requests" && !openPanelPullRequestUrl)
       ? null
       : resolveThreadReferenceCopyTarget({
-          threadId: activeThread.id,
+          threadId: referenceThreadRef.threadId,
           openPanelPullRequestUrl,
           linkedPullRequestUrl:
-            activeThread.linkedPullRequest?.url ?? activeThread.branchPullRequest?.url ?? null,
+            activeThread?.linkedPullRequest?.url ?? activeThread?.branchPullRequest?.url ?? null,
         });
   const copyActiveThreadReference = useCallback(async () => {
     const target = activeThreadReferenceCopyTarget;
@@ -787,7 +791,7 @@ function OpenCommandPaletteDialog(props: {
     () =>
       projectPickerEntries.map(({ group, targetProject }) => ({
         ...targetProject,
-        title: group.displayName,
+        displayName: group.displayName,
       })),
     [projectPickerEntries],
   );
@@ -920,18 +924,8 @@ function OpenCommandPaletteDialog(props: {
       new Map<ProjectId, string>(projects.map((project) => [project.id, project.workspaceRoot])),
     [projects],
   );
-  const projectFaviconPathById = useMemo(
-    () => new Map(projects.map((project) => [project.id, project.faviconPath ?? null] as const)),
-    [projects],
-  );
-  const projectIconByKey = useMemo(
-    () =>
-      new Map(
-        projects.map(
-          (project) =>
-            [`${project.environmentId}:${project.id}`, project.projectIcon ?? null] as const,
-        ),
-      ),
+  const projectByKey = useMemo(
+    () => new Map(projects.map((project) => [`${project.environmentId}:${project.id}`, project])),
     [projects],
   );
   const projectTitleById = useMemo(
@@ -1167,12 +1161,7 @@ function OpenCommandPaletteDialog(props: {
             ) ?? null;
           return (
             <ThreadCommandSubtitle
-              environmentId={thread.environmentId}
-              projectCwd={projectCwdById.get(thread.projectId) ?? null}
-              projectFaviconPath={projectFaviconPathById.get(thread.projectId) ?? null}
-              projectIcon={
-                projectIconByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null
-              }
+              project={projectByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null}
               projectTitle={projectTitle ?? null}
               branch={thread.branch}
               worktreePath={thread.worktreePath}
@@ -1210,9 +1199,7 @@ function OpenCommandPaletteDialog(props: {
       activeThreadId,
       clientSettings.sidebarThreadSortOrder,
       navigate,
-      projectCwdById,
-      projectFaviconPathById,
-      projectIconByKey,
+      projectByKey,
       projectTitleById,
       providerEntryByEnvironmentAndInstanceId,
       threadContentMatchByKey,

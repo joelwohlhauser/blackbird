@@ -1,4 +1,5 @@
-import type { EnvironmentId, ProjectIconOverride } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
   getProjectFaviconResourceKey,
   isProjectFaviconFallbackUrl,
@@ -22,19 +23,29 @@ function DynamicProjectIconFallback() {
   return <FolderCodeIcon className="size-full text-[inherit]" />;
 }
 
+// Pass the project record so its saved favicon and icon override stay together.
+export type ProjectFaviconProject = Pick<
+  EnvironmentProject,
+  "environmentId" | "workspaceRoot" | "title" | "faviconPath" | "projectIcon"
+>;
+
 export function ProjectFavicon(input: {
-  environmentId: EnvironmentId;
-  cwd: string;
-  faviconPath?: string | null | undefined;
-  projectIcon?: ProjectIconOverride | null | undefined;
+  project: ProjectFaviconProject;
   className?: string | undefined;
 }) {
-  const src = useAtomValue(projectFaviconUrlAtom(input));
-  if (input.projectIcon?.kind === "emoji") {
-    return <ProjectEmojiIcon className={input.className} emoji={input.projectIcon.emoji} />;
+  const { project } = input;
+  const src = useAtomValue(
+    projectFaviconUrlAtom({
+      environmentId: project.environmentId,
+      cwd: project.workspaceRoot,
+      faviconPath: project.faviconPath,
+    }),
+  );
+  if (project.projectIcon?.kind === "emoji") {
+    return <ProjectEmojiIcon className={input.className} emoji={project.projectIcon.emoji} />;
   }
-  if (input.projectIcon?.kind === "lucide") {
-    const colorClassName = projectIconColorClassName(input.projectIcon.color);
+  if (project.projectIcon?.kind === "lucide") {
+    const colorClassName = projectIconColorClassName(project.projectIcon.color);
     const iconClassName = cn(
       "inline-flex size-3.5 shrink-0 items-center justify-center",
       colorClassName,
@@ -44,7 +55,7 @@ export function ProjectFavicon(input: {
       <span aria-hidden="true" className={iconClassName}>
         <Suspense fallback={<DynamicProjectIconFallback />}>
           <DynamicIcon
-            name={input.projectIcon.name as IconName}
+            name={project.projectIcon.name as IconName}
             className={cn("size-full", colorClassName)}
             fallback={DynamicProjectIconFallback}
           />
@@ -52,9 +63,13 @@ export function ProjectFavicon(input: {
       </span>
     );
   }
-  if (!input.faviconPath || !src || isProjectFaviconFallbackUrl(src)) return null;
+  if (!project.faviconPath || !src || isProjectFaviconFallbackUrl(src)) return null;
 
-  const cacheKey = getProjectFaviconResourceKey(input.environmentId, input.cwd, input.faviconPath);
+  const cacheKey = getProjectFaviconResourceKey(
+    project.environmentId,
+    project.workspaceRoot,
+    project.faviconPath,
+  );
 
   return <ProjectFaviconImage key={cacheKey} src={src} className={input.className} />;
 }
@@ -111,7 +126,7 @@ function ProjectFaviconImage({
         <img
           src={displayedSrc}
           alt=""
-          className={cn("size-3.5 shrink-0 rounded-sm object-contain", className)}
+          className={cn("size-3.5 shrink-0 rounded-[37.5%] object-contain", className)}
           onError={() => handleLoadError(displayedSrc)}
         />
       ) : null}

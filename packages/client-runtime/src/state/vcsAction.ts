@@ -78,7 +78,7 @@ export interface RunVcsStackedActionInput {
   readonly onProgress?: (event: GitActionProgressEvent) => void;
 }
 
-export class VcsActionUnavailableError extends Schema.TaggedErrorClass<VcsActionUnavailableError>()(
+export class VcsActionUnavailableError extends Schema.TaggedError<VcsActionUnavailableError>()(
   "VcsActionUnavailableError",
   {
     operation: VcsActionOperation,
@@ -91,7 +91,7 @@ export class VcsActionUnavailableError extends Schema.TaggedErrorClass<VcsAction
   }
 }
 
-export class VcsActionRemoteFailureError extends Schema.TaggedErrorClass<VcsActionRemoteFailureError>()(
+export class VcsActionRemoteFailureError extends Schema.TaggedError<VcsActionRemoteFailureError>()(
   "VcsActionRemoteFailureError",
   {
     actionId: Schema.String,
@@ -109,7 +109,7 @@ export class VcsActionRemoteFailureError extends Schema.TaggedErrorClass<VcsActi
   }
 }
 
-export class VcsActionMissingTerminalEventError extends Schema.TaggedErrorClass<VcsActionMissingTerminalEventError>()(
+export class VcsActionMissingTerminalEventError extends Schema.TaggedError<VcsActionMissingTerminalEventError>()(
   "VcsActionMissingTerminalEventError",
   {
     actionId: Schema.String,
@@ -124,7 +124,7 @@ export class VcsActionMissingTerminalEventError extends Schema.TaggedErrorClass<
   }
 }
 
-export class VcsActionTargetKeyParseError extends Schema.TaggedErrorClass<VcsActionTargetKeyParseError>()(
+export class VcsActionTargetKeyParseError extends Schema.TaggedError<VcsActionTargetKeyParseError>()(
   "VcsActionTargetKeyParseError",
   {
     keyLength: Schema.Number,
