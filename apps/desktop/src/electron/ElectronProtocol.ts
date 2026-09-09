@@ -91,7 +91,9 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
     "style-src 'self' 'unsafe-inline'",
     `font-src 'self' ${input.scheme}: data:`,
     "worker-src 'self' blob:",
-    "frame-src 'self' https://challenges.cloudflare.com",
+    // HTML/PDF previews use asset URLs from local or remote environments.
+    // HTML remains sandboxed by the preview iframe and the asset response policy.
+    "frame-src 'self' http: https:",
     "form-action 'self'",
   ].join("; ");
 }
