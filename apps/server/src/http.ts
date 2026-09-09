@@ -220,7 +220,20 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
       headers,
     });
   }
-  return yield* HttpServerResponse.file(asset.path, { status, offset, bytesToRead, headers });
+  const response = yield* HttpServerResponse.file(asset.path, {
+    status,
+    offset,
+    bytesToRead,
+    headers,
+  });
+  // Node file responses put the MIME type only in headers. Compression rebuilds
+  // raw bodies from their metadata, so it otherwise drops the Content-Type.
+  return response.body._tag === "Raw"
+    ? HttpServerResponse.raw(response.body.body, {
+        ...response,
+        contentType: response.headers["content-type"],
+      })
+    : response;
 });
 
 export const httpCompressionLayer = HttpRouter.middleware(HttpMiddleware.compression(), {

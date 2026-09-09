@@ -6,7 +6,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { HttpServerResponse } from "effect/unstable/http";
+import { HttpPlatform, HttpServerResponse } from "effect/unstable/http";
+import * as NodeZlib from "node:zlib";
 import { openMediaFile } from "./assets/MediaFile.ts";
 
 import {
@@ -18,6 +19,37 @@ import {
 } from "./http.ts";
 
 const fileResponseLayer = Layer.mergeAll(NodeHttpPlatform.layer, NodeServices.layer);
+
+it.effect("preserves asset content types and bytes through compression", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const platform = yield* HttpPlatform.HttpPlatform;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-compressed-assets-" });
+    for (const [name, contentType, contents] of [
+      ["index.html", "text/html; charset=utf-8", "<!doctype html><h1>Preview · works</h1>"],
+      ["style.css", "text/css", "body { background: green; }"],
+    ] as const) {
+      const filePath = path.join(directory, name);
+      yield* fs.writeFileString(filePath, contents);
+      for (const algorithm of ["gzip", "br"] as const) {
+        const response = HttpServerResponse.toWeb(
+          yield* platform.compression.compressResponse(
+            yield* assetFileResponse({ path: filePath }),
+            algorithm,
+          ),
+        );
+        const bytes = yield* Effect.promise(() => response.arrayBuffer());
+        const decoded = (
+          algorithm === "gzip" ? NodeZlib.gunzipSync : NodeZlib.brotliDecompressSync
+        )(new Uint8Array(bytes)).toString("utf8");
+        expect(decoded).toBe(contents);
+        expect(response.headers.get("content-type")).toBe(contentType);
+        expect(response.headers.get("content-encoding")).toBe(algorithm);
+      }
+    }
+  }).pipe(Effect.provide(fileResponseLayer)),
+);
 
 describe("video asset byte ranges", () => {
   it.effect("uses current descriptor metadata after an in-place truncate or extension", () =>
