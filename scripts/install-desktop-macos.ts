@@ -1,22 +1,27 @@
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off globalDate:off globalTimers:off - This host-side installer must invoke macOS packaging and disk-image utilities directly.
-import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
 const APP_QUIT_TIMEOUT_MS = 15_000;
 const APP_QUIT_POLL_INTERVAL_MS = 250;
 const LEGACY_DESKTOP_PRODUCT_NAMES = ["Blackboard (Alpha)", "Blackbird (Alpha)"] as const;
 
-async function run(command: string, args: readonly string[]): Promise<void> {
+async function run(command: string, args: readonly string[], input?: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = NodeChildProcess.spawn(command, args, {
       cwd: repoRoot,
-      stdio: "inherit",
+      stdio: input === undefined ? "inherit" : ["pipe", "inherit", "inherit"],
     });
     child.once("error", reject);
+    if (input !== undefined) {
+      child.stdin!.on("error", reject);
+      child.stdin!.end(input);
+    }
     child.once("exit", (code, signal) => {
       if (code === 0) {
         resolve();
@@ -32,7 +37,7 @@ async function run(command: string, args: readonly string[]): Promise<void> {
 }
 
 async function exists(target: string): Promise<boolean> {
-  return stat(target).then(
+  return NodeFSP.stat(target).then(
     () => true,
     () => false,
   );
@@ -40,7 +45,7 @@ async function exists(target: string): Promise<boolean> {
 
 async function output(command: string, args: readonly string[]): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = NodeChildProcess.spawn(command, args, {
       cwd: repoRoot,
       stdio: ["ignore", "pipe", "inherit"],
     });
@@ -69,7 +74,7 @@ export function findInstalledDesktopProcessIds(
   installedAppPath: string,
   productName: string,
 ): readonly number[] {
-  const executablePath = path.join(installedAppPath, "Contents", "MacOS", productName);
+  const executablePath = NodePath.join(installedAppPath, "Contents", "MacOS", productName);
   return processList.split("\n").flatMap((line) => {
     const match = /^\s*(\d+)\s+(.+?)\s*$/.exec(line);
     if (!match) return [];
@@ -111,7 +116,7 @@ async function quitInstalledDesktopApp(
 }
 
 export function resolveInstalledAppPath(applicationsDir: string, productName: string): string {
-  return path.join(path.resolve(applicationsDir), `${productName}.app`);
+  return NodePath.join(NodePath.resolve(applicationsDir), `${productName}.app`);
 }
 
 export function resolveLegacyInstalledAppPaths(applicationsDir: string): readonly string[] {
@@ -144,13 +149,39 @@ export function findSingleDmg(entries: readonly string[]): string {
   return images[0]!;
 }
 
+async function updateTarsServer(appPath: string): Promise<void> {
+  const archive = NodePath.join(appPath, "Contents/Resources/blackbird-remote-server.tgz");
+  const archiveId = NodeCrypto.createHash("sha256")
+    .update(await NodeFSP.readFile(archive))
+    .digest("hex");
+  const uploadName = `${archiveId}-${NodeCrypto.randomUUID()}.tgz`;
+  const script = await NodeFSP.readFile(
+    NodePath.join(repoRoot, "scripts/install-example-server.sh"),
+    "utf8",
+  );
+  console.log("[desktop-install] Updating the matching Blackbird server on remote...");
+  await run("ssh", ["-o", "BatchMode=yes", "remote", "mkdir -p ~/.t3/blackbird-server"]);
+  await run("scp", ["-o", "BatchMode=yes", archive, `remote:.t3/blackbird-server/${uploadName}`]);
+  await run(
+    "ssh",
+    [
+      "-o",
+      "BatchMode=yes",
+      "remote",
+      `bash -s -- "$HOME/.t3/blackbird-server" ${archiveId} ${uploadName}`,
+    ],
+    script,
+  );
+}
+
 async function installDesktopApp(): Promise<void> {
+  // oxlint-disable-next-line t3code/no-global-process-runtime -- This host installer only runs on the local Mac.
   if (process.platform !== "darwin") {
     throw new Error("Local desktop deployment is only supported on macOS.");
   }
 
   const desktopPackage = JSON.parse(
-    await readFile(path.join(repoRoot, "apps/desktop/package.json"), "utf8"),
+    await NodeFSP.readFile(NodePath.join(repoRoot, "apps/desktop/package.json"), "utf8"),
   ) as { productName?: string };
   const productName = desktopPackage.productName?.trim();
   if (!productName) {
@@ -160,18 +191,20 @@ async function installDesktopApp(): Promise<void> {
   const applicationsDir = process.env.BLACKBIRD_APPLICATIONS_DIR?.trim() || "/Applications";
   const destination = resolveInstalledAppPath(applicationsDir, productName);
 
-  const workDir = await mkdtemp(path.join(tmpdir(), "blackbird-desktop-install-"));
-  const artifactsDir = path.join(workDir, "artifacts");
-  const mountDir = path.join(workDir, "mounted-dmg");
-  const stagedApp = path.join(applicationsDir, `.${productName}.app.installing-${process.pid}`);
-  const previousApp = path.join(applicationsDir, `.${productName}.app.previous-${process.pid}`);
+  const workDir = await NodeFSP.mkdtemp(
+    NodePath.join(NodeOS.tmpdir(), "blackbird-desktop-install-"),
+  );
+  const artifactsDir = NodePath.join(workDir, "artifacts");
+  const mountDir = NodePath.join(workDir, "mounted-dmg");
+  const stagedApp = NodePath.join(applicationsDir, `.${productName}.app.installing-${process.pid}`);
+  const previousApp = NodePath.join(applicationsDir, `.${productName}.app.previous-${process.pid}`);
   let mounted = false;
   let previousMoved = false;
 
   try {
-    await mkdir(artifactsDir, { recursive: true });
-    await mkdir(mountDir, { recursive: true });
-    await mkdir(applicationsDir, { recursive: true });
+    await NodeFSP.mkdir(artifactsDir, { recursive: true });
+    await NodeFSP.mkdir(mountDir, { recursive: true });
+    await NodeFSP.mkdir(applicationsDir, { recursive: true });
 
     console.log(`[desktop-install] Building the latest ${productName} desktop app...`);
     await run("node", [
@@ -184,17 +217,17 @@ async function installDesktopApp(): Promise<void> {
       artifactsDir,
     ]);
 
-    const dmgName = findSingleDmg(await readdir(artifactsDir));
-    const dmgPath = path.join(artifactsDir, dmgName);
+    const dmgName = findSingleDmg(await NodeFSP.readdir(artifactsDir));
+    const dmgPath = NodePath.join(artifactsDir, dmgName);
     await run("hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mountDir, dmgPath]);
     mounted = true;
 
-    const bundledApp = path.join(mountDir, `${productName}.app`);
+    const bundledApp = NodePath.join(mountDir, `${productName}.app`);
     if (!(await exists(bundledApp))) {
       throw new Error(`The desktop image does not contain ${productName}.app.`);
     }
 
-    await rm(stagedApp, { recursive: true, force: true });
+    await NodeFSP.rm(stagedApp, { recursive: true, force: true });
     await run("ditto", [bundledApp, stagedApp]);
     await run("hdiutil", ["detach", mountDir]);
     mounted = false;
@@ -209,6 +242,10 @@ async function installDesktopApp(): Promise<void> {
     );
     await run("codesign", ["--force", "--deep", "--sign", signingIdentity, stagedApp]);
 
+    // Install the bundled backend before closing the desktop, so an SSH or
+    // dependency-install failure leaves the local app running.
+    await updateTarsServer(stagedApp);
+
     // Keep the currently installed app available throughout the expensive build
     // and staging work. Only close it once the replacement is ready for the
     // atomic swap below.
@@ -221,19 +258,19 @@ async function installDesktopApp(): Promise<void> {
     }
 
     if (await exists(destination)) {
-      await rm(previousApp, { recursive: true, force: true });
-      await rename(destination, previousApp);
+      await NodeFSP.rm(previousApp, { recursive: true, force: true });
+      await NodeFSP.rename(destination, previousApp);
       previousMoved = true;
     }
-    await rename(stagedApp, destination);
+    await NodeFSP.rename(stagedApp, destination);
     if (previousMoved) {
-      await rm(previousApp, { recursive: true, force: true });
+      await NodeFSP.rm(previousApp, { recursive: true, force: true });
       previousMoved = false;
     }
 
     for (const legacyAppPath of resolveLegacyInstalledAppPaths(applicationsDir)) {
       if (legacyAppPath === destination || !(await exists(legacyAppPath))) continue;
-      await rm(legacyAppPath, { recursive: true, force: true });
+      await NodeFSP.rm(legacyAppPath, { recursive: true, force: true });
       console.log(`[desktop-install] Removed legacy installation ${legacyAppPath}`);
     }
 
@@ -243,7 +280,7 @@ async function installDesktopApp(): Promise<void> {
   } catch (error) {
     if (previousMoved && !(await exists(destination)) && (await exists(previousApp))) {
       try {
-        await rename(previousApp, destination);
+        await NodeFSP.rename(previousApp, destination);
         previousMoved = false;
       } catch (restoreError) {
         throw new AggregateError(
@@ -257,11 +294,11 @@ async function installDesktopApp(): Promise<void> {
     if (mounted) {
       await run("hdiutil", ["detach", mountDir]).catch(() => undefined);
     }
-    await rm(stagedApp, { recursive: true, force: true });
+    await NodeFSP.rm(stagedApp, { recursive: true, force: true });
     if (!previousMoved) {
-      await rm(previousApp, { recursive: true, force: true });
+      await NodeFSP.rm(previousApp, { recursive: true, force: true });
     }
-    await rm(workDir, { recursive: true, force: true });
+    await NodeFSP.rm(workDir, { recursive: true, force: true });
   }
 }
 

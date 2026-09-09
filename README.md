@@ -289,14 +289,7 @@ belong under:
 The leading `~` resolves on remote. `.env` links must point to the corresponding
 main checkout on remote, and dependency installation must also execute there.
 
-A local desktop deployment updates only the local Blackbird client/bundled
-server. It does not magically replace an already-running remote server on
-remote. If a new server-side feature works locally but appears missing remotely,
-check the environment's client/server version warning first, use the remote
-environment update command/flow, and reconnect or restart remote. Keeping the
-remote server version aligned, and resolving worktree settings per environment
-rather than on the client, prevents the earlier remote path and stale-behavior
-problems.
+`pnpm deploy:desktop` updates both the local app and the existing `blackbird.service` on remote using the server archive bundled with that app. Desktop and mobile share this service through the existing Remote link. Do not run the banner's generic `npx t3@…` command or add a second SSH environment for remote; those paths can start an upstream or duplicate backend.
 
 ## Development and deployment
 
@@ -311,8 +304,7 @@ The web client is suitable for everyday UI development and browser testing.
 Use focused tests and typechecks for the code being changed; the inherited
 `AGENTS.md` contains the repository's detailed safety and verification rules.
 
-In this project, **"deploy it" means install the latest Blackbird desktop app
-on the local Mac**, not deploy a website. Run:
+In this project, **"deploy it" means update Blackbird on the local Mac and its matching server on remote**. Run:
 
 ```bash
 pnpm deploy:desktop
@@ -326,9 +318,9 @@ Development identity from the login keychain, whose stable identity lets the
 notification permission survive redeploys, and otherwise signs ad-hoc, which
 works but resets the permission on every deploy.
 
-The deployment script builds the replacement first. Only after the new build
-is ready does it close a running Blackbird app, install the new macOS app, and
-launch it again. This minimizes downtime while working in Blackbird itself.
+The deployment script builds and signs the replacement first, uploads its bundled server to remote, installs dependencies, and restarts the existing service. A failed server health check restores the previous server build. Once remote responds, the script replaces and relaunches the local app. Finish active remote turns before deploying; desktop and mobile briefly reconnect during the server restart.
+
+Routine deployments do not back up the database. The previous server build remains available, but restoring that build does not undo database migrations. Take a database backup separately when a migration needs one.
 
 ## Git workflow
 
