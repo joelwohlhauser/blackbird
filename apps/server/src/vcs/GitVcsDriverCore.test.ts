@@ -945,6 +945,91 @@ it.layer(TestLayer)("GitVcsDriver core integration", (it) => {
   });
 
   describe("review diff previews", () => {
+    it.effect("returns complete oversized tracked diffs for selected files and whole reviews", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        const { initialBranch } = yield* initRepoWithCommit(cwd);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+        const context = "unchanged translation äöü\n".repeat(45_000);
+        yield* writeTextFile(cwd, "large.txt", `${context}original tail\n`);
+        yield* git(cwd, ["add", "large.txt"]);
+        yield* git(cwd, ["commit", "-m", "add large file"]);
+        yield* git(cwd, ["checkout", "-b", "feature/large-diff"]);
+        const committed = `${context}${"committed translation\n".repeat(10_000)}committed tail\n`;
+        yield* writeTextFile(cwd, "large.txt", committed);
+        yield* git(cwd, ["add", "large.txt"]);
+        yield* git(cwd, ["commit", "-m", "change large file"]);
+        const working = `${context}${"working translation\n".repeat(10_000)}working tail\n`;
+        yield* writeTextFile(cwd, "large.txt", working);
+
+        for (const filePath of [undefined, "large.txt"]) {
+          const preview = yield* driver.getReviewDiffPreview({
+            cwd,
+            baseRef: initialBranch,
+            ...(filePath ? { filePath } : {}),
+          });
+          for (const source of preview.sources) {
+            const expected = yield* driver.execute({
+              operation: "test.completeDiff",
+              cwd,
+              args: [
+                "diff",
+                "--patch",
+                "--no-color",
+                "--minimal",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
+                ...(filePath ? ["--unified=999999"] : []),
+                source.kind === "working-tree" ? "HEAD" : `${initialBranch}...HEAD`,
+                "--",
+                ...(filePath ? [filePath] : []),
+              ],
+              maxOutputBytes: Number.POSITIVE_INFINITY,
+            });
+            assert.isAbove(expected.stdout.length, 120_000);
+            assert.isFalse(source.truncated);
+            assert.strictEqual(source.diff.trimEnd(), expected.stdout.trimEnd());
+          }
+        }
+
+        const contents = yield* driver.getReviewDiffFileContents(
+          makeReviewDiffFileContentsInput(cwd, { oldPath: "large.txt", newPath: "large.txt" }),
+        );
+        assert.strictEqual(contents.oldContents, committed);
+        assert.strictEqual(contents.newContents, working);
+      }),
+    );
+
+    it.effect(
+      "returns complete oversized untracked diffs for selected files and whole reviews",
+      () =>
+        Effect.gen(function* () {
+          const cwd = yield* makeTmpDir();
+          yield* initRepoWithCommit(cwd);
+          const driver = yield* GitVcsDriver.GitVcsDriver;
+          const contents = `${"new translation äöü\n".repeat(60_000)}final translation\n`;
+          yield* writeTextFile(cwd, "large.txt", contents);
+
+          for (const filePath of [undefined, "large.txt"]) {
+            const preview = yield* driver.getReviewDiffPreview({
+              cwd,
+              ...(filePath ? { filePath } : {}),
+            });
+            const source = preview.sources.find((source) => source.kind === "working-tree");
+            assert(source);
+            assert.isFalse(source.truncated);
+            assert.include(
+              source.diff,
+              contents
+                .split("\n")
+                .slice(0, -1)
+                .map((line) => `+${line}`)
+                .join("\n"),
+            );
+          }
+        }),
+    );
+
     it.effect("drops an unterminated path from truncated NUL-separated git output", () =>
       Effect.sync(() => {
         const paths = splitNullSeparatedGitStdoutPaths({

@@ -50,14 +50,13 @@ const PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES = 49_000;
 const RANGE_COMMIT_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
 const RANGE_DIFF_SUMMARY_MAX_OUTPUT_BYTES = 19_000;
 const RANGE_DIFF_PATCH_MAX_OUTPUT_BYTES = 59_000;
-const REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES = 120_000;
-const REVIEW_UNTRACKED_DIFF_MAX_OUTPUT_BYTES = 80_000;
-const REVIEW_DIFF_FILE_MAX_OUTPUT_BYTES = 1024 * 1024;
+// Review patches and file contents must be complete. Cutting either can hide
+// changes, especially when a selected file includes all unchanged context.
+const REVIEW_MAX_OUTPUT_BYTES = Number.POSITIVE_INFINITY;
 // Patches the clients render are parsed against git's default a/ and b/ path
 // prefixes. A repository or global diff.noprefix or diff.mnemonicPrefix would
 // otherwise leak into the patch and leave every parsed file unnamed.
 export const PATCH_RENDER_PREFIX_ARGS = ["--src-prefix=a/", "--dst-prefix=b/"] as const;
-const WORKSPACE_FILES_MAX_OUTPUT_BYTES = 120_000;
 const STATUS_UPSTREAM_REFRESH_INTERVAL = Duration.seconds(15);
 const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 
@@ -2304,8 +2303,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         ...(filePath ? ["--", filePath] : []),
       ],
       {
-        maxOutputBytes: WORKSPACE_FILES_MAX_OUTPUT_BYTES,
-        appendTruncationMarker: true,
+        maxOutputBytes: REVIEW_MAX_OUTPUT_BYTES,
       },
     );
     const untrackedPaths = splitNullSeparatedGitStdoutPaths(untrackedResult);
@@ -2335,8 +2333,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
           ],
           {
             allowNonZeroExit: true,
-            maxOutputBytes: REVIEW_UNTRACKED_DIFF_MAX_OUTPUT_BYTES,
-            appendTruncationMarker: true,
+            maxOutputBytes: REVIEW_MAX_OUTPUT_BYTES,
           },
         ),
       { concurrency: 4 },
@@ -2406,8 +2403,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         ...(input.filePath ? [input.filePath] : []),
       ],
       {
-        maxOutputBytes: REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES,
-        appendTruncationMarker: true,
+        maxOutputBytes: REVIEW_MAX_OUTPUT_BYTES,
       },
     ).pipe(
       Effect.orElseSucceed(() => ({
@@ -2445,8 +2441,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
             ...(input.filePath ? [input.filePath] : []),
           ],
           {
-            maxOutputBytes: REVIEW_DIFF_PATCH_MAX_OUTPUT_BYTES,
-            appendTruncationMarker: true,
+            maxOutputBytes: REVIEW_MAX_OUTPUT_BYTES,
           },
         ).pipe(
           Effect.orElseSucceed(() => ({
@@ -2538,7 +2533,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       "GitVcsDriver.getReviewDiffFileContents.revision",
       input.cwd,
       ["show", `${revision}:${relativePath}`],
-      { maxOutputBytes: REVIEW_DIFF_FILE_MAX_OUTPUT_BYTES },
+      { maxOutputBytes: REVIEW_MAX_OUTPUT_BYTES },
     );
     if (result.stdout.includes("\0")) {
       return yield* reviewDiffFileError(input, `Cannot expand binary file '${relativePath}'.`);
@@ -2591,13 +2586,6 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     if (info.type !== "File") {
       return yield* fileError("fs.stat", `Diff path '${input.newPath}' is not a file.`);
     }
-    if (info.size > BigInt(REVIEW_DIFF_FILE_MAX_OUTPUT_BYTES)) {
-      return yield* fileError(
-        "fs.stat",
-        `Diff file '${input.newPath}' exceeds the 1 MB expansion limit.`,
-      );
-    }
-
     const bytes = yield* fileSystem
       .readFile(realTarget)
       .pipe(
