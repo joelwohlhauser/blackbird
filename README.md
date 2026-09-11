@@ -46,7 +46,7 @@ The left sidebar includes:
 - resizing while docked or while temporarily overlaid; and
 - edge-hover reveal when the sidebar is hidden, without reflowing the app.
 
-Option+Tab immediately opens the chat below the current one in the left sidebar; Shift+Option+Tab opens the chat above. Navigation follows the displayed order, stops at either end, and shows no switcher overlay. Command+Shift+N opens the Quick-chat start page.
+Option+Tab immediately opens the next chat in the Active chats list; Shift+Option+Tab opens the previous one. Navigation follows the displayed order and stops at either end. There is no chat switcher or recent-chat ordering. Command+Shift+N opens the Quick-chat start page.
 
 Control+Tab opens the **tab switcher** for tabs inside the current chat (the pinned chat tab, main-area tabs, and right-panel tabs). It only engages when the chat has two or more tabs. There is no Command-held numbered chat-jump hint overlay (the ⌘1–9 shortcuts still work quietly and appear in the command palette).
 
@@ -186,18 +186,7 @@ New worktrees:
 - run all filesystem and Git operations on the environment that owns the
   project.
 
-Agents can start the same workflow from an active chat through Blackbird's MCP
-tool. The agent names a branch: an existing branch is reused (the chat switches
-to its current worktree, or a new worktree checks it out), and an unknown
-branch is created with a new worktree. The current turn finishes and is
-checkpointed, then the same thread automatically continues in the new
-workspace. The composer branch label, Files and Changes navigator roots, and
-new workspace-backed tabs follow the new worktree. This works for local and
-remote environments and is available to Codex, Claude Code, Cursor, Grok, and
-OpenCode. Dependency installation follows the environment setting by default;
-an agent can explicitly skip it for a particular handoff. Agent-created
-worktrees also honor the environment's **Start from origin** default and launch
-the project's configured setup script, matching the composer workflow.
+Agents can start the same workflow from an active chat through Blackbird's MCP tool. An existing branch reuses its checkout or gets a new worktree; an unknown branch creates a new worktree. Agents can pass a destination repository to leave a Quick chat or change projects, or pass an existing folder without a branch to switch there directly. The same conversation keeps its history and resumes in the destination after the current turn ends. Git workspaces are checkpointed before leaving; ordinary folders do not require a checkpoint. The composer, Files and Changes navigator, and newly opened workspace tabs follow the destination. Paths and worktree setup run on the owning environment, including remote. Dependency installation follows the environment setting unless explicitly skipped, and new worktrees honor the environment's **Start from origin** setting and project setup script.
 
 An active worktree chat shows a **Delete it** action. It removes the worktree
 directly, including when it has uncommitted changes, without a confirmation

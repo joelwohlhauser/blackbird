@@ -546,6 +546,47 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       }).pipe(Effect.provide(makeKeybindingsLayer())),
   );
 
+  it.effect("keeps new default aliases when the saved config contains older defaults", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+      yield* writeKeybindingsConfig(keybindingsConfigPath, [
+        { key: "mod+shift+[", command: "thread.previous" },
+        { key: "mod+shift+]", command: "thread.next" },
+      ]);
+      const keybindings = yield* Keybindings.Keybindings;
+      const { keybindings: loaded } = yield* keybindings.loadConfigState;
+      for (const [command, shiftKey] of [
+        ["thread.next", false],
+        ["thread.previous", true],
+      ] as const) {
+        const bindings = loaded.filter((binding) => binding.command === command);
+        assert.equal(bindings.length, 2);
+        assert.isTrue(
+          bindings.some(
+            (binding) =>
+              binding.shortcut.key === "tab" &&
+              binding.shortcut.altKey &&
+              binding.shortcut.shiftKey === shiftKey,
+          ),
+        );
+      }
+    }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
+  it.effect("still replaces default shortcuts when a command is explicitly remapped", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+      yield* writeKeybindingsConfig(keybindingsConfigPath, [
+        { key: "alt+x", command: "thread.next" },
+      ]);
+      const keybindings = yield* Keybindings.Keybindings;
+      const { keybindings: loaded } = yield* keybindings.loadConfigState;
+      const bindings = loaded.filter((binding) => binding.command === "thread.next");
+      assert.equal(bindings.length, 1);
+      assert.equal(bindings[0]?.shortcut.key, "x");
+    }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
   it.effect("caches loaded resolved config across repeated reads", () =>
     Effect.gen(function* () {
       const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;

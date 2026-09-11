@@ -1067,8 +1067,10 @@ const ThreadWorkspaceHandoffRequestCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   sourceTurnId: TurnId,
-  branch: TrimmedNonEmptyString,
-  worktreePath: TrimmedNonEmptyString,
+  projectId: Schema.optional(ProjectId),
+  requiresCheckpoint: Schema.optional(Schema.Boolean),
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   createdAt: IsoDateTime,
 });
 
@@ -1590,8 +1592,10 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
 export const ThreadWorkspaceHandoffRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   sourceTurnId: TurnId,
-  branch: TrimmedNonEmptyString,
-  worktreePath: TrimmedNonEmptyString,
+  projectId: Schema.optional(ProjectId),
+  requiresCheckpoint: Schema.optional(Schema.Boolean),
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   requestedAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -1599,8 +1603,9 @@ export const ThreadWorkspaceHandoffRequestedPayload = Schema.Struct({
 export const ThreadWorkspaceHandoffAppliedPayload = Schema.Struct({
   threadId: ThreadId,
   sourceTurnId: TurnId,
-  branch: TrimmedNonEmptyString,
-  worktreePath: TrimmedNonEmptyString,
+  projectId: Schema.optional(ProjectId),
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   updatedAt: IsoDateTime,
 });
 

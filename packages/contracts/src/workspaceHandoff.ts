@@ -1,23 +1,33 @@
 import * as Schema from "effect/Schema";
 
-import { IsoDateTime, TrimmedNonEmptyString, TurnId } from "./baseSchemas.ts";
+import { IsoDateTime, ProjectId, TrimmedNonEmptyString, TurnId } from "./baseSchemas.ts";
 
 export const WorkspaceHandoffMessageSource = Schema.Literal("workspace-handoff");
 export type WorkspaceHandoffMessageSource = typeof WorkspaceHandoffMessageSource.Type;
 
 export const PendingWorkspaceHandoff = Schema.Struct({
   sourceTurnId: TurnId,
-  branch: TrimmedNonEmptyString,
-  worktreePath: TrimmedNonEmptyString,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  projectId: Schema.optional(ProjectId),
+  requiresCheckpoint: Schema.optional(Schema.Boolean),
   requestedAt: IsoDateTime,
 });
 export type PendingWorkspaceHandoff = typeof PendingWorkspaceHandoff.Type;
 
 export const CreateWorktreeAndSwitchInput = Schema.Struct({
-  branchName: TrimmedNonEmptyString.annotate({
-    description:
-      "Branch for the worktree. An existing local branch is reused: the chat switches to its current worktree, or a new worktree checks it out. Any other name creates a new branch.",
-  }),
+  repositoryPath: Schema.optional(
+    TrimmedNonEmptyString.annotate({
+      description:
+        "Destination repository or existing folder on this environment. Required when leaving a Quick chat or changing repositories. Without branchName, switches directly to this folder without creating a worktree.",
+    }),
+  ),
+  branchName: Schema.optional(
+    TrimmedNonEmptyString.annotate({
+      description:
+        "Branch for the worktree. An existing local branch is reused: the chat switches to its current worktree, or a new worktree checks it out. Any other name creates a new branch.",
+    }),
+  ),
   baseBranch: Schema.optional(
     TrimmedNonEmptyString.annotate({
       description:
@@ -35,7 +45,7 @@ export type CreateWorktreeAndSwitchInput = typeof CreateWorktreeAndSwitchInput.T
 
 export const CreateWorktreeAndSwitchResult = Schema.Struct({
   status: Schema.Literal("handoff-scheduled"),
-  branch: TrimmedNonEmptyString,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: TrimmedNonEmptyString,
 });
 export type CreateWorktreeAndSwitchResult = typeof CreateWorktreeAndSwitchResult.Type;

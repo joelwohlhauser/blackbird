@@ -4184,7 +4184,9 @@ export default function Sidebar() {
         event.stopPropagation();
         navigateToThreadKey(
           resolveAdjacentThreadId({
-            threadIds: orderedThreadKeys,
+            threadIds: activeThreads.map((thread) =>
+              scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+            ),
             currentThreadId: routeThreadKey,
             direction: traversalDirection,
           }),
@@ -4201,6 +4203,7 @@ export default function Sidebar() {
     keybindings,
     navigateToThread,
     orderedThreadKeys,
+    activeThreads,
     routeTerminalOpen,
     routeThreadKey,
     threadByKey,

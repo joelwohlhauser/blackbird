@@ -541,6 +541,10 @@ export function projectEvent(
           threads: updateThread(nextBase.threads, payload.threadId, {
             pendingWorkspaceHandoff: {
               sourceTurnId: payload.sourceTurnId,
+              ...(payload.projectId !== undefined ? { projectId: payload.projectId } : {}),
+              ...(payload.requiresCheckpoint !== undefined
+                ? { requiresCheckpoint: payload.requiresCheckpoint }
+                : {}),
               branch: payload.branch,
               worktreePath: payload.worktreePath,
               requestedAt: payload.requestedAt,
@@ -562,6 +566,9 @@ export function projectEvent(
           threads: updateThread(nextBase.threads, payload.threadId, {
             branch: payload.branch,
             worktreePath: payload.worktreePath,
+            ...(payload.projectId !== undefined ? { projectId: payload.projectId } : {}),
+            linkedPullRequest: null,
+            branchPullRequest: null,
             pendingWorkspaceHandoff: null,
             updatedAt: payload.updatedAt,
           }),

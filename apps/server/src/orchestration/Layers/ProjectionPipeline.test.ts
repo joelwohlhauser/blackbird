@@ -4371,3 +4371,104 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
     }),
   );
 });
+
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-handoff-project-")))(
+  "workspace handoff projection",
+  (it) => {
+    it.effect("persists the destination project and a checkpoint-free handoff", () =>
+      Effect.gen(function* () {
+        const pipeline = yield* OrchestrationProjectionPipeline;
+        const store = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+        const now = "2026-09-11T20:00:00.000Z";
+        const threadId = ThreadId.make("moving-thread");
+        const sourceProjectId = ProjectId.make("quick-chats");
+        const destinationId = ProjectId.make("destination");
+        const fields = {
+          aggregateKind: "thread" as const,
+          aggregateId: threadId,
+          occurredAt: now,
+          commandId: null,
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+        };
+        yield* pipeline.projectEvent(
+          yield* store.append({
+            ...fields,
+            eventId: EventId.make("handoff-create"),
+            type: "thread.created",
+            payload: {
+              threadId,
+              projectId: sourceProjectId,
+              title: "Keep this conversation",
+              modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5" },
+              runtimeMode: "full-access",
+              interactionMode: "default",
+              branch: null,
+              worktreePath: null,
+              createdAt: now,
+              updatedAt: now,
+            },
+          }),
+        );
+        yield* pipeline.projectEvent(
+          yield* store.append({
+            ...fields,
+            eventId: EventId.make("handoff-request"),
+            type: "thread.workspace-handoff-requested",
+            payload: {
+              threadId,
+              sourceTurnId: TurnId.make("source-turn"),
+              projectId: destinationId,
+              requiresCheckpoint: false,
+              branch: null,
+              worktreePath: null,
+              requestedAt: now,
+              updatedAt: now,
+            },
+          }),
+        );
+        const pending = yield* sql<{
+          projectId: string;
+          pending: string;
+        }>`SELECT project_id AS "projectId", pending_workspace_handoff_json AS pending FROM projection_threads WHERE thread_id = ${threadId}`;
+        assert.equal(pending[0]?.projectId, sourceProjectId);
+        assert.deepEqual(JSON.parse(pending[0]!.pending), {
+          sourceTurnId: "source-turn",
+          projectId: destinationId,
+          requiresCheckpoint: false,
+          branch: null,
+          worktreePath: null,
+          requestedAt: now,
+        });
+        yield* pipeline.projectEvent(
+          yield* store.append({
+            ...fields,
+            eventId: EventId.make("handoff-apply"),
+            type: "thread.workspace-handoff-applied",
+            payload: {
+              threadId,
+              sourceTurnId: TurnId.make("source-turn"),
+              projectId: destinationId,
+              branch: null,
+              worktreePath: null,
+              updatedAt: now,
+            },
+          }),
+        );
+        const applied =
+          yield* sql`SELECT project_id, title, pending_workspace_handoff_json, branch, worktree_path FROM projection_threads WHERE thread_id = ${threadId}`;
+        assert.deepEqual(applied, [
+          {
+            project_id: destinationId,
+            title: "Keep this conversation",
+            pending_workspace_handoff_json: null,
+            branch: null,
+            worktree_path: null,
+          },
+        ]);
+      }),
+    );
+  },
+);

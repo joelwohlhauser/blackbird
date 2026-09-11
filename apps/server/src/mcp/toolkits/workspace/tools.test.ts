@@ -12,10 +12,11 @@ it("exposes the bounded workspace handoff contract to providers", () => {
 
   expect(CreateWorktreeAndSwitchTool.name).toBe("create_worktree_and_switch");
   expect(schema.type).toBe("object");
-  expect(schema.required).toEqual(["branchName"]);
+  expect(schema.required ?? []).toEqual([]);
   expect(Object.keys(schema.properties ?? {}).toSorted()).toEqual([
     "baseBranch",
     "branchName",
     "installDependencies",
+    "repositoryPath",
   ]);
 });

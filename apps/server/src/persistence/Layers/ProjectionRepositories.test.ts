@@ -396,7 +396,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         model: "claude-opus-4-6",
       });
       assert.deepStrictEqual(Option.getOrNull(persisted)?.pendingWorkspaceHandoff, {
-        sourceTurnId: "turn-handoff",
+        sourceTurnId: TurnId.make("turn-handoff"),
         branch: "eng-123",
         worktreePath: "/tmp/eng-123",
         requestedAt: "2026-03-24T00:00:00.000Z",

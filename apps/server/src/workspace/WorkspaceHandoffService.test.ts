@@ -14,6 +14,9 @@ import {
   type VcsStatusLocalResult,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import { ExitCode } from "effect/unstable/process/ChildProcessSpawner";
+import { GitVcsDriver } from "../vcs/GitVcsDriver.ts";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
@@ -128,6 +131,7 @@ it.effect("creates the handoff on the owning environment's project root", () => 
       getProjectShellById: () => Effect.succeed(Option.some(project)),
     }),
     Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: () => Effect.succeed(localStatus),
       createWorktree,
       listRefs: () => Effect.succeed(noRefs),
     }),
@@ -137,6 +141,7 @@ it.effect("creates the handoff on the owning environment's project root", () => 
     ServerSettings.ServerSettingsService.layerTest({ newWorktreesStartFromOrigin: true }),
     Layer.mock(OrchestrationEngineService)({ dispatch }),
     Layer.mock(VcsStatusBroadcaster)({ refreshLocalStatus: () => Effect.succeed(localStatus) }),
+    Layer.mock(GitVcsDriver)({}),
     NodeServices.layer,
   );
 
@@ -234,6 +239,7 @@ it.effect("switches to the existing worktree of a branch that already has one", 
       getProjectShellById: () => Effect.succeed(Option.some(project)),
     }),
     Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: () => Effect.succeed(localStatus),
       createWorktree,
       listRefs: () =>
         Effect.succeed({
@@ -255,6 +261,7 @@ it.effect("switches to the existing worktree of a branch that already has one", 
     ServerSettings.ServerSettingsService.layerTest({ newWorktreesStartFromOrigin: true }),
     Layer.mock(OrchestrationEngineService)({ dispatch }),
     Layer.mock(VcsStatusBroadcaster)({ refreshLocalStatus: () => Effect.succeed(localStatus) }),
+    Layer.mock(GitVcsDriver)({}),
     NodeServices.layer,
   );
 
@@ -293,6 +300,7 @@ it.effect("checks out an existing branch into a new worktree instead of recreati
       getProjectShellById: () => Effect.succeed(Option.some(project)),
     }),
     Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: () => Effect.succeed(localStatus),
       createWorktree,
       listRefs: () =>
         Effect.succeed({
@@ -307,6 +315,7 @@ it.effect("checks out an existing branch into a new worktree instead of recreati
     ServerSettings.ServerSettingsService.layerTest({ newWorktreesStartFromOrigin: true }),
     Layer.mock(OrchestrationEngineService)({ dispatch }),
     Layer.mock(VcsStatusBroadcaster)({ refreshLocalStatus: () => Effect.succeed(localStatus) }),
+    Layer.mock(GitVcsDriver)({}),
     NodeServices.layer,
   );
 
@@ -326,13 +335,15 @@ it.effect("checks out an existing branch into a new worktree instead of recreati
   }).pipe(Effect.provide(testLayer));
 });
 
-it.effect("refuses a branch that is checked out in the main checkout", () => {
+it.effect("switches back to the main checkout without treating it as a deletable worktree", () => {
+  const dispatch = vi.fn(() => Effect.succeed({ sequence: 1 }));
   const testLayer = Layer.mergeAll(
     Layer.mock(ProjectionSnapshotQuery)({
       getThreadShellById: () => Effect.succeed(Option.some(threadShellOf(thread))),
       getProjectShellById: () => Effect.succeed(Option.some(project)),
     }),
     Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: () => Effect.succeed(localStatus),
       listRefs: () =>
         Effect.succeed({
           ...noRefs,
@@ -344,22 +355,32 @@ it.effect("refuses a branch that is checked out in the main checkout", () => {
     }),
     Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
     ServerSettings.ServerSettingsService.layerTest(),
-    Layer.mock(OrchestrationEngineService)({}),
-    Layer.mock(VcsStatusBroadcaster)({}),
+    Layer.mock(OrchestrationEngineService)({ dispatch }),
+    Layer.mock(VcsStatusBroadcaster)({ refreshLocalStatus: () => Effect.succeed(localStatus) }),
+    Layer.mock(GitVcsDriver)({}),
     NodeServices.layer,
   );
 
   return Effect.gen(function* () {
     const service = yield* make;
-    const error = yield* Effect.flip(service.request(threadId, { branchName: "main" }));
-    expect(error.operation).toBe("resolve-worktree");
+    yield* service.request(threadId, { branchName: "main" });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "thread.workspace-handoff.request",
+        worktreePath: null,
+        branch: "main",
+        projectId,
+      }),
+    );
   }).pipe(Effect.provide(testLayer));
 });
 
-it.effect("rejects workspace handoffs from Quick Chats", () => {
+it.effect("asks Quick Chats for a destination repository when none is provided", () => {
   const quickChat = { ...thread, projectId: QUICK_CHATS_PROJECT_ID };
   const testLayer = Layer.mergeAll(
     Layer.mock(ProjectionSnapshotQuery)({
+      getProjectShellById: () =>
+        Effect.succeed(Option.some({ ...project, id: QUICK_CHATS_PROJECT_ID })),
       getThreadShellById: () =>
         Effect.succeed(
           Option.some({
@@ -371,18 +392,21 @@ it.effect("rejects workspace handoffs from Quick Chats", () => {
           }),
         ),
     }),
-    Layer.mock(GitWorkflowService.GitWorkflowService)({}),
+    Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: () => Effect.succeed(localStatus),
+    }),
     Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
     ServerSettings.ServerSettingsService.layerTest(),
     Layer.mock(OrchestrationEngineService)({}),
     Layer.mock(VcsStatusBroadcaster)({}),
+    Layer.mock(GitVcsDriver)({}),
     NodeServices.layer,
   );
 
   return Effect.gen(function* () {
     const service = yield* make;
     const error = yield* Effect.flip(service.request(threadId, { branchName: "not-allowed" }));
-    expect(error.detail).toBe("Quick chats cannot be switched to a Git worktree.");
+    expect(error.detail).toContain("Provide repositoryPath");
   }).pipe(Effect.provide(testLayer));
 });
 
@@ -414,11 +438,14 @@ it.effect(
           ),
         getThreadDetailById: () => Effect.succeed(Option.some(pendingThread)),
       }),
-      Layer.mock(GitWorkflowService.GitWorkflowService)({}),
+      Layer.mock(GitWorkflowService.GitWorkflowService)({
+        localStatus: () => Effect.succeed(localStatus),
+      }),
       Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
       ServerSettings.ServerSettingsService.layerTest(),
       Layer.mock(OrchestrationEngineService)({ dispatch }),
       Layer.mock(VcsStatusBroadcaster)({}),
+      Layer.mock(GitVcsDriver)({}),
       NodeServices.layer,
     );
 
@@ -466,11 +493,14 @@ it.effect("clears an unusable pending handoff during restart recovery", () => {
           updatedAt: NOW,
         }),
     }),
-    Layer.mock(GitWorkflowService.GitWorkflowService)({}),
+    Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: () => Effect.succeed(localStatus),
+    }),
     Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
     ServerSettings.ServerSettingsService.layerTest(),
     Layer.mock(OrchestrationEngineService)({ dispatch }),
     Layer.mock(VcsStatusBroadcaster)({}),
+    Layer.mock(GitVcsDriver)({}),
     NodeServices.layer,
   );
 
@@ -524,11 +554,14 @@ it.effect("applies a ready handoff during recovery even when a newer turn is rec
           updatedAt: NOW,
         }),
     }),
-    Layer.mock(GitWorkflowService.GitWorkflowService)({}),
+    Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: () => Effect.succeed(localStatus),
+    }),
     Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
     ServerSettings.ServerSettingsService.layerTest(),
     Layer.mock(OrchestrationEngineService)({ dispatch }),
     Layer.mock(VcsStatusBroadcaster)({}),
+    Layer.mock(GitVcsDriver)({}),
     NodeServices.layer,
   );
 
@@ -540,3 +573,190 @@ it.effect("applies a ready handoff during recovery even when a newer turn is rec
     );
   }).pipe(Effect.provide(testLayer));
 });
+
+for (const sourceProjectId of [QUICK_CHATS_PROJECT_ID, ProjectId.make("mobile-quick-chats")]) {
+  it.effect(
+    `moves ${sourceProjectId} to an existing worktree after the turn ends without a checkpoint`,
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const destination = yield* fs.makeTempDirectoryScoped();
+        const root = yield* fs.realPath(destination);
+        const worktreePath = `${root}/feature`;
+        yield* fs.makeDirectory(worktreePath);
+        let current: OrchestrationThread = { ...thread, projectId: sourceProjectId };
+        const dispatch = vi.fn<OrchestrationEngineService["Service"]["dispatch"]>((command) => {
+          if (command.type === "thread.workspace-handoff.request") {
+            current = {
+              ...current,
+              pendingWorkspaceHandoff: {
+                sourceTurnId: command.sourceTurnId,
+                branch: command.branch,
+                worktreePath: command.worktreePath,
+                projectId: command.projectId,
+                requiresCheckpoint: command.requiresCheckpoint,
+                requestedAt: command.createdAt,
+              },
+            };
+          }
+          return Effect.succeed({ sequence: 1 });
+        });
+        const execute = vi.fn(() =>
+          Effect.succeed({
+            stdout: `${worktreePath}\n${root}/.git\n`,
+            stderr: "",
+            exitCode: ExitCode(0),
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          }),
+        );
+        const testLayer = Layer.mergeAll(
+          Layer.mock(ProjectionSnapshotQuery)({
+            getThreadShellById: () => Effect.succeed(Option.some(threadShellOf(current))),
+            getThreadDetailById: () => Effect.succeed(Option.some(current)),
+            getSnapshot: () =>
+              Effect.sync(() => ({
+                snapshotSequence: 1,
+                projects: [],
+                threads: [current],
+                updatedAt: NOW,
+              })),
+            getProjectShellById: () =>
+              Effect.succeed(
+                Option.some({
+                  ...project,
+                  id: sourceProjectId,
+                  workspaceRoot: "/root/Quick chats",
+                }),
+              ),
+            getActiveProjectByWorkspaceRoot: (cwd) => {
+              expect(cwd).toBe(root);
+              return Effect.succeed(
+                Option.some({ ...project, workspaceRoot: root, deletedAt: null }),
+              );
+            },
+          }),
+          Layer.mock(GitWorkflowService.GitWorkflowService)({
+            localStatus: ({ cwd }) =>
+              Effect.succeed({ ...localStatus, isRepo: cwd !== "/root/Quick chats" }),
+            listRefs: () =>
+              Effect.succeed({
+                ...noRefs,
+                refs: [{ name: "feature", current: true, isDefault: false, worktreePath }],
+              }),
+          }),
+          Layer.mock(GitVcsDriver)({ execute }),
+          Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
+          ServerSettings.ServerSettingsService.layerTest(),
+          Layer.mock(OrchestrationEngineService)({ dispatch }),
+          Layer.mock(VcsStatusBroadcaster)({
+            refreshLocalStatus: () => Effect.succeed(localStatus),
+          }),
+          NodeServices.layer,
+        );
+        yield* Effect.gen(function* () {
+          const service = yield* make;
+          yield* service.request(threadId, { repositoryPath: worktreePath, branchName: "feature" });
+          expect(current.projectId).toBe(sourceProjectId);
+          expect(current.pendingWorkspaceHandoff).toMatchObject({
+            projectId,
+            worktreePath,
+            requiresCheckpoint: false,
+          });
+          expect(execute).toHaveBeenCalledWith(expect.objectContaining({ cwd: worktreePath }));
+          const recovering = sourceProjectId !== QUICK_CHATS_PROJECT_ID;
+          if (recovering) yield* service.recover;
+          expect(dispatch).toHaveBeenCalledTimes(1);
+          current = {
+            ...current,
+            session: { ...current.session!, activeTurnId: null, status: "ready" },
+          };
+          yield* service.applyReady(threadId);
+          if (recovering) {
+            expect(dispatch).toHaveBeenLastCalledWith(
+              expect.objectContaining({ type: "thread.workspace-handoff.apply" }),
+            );
+            return;
+          }
+          expect(dispatch).toHaveBeenCalledTimes(1);
+          current = {
+            ...current,
+            session: { ...current.session!, activeTurnId: sourceTurnId, status: "running" },
+          };
+          yield* service.applyReady(threadId);
+          yield* service.applyAfterCheckpoint(threadId, sourceTurnId);
+          expect(dispatch).toHaveBeenCalledTimes(1);
+          current = {
+            ...current,
+            session: { ...current.session!, activeTurnId: TurnId.make("newer-turn") },
+          };
+          yield* service.applyAfterCheckpoint(threadId, sourceTurnId);
+          expect(dispatch).toHaveBeenCalledTimes(1);
+          current = {
+            ...current,
+            session: { ...current.session!, activeTurnId: null, status: "ready" },
+          };
+          yield* service.applyReady(threadId);
+          expect(dispatch).toHaveBeenLastCalledWith(
+            expect.objectContaining({ type: "thread.workspace-handoff.apply" }),
+          );
+        }).pipe(Effect.provide(testLayer));
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+}
+
+it.effect("creates a project for an existing ordinary folder without requiring Git", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const destination = yield* fs.realPath(yield* fs.makeTempDirectoryScoped());
+    const dispatch = vi.fn(() => Effect.succeed({ sequence: 1 }));
+    const testLayer = Layer.mergeAll(
+      Layer.mock(ProjectionSnapshotQuery)({
+        getThreadShellById: () => Effect.succeed(Option.some(threadShellOf(thread))),
+        getProjectShellById: () => Effect.succeed(Option.some(project)),
+        getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
+      }),
+      Layer.mock(GitWorkflowService.GitWorkflowService)({
+        localStatus: ({ cwd }) =>
+          Effect.succeed({
+            ...localStatus,
+            isRepo: cwd !== destination,
+            refName: cwd === destination ? null : "main",
+          }),
+      }),
+      Layer.mock(GitVcsDriver)({
+        execute: () =>
+          Effect.succeed({
+            stdout: "",
+            stderr: "not a git repository",
+            exitCode: ExitCode(128),
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          }),
+      }),
+      Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
+      ServerSettings.ServerSettingsService.layerTest(),
+      Layer.mock(OrchestrationEngineService)({ dispatch }),
+      Layer.mock(VcsStatusBroadcaster)({ refreshLocalStatus: () => Effect.succeed(localStatus) }),
+      NodeServices.layer,
+    );
+    yield* Effect.gen(function* () {
+      const service = yield* make;
+      const result = yield* service.request(threadId, { repositoryPath: destination });
+      expect(result.branch).toBeNull();
+      expect(dispatch).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ type: "project.create", workspaceRoot: destination }),
+      );
+      expect(dispatch).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          type: "thread.workspace-handoff.request",
+          branch: null,
+          worktreePath: null,
+          requiresCheckpoint: true,
+        }),
+      );
+    }).pipe(Effect.provide(testLayer));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

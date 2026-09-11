@@ -253,6 +253,35 @@ export function applyThreadDetailEvent(
         },
       };
 
+    case "thread.workspace-handoff-requested": {
+      const { threadId: _threadId, updatedAt, ...handoff } = event.payload;
+      return {
+        kind: "updated",
+        thread: { ...thread, pendingWorkspaceHandoff: handoff, updatedAt },
+      };
+    }
+
+    case "thread.workspace-handoff-applied":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          projectId: event.payload.projectId ?? thread.projectId,
+          branch: event.payload.branch,
+          worktreePath: event.payload.worktreePath,
+          linkedPullRequest: null,
+          branchPullRequest: null,
+          pendingWorkspaceHandoff: null,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.workspace-handoff-cancelled":
+      return {
+        kind: "updated",
+        thread: { ...thread, pendingWorkspaceHandoff: null, updatedAt: event.payload.updatedAt },
+      };
+
     case "thread.runtime-mode-set":
       return {
         kind: "updated",

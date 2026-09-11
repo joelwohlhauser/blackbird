@@ -10,13 +10,13 @@ import { WorkspaceHandoffService } from "../../../workspace/WorkspaceHandoffServ
 
 export const CreateWorktreeAndSwitchTool = Tool.make("create_worktree_and_switch", {
   description:
-    "Switch this chat to a Git worktree for the given branch after the current turn is checkpointed. An existing branch is reused (its current worktree, or a new worktree checking it out); an unknown branch is created together with its worktree. Call this only after any external setup is complete and when you are ready to end the current turn. Once it succeeds, stop working in the current directory; Blackbird automatically continues the task in the new worktree in a new turn.",
+    "Switch this chat to another repository, worktree, or existing folder on this environment after the current turn ends. Pass repositoryPath when leaving a Quick chat or changing repositories. With branchName, reuses that branch's checkout or creates a worktree; without branchName, switches directly to repositoryPath. Conversation history is preserved. Call this only after external setup is complete and when ready to end the turn. Once it succeeds, stop working in the current directory; Blackbird automatically continues the task in the destination in a new turn.",
   parameters: CreateWorktreeAndSwitchInput,
   success: CreateWorktreeAndSwitchResult,
   failure: WorkspaceHandoffError,
   dependencies: [McpInvocationContext.McpInvocationContext, WorkspaceHandoffService],
 })
-  .annotate(Tool.Title, "Switch chat to a worktree")
+  .annotate(Tool.Title, "Switch chat workspace")
   .annotate(Tool.Readonly, false)
   .annotate(Tool.Destructive, true)
   .annotate(Tool.Idempotent, false)

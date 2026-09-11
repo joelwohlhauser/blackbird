@@ -454,6 +454,32 @@ describe("releaseManagedTunnelOnShutdown", () => {
     }).pipe(provideReleaseHarness({ store, applyConfigCalls, requests }));
   });
 
+  it.effect("preserves the tunnel during a desktop deployment without launcher state", () => {
+    const { store, values } = makeMemorySecretStore(managedLinkSecrets);
+    const applyConfigCalls: Array<unknown> = [];
+    const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+
+    return Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const config = yield* ServerConfigModule.ServerConfig;
+      const runtimeDir = path.join(config.baseDir, "runtime");
+      yield* fs.makeDirectory(runtimeDir, { recursive: true });
+      const marker = path.join(runtimeDir, "blackbird-deploy-in-progress");
+      yield* fs.writeFileString(marker, "");
+
+      expect(yield* releaseManagedTunnelOnShutdown()).toBe(false);
+      expect(requests).toEqual([]);
+      expect(applyConfigCalls).toEqual([]);
+      expect(values.has(CLOUD_ENDPOINT_RUNTIME_CONFIG)).toBe(true);
+
+      yield* fs.remove(marker);
+      expect(yield* releaseManagedTunnelOnShutdown()).toBe(true);
+      expect(requests).toHaveLength(1);
+      expect(values.has(CLOUD_ENDPOINT_RUNTIME_CONFIG)).toBe(false);
+    }).pipe(provideReleaseHarness({ store, applyConfigCalls, requests }));
+  });
+
   it.effect("still releases a pending update when the launcher is stopping", () => {
     // `t3 service uninstall` or `systemctl stop` during the pending window:
     // the launcher writes its stop marker before signalling the child, so no

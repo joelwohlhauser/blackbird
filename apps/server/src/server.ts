@@ -730,13 +730,19 @@ const makeServerLayer = Layer.unwrap(
             // millisecond here is dead time on the path to remote
             // reachability after a restart.
             yield* reconcileDesiredCloudLink(`http://127.0.0.1:${address.port}`).pipe(
+              Effect.tapError((cause) =>
+                shouldRetryCloudLink(cause)
+                  ? Effect.logWarning("T3 Connect link failed; retrying", {
+                      message: cause.message,
+                    })
+                  : Effect.void,
+              ),
               Effect.retry({
                 while: shouldRetryCloudLink,
                 schedule: Schedule.exponential("1 second").pipe(
                   Schedule.modifyDelay(({ duration }) =>
                     Effect.succeed(Duration.min(duration, Duration.seconds(30))),
                   ),
-                  Schedule.upTo({ duration: "10 minutes" }),
                 ),
               }),
               Effect.tap(() => Effect.logInfo("T3 Connect desired link reconciled on startup")),

@@ -836,6 +836,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             pendingWorkspaceHandoff: {
               sourceTurnId: event.payload.sourceTurnId,
+              ...(event.payload.projectId !== undefined
+                ? { projectId: event.payload.projectId }
+                : {}),
+              ...(event.payload.requiresCheckpoint !== undefined
+                ? { requiresCheckpoint: event.payload.requiresCheckpoint }
+                : {}),
               branch: event.payload.branch,
               worktreePath: event.payload.worktreePath,
               requestedAt: event.payload.requestedAt,
@@ -856,6 +862,11 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             branch: event.payload.branch,
             worktreePath: event.payload.worktreePath,
+            ...(event.payload.projectId !== undefined
+              ? { projectId: event.payload.projectId }
+              : {}),
+            linkedPullRequest: null,
+            branchPullRequest: null,
             pendingWorkspaceHandoff: null,
             updatedAt: event.payload.updatedAt,
           });

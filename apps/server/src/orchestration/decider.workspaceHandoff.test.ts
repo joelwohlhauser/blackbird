@@ -121,6 +121,81 @@ it.layer(NodeServices.layer)("workspace handoff decider", (it) => {
     }),
   );
 
+  it.effect(
+    "moves the same conversation to another project and continues in an ordinary folder",
+    () =>
+      Effect.gen(function* () {
+        const destinationId = ProjectId.make("destination-project");
+        const projectCreated = yield* decideOrchestrationCommand({
+          readModel,
+          command: {
+            type: "project.create",
+            commandId: CommandId.make("create-destination"),
+            projectId: destinationId,
+            title: "Notes",
+            workspaceRoot: "/remote/notes",
+            createdAt: NOW,
+          },
+        });
+        if (Array.isArray(projectCreated)) throw new Error("Expected project event");
+        const withDestination = yield* projectEvent(readModel, {
+          ...projectCreated,
+          sequence: 1,
+        } as OrchestrationEvent);
+        const requested = yield* decideOrchestrationCommand({
+          readModel: withDestination,
+          command: {
+            type: "thread.workspace-handoff.request",
+            commandId: CommandId.make("move-request"),
+            threadId,
+            sourceTurnId,
+            projectId: destinationId,
+            requiresCheckpoint: false,
+            branch: null,
+            worktreePath: null,
+            createdAt: NOW,
+          },
+        });
+        if (Array.isArray(requested)) throw new Error("Expected handoff event");
+        const pending = yield* projectEvent(withDestination, {
+          ...requested,
+          sequence: 2,
+        } as OrchestrationEvent);
+        expect(pending.threads[0]?.projectId).toBe(readModel.threads[0]?.projectId);
+        expect(pending.threads[0]?.pendingWorkspaceHandoff?.requiresCheckpoint).toBe(false);
+        const applied = yield* decideOrchestrationCommand({
+          readModel: pending,
+          command: {
+            type: "thread.workspace-handoff.apply",
+            commandId: CommandId.make("move-apply"),
+            threadId,
+            sourceTurnId,
+            messageId: MessageId.make("move-continue"),
+            createdAt: NOW,
+          },
+        });
+        if (!Array.isArray(applied)) throw new Error("Expected continuation events");
+        let moved = pending;
+        for (const [index, event] of applied.entries()) {
+          moved = yield* projectEvent(moved, {
+            ...event,
+            sequence: index + 3,
+          } as OrchestrationEvent);
+        }
+        expect(moved.threads).toHaveLength(1);
+        expect(moved.threads[0]).toMatchObject({
+          id: threadId,
+          projectId: destinationId,
+          branch: null,
+          worktreePath: null,
+          pendingWorkspaceHandoff: null,
+        });
+        expect(moved.threads[0]?.messages.at(-1)?.text).toContain(
+          "Workspace switched to '/remote/notes'.",
+        );
+      }),
+  );
+
   it.effect("rejects another request while the current turn already has one pending", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(

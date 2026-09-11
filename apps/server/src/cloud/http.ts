@@ -650,13 +650,17 @@ export const pendingServiceUpdateExists = Effect.gen(function* () {
 // the pending window also tears this server down. The launcher marks that case
 // just before it signals the child, so pending + no marker is the handoff.
 const pendingUpdateHandoffExists = Effect.gen(function* () {
-  if (!(yield* pendingServiceUpdateExists)) {
-    return false;
-  }
   const config = yield* ServerConfig.ServerConfig;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const runtimeDir = path.join(config.baseDir, "runtime");
+  // The desktop installer restarts systemd directly, outside the T3 launcher.
+  if (yield* fs.exists(path.join(runtimeDir, "blackbird-deploy-in-progress"))) {
+    return true;
+  }
+  if (!(yield* pendingServiceUpdateExists)) {
+    return false;
+  }
   const stopping = yield* fs
     .exists(path.join(runtimeDir, SERVICE_STOP_MARKER_FILE))
     .pipe(Effect.orElseSucceed(() => false));

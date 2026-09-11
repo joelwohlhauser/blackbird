@@ -949,6 +949,10 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           threadId: command.threadId,
           sourceTurnId: command.sourceTurnId,
+          ...(command.projectId !== undefined ? { projectId: command.projectId } : {}),
+          ...(command.requiresCheckpoint !== undefined
+            ? { requiresCheckpoint: command.requiresCheckpoint }
+            : {}),
           branch: command.branch,
           worktreePath: command.worktreePath,
           requestedAt: command.createdAt,
@@ -971,6 +975,17 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         });
       }
 
+      const destinationProject =
+        handoff.projectId === undefined
+          ? undefined
+          : yield* requireProject({ readModel, command, projectId: handoff.projectId });
+      if (destinationProject?.deletedAt != null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: "The destination project was deleted before the workspace switch.",
+        });
+      }
+      const destinationPath = handoff.worktreePath ?? destinationProject?.workspaceRoot;
       const appliedEvent = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -982,6 +997,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           threadId: command.threadId,
           sourceTurnId: command.sourceTurnId,
+          ...(handoff.projectId !== undefined ? { projectId: handoff.projectId } : {}),
           branch: handoff.branch,
           worktreePath: handoff.worktreePath,
           updatedAt: command.createdAt,
@@ -1002,7 +1018,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
               messageId: command.messageId,
               role: "user",
               source: "workspace-handoff",
-              text: `Workspace switched to branch '${handoff.branch}' at '${handoff.worktreePath}'. Continue the user's current task in this workspace. Do not repeat completed external actions such as creating issues.`,
+              text: `Workspace switched to '${destinationPath}'${handoff.branch ? ` on branch '${handoff.branch}'` : ""}. Continue the user's current task in this workspace. Do not repeat completed external actions such as creating issues.`,
               attachments: [],
             },
             runtimeMode: thread.runtimeMode,

@@ -46,6 +46,52 @@ const baseThread: OrchestrationThread = {
 };
 
 describe("applyThreadDetailEvent", () => {
+  it("updates an open conversation when a workspace handoff moves it to another project", () => {
+    const destinationId = ProjectId.make("destination");
+    const fields = {
+      ...baseEventFields,
+      sequence: 1,
+      occurredAt: baseThread.updatedAt,
+      aggregateKind: "thread" as const,
+      aggregateId: baseThread.id,
+    };
+    const pending = applyThreadDetailEvent(baseThread, {
+      ...fields,
+      type: "thread.workspace-handoff-requested",
+      payload: {
+        threadId: baseThread.id,
+        sourceTurnId: TurnId.make("source-turn"),
+        projectId: destinationId,
+        requiresCheckpoint: false,
+        branch: null,
+        worktreePath: null,
+        requestedAt: baseThread.updatedAt,
+        updatedAt: baseThread.updatedAt,
+      },
+    });
+    if (pending.kind !== "updated") throw new Error("Expected pending handoff");
+    expect(pending.thread.projectId).toBe(baseThread.projectId);
+    expect(pending.thread.pendingWorkspaceHandoff?.projectId).toBe(destinationId);
+    const applied = applyThreadDetailEvent(pending.thread, {
+      ...fields,
+      sequence: 2,
+      type: "thread.workspace-handoff-applied",
+      payload: {
+        threadId: baseThread.id,
+        sourceTurnId: TurnId.make("source-turn"),
+        projectId: destinationId,
+        branch: null,
+        worktreePath: null,
+        updatedAt: baseThread.updatedAt,
+      },
+    });
+    if (applied.kind !== "updated") throw new Error("Expected moved conversation");
+    expect(applied.thread.projectId).toBe(destinationId);
+    expect(applied.thread.pendingWorkspaceHandoff).toBeNull();
+    expect(applied.thread.messages).toBe(baseThread.messages);
+    expect(applied.thread.id).toBe(baseThread.id);
+  });
+
   describe("project events", () => {
     it("returns unchanged for project.created", () => {
       const result = applyThreadDetailEvent(baseThread, {

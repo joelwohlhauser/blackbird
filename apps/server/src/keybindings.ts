@@ -206,9 +206,22 @@ function mergeWithDefaultKeybindings(custom: ResolvedKeybindingsConfig): Resolve
     return [...DEFAULT_RESOLVED_KEYBINDINGS];
   }
 
-  const overriddenCommands = new Set(custom.map((binding) => binding.command));
+  const ruleKey = (binding: ResolvedKeybindingRule) =>
+    JSON.stringify([
+      binding.command,
+      encodeShortcut(binding.shortcut),
+      binding.whenAst ? encodeWhenAst(binding.whenAst) : null,
+    ]);
+  const defaultRules = new Set(DEFAULT_RESOLVED_KEYBINDINGS.map(ruleKey));
+  const customRules = new Set(custom.map(ruleKey));
+  // Saved defaults are not remaps: keep aliases added since the file was written.
+  const overriddenCommands = new Set(
+    custom
+      .filter((binding) => !defaultRules.has(ruleKey(binding)))
+      .map((binding) => binding.command),
+  );
   const retainedDefaults = DEFAULT_RESOLVED_KEYBINDINGS.filter(
-    (binding) => !overriddenCommands.has(binding.command),
+    (binding) => !overriddenCommands.has(binding.command) && !customRules.has(ruleKey(binding)),
   );
   const merged = [...retainedDefaults, ...custom];
 
