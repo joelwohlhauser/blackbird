@@ -485,13 +485,23 @@ it.effect("clears an unusable pending handoff during restart recovery", () => {
   const dispatch = vi.fn(() => Effect.succeed({ sequence: 1 }));
   const testLayer = Layer.mergeAll(
     Layer.mock(ProjectionSnapshotQuery)({
-      getSnapshot: () =>
+      getCommandReadModel: () =>
         Effect.succeed({
           snapshotSequence: 1,
           projects: [{ ...project, deletedAt: null }],
           threads: [pendingThread],
           updatedAt: NOW,
         }),
+      getThreadCheckpointContext: () =>
+        Effect.succeed(
+          Option.some({
+            threadId,
+            projectId,
+            workspaceRoot: project.workspaceRoot,
+            worktreePath: null,
+            checkpoints: [],
+          }),
+        ),
     }),
     Layer.mock(GitWorkflowService.GitWorkflowService)({
       localStatus: () => Effect.succeed(localStatus),
@@ -513,66 +523,89 @@ it.effect("clears an unusable pending handoff during restart recovery", () => {
   }).pipe(Effect.provide(testLayer));
 });
 
-it.effect("applies a ready handoff during recovery even when a newer turn is recorded", () => {
-  const pendingThread: OrchestrationThread = {
-    ...thread,
-    pendingWorkspaceHandoff: {
-      sourceTurnId,
-      branch: "eng-123",
-      worktreePath: "/remote/worktrees/blackbird/eng-123",
-      requestedAt: NOW,
-    },
-    latestTurn: {
-      turnId: TurnId.make("turn-newer"),
-      state: "completed",
-      requestedAt: NOW,
-      startedAt: NOW,
-      completedAt: NOW,
-      assistantMessageId: null,
-    },
-    checkpoints: [
-      {
-        turnId: sourceTurnId,
-        checkpointTurnCount: 1,
-        checkpointRef: CheckpointRef.make("checkpoint-1"),
-        status: "ready",
-        files: [],
-        assistantMessageId: null,
-        completedAt: NOW,
+it.effect.each([null, NOW])(
+  "recovers a ready handoff without chat history, archivedAt=%s",
+  (archivedAt) => {
+    const pendingThread: OrchestrationThread = {
+      ...thread,
+      archivedAt,
+      pendingWorkspaceHandoff: {
+        sourceTurnId,
+        branch: "eng-123",
+        worktreePath: "/remote/worktrees/blackbird/eng-123",
+        requestedAt: NOW,
       },
-    ],
-    session: { ...thread.session!, status: "ready", activeTurnId: null },
-  };
-  const dispatch = vi.fn(() => Effect.succeed({ sequence: 1 }));
-  const testLayer = Layer.mergeAll(
-    Layer.mock(ProjectionSnapshotQuery)({
-      getSnapshot: () =>
-        Effect.succeed({
-          snapshotSequence: 1,
-          projects: [{ ...project, deletedAt: null }],
-          threads: [pendingThread],
-          updatedAt: NOW,
+      latestTurn: {
+        turnId: TurnId.make("turn-newer"),
+        state: "completed",
+        requestedAt: NOW,
+        startedAt: NOW,
+        completedAt: NOW,
+        assistantMessageId: null,
+      },
+      checkpoints: [
+        {
+          turnId: sourceTurnId,
+          checkpointTurnCount: 1,
+          checkpointRef: CheckpointRef.make("checkpoint-1"),
+          status: "ready",
+          files: [],
+          assistantMessageId: null,
+          completedAt: NOW,
+        },
+      ],
+      session: { ...thread.session!, status: "ready", activeTurnId: null },
+    };
+    const dispatch = vi.fn(() => Effect.succeed({ sequence: 1 }));
+    const getSnapshot = vi.fn(() => Effect.die("Recovery must not load all chat history"));
+    const getThreadCheckpointContext = vi.fn(() =>
+      Effect.succeed(
+        Option.some({
+          threadId,
+          projectId,
+          workspaceRoot: project.workspaceRoot,
+          worktreePath: null,
+          checkpoints: pendingThread.checkpoints,
         }),
-    }),
-    Layer.mock(GitWorkflowService.GitWorkflowService)({
-      localStatus: () => Effect.succeed(localStatus),
-    }),
-    Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
-    ServerSettings.ServerSettingsService.layerTest(),
-    Layer.mock(OrchestrationEngineService)({ dispatch }),
-    Layer.mock(VcsStatusBroadcaster)({}),
-    Layer.mock(GitVcsDriver)({}),
-    NodeServices.layer,
-  );
-
-  return Effect.gen(function* () {
-    const service = yield* make;
-    yield* service.recover;
-    expect(dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "thread.workspace-handoff.apply", sourceTurnId }),
+      ),
     );
-  }).pipe(Effect.provide(testLayer));
-});
+    const testLayer = Layer.mergeAll(
+      Layer.mock(ProjectionSnapshotQuery)({
+        getSnapshot,
+        getThreadCheckpointContext,
+        getCommandReadModel: () =>
+          Effect.succeed({
+            snapshotSequence: 1,
+            projects: [{ ...project, deletedAt: null }],
+            threads: [
+              { ...thread, id: ThreadId.make("unrelated-thread") },
+              { ...pendingThread, checkpoints: [] },
+            ],
+            updatedAt: NOW,
+          }),
+      }),
+      Layer.mock(GitWorkflowService.GitWorkflowService)({
+        localStatus: () => Effect.succeed(localStatus),
+      }),
+      Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
+      ServerSettings.ServerSettingsService.layerTest(),
+      Layer.mock(OrchestrationEngineService)({ dispatch }),
+      Layer.mock(VcsStatusBroadcaster)({}),
+      Layer.mock(GitVcsDriver)({}),
+      NodeServices.layer,
+    );
+
+    return Effect.gen(function* () {
+      const service = yield* make;
+      yield* service.recover;
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "thread.workspace-handoff.apply", sourceTurnId }),
+      );
+      expect(getSnapshot).not.toHaveBeenCalled();
+      expect(getThreadCheckpointContext).toHaveBeenCalledExactlyOnceWith(threadId);
+    }).pipe(Effect.provide(testLayer));
+  },
+);
 
 for (const sourceProjectId of [QUICK_CHATS_PROJECT_ID, ProjectId.make("mobile-quick-chats")]) {
   it.effect(
@@ -614,7 +647,7 @@ for (const sourceProjectId of [QUICK_CHATS_PROJECT_ID, ProjectId.make("mobile-qu
           Layer.mock(ProjectionSnapshotQuery)({
             getThreadShellById: () => Effect.succeed(Option.some(threadShellOf(current))),
             getThreadDetailById: () => Effect.succeed(Option.some(current)),
-            getSnapshot: () =>
+            getCommandReadModel: () =>
               Effect.sync(() => ({
                 snapshotSequence: 1,
                 projects: [],

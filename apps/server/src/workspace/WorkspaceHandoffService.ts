@@ -409,20 +409,25 @@ export const make = Effect.gen(function* () {
     ),
   );
 
-  const recover = snapshots.getSnapshot().pipe(
-    Effect.flatMap((snapshot) =>
-      Effect.forEach(
-        snapshot.threads,
-        (thread) => {
-          if (!thread.pendingWorkspaceHandoff) return Effect.void;
-          if (thread.pendingWorkspaceHandoff.requiresCheckpoint === false) {
-            finalizedHandoffs.set(thread.id, thread.pendingWorkspaceHandoff.sourceTurnId);
-          }
-          return settlePending(thread, { type: "recovery" });
-        },
-        { concurrency: 1, discard: true },
-      ),
-    ),
+  const recover = Effect.gen(function* () {
+    // Include archived threads without hydrating every chat's messages and tool output.
+    const snapshot = yield* snapshots.getCommandReadModel();
+    for (const thread of snapshot.threads) {
+      const handoff = thread.pendingWorkspaceHandoff;
+      if (!handoff) continue;
+      let recoveryThread = thread;
+      if (handoff.requiresCheckpoint === false) {
+        finalizedHandoffs.set(thread.id, handoff.sourceTurnId);
+      } else {
+        const context = yield* snapshots.getThreadCheckpointContext(thread.id);
+        recoveryThread = {
+          ...thread,
+          checkpoints: Option.isSome(context) ? context.value.checkpoints : [],
+        };
+      }
+      yield* settlePending(recoveryThread, { type: "recovery" });
+    }
+  }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("Unable to recover pending workspace handoffs.", {
         cause: failureDetail(cause),
