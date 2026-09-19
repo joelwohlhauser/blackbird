@@ -129,6 +129,7 @@ describe("openTerminalLinkInPreview", () => {
         },
       } as unknown as LocalApi,
       fallbackToBrowser,
+      forceBrowser: false,
     });
 
     expect(fallbackToBrowser).toHaveBeenCalledOnce();
@@ -163,6 +164,7 @@ describe("openTerminalLinkInPreview", () => {
         },
       } as unknown as LocalApi,
       fallbackToBrowser,
+      forceBrowser: false,
     });
 
     expect(fallbackToBrowser).toHaveBeenCalledOnce();
@@ -193,9 +195,28 @@ describe("openTerminalLinkInPreview", () => {
         },
       } as unknown as LocalApi,
       fallbackToBrowser,
+      forceBrowser: false,
     });
 
     expect(reportError).not.toHaveBeenCalled();
     expect(fallbackToBrowser).not.toHaveBeenCalled();
+  });
+
+  it("opens in the system browser when Ctrl or Command is held", async () => {
+    const fallbackToBrowser = vi.fn();
+    const openPreview = vi.fn(async () => AsyncResult.success(snapshot));
+
+    await openTerminalLinkInPreview({
+      url: "https://example.com/docs",
+      threadRef,
+      openPreview,
+      fallbackToBrowser,
+      forceBrowser: true,
+      position: { x: 12, y: 34 },
+      localApi: { contextMenu: { show: vi.fn() } } as unknown as LocalApi,
+    });
+
+    expect(fallbackToBrowser).toHaveBeenCalledOnce();
+    expect(openPreview).not.toHaveBeenCalled();
   });
 });

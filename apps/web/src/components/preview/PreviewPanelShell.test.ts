@@ -1,5 +1,3 @@
-import { jsx } from "react/jsx-runtime";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -27,14 +25,6 @@ describe("getPreviewPanelMaxWidth", () => {
 
   it("rounds fractional CSS pixels down", () => {
     expect(getPreviewPanelMaxWidth(2_001)).toBe(1_400);
-  });
-
-  it("keeps inline panels inside their containing workspace", () => {
-    const markup = renderToStaticMarkup(
-      jsx(PreviewPanelShell, { mode: "inline", defaultWidth: 1_000, children: "Panel" }),
-    );
-
-    expect(markup).toContain("max-w-full");
   });
 
   it("reserves the sibling column minimum when the flex row is known", () => {

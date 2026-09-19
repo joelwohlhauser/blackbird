@@ -23,8 +23,8 @@ describe("PanelLayoutControls", () => {
     expect(html).toContain('aria-label="Toggle terminal drawer"');
     expect(html).toContain('aria-label="Toggle right panel"');
     expect(html).toContain('aria-label="Toggle workspace navigator"');
-    expect(html.match(/sm:size-6/g)).toHaveLength(3);
-    expect(html.match(/<svg[^>]*size-3\.5/g)).toHaveLength(3);
+    expect(html.match(/sm:size-7/g)).toHaveLength(3);
+    expect(html.match(/<svg[^>]*size-4/g)).toHaveLength(3);
     expect(html).toContain('aria-pressed="true"');
     expect(html).not.toContain(' data-pressed="');
   });

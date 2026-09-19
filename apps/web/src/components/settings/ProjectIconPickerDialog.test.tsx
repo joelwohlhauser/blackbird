@@ -41,7 +41,13 @@ import { ProjectIconPickerDialog } from "./ProjectIconPickerDialog";
 describe("ProjectIconPickerDialog", () => {
   it("defaults to no icon", () => {
     const markup = renderToStaticMarkup(
-      <ProjectIconPickerDialog current={null} open onOpenChange={() => {}} onSelect={() => {}} />,
+      <ProjectIconPickerDialog
+        current={null}
+        projectName="Test"
+        open
+        onOpenChange={() => {}}
+        onSelect={() => {}}
+      />,
     );
 
     expect(markup).toContain('data-current="none"');

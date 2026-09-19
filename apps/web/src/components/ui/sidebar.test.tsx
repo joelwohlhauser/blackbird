@@ -1,5 +1,5 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   Sidebar,
@@ -19,7 +19,7 @@ function renderSidebarButton(className?: string) {
   );
 }
 
-describe("sidebar interactive cursors", () => {
+describe("responsive sidebar state", () => {
   it("uses mobile sheet visibility for the shared responsive state", () => {
     expect(resolveSidebarState({ isMobile: true, open: true, openMobile: false })).toBe(
       "collapsed",

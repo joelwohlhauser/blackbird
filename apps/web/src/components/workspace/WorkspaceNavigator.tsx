@@ -4,7 +4,8 @@ import type {
   ScopedThreadRef,
   VcsStatusResult,
 } from "@t3tools/contracts";
-import { FileDiffIcon, GitPullRequestIcon, RefreshCwIcon } from "lucide-react";
+import { FileDiffIcon, RefreshCwIcon } from "lucide-react";
+import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { useResizableWidth } from "~/hooks/useResizableWidth";
@@ -95,7 +96,7 @@ function NavigatorHeader(props: {
 }
 
 function NavigatorMessage(props: { icon?: "changes" | "pr"; children: string }) {
-  const Icon = props.icon === "changes" ? FileDiffIcon : GitPullRequestIcon;
+  const Icon = props.icon === "changes" ? FileDiffIcon : PullRequestGlyph.pullRequest;
   return (
     <div className="flex min-h-40 flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-xs leading-relaxed text-muted-foreground">
       {props.icon ? <Icon className="size-5 opacity-60" aria-hidden="true" /> : null}

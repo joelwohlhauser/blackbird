@@ -16,7 +16,11 @@ import {
   removeLocalStorageItem,
   setLocalStorageItem,
 } from "../hooks/useLocalStorage";
-import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import {
+  isRichTextBoldShortcut,
+  resolveShortcutCommand,
+  shortcutLabelForCommand,
+} from "../keybindings";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { CLOSE_WORKSPACE_TAB_EVENT, NEW_WORKSPACE_TAB_EVENT } from "../workspaceTabs";
@@ -56,7 +60,7 @@ import {
 } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
-const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "90px";
+const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "var(--desktop-window-controls-inset, 90px)";
 const SIDEBAR_HOVER_REVEAL_EDGE_PX = 8;
 const SIDEBAR_HOVER_DISMISS_PADDING_PX = 12;
 const SIDEBAR_HOVER_DISMISS_DELAY_MS = 120;
@@ -110,6 +114,15 @@ function SidebarControl() {
         event.target instanceof HTMLElement &&
         event.target.closest("[data-keybinding-capture]")
       ) {
+        return;
+      }
+      if (
+        isRichTextBoldShortcut(event) &&
+        event.target instanceof HTMLElement &&
+        event.target.closest('[data-composer-rich-text="true"]')
+      ) {
+        // The rich-text composer claims Mod+B for bold; the toggle stays
+        // available everywhere else, including the plain-text composer.
         return;
       }
       if (resolveShortcutCommand(event, keybindings) !== "sidebar.toggle") return;

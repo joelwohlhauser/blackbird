@@ -11,6 +11,7 @@ import { useAssetUrlState } from "../assets/assetUrls";
 import { useAtomValue } from "@effect/atom-react";
 import { projectFaviconUrlAtom } from "../state/assets";
 import { projectIconColorClassName } from "../projectIconColors";
+import { ProjectMonogram } from "./ProjectMonogram";
 import { cn } from "~/lib/utils";
 
 const DynamicIcon = lazy(() =>
@@ -28,7 +29,6 @@ export type ProjectFaviconProject = Pick<
   EnvironmentProject,
   "environmentId" | "workspaceRoot" | "title" | "faviconPath" | "projectIcon"
 >;
-
 export function ProjectFavicon(input: {
   project: ProjectFaviconProject;
   className?: string | undefined;
@@ -41,6 +41,15 @@ export function ProjectFavicon(input: {
       faviconPath: project.faviconPath,
     }),
   );
+  if (project.projectIcon?.kind === "monogram") {
+    return (
+      <ProjectMonogram
+        text={project.projectIcon.text}
+        color={project.projectIcon.color}
+        className={input.className}
+      />
+    );
+  }
   if (project.projectIcon?.kind === "emoji") {
     return <ProjectEmojiIcon className={input.className} emoji={project.projectIcon.emoji} />;
   }

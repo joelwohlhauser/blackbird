@@ -27,18 +27,28 @@ export const RIGHT_PANEL_KINDS = [
   "file",
   "file-diff",
   "preview",
+  "device",
   "terminal",
   "linear",
   "github-pr",
   "pull-request",
+  "pull-requests",
   "agents",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
+
+export interface DeviceTabTarget {
+  hostId: string;
+  deviceId: string;
+  platform: "ios" | "android";
+  name: string;
+}
 
 export type RightPanelSurface =
   | { id: "new-tab"; kind: "new-tab" }
   | { id: `browser:${string}`; kind: "preview"; resourceId: string; url?: string | null }
   | { id: "browser:new"; kind: "preview"; resourceId: null; url?: null }
+  | { id: "device" | `device:${string}`; kind: "device"; target?: DeviceTabTarget; title?: string }
   | { id: "linear"; kind: "linear"; resourceId: string; url?: string | null }
   | { id: "github-pr"; kind: "github-pr"; resourceId: string; url?: string | null }
   | {
@@ -84,10 +94,13 @@ export type RightPanelSurface =
        */
       environmentId?: string;
       projectId: string;
+      host?: string;
       repository: string;
       number: number;
       url?: string;
     }
+  /** The thread's linked pull requests, one singleton tab beside any number of `pull-request` tabs. */
+  | { id: "pull-requests"; kind: "pull-requests" }
   | { id: "agents"; kind: "agents" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
@@ -131,6 +144,7 @@ export interface ThreadRightPanelState {
   mainSurfaces: RightPanelSurface[];
   /** Active main-area tab; null means the chat tab is active. */
   activeMainSurfaceId: string | null;
+  dismissedDeviceSurfaceIds?: string[];
 }
 
 export function resolveAdjacentRightPanelSurface(
@@ -164,7 +178,7 @@ interface RightPanelStoreState {
    */
   openProactive: (
     ref: ScopedThreadRef,
-    surface: Extract<RightPanelSurface, { kind: "diff" | "pull-request" }>,
+    surface: Extract<RightPanelSurface, { kind: "diff" | "pull-request" | "pull-requests" }>,
     expectedUserActionRevision: number,
   ) => boolean;
 
@@ -189,6 +203,8 @@ interface RightPanelStoreState {
     options?: { pinned?: boolean },
   ) => void;
   pinDedicatedSurface: (ref: ScopedThreadRef, surfaceId: "linear" | "github-pr") => void;
+  openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
+  renameDevice: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
   openDiffFile: (
     ref: ScopedThreadRef,
@@ -203,6 +219,7 @@ interface RightPanelStoreState {
     target: {
       environmentId?: string;
       projectId: string;
+      host?: string;
       repository: string;
       number: number;
       url?: string;
@@ -271,8 +288,12 @@ const singletonSurface = (
       return { id: "diff", kind };
     case "files":
       return { id: "files", kind };
+    case "pull-requests":
+      return { id: "pull-requests", kind };
     case "agents":
       return { id: "agents", kind };
+    case "device":
+      return { id: "device", kind };
   }
 };
 
@@ -367,6 +388,7 @@ export type PullRequestSurface = Extract<RightPanelSurface, { kind: "pull-reques
 export function pullRequestSurfaceId(target: {
   environmentId?: string;
   projectId: string;
+  host?: string;
   repository: string;
   number: number;
 }): PullRequestSurface["id"] {
@@ -374,12 +396,14 @@ export function pullRequestSurfaceId(target: {
   // servers is two tabs rather than one tab that changes its mind about which server it is on.
   const scope =
     target.environmentId === undefined ? "" : `${encodeURIComponent(target.environmentId)}:`;
-  return `pull-request:${scope}${encodeURIComponent(target.projectId)}:${encodeURIComponent(target.repository)}:${target.number}`;
+  const host = target.host === undefined ? "" : `${encodeURIComponent(target.host.toLowerCase())}:`;
+  return `pull-request:${scope}${encodeURIComponent(target.projectId)}:${host}${encodeURIComponent(target.repository)}:${target.number}`;
 }
 
 export function pullRequestSurface(target: {
   environmentId?: string;
   projectId: string;
+  host?: string;
   repository: string;
   number: number;
   url?: string;
@@ -389,6 +413,7 @@ export function pullRequestSurface(target: {
     kind: "pull-request",
     ...(target.environmentId === undefined ? {} : { environmentId: target.environmentId }),
     projectId: target.projectId,
+    ...(typeof target.host === "string" ? { host: target.host.toLowerCase() } : {}),
     repository: target.repository,
     number: target.number,
     ...(typeof target.url === "string" ? { url: target.url } : {}),
@@ -579,7 +604,8 @@ const updateThread = (
     next.activeSurfaceId === null &&
     next.surfaces.length === 0 &&
     next.mainSurfaces.length === 0 &&
-    next.activeMainSurfaceId === null
+    next.activeMainSurfaceId === null &&
+    !next.dismissedDeviceSurfaceIds?.length
   ) {
     if (!(threadKey in byThreadKey)) return byThreadKey;
     const { [threadKey]: _removed, ...rest } = byThreadKey;
@@ -716,7 +742,21 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                 : null;
               return [
                 threadKey,
-                { isOpen, surfaces, activeSurfaceId, mainSurfaces, activeMainSurfaceId },
+                {
+                  isOpen,
+                  surfaces,
+                  activeSurfaceId,
+                  mainSurfaces,
+                  activeMainSurfaceId,
+                  ...(Array.isArray(validThreadState?.dismissedDeviceSurfaceIds)
+                    ? {
+                        dismissedDeviceSurfaceIds:
+                          validThreadState.dismissedDeviceSurfaceIds.filter(
+                            (id): id is string => typeof id === "string",
+                          ),
+                      }
+                    : {}),
+                },
               ];
             }),
         )
@@ -749,7 +789,23 @@ const userAction = (
   threadKey: string,
   updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
 ): Partial<RightPanelStoreState> => ({
-  byThreadKey: updateThread(state.byThreadKey, threadKey, updater),
+  byThreadKey: updateThread(state.byThreadKey, threadKey, (current) => {
+    const next = updater(current);
+    const nextIds = new Set([...next.surfaces, ...next.mainSurfaces].map((entry) => entry.id));
+    const removed = [...current.surfaces, ...current.mainSurfaces].filter(
+      (surface) => surface.kind === "device" && surface.target && !nextIds.has(surface.id),
+    );
+    if (removed.length === 0) return next;
+    return {
+      ...next,
+      dismissedDeviceSurfaceIds: [
+        ...new Set([
+          ...(next.dismissedDeviceSurfaceIds ?? []),
+          ...removed.map((surface) => surface.id),
+        ]),
+      ],
+    };
+  }),
   userActionRevisionByThreadKey: {
     ...state.userActionRevisionByThreadKey,
     [threadKey]: (state.userActionRevisionByThreadKey[threadKey] ?? 0) + 1,
@@ -778,7 +834,9 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           if (
             surface.kind === "diff" &&
             (selectActiveRightPanel(state.byThreadKey, ref) === "pull-request" ||
-              selectActiveMainSurface(state.byThreadKey, ref)?.kind === "pull-request")
+              selectActiveMainSurface(state.byThreadKey, ref)?.kind === "pull-request" ||
+              selectActiveRightPanel(state.byThreadKey, ref) === "pull-requests" ||
+              selectActiveMainSurface(state.byThreadKey, ref)?.kind === "pull-requests")
           ) {
             return state;
           }
@@ -796,6 +854,43 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               return upsertSurface(current, existing ?? browserSurface(null));
             }
             return upsertSurface(current, singletonSurface(kind));
+          }),
+        })),
+      openDevice: (ref, target, automatic = false) =>
+        set((state) => ({
+          ...(automatic ? automaticUpdate : userAction)(state, scopedThreadKey(ref), (current) => {
+            const id =
+              `device:${encodeURIComponent(target.hostId)}:${encodeURIComponent(target.deviceId)}` as const;
+            if (automatic && current.dismissedDeviceSurfaceIds?.includes(id)) return current;
+            const surface: RightPanelSurface = { id, kind: "device", target };
+            const existing = findSurface(current, (entry) => entry.id === id);
+            // A concrete device replaces the placeholder tab in whichever container holds it.
+            const base = existing
+              ? current
+              : withoutSurfaces(current, (entry) => entry.id === "device");
+            return upsertSurface(
+              {
+                ...base,
+                dismissedDeviceSurfaceIds: (current.dismissedDeviceSurfaceIds ?? []).filter(
+                  (entry) => entry !== id,
+                ),
+              },
+              existing ?? surface,
+            );
+          }),
+        })),
+      renameDevice: (ref, surfaceId, title) =>
+        set((state) => ({
+          ...userAction(state, scopedThreadKey(ref), (current) => {
+            const rename = (surface: RightPanelSurface): RightPanelSurface =>
+              surface.id === surfaceId && surface.kind === "device"
+                ? { ...surface, title: title.trim() || surface.target?.name || "Device" }
+                : surface;
+            return {
+              ...current,
+              surfaces: current.surfaces.map(rename),
+              mainSurfaces: current.mainSurfaces.map(rename),
+            };
           }),
         })),
       openBrowser: (ref, tabId, url) =>
@@ -906,9 +1001,13 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             },
           ),
         })),
-      openFile: (ref, relativePath, line) =>
+      openFile: (ref, requestedPath, line) =>
         set((state) => ({
           ...userAction(state, scopedThreadKey(ref), (current) => {
+            // Workspace entry paths use '/', including on Windows.
+            const relativePath = /^[A-Za-z]:\/+$/.test(requestedPath)
+              ? requestedPath
+              : requestedPath.replace(/\/+$/, "") || requestedPath;
             const base = withoutSurfaces(current, (surface) => surface.kind === "files");
             const surfaceId = `file:${relativePath}` as const;
             const isExistingFileSurface = (

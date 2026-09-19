@@ -18,6 +18,8 @@ import * as DesktopClientSettings from "./DesktopClientSettings.ts";
 
 const clientSettings: ClientSettings = {
   ...DEFAULT_CLIENT_SETTINGS,
+  notificationMode: "notifications-and-sound",
+  inAppNotificationsEnabled: true,
   appearanceContrast: 100,
   browserDefaultViewport: {
     _tag: "preset",
@@ -40,6 +42,7 @@ const clientSettings: ClientSettings = {
   contextWindowMeterEnabled: false,
   composerCollapseOnScroll: true,
   dismissedProviderUpdateNotificationKeys: [],
+  diffFilesCollapsed: true,
   diffIgnoreWhitespace: true,
   diffLayout: "stacked",
   environmentIdentificationMode: "artwork",

@@ -45,7 +45,7 @@ import { writeFileStringAtomically } from "./atomicWrite.ts";
 import { fromJsonStringPretty, fromLenientJson } from "@t3tools/shared/schemaJson";
 import {
   DEFAULT_KEYBINDINGS,
-  DEFAULT_RESOLVED_KEYBINDINGS,
+  mergeWithDefaultKeybindings,
   compileResolvedKeybindingRule,
   compileResolvedKeybindingsConfig,
   parseKeybindingShortcut,
@@ -61,7 +61,7 @@ export {
 export const ResolvedKeybindingFromConfig = KeybindingRule.pipe(
   Schema.decodeTo(
     Schema.toType(ResolvedKeybindingRule),
-    SchemaTransformation.transformOrFail({
+    SchemaTransformation.transformEffect({
       decode: (rule) =>
         Effect.succeed(compileResolvedKeybindingRule(rule)).pipe(
           Effect.filterOrFail(
@@ -129,7 +129,11 @@ function replaceTargetFromUpsertInput(input: ServerUpsertKeybindingInput): Keybi
   if (!input.replace) return null;
   return input.replace.when === undefined
     ? { key: input.replace.key, command: input.replace.command }
-    : { key: input.replace.key, command: input.replace.command, when: input.replace.when };
+    : {
+        key: input.replace.key,
+        command: input.replace.command,
+        when: input.replace.when,
+      };
 }
 
 function keybindingRuleFromRemoveInput(input: ServerRemoveKeybindingInput): KeybindingRule {
@@ -199,38 +203,6 @@ function invalidEntryIssue(index: number, detail: string): ServerConfigIssue {
     index,
     message: trimIssueMessage(detail),
   };
-}
-
-function mergeWithDefaultKeybindings(custom: ResolvedKeybindingsConfig): ResolvedKeybindingsConfig {
-  if (custom.length === 0) {
-    return [...DEFAULT_RESOLVED_KEYBINDINGS];
-  }
-
-  const ruleKey = (binding: ResolvedKeybindingRule) =>
-    JSON.stringify([
-      binding.command,
-      encodeShortcut(binding.shortcut),
-      binding.whenAst ? encodeWhenAst(binding.whenAst) : null,
-    ]);
-  const defaultRules = new Set(DEFAULT_RESOLVED_KEYBINDINGS.map(ruleKey));
-  const customRules = new Set(custom.map(ruleKey));
-  // Saved defaults are not remaps: keep aliases added since the file was written.
-  const overriddenCommands = new Set(
-    custom
-      .filter((binding) => !defaultRules.has(ruleKey(binding)))
-      .map((binding) => binding.command),
-  );
-  const retainedDefaults = DEFAULT_RESOLVED_KEYBINDINGS.filter(
-    (binding) => !overriddenCommands.has(binding.command) && !customRules.has(ruleKey(binding)),
-  );
-  const merged = [...retainedDefaults, ...custom];
-
-  if (merged.length <= MAX_KEYBINDINGS_COUNT) {
-    return merged;
-  }
-
-  // Keep the latest rules when the config exceeds max size; later rules have higher precedence.
-  return merged.slice(-MAX_KEYBINDINGS_COUNT);
 }
 
 /**

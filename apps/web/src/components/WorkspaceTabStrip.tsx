@@ -14,10 +14,10 @@ import {
   Bot,
   FileDiff,
   Files,
-  GitPullRequest,
   Globe2,
   MessageSquare,
   Plus,
+  Smartphone,
   TerminalSquare,
   Volume2,
   VolumeOff,
@@ -47,7 +47,8 @@ import {
 } from "~/workspaceTabs";
 
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
-import { GitHubIcon, LinearIcon } from "./Icons";
+import { AndroidIcon, AppleIcon, GitHubIcon, LinearIcon } from "./Icons";
+import { PullRequestGlyph } from "./pullRequest/pullRequestIcons";
 import { FaviconImage } from "./preview/PreviewFaviconIcon";
 import { previewBridge } from "./preview/previewBridge";
 
@@ -99,6 +100,10 @@ export function surfaceTitle(
       );
     case "pull-request":
       return `#${surface.number}`;
+    case "pull-requests":
+      return "Pull Requests";
+    case "device":
+      return surface.title ?? surface.target?.name ?? "Device";
     case "agents":
       return "Agents";
     case "preview": {
@@ -189,8 +194,18 @@ export function SurfaceIcon({
               : status?.state === "open"
                 ? "text-emerald-600 dark:text-emerald-300/90"
                 : "text-muted-foreground";
-      return <GitPullRequest className={cn("size-3 shrink-0", toneClassName)} />;
+      return <PullRequestGlyph.pullRequest className={cn("size-3 shrink-0", toneClassName)} />;
     }
+    case "pull-requests":
+      return <PullRequestGlyph.link className="size-3 shrink-0" />;
+    case "device":
+      return surface.target?.platform === "ios" ? (
+        <AppleIcon className="size-3 shrink-0" />
+      ) : surface.target?.platform === "android" ? (
+        <AndroidIcon className="size-3 shrink-0" />
+      ) : (
+        <Smartphone className="size-3 shrink-0" />
+      );
     case "agents":
       return <Bot className="size-3 shrink-0" />;
   }

@@ -1,9 +1,11 @@
+import { EnvironmentId, type ThreadPullRequestLink } from "@t3tools/contracts";
 import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   RightPanelTabs,
+  resolvePullRequestTabLink,
   surfaceShortcutActionForKey,
   surfaceShortcutTargetsTypingContext,
   tabMuteMenuItem,
@@ -38,7 +40,11 @@ const sessions: Readonly<Record<string, PreviewSessionSnapshot>> = {
   "tab-1": {
     threadId: "thread-1",
     tabId: "tab-1",
-    navStatus: { _tag: "Success", url: "http://24x.xf.local/", title: "Local site" },
+    navStatus: {
+      _tag: "Success",
+      url: "http://24x.xf.local/",
+      title: "Local site",
+    },
     canGoBack: false,
     canGoForward: false,
     updatedAt: "2026-08-09T00:00:00.000Z",
@@ -46,7 +52,11 @@ const sessions: Readonly<Record<string, PreviewSessionSnapshot>> = {
   "tab-2": {
     threadId: "thread-1",
     tabId: "tab-2",
-    navStatus: { _tag: "Success", url: "http://24x.xf.local/admin", title: "Admin" },
+    navStatus: {
+      _tag: "Success",
+      url: "http://24x.xf.local/admin",
+      title: "Admin",
+    },
     canGoBack: false,
     canGoForward: false,
     updatedAt: "2026-08-09T00:00:00.000Z",
@@ -106,19 +116,27 @@ function renderTabs(
       onCopyFilePath={() => undefined}
       onOpenNewTab={() => undefined}
       onAddBrowser={() => undefined}
-      onAddBrowserInProfile={() => undefined}
+      onAddLinear={() => undefined}
+      onAddGitHubPullRequest={() => undefined}
       onAddTerminal={() => undefined}
       onAddPullRequest={() => undefined}
+      onAddPullRequests={() => undefined}
       onAddDiff={() => undefined}
       onAddFiles={() => undefined}
       onAddAgents={() => undefined}
+      onAddDevice={() => undefined}
       liveAgentCount={0}
       browserAvailable
+      linearAvailable={false}
+      githubPullRequestDetected={false}
+      githubPullRequestAvailable={false}
       terminalAvailable={false}
       diffAvailable={false}
       filesAvailable={false}
       pullRequestAvailable={false}
+      pullRequestsAvailable={false}
       agentsAvailable={false}
+      deviceAvailable={false}
     >
       <div>content</div>
     </RightPanelTabs>,
@@ -257,14 +275,24 @@ describe("tabMuteMenuItem", () => {
   });
 
   it("stays disabled when no runtime tab id can be resolved", () => {
-    expect(tabMuteMenuItem({ overlay: overlay(false), canResolveRuntimeTabId: false })).toEqual({
+    expect(
+      tabMuteMenuItem({
+        overlay: overlay(false),
+        canResolveRuntimeTabId: false,
+      }),
+    ).toEqual({
       label: "Mute tab",
       disabled: true,
     });
   });
 
   it("offers mute and unmute once the tab is addressable", () => {
-    expect(tabMuteMenuItem({ overlay: overlay(false), canResolveRuntimeTabId: true })).toEqual({
+    expect(
+      tabMuteMenuItem({
+        overlay: overlay(false),
+        canResolveRuntimeTabId: true,
+      }),
+    ).toEqual({
       label: "Mute tab",
       disabled: false,
     });
@@ -272,5 +300,49 @@ describe("tabMuteMenuItem", () => {
       label: "Unmute tab",
       disabled: false,
     });
+  });
+});
+
+describe("pull request tab snapshots", () => {
+  const environmentId = EnvironmentId.make("local");
+  const link: ThreadPullRequestLink = {
+    host: "github.com",
+    repository: "acme/api",
+    number: 7,
+    url: "https://github.com/acme/api/pull/7",
+    source: "manual",
+    linkedAt: "2026-01-01T00:00:00Z",
+    stack: null,
+    snapshot: null,
+  };
+  it("keeps unknown linked state authoritative and scopes matches to environment and host", () => {
+    const threads = [{ environmentId, pullRequests: [link] }];
+    expect(resolvePullRequestTabLink(threads, environmentId, "github.com", link)).toBe(link);
+    expect(
+      resolvePullRequestTabLink(threads, EnvironmentId.make("remote"), "github.com", link),
+    ).toBeUndefined();
+    expect(
+      resolvePullRequestTabLink(threads, environmentId, "github.enterprise.test", link),
+    ).toBeUndefined();
+  });
+  it("uses the newest snapshot when several threads link the same PR", () => {
+    const snapshot = {
+      state: "merged" as const,
+      title: "API",
+      headBranch: "api",
+      baseBranch: "main",
+      isDraft: false,
+      updatedAt: null,
+      syncedAt: "2026-02-01T00:00:00Z",
+    };
+    const newer = { ...link, snapshot };
+    expect(
+      resolvePullRequestTabLink(
+        [{ environmentId, pullRequests: [link, newer] }],
+        environmentId,
+        "github.com",
+        link,
+      ),
+    ).toBe(newer);
   });
 });

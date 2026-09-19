@@ -37,6 +37,7 @@ const thread: OrchestrationThread = {
   id: threadId,
   projectId,
   title: "Issue investigation",
+  pullRequests: [],
   modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.6" },
   runtimeMode: "full-access",
   interactionMode: "default",

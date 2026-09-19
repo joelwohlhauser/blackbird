@@ -83,7 +83,9 @@ Blackbird uses:
 - [`@pierre/trees`](https://trees.software/) for file, change, and PR trees.
 
 Changed lines use clear VS Code-like red/green backgrounds, with subtler
-character-level highlights and change markers alongside the scrollbar.
+character-level highlights and change markers alongside the scrollbar. Large
+diffs report complete file counts up front and load their patches
+progressively, file by file, so the aggregate Diff view stays responsive.
 
 ### Workspace tabs and two right-side surfaces
 
@@ -96,7 +98,9 @@ nested layouts). Tabs can show:
 - the aggregate Diff view;
 - normal files and `filename (Working Tree)` whole-file diffs;
 - Linear issues;
-- GitHub pull requests; and
+- GitHub pull requests;
+- the chat's linked pull requests list (from T3 Code's PR linking);
+- agent device streams (T3 Code's Device panel for phones and simulators); and
 - agent/subagent activity.
 
 The chat itself renders as a **pinned tab** at the head of the chat area's tab

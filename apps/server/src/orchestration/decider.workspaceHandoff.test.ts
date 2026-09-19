@@ -27,6 +27,7 @@ const readModel: OrchestrationReadModel = {
       id: threadId,
       projectId: ProjectId.make("project-1"),
       title: "Investigate issue",
+      pullRequests: [],
       modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.6" },
       runtimeMode: "full-access",
       interactionMode: "default",

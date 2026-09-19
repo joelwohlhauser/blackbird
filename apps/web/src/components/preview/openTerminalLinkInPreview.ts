@@ -44,22 +44,24 @@ interface OpenTerminalLinkInPreviewInput<E> {
   readonly openPreview: OpenPreviewMutation<E>;
   readonly fallbackToBrowser: () => void;
   readonly mode?: ExternalLinkOpenMode;
+  /** Cmd/Ctrl-click bypasses the preference and opens in the system browser. */
+  readonly forceBrowser?: boolean;
   readonly position: { readonly x: number; readonly y: number };
   readonly localApi: LocalApi;
 }
 
 /**
- * Opens a terminal hyperlink where the "Open links in" setting says. Terminal
- * links are activated with the platform modifier already held, so unlike chat
- * links the modifier cannot double as the system-browser override; the setting
- * alone decides, and the system browser is the fallback whenever the in-app
- * one cannot take the URL.
+ * Opens a terminal hyperlink where the "Open links in" setting says, unless a
+ * Cmd/Ctrl-click explicitly requests the system browser.
  */
 export async function openTerminalLinkInPreview<E>(
   input: OpenTerminalLinkInPreviewInput<E>,
 ): Promise<void> {
   const supportsPreview =
-    isWebUrl(input.url) && isPreviewSupportedInRuntime() && input.threadRef.threadId.length > 0;
+    !input.forceBrowser &&
+    isWebUrl(input.url) &&
+    isPreviewSupportedInRuntime() &&
+    input.threadRef.threadId.length > 0;
 
   if (!supportsPreview) {
     input.fallbackToBrowser();

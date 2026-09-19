@@ -1,5 +1,10 @@
 import type { EnvironmentId, PreviewSessionSnapshot } from "@t3tools/contracts";
-import { Bot, FileDiff, GitPullRequest, Globe2, Plus, TerminalSquare } from "lucide-react";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import {
+  threadPullRequestKeysEqual,
+  visibleThreadPullRequests,
+} from "@t3tools/shared/threadPullRequests";
+import { Bot, FileDiff, Globe2, Plus, Smartphone, TerminalSquare } from "lucide-react";
 import {
   type ElementType,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -16,6 +21,7 @@ import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Kbd } from "~/components/ui/kbd";
+import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
 import { WorkspaceTabStrip, type WorkspacePullRequestTabStatus } from "./WorkspaceTabStrip";
@@ -54,7 +60,9 @@ interface RightPanelTabsProps {
   /** Retained for persisted legacy Files surfaces; new browsing uses WorkspaceNavigator. */
   onAddFiles: () => void;
   onAddPullRequest?: () => void;
+  onAddPullRequests?: () => void;
   onAddAgents: () => void;
+  onAddDevice?: () => void;
   browserAvailable: boolean;
   linearAvailable: boolean;
   githubPullRequestDetected: boolean;
@@ -63,7 +71,9 @@ interface RightPanelTabsProps {
   diffAvailable: boolean;
   filesAvailable?: boolean;
   pullRequestAvailable?: boolean;
+  pullRequestsAvailable?: boolean;
   agentsAvailable?: boolean;
+  deviceAvailable?: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   pinnedSurfaceIds?: ReadonlySet<string>;
   /** Running and waiting subagents shown on the Agents empty-state card. */
@@ -74,6 +84,7 @@ interface RightPanelTabsProps {
 
 export type PullRequestTabStatus = WorkspacePullRequestTabStatus;
 
+/** Overlays that must win over the launcher's letter shortcuts. */
 const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
   '[data-slot="dialog-popup"]',
   '[data-slot="alert-dialog-popup"]',
@@ -85,6 +96,7 @@ const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
   '[data-slot="autocomplete-popup"]',
 ].join(",");
 
+/** One-line unavailability hints for the New Tab cards. */
 const SURFACE_UNAVAILABLE_HINTS = {
   browser: "Only available in the desktop app.",
   linear: "Only available in the desktop app.",
@@ -92,7 +104,9 @@ const SURFACE_UNAVAILABLE_HINTS = {
   terminal: "Available when a project is open.",
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
+  pullRequests: "No linked pull requests available.",
   agents: "No agents in this chat yet.",
+  device: "Available from a chat.",
 } as const;
 
 type SurfaceShortcutEvent = Pick<
@@ -123,6 +137,41 @@ export function surfaceShortcutTargetsTypingContext(
 
 export { tabMuteMenuItem } from "./WorkspaceTabStrip";
 
+/**
+ * Newest linked pull request matching a PR tab, scoped to the tab's
+ * environment and host so same-numbered PRs on other forges never collide.
+ * A link without a snapshot still wins over nothing: linked state is
+ * authoritative even before the first sync.
+ */
+export function resolvePullRequestTabLink(
+  threads: readonly Pick<EnvironmentThreadShell, "environmentId" | "pullRequests">[],
+  environmentId: EnvironmentId | null,
+  host: string | null,
+  reference: { repository: string; number: number },
+) {
+  if (environmentId === null || host === null) return undefined;
+  let newest: EnvironmentThreadShell["pullRequests"][number] | undefined;
+  for (const thread of threads) {
+    if (thread.environmentId !== environmentId) continue;
+    for (const link of visibleThreadPullRequests(thread.pullRequests)) {
+      if (
+        !threadPullRequestKeysEqual(link, {
+          host,
+          repository: reference.repository,
+          number: reference.number,
+        })
+      )
+        continue;
+      if (
+        newest === undefined ||
+        (link.snapshot?.syncedAt ?? "") > (newest.snapshot?.syncedAt ?? "")
+      )
+        newest = link;
+    }
+  }
+  return newest;
+}
+
 export function NewTabButton(props: { ariaLabel: string; onClick: () => void }) {
   return (
     <Tooltip>
@@ -143,6 +192,12 @@ export function NewTabButton(props: { ariaLabel: string; onClick: () => void }) 
   );
 }
 
+/**
+ * Card grid shown by a container's New Tab page. Keyboard-first: a card's
+ * letter opens it directly from anywhere outside a typing context, and arrows
+ * plus Enter work while the page is focused. Unavailable cards stay visible
+ * with a one-line reason.
+ */
 export function NewTabPage(props: {
   onAddBrowser: () => void;
   onAddLinear: () => void;
@@ -150,7 +205,9 @@ export function NewTabPage(props: {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddPullRequest?: () => void;
+  onAddPullRequests?: () => void;
   onAddAgents: () => void;
+  onAddDevice?: () => void;
   browserAvailable: boolean;
   linearAvailable: boolean;
   githubPullRequestDetected: boolean;
@@ -158,7 +215,9 @@ export function NewTabPage(props: {
   terminalAvailable?: boolean;
   diffAvailable: boolean;
   pullRequestAvailable?: boolean;
+  pullRequestsAvailable?: boolean;
   agentsAvailable?: boolean;
+  deviceAvailable?: boolean;
   liveAgentCount: number;
 }) {
   const [highlight, setHighlight] = useState(-1);
@@ -213,11 +272,24 @@ export function NewTabPage(props: {
           {
             label: "Pull request",
             description: "Open this branch's pull request.",
-            icon: GitPullRequest,
+            icon: PullRequestGlyph.pullRequest,
             shortcut: "P",
             available: props.pullRequestAvailable === true,
             disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequest,
             onClick: props.onAddPullRequest,
+          },
+        ]
+      : []),
+    ...(props.onAddPullRequests
+      ? [
+          {
+            label: "Linked pull requests",
+            description: "Browse the pull requests linked to this chat.",
+            icon: PullRequestGlyph.link,
+            shortcut: "R",
+            available: props.pullRequestsAvailable === true,
+            disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequests,
+            onClick: props.onAddPullRequests,
           },
         ]
       : []),
@@ -231,6 +303,19 @@ export function NewTabPage(props: {
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
     },
+    ...(props.onAddDevice
+      ? [
+          {
+            label: "Device",
+            description: "Watch an iOS Simulator or Android Emulator.",
+            icon: Smartphone,
+            shortcut: "M",
+            available: props.deviceAvailable === true,
+            disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
+            onClick: props.onAddDevice,
+          },
+        ]
+      : []),
   ];
   if (props.githubPullRequestDetected) {
     actions.push({
@@ -284,7 +369,9 @@ export function NewTabPage(props: {
       return;
     }
     if (event.key === "Enter") {
-      if (event.target instanceof HTMLElement && event.target.closest("button")) return;
+      // Only activate the highlight when the page itself has focus; a focused
+      // card button already handles Enter on its own.
+      if (event.target !== event.currentTarget) return;
       const action = availableActions[highlightIndex];
       if (!action) return;
       event.preventDefault();
@@ -451,7 +538,11 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             {...(props.onAddPullRequest !== undefined
               ? { onAddPullRequest: props.onAddPullRequest }
               : {})}
+            {...(props.onAddPullRequests !== undefined
+              ? { onAddPullRequests: props.onAddPullRequests }
+              : {})}
             onAddAgents={props.onAddAgents}
+            {...(props.onAddDevice !== undefined ? { onAddDevice: props.onAddDevice } : {})}
             browserAvailable={props.browserAvailable}
             linearAvailable={props.linearAvailable}
             githubPullRequestDetected={props.githubPullRequestDetected}
@@ -463,8 +554,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             {...(props.pullRequestAvailable !== undefined
               ? { pullRequestAvailable: props.pullRequestAvailable }
               : {})}
+            {...(props.pullRequestsAvailable !== undefined
+              ? { pullRequestsAvailable: props.pullRequestsAvailable }
+              : {})}
             {...(props.agentsAvailable !== undefined
               ? { agentsAvailable: props.agentsAvailable }
+              : {})}
+            {...(props.deviceAvailable !== undefined
+              ? { deviceAvailable: props.deviceAvailable }
               : {})}
             liveAgentCount={props.liveAgentCount}
           />
