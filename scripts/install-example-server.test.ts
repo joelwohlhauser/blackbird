@@ -40,8 +40,9 @@ async function fixture(
 echo install >> "$DEPLOY_FIXTURE/calls"
 [ "$FAIL_INSTALL" != 1 ] || exit 1
 while [ "$1" != --prefix ]; do shift; done
-mkdir -p "$2/node_modules/t3/dist"
+mkdir -p "$2/node_modules/t3/dist" "$2/node_modules/@ff-labs/fff-node"
 touch "$2/node_modules/t3/dist/bin.mjs"
+printf '%s' '{"name":"@ff-labs/fff-node","exports":{".":{"import":"./dist/src/index.js","types":"./dist/src/index.d.ts"}}}' > "$2/node_modules/@ff-labs/fff-node/package.json"
 `,
     systemctl: `
 if [ "$2" = restart ]; then
@@ -108,6 +109,14 @@ describe("remote server deployment", () => {
     await expect(
       NodeFSP.stat(NodePath.join(test.root, "runtime/blackbird-deploy-in-progress")),
     ).rejects.toThrow();
+    // npm installs the unpatched fff-node; the bundle requires it.
+    const fffManifest = JSON.parse(
+      await NodeFSP.readFile(
+        NodePath.join(test.release, "node_modules/@ff-labs/fff-node/package.json"),
+        "utf8",
+      ),
+    ) as { exports: { ".": Record<string, string> } };
+    expect(fffManifest.exports["."].require).toBe("./dist/src/index.js");
   });
 
   it("prunes obsolete releases after success while preserving unrelated entries", async () => {

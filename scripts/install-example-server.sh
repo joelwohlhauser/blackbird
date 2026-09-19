@@ -72,6 +72,21 @@ if [ ! -f "$release/node_modules/t3/dist/bin.mjs" ]; then
   staging=$(mktemp -d "$server_root/.installing-XXXXXXXX")
   npm install --omit=dev --no-audit --no-fund --prefix "$staging" "$archive"
   test -f "$staging/node_modules/t3/dist/bin.mjs"
+  # The server bundle loads fff-node through `require`, but the published
+  # package only exports an `import` entry. Local builds get the `require`
+  # entry from patches/@ff-labs__fff-node@0.9.4.patch via pnpm; npm installs
+  # the unpatched package, so add the same entry here.
+  node - "$staging/node_modules/@ff-labs/fff-node/package.json" <<'FFF_EXPORTS'
+const fs = require("node:fs");
+const manifestPath = process.argv[2];
+if (!fs.existsSync(manifestPath)) process.exit(0);
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+const entry = manifest.exports?.["."];
+if (entry && typeof entry === "object" && entry.require === undefined && entry.import) {
+  entry.require = entry.import;
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+FFF_EXPORTS
   node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "$staging" "$release"
   staging=""
 fi
