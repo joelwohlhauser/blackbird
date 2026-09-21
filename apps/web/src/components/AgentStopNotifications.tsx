@@ -13,7 +13,8 @@ import { buildThreadRouteParams } from "../threadRoutes";
  * Desktop-only headless observer: posts a macOS notification through the
  * renderer's Notification API whenever an agent stops (finished, failed,
  * waiting for approval or input) while the Blackbird window is not focused.
- * Clicking the notification opens the thread.
+ * Only chats whose bell was turned on notify. Clicking the notification opens
+ * the thread.
  */
 export function AgentStopNotifications() {
   const enabled = useClientSettings((settings) => settings.notifyWhenAgentStops);
@@ -37,7 +38,7 @@ export function AgentStopNotifications() {
     for (const { shell, kind } of stops) {
       const threadRef = scopeThreadRef(shell.environmentId, shell.id);
       const threadKey = scopedThreadKey(threadRef);
-      if (!(preferences[threadKey] ?? enabled)) continue;
+      if (!enabled || !preferences[threadKey]) continue;
       const project = projects.find(
         (candidate) =>
           candidate.environmentId === shell.environmentId && candidate.id === shell.projectId,

@@ -3397,7 +3397,7 @@ export function GeneralSettingsPanel() {
         {isElectron ? (
           <SettingsRow
             {...searchableSetting("agent-notifications")}
-            description="Show a macOS notification when an agent finishes, fails, or waits for approval or input while Blackbird is not the active window. The bell in each chat can override this default."
+            description="Show a macOS notification when an agent finishes, fails, or waits for approval or input while Blackbird is not the active window. Chats stay silent until you turn on the bell in their header."
             resetAction={
               settings.notifyWhenAgentStops !== DEFAULT_UNIFIED_SETTINGS.notifyWhenAgentStops ? (
                 <SettingResetButton

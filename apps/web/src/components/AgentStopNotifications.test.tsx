@@ -109,6 +109,7 @@ describe("per-chat desktop notifications", () => {
   }
 
   it("enables just this environment's chat and restores its choice after remounting", async () => {
+    state.enabled = true;
     await render();
     await toggle();
     await act(async () => renderer!.unmount());
@@ -124,25 +125,31 @@ describe("per-chat desktop notifications", () => {
     });
   });
 
-  it("mutes one chat despite the global default and never replays a stop when unmuted", async () => {
+  it("keeps new chats silent until their bell is turned on and never replays a stop", async () => {
     state.enabled = true;
     await render();
-    await toggle();
     state.shells = shells(true);
     await render();
-    expect(state.notify).toHaveBeenCalledExactlyOnceWith("remote chat", {
-      body: "Needs approval · Quick chat",
-      tag: "remote:chat",
-    });
+    expect(state.notify).not.toHaveBeenCalled();
 
-    state.notify.mockClear();
     await toggle();
     expect(state.notify).not.toHaveBeenCalled();
     state.shells = shells();
     await render();
     state.shells = shells(true);
     await render();
-    expect(state.notify).toHaveBeenCalledTimes(2);
+    expect(state.notify).toHaveBeenCalledExactlyOnceWith("local chat", {
+      body: "Needs approval · Quick chat",
+      tag: "local:chat",
+    });
+  });
+
+  it("ignores the bell while the global setting is off", async () => {
+    await render();
+    await toggle();
+    state.shells = shells(true);
+    await render();
+    expect(state.notify).not.toHaveBeenCalled();
   });
 
   it("does not notify while Blackbird is focused", async () => {
@@ -160,9 +167,10 @@ describe("per-chat desktop notifications", () => {
       state.enabled = true;
       Object.assign(window, { desktopBridge: { isAppFocused: () => appFocused } });
       await render();
+      await toggle();
       state.shells = shells(true);
       await render();
-      expect(state.notify).toHaveBeenCalledTimes(appFocused ? 0 : 2);
+      expect(state.notify).toHaveBeenCalledTimes(appFocused ? 0 : 1);
     },
   );
 });

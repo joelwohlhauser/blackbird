@@ -1,17 +1,20 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { BellIcon, BellOffIcon } from "lucide-react";
-import { useClientSettings } from "../../hooks/useSettings";
 import { useThreadNotificationPreferences } from "../../hooks/useThreadNotificationPreferences";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
+/**
+ * Per-chat opt-in for agent-stop notifications. Every chat starts muted; the
+ * global "Agent notifications" setting only decides whether opted-in chats
+ * actually post anything.
+ */
 export function ChatNotificationToggle({ threadRef }: { threadRef: ScopedThreadRef }) {
-  const enabledByDefault = useClientSettings((settings) => settings.notifyWhenAgentStops);
   const [preferences, setPreferences] = useThreadNotificationPreferences();
   const threadKey = scopedThreadKey(threadRef);
-  const enabled = preferences[threadKey] ?? enabledByDefault;
+  const enabled = preferences[threadKey] ?? false;
 
   return (
     <Tooltip>
@@ -28,7 +31,7 @@ export function ChatNotificationToggle({ threadRef }: { threadRef: ScopedThreadR
             onClick={() =>
               setPreferences((current) => ({
                 ...current,
-                [threadKey]: !(current[threadKey] ?? enabledByDefault),
+                [threadKey]: !(current[threadKey] ?? false),
               }))
             }
           />

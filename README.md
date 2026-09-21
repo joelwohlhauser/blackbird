@@ -53,8 +53,8 @@ Control+Tab opens the **tab switcher** for tabs inside the current chat (the pin
 **Settings → General → Agent notifications** (desktop only, off by default)
 posts a macOS notification whenever an agent stops — finished, failed, or
 waiting for approval or input — while Blackbird is not the active window.
-The bell beside **Add action** enables or disables notifications for that chat,
-overriding the global setting. Each chat's choice is saved locally.
+Every chat starts silent; the bell in the chat header turns notifications on
+for that chat. Each chat's choice is saved locally.
 Clicking the notification opens that chat. The
 installer's code-signing step makes this possible; see Development and
 deployment.
