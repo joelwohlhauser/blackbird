@@ -23,6 +23,9 @@ import {
   resolveStartupChatPath,
   writeLastChatPath,
 } from "../lastChatRoute";
+import { isEditableFocused } from "../lib/editableFocus";
+import { isModelPickerOpen } from "../modelPickerVisibility";
+import { undoLatestThreadAction } from "../hooks/showThreadUndoNotice";
 import { resolveShortcutCommand } from "../keybindings";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { isPreviewSupportedInRuntime } from "../previewStateStore";
@@ -86,6 +89,8 @@ function ChatRouteGlobalShortcuts() {
           terminalOpen,
           previewFocus: isPreviewFocused(),
           previewOpen,
+          editableFocus: isEditableFocused(event.target),
+          modelPickerOpen: isModelPickerOpen(),
         },
       });
 
@@ -104,6 +109,15 @@ function ChatRouteGlobalShortcuts() {
         event.preventDefault();
         event.stopPropagation();
         if (!event.repeat) openCommandPalette({ open: "new-thread-in" });
+        return;
+      }
+
+      if (command === "thread.undo") {
+        if (event.repeat || isModelPickerOpen()) return;
+        if (undoLatestThreadAction()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
         return;
       }
 

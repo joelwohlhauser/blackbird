@@ -186,7 +186,9 @@ New worktrees:
   `~/repositories/.worktrees`;
 - use a repository/branch directory layout;
 - link `.env` files from the main checkout;
-- install project dependencies automatically; and
+- install project dependencies automatically;
+- initialize submodules recursively unless the environment's **Submodules**
+  setting or the repository's `t3.json` limits or disables that; and
 - run all filesystem and Git operations on the environment that owns the
   project.
 
