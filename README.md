@@ -245,6 +245,10 @@ its routes without deleting saved pins.
 - Pins persist in client settings and appear only in the desktop app, since
   the web build has no in-app browser.
 
+### Read aloud
+
+Assistant messages can be read aloud with Google Gemini text-to-speech (`gemini-3.1-flash-tts-preview`). Add a Gemini API key under **Settings → General → Text to speech**, where you also pick a voice (Alnilam by default, Achernar, or Kore) and the default reading speed. A speaker button then appears next to each message's copy button; clicking it generates the audio and then plays it, clicking again stops it, and a speed button beside it cycles the speed while listening. Code blocks and Markdown syntax are skipped. The key is stored on the device only, and the browser calls Gemini directly.
+
 ### Linear, GitHub, and links
 
 The normal right panel has browser-backed integration tabs:

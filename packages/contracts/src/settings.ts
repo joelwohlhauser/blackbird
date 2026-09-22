@@ -311,6 +311,13 @@ export const LoadBalancingWeights = Schema.Record(
 
 export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 
+export const TEXT_TO_SPEECH_VOICES = ["Achernar", "Alnilam", "Kore"] as const;
+export const DEFAULT_TEXT_TO_SPEECH_VOICE =
+  "Alnilam" satisfies (typeof TEXT_TO_SPEECH_VOICES)[number];
+export const TEXT_TO_SPEECH_SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+export const TextToSpeechSpeed = Schema.Literals(TEXT_TO_SPEECH_SPEEDS);
+export type TextToSpeechSpeed = typeof TextToSpeechSpeed.Type;
+
 export const ClientSettingsSchema = Schema.Struct({
   notificationMode: NotificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("off" as const)),
@@ -515,6 +522,11 @@ export const ClientSettingsSchema = Schema.Struct({
   snapShotFlash: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   snapShotAnimations: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   wordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  geminiApiKey: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  textToSpeechVoice: TrimmedNonEmptyString.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TEXT_TO_SPEECH_VOICE)),
+  ),
+  textToSpeechSpeed: TextToSpeechSpeed.pipe(Schema.withDecodingDefault(Effect.succeed(1 as const))),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -1712,5 +1724,8 @@ export const ClientSettingsPatch = Schema.Struct({
   snapShotFlash: Schema.optionalKey(Schema.Boolean),
   snapShotAnimations: Schema.optionalKey(Schema.Boolean),
   wordWrap: Schema.optionalKey(Schema.Boolean),
+  geminiApiKey: Schema.optionalKey(Schema.String),
+  textToSpeechVoice: Schema.optionalKey(TrimmedNonEmptyString),
+  textToSpeechSpeed: Schema.optionalKey(TextToSpeechSpeed),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;

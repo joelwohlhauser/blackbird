@@ -52,6 +52,10 @@ export class DesktopPreReadyElectronOptions extends Context.Service<
 export const make = Effect.gen(function* () {
   const platform = yield* HostProcessPlatform;
   return yield* Effect.sync((): DesktopPreReadyElectronOptions["Service"] => {
+    Electron.app.commandLine.appendSwitch(
+      "disable-features",
+      "HardwareMediaKeyHandling,MediaSessionService",
+    );
     const linuxPasswordStoreCommandLine =
       platform === "linux"
         ? readCommandLineSwitchValue(Electron.app.commandLine, "password-store")

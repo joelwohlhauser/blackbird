@@ -506,6 +506,24 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "gemini-api-key",
+    title: "Gemini API key",
+    to: "/settings/general",
+    searchTerms: ["google text to speech tts read aloud listen audio"],
+  },
+  {
+    id: "text-to-speech-voice",
+    title: "Voice",
+    to: "/settings/general",
+    searchTerms: ["text to speech tts gemini read aloud listen"],
+  },
+  {
+    id: "text-to-speech-speed",
+    title: "Reading speed",
+    to: "/settings/general",
+    searchTerms: ["text to speech tts gemini playback rate listen"],
+  },
+  {
     id: "workspaces",
     title: "Workspaces",
     to: "/settings/workspaces",
