@@ -70,7 +70,8 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -995,6 +996,26 @@ export default function DiffPanel({
     if (!routeThreadRef) return;
     useDiffPanelStore.getState().selectBranchBaseRef(routeThreadRef, baseRef);
   };
+  // The scope menu has two radio groups: the top-level one treats the latest
+  // turn as "latest", while the turn sub-menu keys every turn by id so the
+  // latest turn is also marked there.
+  const selectedTurnValue = selectedTurn ? `turn:${selectedTurn.turnId}` : "";
+  const selectedScopeValue =
+    selectedTurnId === null
+      ? selectedGitScope
+      : selectedTurn?.turnId === latestTurn?.turnId
+        ? "latest"
+        : selectedTurnValue;
+  const selectScopeValue = (value: string) => {
+    if (value === "unstaged" || value === "branch") {
+      selectGitScope(value);
+    } else if (value === "latest") {
+      if (latestTurn) selectTurn(latestTurn.turnId);
+    } else {
+      const turn = orderedTurnDiffSummaries.find((summary) => `turn:${summary.turnId}` === value);
+      if (turn) selectTurn(turn.turnId);
+    }
+  };
 
   const headerRow = (
     <>
@@ -1018,64 +1039,46 @@ export default function DiffPanel({
               <span className="truncate">{selectedScopeLabel}</span>
               <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-60">
-              <DropdownMenuItem
-                className={
-                  selectedTurnId === null && selectedGitScope === "unstaged"
-                    ? "bg-foreground/[0.08]"
-                    : undefined
-                }
-                onClick={() => selectGitScope("unstaged")}
-              >
-                <span>Working tree</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className={
-                  selectedTurnId === null && selectedGitScope === "branch"
-                    ? "bg-foreground/[0.08]"
-                    : undefined
-                }
-                onClick={() => selectGitScope("branch")}
-              >
-                <span>Branch changes</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className={
-                  selectedTurnId !== null && selectedTurn?.turnId === latestTurn?.turnId
-                    ? "bg-foreground/[0.08]"
-                    : undefined
-                }
-                onClick={() => {
-                  if (latestTurn) selectTurn(latestTurn.turnId);
-                }}
-              >
-                <span>Latest turn</span>
-              </DropdownMenuItem>
+            <DropdownMenuContent align="start">
+              <DropdownMenuRadioGroup value={selectedScopeValue} onValueChange={selectScopeValue}>
+                <DropdownMenuRadioItem value="unstaged" closeOnClick>
+                  <span>Working tree</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="branch" closeOnClick>
+                  <span>Branch changes</span>
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="latest" closeOnClick>
+                  <span>Latest turn</span>
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Turn</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-64">
-                  {orderedTurnDiffSummaries.map((summary) => {
-                    const turnCount =
-                      summary.checkpointTurnCount ??
-                      inferredCheckpointTurnCountByTurnId[summary.turnId] ??
-                      "?";
-                    return (
-                      <DropdownMenuItem
-                        key={summary.turnId}
-                        className={
-                          summary.turnId === selectedTurn?.turnId
-                            ? "bg-foreground/[0.08]"
-                            : undefined
-                        }
-                        onClick={() => selectTurn(summary.turnId)}
-                      >
-                        <span>Turn {turnCount}</span>
-                        <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-                          {formatShortTimestamp(summary.completedAt, settings.timestampFormat)}
-                        </span>
-                      </DropdownMenuItem>
-                    );
-                  })}
+                <DropdownMenuSubContent>
+                  <DropdownMenuRadioGroup
+                    value={selectedTurnValue}
+                    onValueChange={selectScopeValue}
+                  >
+                    {orderedTurnDiffSummaries.map((summary) => {
+                      const turnCount =
+                        summary.checkpointTurnCount ??
+                        inferredCheckpointTurnCountByTurnId[summary.turnId] ??
+                        "?";
+                      return (
+                        <DropdownMenuRadioItem
+                          key={summary.turnId}
+                          value={`turn:${summary.turnId}`}
+                          closeOnClick
+                        >
+                          <span className="flex items-center gap-2">
+                            <span>Turn {turnCount}</span>
+                            <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                              {formatShortTimestamp(summary.completedAt, settings.timestampFormat)}
+                            </span>
+                          </span>
+                        </DropdownMenuRadioItem>
+                      );
+                    })}
+                  </DropdownMenuRadioGroup>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             </DropdownMenuContent>
@@ -1138,7 +1141,7 @@ export default function DiffPanel({
                   <ComboboxEmpty>No matching refs.</ComboboxEmpty>
                   <ComboboxList className="max-h-64 min-w-0 overflow-x-hidden">
                     <ComboboxItem
-                      className="h-8 w-full min-w-0 grid-cols-[1rem_minmax(0,1fr)] py-0"
+                      className="w-full min-w-0 grid-cols-[1rem_minmax(0,1fr)]"
                       contentClassName="w-full min-w-0 overflow-hidden"
                       value={AUTOMATIC_BASE_REF}
                     >
@@ -1151,7 +1154,7 @@ export default function DiffPanel({
                       return (
                         <ComboboxItem
                           key={choice.id}
-                          className="h-8 w-full min-w-0 grid-cols-[1rem_minmax(0,1fr)] py-0"
+                          className="w-full min-w-0 grid-cols-[1rem_minmax(0,1fr)]"
                           contentClassName="w-full min-w-0 overflow-hidden"
                           value={item}
                         >
