@@ -256,6 +256,7 @@ import WorkspaceNavigator, {
   type WorkspaceNavigatorDiffTarget,
   type WorkspaceNavigatorTab,
 } from "./workspace/WorkspaceNavigator";
+import { checkoutPullRequestReference } from "./workspace/WorkspaceNavigator.logic";
 import { pullRequestPanelContext } from "./pullRequest/pullRequestDetail.logic";
 import { PullRequestDetailPanel } from "./pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "./pullRequest/PullRequestGhosts";
@@ -4973,7 +4974,10 @@ export default function ChatView(props: ChatViewProps) {
   const threadRepository = linkedThreadPullRequest?.repository ?? activeProjectRepository;
   const persistedLinkedThreadPullRequestStatus = useLinkedThreadPullRequest(
     activeThreadRef?.environmentId ?? null,
-    linkedThreadPullRequest,
+    activeThreadMetadata?.linkedPullRequest,
+    true,
+    activeThreadMetadata?.pullRequests,
+    activeThreadMetadata?.branchPullRequest,
   );
   const activeThreadPr =
     persistedLinkedThreadPullRequestStatus?.pr ??
@@ -5000,6 +5004,13 @@ export default function ChatView(props: ChatViewProps) {
       linkedThreadPullRequest?.projectId,
     ],
   );
+  const workspaceNavigatorPullRequestReference = supportsPullRequests
+    ? checkoutPullRequestReference(
+        gitStatusQuery.data,
+        activeProject?.id ?? null,
+        activeProjectRepository,
+      )
+    : null;
   const pullRequestSurfaceAvailable = activeThreadPullRequestReference !== null;
   const attachedWorkspaceSurfaceIds = useMemo(
     () =>
@@ -11533,7 +11544,7 @@ export default function ChatView(props: ChatViewProps) {
               {...(routeKind === "draft" && draftId ? { draftId } : {})}
               cwd={activeWorkspaceRoot}
               projectName={activeProject.title}
-              pullRequestReference={activeThreadPullRequestReference}
+              pullRequestReference={workspaceNavigatorPullRequestReference}
               selectedPath={activeFileSurface?.relativePath ?? null}
               selectedPathRevealId={activeFileSurface?.revealRequestId ?? 0}
               gitStatus={gitStatusQuery.data ?? null}

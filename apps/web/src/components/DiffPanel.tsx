@@ -757,10 +757,10 @@ export default function DiffPanel({
   );
   const defaultCollapsedDiffFileKeys = useMemo(
     () =>
-      settings.diffFilesCollapsed
+      settings.diffFilesCollapsed && !fixedGitSelection
         ? new Set(renderableFileEntries.map((file) => file.fileKey))
         : EMPTY_COLLAPSED_DIFF_FILE_KEYS,
-    [renderableFileEntries, settings.diffFilesCollapsed],
+    [fixedGitSelection, renderableFileEntries, settings.diffFilesCollapsed],
   );
   const collapsedDiffFileKeys =
     collapsedDiffFiles.scopeKey === collapseScopeKey

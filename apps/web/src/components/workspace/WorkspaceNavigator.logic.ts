@@ -1,4 +1,10 @@
-import type { PullRequestDiffResult } from "@t3tools/contracts";
+import type {
+  ProjectId,
+  PullRequestDiffResult,
+  PullRequestRef,
+  VcsStatusResult,
+} from "@t3tools/contracts";
+import { parseChangeRequestUrl } from "@t3tools/shared/changeRequestUrl";
 
 import type { TurnDiffFileChange } from "~/types";
 import { getDiffLineStat, getRenderablePatch, resolveFileDiffPath } from "~/lib/diffRendering";
@@ -21,6 +27,25 @@ export const EMPTY_PULL_REQUEST_DIFF_WALK: PullRequestDiffWalkState = {
   slices: [],
   complete: false,
 };
+
+/** The PR navigator follows the checked-out branch, even when the thread links another PR. */
+export function checkoutPullRequestReference(
+  status: Pick<VcsStatusResult, "pr" | "sourceControlProvider"> | null | undefined,
+  projectId: ProjectId | null,
+  projectRepository: string | null,
+): PullRequestRef | null {
+  if (!status?.pr || !projectId) return null;
+  const parsed = parseChangeRequestUrl(status.pr.url);
+  const isAzureDevOps = status.sourceControlProvider?.kind === "azure-devops";
+  const repository = isAzureDevOps ? projectRepository : (parsed?.repository ?? projectRepository);
+  if (!repository) return null;
+  return {
+    projectId,
+    repository,
+    number: status.pr.number,
+    ...(parsed && !isAzureDevOps ? { host: parsed.host } : {}),
+  };
+}
 
 export interface WorkingTreeFileChange {
   readonly path: string;
