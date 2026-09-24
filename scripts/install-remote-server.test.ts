@@ -78,10 +78,12 @@ echo '{}'
       execute(
         "bash",
         [
-          NodePath.join(import.meta.dirname, "install-example-server.sh"),
+          NodePath.join(import.meta.dirname, "install-remote-server.sh"),
           serverRoot,
           digest,
           `${digest}.tgz`,
+          "remote",
+          "https://relay.example",
         ],
         {
           env: {

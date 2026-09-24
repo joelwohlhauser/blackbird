@@ -149,29 +149,42 @@ export function findSingleDmg(entries: readonly string[]): string {
   return images[0]!;
 }
 
-async function updateTarsServer(appPath: string): Promise<void> {
+// SSH hosts running a shared `blackbird.service` on port 40959, each with its T3 Connect URL.
+const REMOTE_SERVERS = [
+  { host: "remote", publicUrl: "https://relay-one.example.test" },
+  { host: "remote-example-2", publicUrl: "https://relay-two.example.test" },
+] as const;
+
+async function updateRemoteServers(appPath: string): Promise<void> {
   const archive = NodePath.join(appPath, "Contents/Resources/blackbird-remote-server.tgz");
   const archiveId = NodeCrypto.createHash("sha256")
     .update(await NodeFSP.readFile(archive))
     .digest("hex");
-  const uploadName = `${archiveId}-${NodeCrypto.randomUUID()}.tgz`;
   const script = await NodeFSP.readFile(
-    NodePath.join(repoRoot, "scripts/install-example-server.sh"),
+    NodePath.join(repoRoot, "scripts/install-remote-server.sh"),
     "utf8",
   );
-  console.log("[desktop-install] Updating the matching Blackbird server on remote...");
-  await run("ssh", ["-o", "BatchMode=yes", "remote", "mkdir -p ~/.t3/blackbird-server"]);
-  await run("scp", ["-o", "BatchMode=yes", archive, `remote:.t3/blackbird-server/${uploadName}`]);
-  await run(
-    "ssh",
-    [
+  for (const { host, publicUrl } of REMOTE_SERVERS) {
+    const uploadName = `${archiveId}-${NodeCrypto.randomUUID()}.tgz`;
+    console.log(`[desktop-install] Updating the matching Blackbird server on ${host}...`);
+    await run("ssh", ["-o", "BatchMode=yes", host, "mkdir -p ~/.t3/blackbird-server"]);
+    await run("scp", [
       "-o",
       "BatchMode=yes",
-      "remote",
-      `bash -s -- "$HOME/.t3/blackbird-server" ${archiveId} ${uploadName}`,
-    ],
-    script,
-  );
+      archive,
+      `${host}:.t3/blackbird-server/${uploadName}`,
+    ]);
+    await run(
+      "ssh",
+      [
+        "-o",
+        "BatchMode=yes",
+        host,
+        `bash -s -- "$HOME/.t3/blackbird-server" ${archiveId} ${uploadName} ${host} ${publicUrl}`,
+      ],
+      script,
+    );
+  }
 }
 
 async function installDesktopApp(): Promise<void> {
@@ -244,7 +257,7 @@ async function installDesktopApp(): Promise<void> {
 
     // Install the bundled backend before closing the desktop, so an SSH or
     // dependency-install failure leaves the local app running.
-    await updateTarsServer(stagedApp);
+    await updateRemoteServers(stagedApp);
 
     // Keep the currently installed app available throughout the expensive build
     // and staging work. Only close it once the replacement is ready for the

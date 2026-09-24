@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Invoked over SSH by deploy:desktop. Updates the existing shared service only.
+# Invoked over SSH by deploy:desktop for each remote host. Updates the existing shared service only.
+# Usage: install-remote-server.sh <server-root> <archive-sha256> <upload-name> <host-label> <public-url>
 set -euo pipefail
 
 server_root=$(cd "$1" && pwd -P)
 archive_id=$2
 [[ "$archive_id" =~ ^[a-f0-9]{64}$ ]] || { echo "Invalid server archive digest." >&2; exit 1; }
 archive="$server_root/$3"
+host=$4
+public_url=$5
 release="$server_root/$archive_id"
 next_link="$server_root/.current-$$"
 staging=""
@@ -24,18 +27,18 @@ healthy() {
 }
 
 remote_healthy() {
-  echo "[remote-install] Checking the public remote connection..."
+  echo "[$host-install] Checking the public $host connection..."
   # A deployment from an older server can still replace the tunnel. Its public
   # route may take several minutes to propagate after the connector is ready.
   if ! curl --fail --silent --retry 90 --retry-all-errors --retry-delay 2 \
-    --retry-max-time 180 --max-time 5 https://relay-one.example.test/.well-known/t3/environment > /dev/null; then
-    echo "[remote-install] WARNING: The server responds locally, but the public remote connection is unavailable. Completing the desktop install to keep both builds aligned. Remote access is not verified." >&2
+    --retry-max-time 180 --max-time 5 "$public_url/.well-known/t3/environment" > /dev/null; then
+    echo "[$host-install] WARNING: The server responds locally, but the public $host connection is unavailable. Completing the desktop install to keep both builds aligned. Remote access is not verified." >&2
   fi
 }
 
 # Called under the cache lock, only after the selected server passes health checks.
 prune_releases() {
-  node - "$server_root" <<'PRUNE_RELEASES'
+  node - "$server_root" "$host" <<'PRUNE_RELEASES'
 const fs = require("node:fs");
 const path = require("node:path");
 const root = fs.realpathSync(process.argv[2]);
@@ -49,7 +52,7 @@ for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
   const release = path.join(root, entry.name);
   if (keep.has(release)) continue;
   fs.rmSync(release, { recursive: true });
-  console.log(`[remote-install] Removed obsolete release ${entry.name}`);
+  console.log(`[${process.argv[3]}-install] Removed obsolete release ${entry.name}`);
 }
 PRUNE_RELEASES
 }
@@ -64,7 +67,7 @@ if [ "$previous" = "$release" ]; then
   healthy
   remote_healthy
   prune_releases
-  echo "[remote-install] Already running this Blackbird build."
+  echo "[$host-install] Already running this Blackbird build."
   exit 0
 fi
 
@@ -101,9 +104,9 @@ if systemctl --user restart blackbird.service && healthy; then
   # install even if public access has not recovered yet.
   remote_healthy
   prune_releases
-  echo "[remote-install] Updated Blackbird on remote."
+  echo "[$host-install] Updated Blackbird on $host."
 else
-  echo "[remote-install] New server failed to start; restoring the previous build." >&2
+  echo "[$host-install] New server failed to start; restoring the previous build." >&2
   select_release "$previous"
   systemctl --user restart blackbird.service
   healthy
