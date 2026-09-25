@@ -364,6 +364,17 @@ function ComposerCitationNodeView({ node, editor, getPos }: NodeViewProps) {
     [editor, nodePos],
   );
 
+  const returnFocus = useCallback(() => {
+    if (!editor.isEditable) return;
+    const pos = nodePos();
+    const current = pos === null ? null : editor.state.doc.nodeAt(pos);
+    const caretAfterChip =
+      pos !== null && current && !(editor.state.selection instanceof TextSelection)
+        ? pos + current.nodeSize
+        : null;
+    editor.commands.focus(caretAfterChip);
+  }, [editor, nodePos]);
+
   const onRemove = useCallback(() => {
     if (!editor.isEditable) return;
     const pos = nodePos();
@@ -396,6 +407,7 @@ function ComposerCitationNodeView({ node, editor, getPos }: NodeViewProps) {
             commentContext.onOpenChange(citeKey, open);
           },
           ...(commentTarget?.removeOnCancel ? { onCancel: onRemove } : {}),
+          returnFocus,
           onSave: onSaveComment,
           onSaveAndSend: (comment) => {
             if (!onSaveComment(comment)) return false;

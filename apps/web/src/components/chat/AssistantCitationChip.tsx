@@ -50,6 +50,7 @@ export function AssistantCitationChip({
     sourceAnchor?: AssistantCitationSourceAnchor | undefined;
     onOpenChange: (open: boolean) => void;
     onCancel?: () => void;
+    returnFocus?: () => void;
     onSave: (comment: string) => boolean;
     onSaveAndSend?: (comment: string) => boolean;
   };
@@ -183,6 +184,16 @@ export function AssistantCitationChip({
               anchor={popupAnchor}
               initialFocus={() => {
                 commentInputRef.current?.focus({ preventScroll: true });
+                return false;
+              }}
+              finalFocus={() => {
+                if (!commentEditor.returnFocus) return true;
+                const active = document.activeElement;
+                const focusMovedElsewhere =
+                  active !== null &&
+                  active !== document.body &&
+                  !active.closest("[data-citation-comment-editor]");
+                if (!focusMovedElsewhere) commentEditor.returnFocus();
                 return false;
               }}
               aria-label="Edit citation comment"
