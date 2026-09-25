@@ -717,6 +717,24 @@ const inputSignalsMatch = (left: PreviewInputSignal, right: PreviewInputSignal):
   );
 };
 
+const readClipboardFormats = async () => {
+  const formats: Array<{ type: string; data: string }> = [];
+  for (const item of await clipboard.read()) {
+    for (const type of item.types) {
+      if (type.startsWith("electron ")) continue;
+      const blob = await item.getType(type);
+      if (!("arrayBuffer" in blob)) continue;
+      formats.push({
+        type,
+        data: type.startsWith("text/")
+          ? await blob.text()
+          : Buffer.from(await blob.arrayBuffer()).toString("base64"),
+      });
+    }
+  }
+  return formats;
+};
+
 const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function* (
   artifactDirectory: string,
   pictureInPicturePreloadPath: string,
@@ -761,6 +779,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       userAgent: app.userAgentFallback,
       jsVersion: process.versions.v8,
     }),
+    readClipboard: readClipboardFormats,
   });
   const controlSessionsRef = yield* SynchronizedRef.make<
     ReadonlyMap<number, BrowserControlSession>
@@ -4513,23 +4532,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
             true,
           );
         const clipboardData = keySequence.commands.includes("paste")
-          ? yield* attemptPromise(context, async () => {
-              const formats: Array<{ type: string; data: string }> = [];
-              for (const item of await clipboard.read()) {
-                for (const type of item.types) {
-                  if (type.startsWith("electron ")) continue;
-                  const blob = await item.getType(type);
-                  if (!("arrayBuffer" in blob)) continue;
-                  formats.push({
-                    type,
-                    data: type.startsWith("text/")
-                      ? await blob.text()
-                      : Buffer.from(await blob.arrayBuffer()).toString("base64"),
-                  });
-                }
-              }
-              return formats;
-            })
+          ? yield* attemptPromise(context, readClipboardFormats)
           : [];
         yield* checkControl;
         const expression = previewAutomationEditingCommandExpression(
@@ -4849,7 +4852,11 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       sessionId,
       targetInfo,
       debugger: control.debugger,
-      reload: (ignoreCache) => (ignoreCache ? wc.reloadIgnoringCache() : wc.reload()),
+      guest: {
+        reload: (ignoreCache) => (ignoreCache ? wc.reloadIgnoringCache() : wc.reload()),
+        insertText: (text) => wc.insertText(text),
+        sendInputEvent: (event) => wc.sendInputEvent(event),
+      },
     });
     if (!attached) {
       return yield* new PreviewOperationError({

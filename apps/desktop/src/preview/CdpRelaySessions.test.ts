@@ -1,17 +1,37 @@
 import type { DesktopPreviewCdpMessage } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { makeCdpRelaySessions, type CdpRelayDebugger } from "./CdpRelaySessions.ts";
+import {
+  makeCdpRelaySessions,
+  type CdpRelayDebugger,
+  type CdpRelayGuest,
+} from "./CdpRelaySessions.ts";
 
-const makeDebugger = (respond: (method: string) => Promise<unknown> = async () => ({})) => {
+const makeDebugger = (
+  respond: (method: string, sessionId?: string) => Promise<unknown> = async () => ({}),
+) => {
   const calls: Array<{ method: string; params?: object; sessionId?: string }> = [];
   const target: CdpRelayDebugger = {
     sendCommand: (method, params, sessionId) => {
       calls.push({ method, ...(params ? { params } : {}), ...(sessionId ? { sessionId } : {}) });
-      return respond(method);
+      return respond(method, sessionId);
     },
   };
   return { target, calls };
+};
+
+const makeGuest = () => {
+  const reloads: Array<boolean> = [];
+  const texts: Array<string> = [];
+  const events: Array<Electron.KeyboardInputEvent> = [];
+  const guest: CdpRelayGuest = {
+    reload: (ignoreCache) => reloads.push(ignoreCache),
+    insertText: async (text) => {
+      texts.push(text);
+    },
+    sendInputEvent: (event) => events.push(event),
+  };
+  return { guest, reloads, texts, events };
 };
 
 const makeRouter = () => {
@@ -22,11 +42,11 @@ const makeRouter = () => {
       for (const message of messages) emitted.push({ relayId, message });
     },
     browserVersion: () => ({ product: "Chrome/150.0.0.0", userAgent: "UA", jsVersion: "1" }),
+    readClipboard: async () => [{ type: "text/plain", data: "copied text" }],
     schedule: (flush) => pending.push(flush),
   });
   const flush = async () => {
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
     while (pending.length > 0) pending.shift()?.();
   };
   return { router, emitted, flush };
@@ -42,7 +62,7 @@ describe("CdpRelaySessions", () => {
       sessionId: "page",
       targetInfo: { targetId: "target" },
       debugger: page.target,
-      reload: () => undefined,
+      guest: makeGuest().guest,
     });
 
     router.send("relay", { id: 1, sessionId: "page", method: "Runtime.evaluate" });
@@ -76,7 +96,7 @@ describe("CdpRelaySessions", () => {
       sessionId: "page",
       targetInfo: {},
       debugger: page.target,
-      reload: () => undefined,
+      guest: makeGuest().guest,
     });
 
     expect(router.route(7, "Target.attachedToTarget", { sessionId: "frame" }, "page")).toBe(true);
@@ -109,7 +129,7 @@ describe("CdpRelaySessions", () => {
       sessionId: "p1",
       targetInfo: {},
       debugger: first.target,
-      reload: () => undefined,
+      guest: makeGuest().guest,
     });
     router.attach({
       relayId: "b",
@@ -117,7 +137,7 @@ describe("CdpRelaySessions", () => {
       sessionId: "p2",
       targetInfo: {},
       debugger: second.target,
-      reload: () => undefined,
+      guest: makeGuest().guest,
     });
 
     router.detachWebContents(1);
@@ -146,7 +166,7 @@ describe("CdpRelaySessions", () => {
       sessionId: "page",
       targetInfo: {},
       debugger: page.target,
-      reload: () => undefined,
+      guest: makeGuest().guest,
     });
     router.route(1, "Target.attachedToTarget", { sessionId: "worker" }, "page");
 
@@ -201,7 +221,7 @@ describe("CdpRelaySessions", () => {
         sessionId: "late",
         targetInfo: {},
         debugger: page.target,
-        reload: () => undefined,
+        guest: makeGuest().guest,
       }),
     ).toBe(false);
     expect(page.calls).toEqual([
@@ -213,14 +233,14 @@ describe("CdpRelaySessions", () => {
   it("reloads through WebContents because CDP Page.reload destroys webview guests", async () => {
     const { router, emitted, flush } = makeRouter();
     const page = makeDebugger();
-    const reloads: Array<boolean> = [];
+    const { guest, reloads } = makeGuest();
     router.attach({
       relayId: "relay",
       webContentsId: 1,
       sessionId: "page",
       targetInfo: {},
       debugger: page.target,
-      reload: (ignoreCache) => reloads.push(ignoreCache),
+      guest,
     });
 
     router.send("relay", { id: 1, sessionId: "page", method: "Page.reload" });
@@ -240,6 +260,162 @@ describe("CdpRelaySessions", () => {
     ]);
   });
 
+  it("types into the guest because CDP keyboard input follows the app's focused composer", async () => {
+    const { router, emitted, flush } = makeRouter();
+    const page = makeDebugger();
+    const { guest, texts, events } = makeGuest();
+    router.attach({
+      relayId: "relay",
+      webContentsId: 1,
+      sessionId: "page",
+      targetInfo: {},
+      debugger: page.target,
+      guest,
+    });
+    router.route(1, "Target.attachedToTarget", { sessionId: "frame" }, "page");
+
+    router.send("relay", {
+      id: 1,
+      sessionId: "page",
+      method: "Input.insertText",
+      params: { text: "hello" },
+    });
+    router.send("relay", {
+      id: 2,
+      sessionId: "page",
+      method: "Input.dispatchKeyEvent",
+      params: { type: "keyDown", key: "a", code: "KeyA", text: "a", commands: [] },
+    });
+    router.send("relay", {
+      id: 3,
+      sessionId: "page",
+      method: "Input.dispatchKeyEvent",
+      params: { type: "keyUp", key: "a", code: "KeyA" },
+    });
+    router.send("relay", {
+      id: 4,
+      sessionId: "page",
+      method: "Input.dispatchKeyEvent",
+      params: { type: "rawKeyDown", key: "ArrowLeft", code: "ArrowLeft", modifiers: 8 },
+    });
+    router.send("relay", {
+      id: 5,
+      sessionId: "frame",
+      method: "Input.dispatchKeyEvent",
+      params: { type: "keyDown", key: "b", text: "b" },
+    });
+    router.send("relay", { id: 6, sessionId: "page", method: "Input.imeSetComposition" });
+    router.send("relay", { id: 7, sessionId: "page", method: "Page.bringToFront" });
+    await flush();
+
+    expect(texts).toEqual(["hello"]);
+    expect(events).toEqual([
+      { type: "keyDown", keyCode: "a", modifiers: [] },
+      { type: "char", keyCode: "a", modifiers: [] },
+      { type: "keyUp", keyCode: "a", modifiers: [] },
+      { type: "keyDown", keyCode: "Left", modifiers: ["shift"] },
+    ]);
+    expect(
+      page.calls
+        .filter(({ method }) => method.startsWith("Input."))
+        .map(({ method, sessionId }) => ({ method, sessionId })),
+    ).toEqual([{ method: "Input.dispatchKeyEvent", sessionId: "frame" }]);
+    const byId = new Map(emitted.map(({ message }) => [message.id, message]));
+    for (const id of [1, 2, 3, 4, 5, 7]) expect(byId.get(id)).toHaveProperty("result");
+    expect(byId.get(6)).toHaveProperty("error");
+  });
+
+  it("runs macOS editing commands inside the page instead of the focused app", async () => {
+    const { router, emitted, flush } = makeRouter();
+    const page = makeDebugger(async () => ({ result: {} }));
+    const { guest, events } = makeGuest();
+    router.attach({
+      relayId: "relay",
+      webContentsId: 1,
+      sessionId: "page",
+      targetInfo: {},
+      debugger: page.target,
+      guest,
+    });
+
+    router.send("relay", {
+      id: 1,
+      sessionId: "page",
+      method: "Input.dispatchKeyEvent",
+      params: { type: "rawKeyDown", key: "v", code: "KeyV", modifiers: 4, commands: ["paste"] },
+    });
+    await flush();
+    router.send("relay", {
+      id: 2,
+      sessionId: "page",
+      method: "Input.dispatchKeyEvent",
+      params: { type: "keyUp", key: "v", code: "KeyV", modifiers: 4 },
+    });
+    await flush();
+
+    expect(events).toEqual([]);
+    expect(page.calls).toHaveLength(2);
+    expect(page.calls[1]).toMatchObject({ method: "Runtime.evaluate", sessionId: "page" });
+    const expression = String(Reflect.get(page.calls[1]?.params ?? {}, "expression"));
+    expect(expression).toContain('"paste"');
+    expect(expression).toContain("copied text");
+    expect(expression).toContain('"metaKey":true');
+    expect(emitted.map(({ message }) => message)).toEqual([
+      { id: 1, sessionId: "page", result: {} },
+      { id: 2, sessionId: "page", result: {} },
+    ]);
+  });
+
+  it("sends input for a focused cross-site iframe to that frame's own session", async () => {
+    const { router, emitted, flush } = makeRouter();
+    const page = makeDebugger(async (method, sessionId) => {
+      if (method === "Runtime.evaluate") {
+        return sessionId === "page" ? { result: { objectId: "iframe" } } : { result: {} };
+      }
+      if (method === "DOM.describeNode") return { node: { frameId: "oopif-target" } };
+      return {};
+    });
+    const { guest, texts, events } = makeGuest();
+    router.attach({
+      relayId: "relay",
+      webContentsId: 1,
+      sessionId: "page",
+      targetInfo: {},
+      debugger: page.target,
+      guest,
+    });
+    router.route(
+      1,
+      "Target.attachedToTarget",
+      { sessionId: "oopif", targetInfo: { targetId: "oopif-target", type: "iframe" } },
+      "page",
+    );
+
+    router.send("relay", {
+      id: 1,
+      sessionId: "page",
+      method: "Input.insertText",
+      params: { text: "4242" },
+    });
+    await flush();
+
+    expect(texts).toEqual([]);
+    expect(events).toEqual([]);
+    expect(page.calls.map(({ method, sessionId }) => `${sessionId} ${method}`)).toEqual([
+      "page Runtime.evaluate",
+      "page DOM.describeNode",
+      "page Runtime.releaseObject",
+      "oopif Emulation.setFocusEmulationEnabled",
+      "oopif Runtime.evaluate",
+      "oopif Input.insertText",
+    ]);
+    expect(emitted.find(({ message }) => message.id === 1)?.message).toEqual({
+      id: 1,
+      sessionId: "page",
+      result: {},
+    });
+  });
+
   it("turns debugger failures into CDP errors", async () => {
     const { router, emitted, flush } = makeRouter();
     const page = makeDebugger(async () => {
@@ -251,7 +427,7 @@ describe("CdpRelaySessions", () => {
       sessionId: "page",
       targetInfo: {},
       debugger: page.target,
-      reload: () => undefined,
+      guest: makeGuest().guest,
     });
 
     router.send("relay", { id: 4, sessionId: "page", method: "Runtime.callFunctionOn" });

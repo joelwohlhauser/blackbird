@@ -1,4 +1,9 @@
-import type { DesktopPreviewCdpMessage } from "@t3tools/contracts";
+import type { DesktopPreviewCdpMessage, PreviewAutomationPressInput } from "@t3tools/contracts";
+
+import {
+  PREVIEW_EDITING_COMMANDS,
+  previewAutomationEditingCommandExpression,
+} from "./PreviewKeyboard.ts";
 
 export interface CdpRelayDebugger {
   readonly sendCommand: (
@@ -14,6 +19,17 @@ export interface CdpRelayBrowserVersion {
   readonly jsVersion: string;
 }
 
+export interface CdpRelayGuest {
+  readonly reload: (ignoreCache: boolean) => void;
+  readonly insertText: (text: string) => Promise<void>;
+  readonly sendInputEvent: (event: Electron.KeyboardInputEvent) => void;
+}
+
+export interface CdpRelayClipboardFormat {
+  readonly type: string;
+  readonly data: string;
+}
+
 interface OwnedSession {
   readonly relayId: string;
   readonly webContentsId: number;
@@ -23,7 +39,14 @@ interface OwnedSession {
 
 interface PageSession extends OwnedSession {
   readonly targetInfo: Readonly<Record<string, unknown>>;
-  readonly reload: (ignoreCache: boolean) => void;
+  readonly guest: CdpRelayGuest;
+  readonly editedKeyCodes: Set<string>;
+  readonly frameSessions: Map<string, string>;
+}
+
+interface InputTarget {
+  readonly sessionId: string;
+  readonly contextId?: number;
 }
 
 const SESSION_NOT_FOUND = { code: -32001, message: "Session with given id not found." };
@@ -61,6 +84,7 @@ const PAGE_SESSION_DOMAINS = new Set([
 ]);
 const BLOCKED_SESSION_METHODS = new Set([
   "DOM.setFileInputFiles",
+  "Input.imeSetComposition",
   "Network.loadNetworkResource",
   "Page.close",
   "Page.crash",
@@ -97,6 +121,67 @@ const hasLocalFiles = (dragData: unknown) => {
   return Array.isArray(files) && files.length > 0;
 };
 
+const readString = (params: unknown, key: string) => {
+  const value = readParam(params, key);
+  return typeof value === "string" ? value : "";
+};
+
+type NativeModifier = NonNullable<Electron.KeyboardInputEvent["modifiers"]>[number];
+
+const MODIFIERS = [
+  { flag: 1, name: "Alt", native: "alt" },
+  { flag: 2, name: "Control", native: "control" },
+  { flag: 4, name: "Meta", native: "meta" },
+  { flag: 8, name: "Shift", native: "shift" },
+] as const;
+
+const heldModifiers = (params: unknown) => {
+  const mask = readParam(params, "modifiers");
+  return MODIFIERS.filter(({ flag }) => typeof mask === "number" && (mask & flag) !== 0);
+};
+
+const editingCommands = (params: unknown) => {
+  const commands = readParam(params, "commands");
+  return Array.isArray(commands)
+    ? commands.filter(
+        (command): command is string =>
+          typeof command === "string" && PREVIEW_EDITING_COMMANDS.has(command),
+      )
+    : [];
+};
+
+const nativeKeyEvents = (params: unknown): Array<Electron.KeyboardInputEvent> => {
+  const key = readString(params, "key");
+  const text = readString(params, "text");
+  const modifiers: Array<NativeModifier> = [
+    ...heldModifiers(params).map(({ native }) => native),
+    ...(readParam(params, "autoRepeat") === true ? ["isautorepeat" as const] : []),
+    ...(readParam(params, "isKeypad") === true ? ["iskeypad" as const] : []),
+  ];
+  const keyCode = key === " " ? "Space" : key.startsWith("Arrow") ? key.slice(5) : key;
+  const char: Array<Electron.KeyboardInputEvent> = text
+    ? [{ type: "char", keyCode: text, modifiers }]
+    : [];
+  switch (readParam(params, "type")) {
+    case "keyDown":
+    case "rawKeyDown":
+      return [{ type: "keyDown", keyCode, modifiers }, ...char];
+    case "char":
+      return char;
+    case "keyUp":
+      return [{ type: "keyUp", keyCode, modifiers }];
+    default:
+      return [];
+  }
+};
+
+const FOCUSED_IFRAME = `(() => {
+  let element = document.activeElement;
+  while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
+  return element?.tagName === "IFRAME" ? element : null;
+})()`;
+const MAX_FRAME_DEPTH = 8;
+
 const childSessionId = (params: unknown): string | undefined => {
   const sessionId = readParam(params, "sessionId");
   return typeof sessionId === "string" && sessionId.length > 0 ? sessionId : undefined;
@@ -105,6 +190,7 @@ const childSessionId = (params: unknown): string | undefined => {
 export function makeCdpRelaySessions(options: {
   readonly emit: (relayId: string, messages: ReadonlyArray<DesktopPreviewCdpMessage>) => void;
   readonly browserVersion: () => CdpRelayBrowserVersion;
+  readonly readClipboard: () => Promise<ReadonlyArray<CdpRelayClipboardFormat>>;
   readonly schedule?: (flush: () => void) => void;
 }) {
   const sessions = new Map<string, OwnedSession>();
@@ -223,6 +309,141 @@ export function makeCdpRelaySessions(options: {
     return undefined;
   };
 
+  const settle = (relayId: string, message: DesktopPreviewCdpMessage, result: Promise<unknown>) =>
+    result.then(
+      (value) => respond(relayId, message, value),
+      (error: unknown) => fail(relayId, message, { code: -32000, message: errorMessage(error) }),
+    );
+
+  const focusedFrame = async (page: PageSession): Promise<InputTarget> => {
+    let target: InputTarget = { sessionId: page.pageSessionId };
+    for (let depth = 0; depth < MAX_FRAME_DEPTH; depth++) {
+      const evaluated = await page.debugger.sendCommand(
+        "Runtime.evaluate",
+        {
+          expression: FOCUSED_IFRAME,
+          ...(target.contextId === undefined ? {} : { contextId: target.contextId }),
+        },
+        target.sessionId,
+      );
+      const objectId = readParam(readParam(evaluated, "result"), "objectId");
+      if (typeof objectId !== "string") return target;
+      const described = await page.debugger
+        .sendCommand("DOM.describeNode", { objectId }, target.sessionId)
+        .finally(() =>
+          page.debugger
+            .sendCommand("Runtime.releaseObject", { objectId }, target.sessionId)
+            .catch(() => null),
+        );
+      const frameId = readParam(readParam(described, "node"), "frameId");
+      if (typeof frameId !== "string") return target;
+      const frameSession = page.frameSessions.get(frameId);
+      if (frameSession) {
+        await page.debugger.sendCommand(
+          "Emulation.setFocusEmulationEnabled",
+          { enabled: true },
+          frameSession,
+        );
+        target = { sessionId: frameSession };
+        continue;
+      }
+      const world = await page.debugger.sendCommand(
+        "Page.createIsolatedWorld",
+        { frameId, worldName: "blackbird-input-target" },
+        target.sessionId,
+      );
+      const contextId = readParam(world, "executionContextId");
+      if (typeof contextId !== "number") return target;
+      target = { sessionId: target.sessionId, contextId };
+    }
+    return target;
+  };
+
+  const runEditingCommands = async (
+    page: PageSession,
+    target: InputTarget,
+    params: unknown,
+    commands: string[],
+  ) => {
+    const input: PreviewAutomationPressInput = {
+      key: readString(params, "key"),
+      modifiers: heldModifiers(params).map(({ name }) => name),
+    };
+    const clipboard = commands.includes("paste") ? await options.readClipboard() : [];
+    const evaluated = await page.debugger.sendCommand(
+      "Runtime.evaluate",
+      {
+        expression: previewAutomationEditingCommandExpression(input, { commands }, clipboard),
+        awaitPromise: true,
+        userGesture: true,
+        ...(target.contextId === undefined ? {} : { contextId: target.contextId }),
+      },
+      target.sessionId,
+    );
+    if (readParam(evaluated, "exceptionDetails") !== undefined) {
+      throw new Error(`Could not run ${commands.join(", ")} in the page.`);
+    }
+    return {};
+  };
+
+  const dispatchKey = async (page: PageSession, params: object) => {
+    const type = readParam(params, "type");
+    const code = readString(params, "code");
+    if (type === "keyUp" && page.editedKeyCodes.delete(code)) return {};
+    const target = await focusedFrame(page);
+    if (target.sessionId !== page.pageSessionId) {
+      return page.debugger.sendCommand("Input.dispatchKeyEvent", params, target.sessionId);
+    }
+    const commands = editingCommands(params);
+    if ((type === "keyDown" || type === "rawKeyDown") && commands.length > 0) {
+      page.editedKeyCodes.add(code);
+      return runEditingCommands(page, target, params, commands);
+    }
+    for (const event of nativeKeyEvents(params)) page.guest.sendInputEvent(event);
+    return {};
+  };
+
+  const insertText = async (page: PageSession, params: object) => {
+    const target = await focusedFrame(page);
+    if (target.sessionId !== page.pageSessionId) {
+      return page.debugger.sendCommand("Input.insertText", params, target.sessionId);
+    }
+    await page.guest.insertText(readString(params, "text"));
+    return {};
+  };
+
+  const sendToGuest = (
+    relayId: string,
+    page: PageSession,
+    message: DesktopPreviewCdpMessage,
+    params: object,
+  ): boolean => {
+    const onPage = message.sessionId === page.pageSessionId;
+    switch (message.method) {
+      case "Input.insertText":
+        if (!onPage) return false;
+        settle(relayId, message, insertText(page, params));
+        return true;
+      case "Input.dispatchKeyEvent":
+        if (!onPage) return false;
+        settle(relayId, message, dispatchKey(page, params));
+        return true;
+      case "Page.bringToFront":
+        respond(relayId, message, {});
+        return true;
+      case "Page.reload":
+        try {
+          page.guest.reload(readParam(message.params, "ignoreCache") === true);
+          respond(relayId, message, {});
+        } catch (error) {
+          fail(relayId, message, { code: -32000, message: errorMessage(error) });
+        }
+        return true;
+      default:
+        return false;
+    }
+  };
+
   return {
     attach(input: {
       readonly relayId: string;
@@ -230,7 +451,7 @@ export function makeCdpRelaySessions(options: {
       readonly sessionId: string;
       readonly targetInfo: Readonly<Record<string, unknown>>;
       readonly debugger: CdpRelayDebugger;
-      readonly reload: (ignoreCache: boolean) => void;
+      readonly guest: CdpRelayGuest;
     }) {
       if (closedRelays.has(input.relayId)) {
         sendQuietly(input.debugger, "Target.detachFromTarget", { sessionId: input.sessionId });
@@ -242,7 +463,9 @@ export function makeCdpRelaySessions(options: {
         pageSessionId: input.sessionId,
         debugger: input.debugger,
         targetInfo: input.targetInfo,
-        reload: input.reload,
+        guest: input.guest,
+        editedKeyCodes: new Set(),
+        frameSessions: new Map(),
       };
       pages.set(input.sessionId, page);
       sessions.set(input.sessionId, page);
@@ -263,10 +486,16 @@ export function makeCdpRelaySessions(options: {
         const owner = sessions.get(sessionId);
         if (!owner || owner.webContentsId !== webContentsId) return false;
         const child = childSessionId(params);
+        const frames = pages.get(owner.pageSessionId)?.frameSessions;
         if (method === "Target.attachedToTarget" && child) {
           sessions.set(child, owner);
+          const targetId = readParam(readParam(params, "targetInfo"), "targetId");
+          if (typeof targetId === "string") frames?.set(targetId, child);
         } else if (method === "Target.detachedFromTarget" && child) {
           sessions.delete(child);
+          for (const [targetId, frameSession] of frames ?? []) {
+            if (frameSession === child) frames?.delete(targetId);
+          }
         }
         push(owner.relayId, { sessionId, method, params });
         return true;
@@ -295,18 +524,10 @@ export function makeCdpRelaySessions(options: {
         fail(relayId, message, { code: -32601, message: rejection });
         return;
       }
-      if (message.method === "Page.reload") {
-        const page = pages.get(owner.pageSessionId);
-        try {
-          page?.reload(readParam(message.params, "ignoreCache") === true);
-          respond(relayId, message, {});
-        } catch (error) {
-          fail(relayId, message, { code: -32000, message: errorMessage(error) });
-        }
-        return;
-      }
       const commandParams =
         typeof message.params === "object" && message.params !== null ? message.params : {};
+      const page = pages.get(owner.pageSessionId);
+      if (page && sendToGuest(relayId, page, message, commandParams)) return;
       try {
         owner.debugger.sendCommand(message.method, commandParams, message.sessionId).then(
           (result) => respond(relayId, message, result),

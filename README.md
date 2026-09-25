@@ -255,7 +255,7 @@ Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to driv
 
 - Playwright sees the chat's browser tabs except the Linear and GitHub PR tabs. `open <url>` navigates the current tab (a bare `open` sends it to `about:blank`), pages it opens become new tabs, and closing a page closes its tab. If you close the agent's tabs while it is still connected, its next command opens a new blank tab.
 - `playwright-cli close` only disconnects; your tabs stay open. Disconnecting resets everything Playwright changed in the tabs (routes, emulation, injected scripts).
-- You can keep using the tabs while the agent works, and each agent gets its own isolated session per tab.
+- You can keep using the tabs while the agent works, and each agent gets its own isolated session per tab. Agent typing, pasting and clicking stay inside the page, so your composer keeps its focus and text.
 - The connection runs through the agent's own server (local or remote) and the existing environment connection, so it only works while the desktop app is connected.
 - Agents stay inside their tabs: they cannot reach Blackbird's own window, other windows, local files, or navigate to anything other than http, https, about and data URLs.
 - There is one shared browser profile, so extra browser contexts, downloads and PDF export are not available. Cookie commands fail when the chat's tabs mix browser profiles.

@@ -102,6 +102,9 @@ const MAC_EDITING_COMMANDS: Readonly<Record<string, string>> = {
   "Meta+KeyZ": "undo",
   "Shift+Meta+KeyZ": "redo",
 };
+export const PREVIEW_EDITING_COMMANDS: ReadonlySet<string> = new Set(
+  Object.values(MAC_EDITING_COMMANDS),
+);
 const SHORTCUT_MODIFIER_ORDER = ["Shift", "Control", "Alt", "Meta"] as const;
 
 const macEditingCommands = (
@@ -242,7 +245,7 @@ export function makePreviewAutomationNativeKeySequence(
 /** Keep macOS editing shortcuts inside the target page without native focus. */
 export function previewAutomationEditingCommandExpression(
   input: PreviewAutomationPressInput,
-  sequence: ReturnType<typeof makePreviewAutomationNativeKeySequence>,
+  sequence: { readonly commands?: ReadonlyArray<string> | undefined },
   clipboardData: ReadonlyArray<{ readonly type: string; readonly data: string }> = [],
 ): string {
   const definition = resolveKeyDefinition(input);
