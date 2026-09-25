@@ -137,7 +137,6 @@ describe("floating browser preview", () => {
     const panels = useRightPanelStore.getState();
     const revision = panels.getUserActionRevision(ref);
     usePreviewMiniPlayerStore.getState().open(ref, { kind: "browser", tabId: "agent-tab" });
-    panels.reconcileBrowserSurfaces(ref, ["agent-tab"]);
     const intent = selectThreadPreviewMiniPlayer(
       usePreviewMiniPlayerStore.getState().byThreadKey,
       ref,
@@ -150,6 +149,7 @@ describe("floating browser preview", () => {
       );
 
     panels.openProactive(ref, { id: "diff", kind: "diff" }, revision);
+    panels.reconcileBrowserSurfaces(ref, ["agent-tab"]);
     expect(isFloating()).toBe(true);
     panels.activateSurface(ref, "browser:agent-tab");
     expect(isFloating()).toBe(false);

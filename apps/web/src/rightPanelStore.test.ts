@@ -1346,17 +1346,17 @@ describe("rightPanelStore", () => {
     ).toEqual(["terminal:term-1", "browser:tab-b", "browser:tab-c"]);
   });
 
-  it("places agent-created browser sessions in the main area on smaller windows", () => {
+  it("adds agent-created browser sessions to the main area in the background", () => {
     const originalIsWide = workspaceLayoutProbe.isWide;
     try {
-      workspaceLayoutProbe.isWide = () => false;
+      workspaceLayoutProbe.isWide = () => true;
       useRightPanelStore.getState().reconcileBrowserSurfaces(refA, ["agent-tab"]);
 
       const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
       expect(state).toMatchObject({
         isOpen: false,
         surfaces: [],
-        activeMainSurfaceId: "browser:agent-tab",
+        activeMainSurfaceId: null,
       });
       expect(state.mainSurfaces).toEqual([
         { id: "browser:agent-tab", kind: "preview", resourceId: "agent-tab" },
@@ -1366,25 +1366,20 @@ describe("rightPanelStore", () => {
     }
   });
 
-  it("places agent-created browser sessions in an already-open panel", () => {
-    const originalIsWide = workspaceLayoutProbe.isWide;
-    try {
-      workspaceLayoutProbe.isWide = () => false;
-      useRightPanelStore.getState().toggleVisibility(refA);
-      useRightPanelStore.getState().reconcileBrowserSurfaces(refA, ["agent-tab"]);
+  it("adds agent-created browser sessions to an open panel without selecting them", () => {
+    useRightPanelStore.getState().openTerminal(refA, "term-1");
+    useRightPanelStore.getState().reconcileBrowserSurfaces(refA, ["agent-tab"]);
 
-      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
-      expect(state).toMatchObject({
-        isOpen: true,
-        activeSurfaceId: "browser:agent-tab",
-        mainSurfaces: [],
-      });
-      expect(state.surfaces).toEqual([
-        { id: "browser:agent-tab", kind: "preview", resourceId: "agent-tab" },
-      ]);
-    } finally {
-      workspaceLayoutProbe.isWide = originalIsWide;
-    }
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(state).toMatchObject({
+      isOpen: true,
+      activeSurfaceId: "terminal:term-1",
+      mainSurfaces: [],
+    });
+    expect(state.surfaces.map((surface) => surface.id)).toEqual([
+      "terminal:term-1",
+      "browser:agent-tab",
+    ]);
   });
 
   it("does not duplicate a Linear browser session as a Browser surface", () => {

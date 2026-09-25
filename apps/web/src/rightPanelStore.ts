@@ -1387,8 +1387,9 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               ),
             );
             // Main-area tabs keep their slot; only stale browser-backed
-            // surfaces are dropped. Newly discovered sessions follow the
-            // same workspace placement rule as browser tabs opened by hand.
+            // surfaces are dropped. Newly discovered sessions (opened by an
+            // agent) join the visible tab bar in the background: the open
+            // panel if there is one, otherwise the main area.
             const retainedMainSurfaces = current.mainSurfaces.filter((surface) => {
               if (surface.kind === "preview") {
                 return (
@@ -1431,8 +1432,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                   !dedicatedBrowserTabIds.has(tabId),
               )
               .map((tabId) => browserSurface(tabId));
-            const placeAddedInMain =
-              added.length > 0 && !current.isOpen && !workspaceLayoutProbe.isWide();
+            const placeAddedInMain = added.length > 0 && !current.isOpen;
             const mainSurfaces = placeAddedInMain
               ? [...retainedMainSurfaces, ...added]
               : retainedMainSurfaces;
@@ -1448,20 +1448,14 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             const activeMainStillExists =
               current.activeMainSurfaceId === null ||
               mainSurfaces.some((surface) => surface.id === current.activeMainSurfaceId);
-            const addedMainSurfaceId = placeAddedInMain ? (added.at(-1)?.id ?? null) : null;
-            const addedPanelSurfaceId = !placeAddedInMain ? (added.at(-1)?.id ?? null) : null;
             return {
               ...current,
-              isOpen: addedPanelSurfaceId ? true : current.isOpen,
               surfaces,
-              activeSurfaceId:
-                addedPanelSurfaceId ??
-                (activeStillExists
-                  ? current.activeSurfaceId
-                  : (fallbackBrowser?.id ?? surfaces[0]?.id ?? null)),
+              activeSurfaceId: activeStillExists
+                ? current.activeSurfaceId
+                : (fallbackBrowser?.id ?? surfaces[0]?.id ?? null),
               mainSurfaces,
-              activeMainSurfaceId:
-                addedMainSurfaceId ?? (activeMainStillExists ? current.activeMainSurfaceId : null),
+              activeMainSurfaceId: activeMainStillExists ? current.activeMainSurfaceId : null,
             };
           }),
         })),
