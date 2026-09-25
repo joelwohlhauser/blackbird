@@ -11553,7 +11553,11 @@ export default function ChatView(props: ChatViewProps) {
               workspaceMutationId={workspaceMutationId}
               activeTab={workspaceNavigatorTab}
               layoutControls={workspaceNavigatorLayoutControls}
-              onRefreshPullRequest={gitStatusQuery.refresh}
+              onRefreshPullRequest={() =>
+                gitStatusCwd === null
+                  ? Promise.resolve()
+                  : refreshVcsStatus({ environmentId, input: { cwd: gitStatusCwd } })
+              }
               onActiveTabChange={setWorkspaceNavigatorTab}
               onOpenFile={openFileSurface}
               onOpenDiffFile={openWorkspaceDiffFile}

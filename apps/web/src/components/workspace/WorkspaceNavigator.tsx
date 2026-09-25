@@ -66,7 +66,7 @@ interface WorkspaceNavigatorProps {
   workspaceMutationId: string | null;
   activeTab: WorkspaceNavigatorTab;
   layoutControls: ReactNode;
-  onRefreshPullRequest: () => void;
+  onRefreshPullRequest: () => Promise<unknown>;
   onActiveTabChange: (tab: WorkspaceNavigatorTab) => void;
   onOpenFile: (relativePath: string) => void;
   onOpenDiffFile: (target: WorkspaceNavigatorDiffTarget) => void;
@@ -183,7 +183,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
       });
       setPullRequestDiffWalk(EMPTY_PULL_REQUEST_DIFF_WALK);
       setPullRequestRefreshRequest((request) => request + 1);
-      props.onRefreshPullRequest();
+      await props.onRefreshPullRequest();
     } finally {
       setPullRequestRefreshing(false);
     }
