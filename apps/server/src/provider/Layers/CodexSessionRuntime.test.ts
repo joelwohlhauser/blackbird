@@ -619,25 +619,23 @@ describe("buildCodexDeveloperInstructions", () => {
 describe("T3 browser developer instructions", () => {
   const runtime = { model: "gpt-5.3-codex", reasoningEffort: "high" };
 
-  it("prefers the product-native preview tools in both collaboration modes", () => {
+  it("points the agent at the connected Playwright CLI in both collaboration modes", () => {
     for (const mode of ["default", "plan"] as const) {
       const instructions = buildCodexDeveloperInstructions(mode, runtime, true);
-      NodeAssert.match(instructions, /t3-code/);
-      NodeAssert.match(instructions, /preview_status/);
-      NodeAssert.match(instructions, /preview_open/);
-      NodeAssert.match(instructions, /Do not switch to global browser skills/);
+      NodeAssert.match(instructions, /playwright-cli open <url>/);
+      NodeAssert.match(instructions, /video-start/);
+      NodeAssert.match(instructions, /Do not switch to Chrome/);
     }
   });
 
   it("omits the browser block entirely when the preview tools are not attached", () => {
     for (const mode of ["default", "plan"] as const) {
       const instructions = buildCodexDeveloperInstructions(mode, runtime, false);
-      NodeAssert.doesNotMatch(instructions, /preview_status/);
-      NodeAssert.doesNotMatch(instructions, /preview_open/);
-      NodeAssert.doesNotMatch(instructions, /T3 Code collaborative browser/);
+      NodeAssert.doesNotMatch(instructions, /playwright-cli/);
+      NodeAssert.doesNotMatch(instructions, /Blackbird browser/);
       // Steering away from other browser automation must go with the tools;
       // keeping it would leave the model talked out of its only option.
-      NodeAssert.doesNotMatch(instructions, /Do not switch to global browser skills/);
+      NodeAssert.doesNotMatch(instructions, /Do not switch to Chrome/);
       // The rest of the collaboration mode is untouched.
       NodeAssert.match(instructions, /<collaboration_mode>/);
       NodeAssert.match(instructions, /<\/collaboration_mode>/);
@@ -645,10 +643,10 @@ describe("T3 browser developer instructions", () => {
   });
 
   it("tracks the turn's MCP configuration rather than defaulting to on", () => {
-    NodeAssert.match(buildCodexDeveloperInstructions("default", runtime, true), /preview_open/);
+    NodeAssert.match(buildCodexDeveloperInstructions("default", runtime, true), /playwright-cli/);
     NodeAssert.doesNotMatch(
       buildCodexDeveloperInstructions("default", runtime, false),
-      /preview_open/,
+      /playwright-cli/,
     );
   });
 });

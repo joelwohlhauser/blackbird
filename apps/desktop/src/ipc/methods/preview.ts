@@ -8,6 +8,10 @@ import {
   DesktopPreviewAutomationStatusSchema,
   DesktopPreviewAutomationTypeInputSchema,
   DesktopPreviewAutomationWaitForInputSchema,
+  DesktopPreviewCdpAttachInputSchema,
+  DesktopPreviewCdpAttachResultSchema,
+  DesktopPreviewCdpRelayInputSchema,
+  DesktopPreviewCdpSendInputSchema,
   DesktopPreviewConfigInputSchema,
   DesktopPreviewNavigateInputSchema,
   DesktopPreviewRecordingArtifactSchema,
@@ -472,6 +476,36 @@ export const automationWaitFor = DesktopIpc.makeIpcMethod({
   }),
 });
 
+export const cdpAttach = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_CDP_ATTACH_CHANNEL,
+  payload: DesktopPreviewCdpAttachInputSchema,
+  result: DesktopPreviewCdpAttachResultSchema,
+  handler: Effect.fn("desktop.ipc.preview.cdpAttach")(function* ({ tabId, relayId }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    return yield* manager.cdpAttach(tabId, relayId);
+  }),
+});
+
+export const cdpSend = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_CDP_SEND_CHANNEL,
+  payload: DesktopPreviewCdpSendInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.cdpSend")(function* ({ relayId, message }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.cdpSend(relayId, message);
+  }),
+});
+
+export const cdpDetach = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_CDP_DETACH_CHANNEL,
+  payload: DesktopPreviewCdpRelayInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.cdpDetach")(function* ({ relayId }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.cdpDetach(relayId);
+  }),
+});
+
 export const saveRecording = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PREVIEW_RECORDING_SAVE_CHANNEL,
   payload: DesktopPreviewRecordingSaveInputSchema,
@@ -519,4 +553,7 @@ export const methods = [
   startRecording,
   stopRecording,
   saveRecording,
+  cdpAttach,
+  cdpSend,
+  cdpDetach,
 ] as const;

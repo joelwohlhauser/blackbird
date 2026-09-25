@@ -2,6 +2,7 @@ import type {
   DesktopBridge,
   DesktopPreviewPointerEvent,
   DesktopPreviewRecordingInputEvent,
+  DesktopPreviewCdpMessage,
   DesktopPreviewRecordingFrame,
   DesktopPreviewTabState,
   DesktopSnapShotEvent,
@@ -375,6 +376,25 @@ contextBridge.exposeInMainWorld("desktopBridge", {
         ipcRenderer.invoke(IpcChannels.PREVIEW_AUTOMATION_EVALUATE_CHANNEL, { tabId, input }),
       waitFor: (tabId, input) =>
         ipcRenderer.invoke(IpcChannels.PREVIEW_AUTOMATION_WAIT_FOR_CHANNEL, { tabId, input }),
+      cdpAttach: (tabId, relayId) =>
+        ipcRenderer.invoke(IpcChannels.PREVIEW_CDP_ATTACH_CHANNEL, { tabId, relayId }),
+      cdpSend: (relayId, message) =>
+        ipcRenderer.invoke(IpcChannels.PREVIEW_CDP_SEND_CHANNEL, { relayId, message }),
+      cdpDetach: (relayId) =>
+        ipcRenderer.invoke(IpcChannels.PREVIEW_CDP_DETACH_CHANNEL, { relayId }),
+      onCdpMessages: (listener) => {
+        const wrappedListener = (
+          _event: Electron.IpcRendererEvent,
+          relayId: unknown,
+          messages: unknown,
+        ) => {
+          if (typeof relayId !== "string" || !Array.isArray(messages)) return;
+          listener(relayId, messages as ReadonlyArray<DesktopPreviewCdpMessage>);
+        };
+        ipcRenderer.on(IpcChannels.PREVIEW_CDP_MESSAGES_CHANNEL, wrappedListener);
+        return () =>
+          ipcRenderer.removeListener(IpcChannels.PREVIEW_CDP_MESSAGES_CHANNEL, wrappedListener);
+      },
     },
     onStateChange: (listener) => {
       const wrappedListener = (

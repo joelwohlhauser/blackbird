@@ -9,6 +9,8 @@ import {
   PreviewAutomationStatus,
   PreviewAutomationTypeInput,
   PreviewAutomationWaitForInput,
+  PreviewCdpRelayId,
+  PreviewCdpTargetInfo,
 } from "./previewAutomation.ts";
 import { SnapShotSource } from "./orchestration.ts";
 import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -1110,6 +1112,34 @@ export const DesktopPreviewAutomationWaitForInputSchema = Schema.Struct({
   input: PreviewAutomationWaitForInput,
 });
 
+export const DesktopPreviewCdpMessageSchema = Schema.Struct({
+  id: Schema.optional(Schema.Int),
+  sessionId: Schema.optional(Schema.String),
+  method: Schema.optional(Schema.String),
+  params: Schema.optional(Schema.Unknown),
+  result: Schema.optional(Schema.Unknown),
+  error: Schema.optional(Schema.Unknown),
+});
+export type DesktopPreviewCdpMessage = typeof DesktopPreviewCdpMessageSchema.Type;
+
+export const DesktopPreviewCdpAttachInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  relayId: PreviewCdpRelayId,
+});
+
+export const DesktopPreviewCdpAttachResultSchema = Schema.Struct({
+  sessionId: TrimmedNonEmptyString,
+  targetInfo: PreviewCdpTargetInfo,
+});
+export type DesktopPreviewCdpAttachResult = typeof DesktopPreviewCdpAttachResultSchema.Type;
+
+export const DesktopPreviewCdpSendInputSchema = Schema.Struct({
+  relayId: PreviewCdpRelayId,
+  message: DesktopPreviewCdpMessageSchema,
+});
+
+export const DesktopPreviewCdpRelayInputSchema = Schema.Struct({ relayId: PreviewCdpRelayId });
+
 /**
  * A System Settings pane the app can deep-link to. The identifier crosses IPC
  * rather than a URL, so the renderer can only reach these known destinations.
@@ -1340,6 +1370,12 @@ export interface DesktopPreviewBridge {
     scroll: (tabId: string, input: PreviewAutomationScrollInput) => Promise<void>;
     evaluate: (tabId: string, input: PreviewAutomationEvaluateInput) => Promise<unknown>;
     waitFor: (tabId: string, input: PreviewAutomationWaitForInput) => Promise<void>;
+    cdpAttach: (tabId: string, relayId: string) => Promise<DesktopPreviewCdpAttachResult>;
+    cdpSend: (relayId: string, message: DesktopPreviewCdpMessage) => Promise<void>;
+    cdpDetach: (relayId: string) => Promise<void>;
+    onCdpMessages: (
+      listener: (relayId: string, messages: ReadonlyArray<DesktopPreviewCdpMessage>) => void,
+    ) => () => void;
   };
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;

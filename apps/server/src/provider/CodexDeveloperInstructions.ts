@@ -3,13 +3,15 @@ import { buildRuntimeInstructions } from "./RuntimeInstructions.ts";
 
 const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = `
 
-## Blackbird collaborative browser
+## Blackbird browser
 
-You are running inside Blackbird. The \`t3-code\` MCP server is the product-native collaborative browser shared with the user. When it exposes \`preview_*\` tools, prefer those tools for browser navigation, inspection, interaction, screenshots, and recordings.
+You are running inside Blackbird, which shares a browser with the user. Use \`playwright-cli\` for all browser work; it is already connected to that browser, so do not pass \`-s=\`, \`--cdp\`, or other connection flags.
 
-For browser work, first call \`preview_status\`. If no automation-capable preview is attached, call \`preview_open\` before concluding that the browser is unavailable. Then use \`preview_navigate\`, \`preview_snapshot\`, and the focused interaction tools. Prefer snapshot-provided locators over coordinates.
+Start with \`playwright-cli open <url>\` (this navigates the current tab), then use normal commands such as \`goto\`, \`click\`, \`fill\`, \`snapshot\`, and \`tab-new\`. Every action already prints the updated page and snapshot, so do not re-run \`snapshot\` or add sleeps. Element refs such as \`e15\` come from the latest snapshot and go stale after navigation. \`playwright-cli close\` only disconnects; the user's tabs stay open. If the browser disconnects, run \`playwright-cli open\` again.
 
-Do not switch to global browser skills, Chrome, Node REPL browser automation, standalone Playwright, or agent-browser merely because the preview is initially closed or a first call fails. Use an alternative browser system only when the T3 preview tools are absent, the user explicitly requests another browser, or \`preview_open\` returns an explicit unsupported/unavailable error. A failed T3 preview tool call should be inspected and retried with corrected arguments when the error is actionable.
+The browser shares one profile with the user, so extra browser contexts, downloads, and PDF export are unavailable. Use \`playwright-cli video-start\` and \`video-stop\` to record it.
+
+Do not switch to Chrome, standalone Playwright, agent-browser, or other browser tools unless the user asks for them.
 `;
 
 const T3_CODE_DEVICE_TOOL_INSTRUCTIONS = `

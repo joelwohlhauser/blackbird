@@ -6,6 +6,9 @@ import {
   FILL_PREVIEW_VIEWPORT,
   PREVIEW_AUTOMATION_OPERATIONS,
   type EnvironmentId,
+  type PreviewAutomationCdpAttachResult,
+  type PreviewAutomationCdpConnectResult,
+  type PreviewAutomationCdpRelayInput,
   type PreviewAutomationNavigateInput,
   type PreviewAutomationOpenInput,
   type PreviewAutomationResizeInput,
@@ -56,11 +59,17 @@ import { runBrowserViewportMutation } from "~/browser/browserViewportActions";
 import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
 import { isElectron } from "~/env";
 import { useEnvironments } from "~/state/environments";
-import { previewEnvironment } from "~/state/preview";
+import { previewEnvironment, resolvePreviewCdpHostUrl } from "~/state/preview";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { previewBridge } from "./previewBridge";
+import {
+  connectPreviewCdpHost,
+  isIntegrationBrowserTab,
+  isPreviewCdpHostConnected,
+  retainPreviewCdpTab,
+} from "./previewCdpHost";
 import {
   PreviewAutomationOperationError,
   PreviewAutomationOverlayTimeoutError,
@@ -699,6 +708,35 @@ function PreviewAutomationHost(props: { readonly environmentId: EnvironmentId })
               request.input as Parameters<typeof ready.bridge.automation.waitFor>[1],
             );
           }
+          case "cdpConnect": {
+            const { relayId } = request.input as PreviewAutomationCdpRelayInput;
+            await connectPreviewCdpHost(
+              relayId,
+              await resolvePreviewCdpHostUrl(environmentId, relayId),
+            );
+            return { clientId: automationClientId } satisfies PreviewAutomationCdpConnectResult;
+          }
+          case "cdpAttach": {
+            const { relayId } = request.input as PreviewAutomationCdpRelayInput;
+            const refuseIntegrationTab = (candidateTabId: string | null) => {
+              if (candidateTabId !== null && isIntegrationBrowserTab(threadRef, candidateTabId)) {
+                throw new PreviewAutomationTargetUnavailableError(unavailableTarget);
+              }
+            };
+            if (!isPreviewCdpHostConnected(relayId)) {
+              throw new PreviewAutomationTargetUnavailableError(unavailableTarget);
+            }
+            refuseIntegrationTab(tabId);
+            const ready = await requireReadyTab();
+            refuseIntegrationTab(ready.tabId);
+            const attached = await ready.bridge.automation.cdpAttach(ready.runtimeTabId, relayId);
+            retainPreviewCdpTab(
+              relayId,
+              attached.sessionId,
+              acquireBrowserSurfaceActivity(ready.runtimeTabId),
+            );
+            return { tabId: ready.tabId, ...attached } satisfies PreviewAutomationCdpAttachResult;
+          }
           case "recordingStart": {
             const ready = await requireReadyTab();
             const startedAt = await startBrowserRecording(
@@ -767,7 +805,7 @@ function PreviewAutomationHost(props: { readonly environmentId: EnvironmentId })
         browserActivity.release?.();
       }
     },
-    [environmentId, listPreviews, open, registry, resize],
+    [automationClientId, environmentId, listPreviews, open, registry, resize],
   );
   const [requestHandlerAtom] = useState(() => Atom.make({ handle: handleRequest }));
   const setRequestHandler = useAtomSet(requestHandlerAtom);

@@ -47,6 +47,7 @@ export interface PreviewAutomationInvokeInput {
   readonly timeoutMs?: number;
   /** Background metadata reads must not change the agent's current tab. */
   readonly updateCurrentTab?: boolean;
+  readonly clientId?: string;
   /** Capture the routed tab before another request changes the current assignment. */
   readonly onTargetTab?: (tabId: PreviewTabId | undefined) => void;
 }
@@ -492,23 +493,30 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
       // operation is not silently moved to a newer client: the caller gets a
       // capability failure and can deliberately start a fresh provider
       // session. A dead lease is pruned above and may fail over.
+      const pinnedConnection =
+        input.clientId === undefined ? undefined : current.clients.get(input.clientId);
       const connection =
-        hasLiveAssignment && supportsOperation(assignedConnection, input.operation)
-          ? assignedConnection
-          : hasLiveAssignment
-            ? undefined
-            : Array.from(current.clients.values())
-                .filter(
-                  (host) =>
-                    host.environmentId === input.scope.environmentId &&
-                    supportsOperation(host, input.operation),
-                )
-                .sort(
-                  (left, right) =>
-                    right.supportedOperations.size - left.supportedOperations.size ||
-                    Number(right.focused) - Number(left.focused) ||
-                    right.focusOrder - left.focusOrder,
-                )[0];
+        input.clientId !== undefined
+          ? pinnedConnection?.environmentId === input.scope.environmentId &&
+            supportsOperation(pinnedConnection, input.operation)
+            ? pinnedConnection
+            : undefined
+          : hasLiveAssignment && supportsOperation(assignedConnection, input.operation)
+            ? assignedConnection
+            : hasLiveAssignment
+              ? undefined
+              : Array.from(current.clients.values())
+                  .filter(
+                    (host) =>
+                      host.environmentId === input.scope.environmentId &&
+                      supportsOperation(host, input.operation),
+                  )
+                  .sort(
+                    (left, right) =>
+                      right.supportedOperations.size - left.supportedOperations.size ||
+                      Number(right.focused) - Number(left.focused) ||
+                      right.focusOrder - left.focusOrder,
+                  )[0];
       if (!connection) {
         if (!hasLiveAssignment) assignments.delete(assignmentKey);
         return [undefined, { ...current, assignments }] as const;

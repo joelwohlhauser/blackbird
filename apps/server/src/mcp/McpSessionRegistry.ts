@@ -20,6 +20,7 @@ export interface McpCredentialRequest {
 
 export interface McpIssuedCredential {
   readonly config: McpProviderSession.McpProviderSessionConfig;
+  readonly cdpEndpoint?: string;
 }
 
 export interface McpSessionRegistryShape {
@@ -27,6 +28,10 @@ export interface McpSessionRegistryShape {
   readonly resolve: (
     rawToken: string,
   ) => Effect.Effect<McpInvocationContext.McpInvocationScope | undefined>;
+  readonly resolveCdp: (
+    rawToken: string,
+  ) => Effect.Effect<McpInvocationContext.McpInvocationScope | undefined>;
+  readonly isCdpTokenLive: (rawToken: string) => Effect.Effect<boolean>;
   /**
    * Records a sign of life for every credential bound to `threadId`. Provider
    * turns call this so that a session which is plainly alive keeps its
@@ -43,7 +48,10 @@ export class McpSessionRegistry extends Context.Service<
   McpSessionRegistryShape
 >()("t3/mcp/McpSessionRegistry") {}
 
+type CredentialKind = "mcp" | "cdp";
+
 interface CredentialRecord {
+  readonly kind: CredentialKind;
   readonly tokenHash: string;
   readonly scope: McpInvocationContext.McpInvocationScope;
   readonly lastAliveAt: number;
@@ -72,6 +80,8 @@ export interface McpSessionRegistryOptions {
  * stack and is reachable on whatever host the server binds to, so this token is
  * the only thing guarding the `t3-code` toolkits on a remote-reachable server.
  */
+export const MCP_CDP_ROUTE_PREFIX = "/mcp/cdp";
+
 const DEFAULT_LIVENESS_WINDOW_MS = 24 * 60 * 60 * 1_000;
 
 const bytesToHex = (bytes: Uint8Array): string =>
@@ -96,9 +106,10 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
   const state = yield* SynchronizedRef.make<RegistryState>({ records: new Map() });
   const currentTimeMillis = options.now ? Effect.sync(options.now) : Clock.currentTimeMillis;
   const livenessWindowMs = options.livenessWindowMs ?? DEFAULT_LIVENESS_WINDOW_MS;
-  const endpoint = NetAddress.isInetAddress(httpServer.address)
-    ? `http://${getHttpMcpEndpointHost(httpServer.address.address)}:${httpServer.address.port}/mcp`
-    : "http://127.0.0.1/mcp";
+  const origin = NetAddress.isInetAddress(httpServer.address)
+    ? `${getHttpMcpEndpointHost(httpServer.address.address)}:${httpServer.address.port}`
+    : "127.0.0.1";
+  const endpoint = `http://${origin}/mcp`;
 
   const hashToken = (token: string) =>
     crypto
@@ -131,12 +142,25 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
         ]),
         issuedAt,
       };
+      const cdpToken = scope.capabilities.has("preview")
+        ? yield* crypto.randomBytes(32).pipe(Effect.map(tokenFromBytes), Effect.orDie)
+        : undefined;
+      const cdpTokenHash = cdpToken ? yield* hashToken(cdpToken) : undefined;
       yield* SynchronizedRef.update(state, ({ records }) => {
         const next = new Map(pruneDead(records, issuedAt));
-        next.set(tokenHash, { tokenHash, scope, lastAliveAt: issuedAt });
+        next.set(tokenHash, { kind: "mcp", tokenHash, scope, lastAliveAt: issuedAt });
+        if (cdpTokenHash) {
+          next.set(cdpTokenHash, {
+            kind: "cdp",
+            tokenHash: cdpTokenHash,
+            scope,
+            lastAliveAt: issuedAt,
+          });
+        }
         return { records: next };
       });
       return {
+        ...(cdpToken ? { cdpEndpoint: `ws://${origin}${MCP_CDP_ROUTE_PREFIX}/${cdpToken}` } : {}),
         config: {
           environmentId,
           threadId: scope.threadId,
@@ -150,21 +174,37 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
     },
   );
 
-  const resolve: McpSessionRegistryShape["resolve"] = Effect.fn("McpSessionRegistry.resolve")(
-    function* (rawToken) {
-      if (rawToken.length === 0) return undefined;
-      const tokenHash = yield* hashToken(rawToken);
-      const timestamp = yield* currentTimeMillis;
-      return yield* SynchronizedRef.modify(state, ({ records }) => {
-        const current = pruneDead(records, timestamp);
-        const record = current.get(tokenHash);
-        if (!record) return [undefined, { records: current }] as const;
-        const next = new Map(current);
-        next.set(tokenHash, { ...record, lastAliveAt: timestamp });
-        return [record.scope, { records: next }] as const;
-      });
-    },
-  );
+  const resolveKind = Effect.fn("McpSessionRegistry.resolveKind")(function* (
+    rawToken: string,
+    kind: CredentialKind,
+  ) {
+    if (rawToken.length === 0) return undefined;
+    const tokenHash = yield* hashToken(rawToken);
+    const timestamp = yield* currentTimeMillis;
+    return yield* SynchronizedRef.modify(state, ({ records }) => {
+      const current = pruneDead(records, timestamp);
+      const record = current.get(tokenHash);
+      if (!record || record.kind !== kind) return [undefined, { records: current }] as const;
+      const next = new Map(current);
+      next.set(tokenHash, { ...record, lastAliveAt: timestamp });
+      return [record.scope, { records: next }] as const;
+    });
+  });
+
+  const resolve: McpSessionRegistryShape["resolve"] = (rawToken) => resolveKind(rawToken, "mcp");
+
+  const resolveCdp: McpSessionRegistryShape["resolveCdp"] = (rawToken) =>
+    resolveKind(rawToken, "cdp");
+
+  const isCdpTokenLive: McpSessionRegistryShape["isCdpTokenLive"] = Effect.fn(
+    "McpSessionRegistry.isCdpTokenLive",
+  )(function* (rawToken) {
+    const tokenHash = yield* hashToken(rawToken);
+    const timestamp = yield* currentTimeMillis;
+    const { records } = yield* SynchronizedRef.get(state);
+    const record = records.get(tokenHash);
+    return record?.kind === "cdp" && timestamp - record.lastAliveAt <= livenessWindowMs;
+  });
 
   const touch: McpSessionRegistryShape["touch"] = Effect.fn("McpSessionRegistry.touch")(
     function* (threadId) {
@@ -190,6 +230,8 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
   return McpSessionRegistry.of({
     issue,
     resolve,
+    resolveCdp,
+    isCdpTokenLive,
     touch,
     revokeProviderSession: Effect.fn("McpSessionRegistry.revokeProviderSession")(
       function* (providerSessionId) {

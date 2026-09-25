@@ -13,6 +13,8 @@ import {
 import type {
   DesktopPreviewAnnotationTheme,
   DesktopPreviewAutomationStatus,
+  DesktopPreviewCdpAttachResult,
+  DesktopPreviewCdpMessage,
   DesktopPreviewColorScheme,
   DesktopPreviewFavicon,
   DesktopPreviewPointerEvent,
@@ -38,6 +40,7 @@ import type {
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { normalizePreviewUrl } from "@t3tools/shared/preview";
 import {
+  app,
   BrowserWindow,
   Menu,
   ClipboardItem,
@@ -68,6 +71,7 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import {
+  PREVIEW_CDP_MESSAGES_CHANNEL,
   PREVIEW_CLOSE_TAB_REQUESTED_CHANNEL,
   PREVIEW_OPEN_LINK_IN_NEW_TAB_CHANNEL,
   PREVIEW_FOCUS_URL_CHANNEL,
@@ -75,6 +79,7 @@ import {
 } from "../ipc/channels.ts";
 import { parseSafeExternalUrl } from "../electron/ElectronShell.ts";
 import * as BrowserSession from "./BrowserSession.ts";
+import { makeCdpRelaySessions } from "./CdpRelaySessions.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
   ANNOTATION_THEME_CHANNEL,
@@ -440,6 +445,11 @@ const nextZoomLevel = (current: number, direction: "in" | "out"): number => {
 type Listener = (tabId: string, state: PreviewTabState) => Effect.Effect<void>;
 type RecordingFrameListener = (frame: DesktopPreviewRecordingFrame) => Effect.Effect<void>;
 
+const CdpTargetInfoResponse = Schema.Struct({
+  targetInfo: Schema.Record(Schema.String, Schema.Unknown),
+});
+const CdpAttachToTargetResponse = Schema.Struct({ sessionId: Schema.String });
+
 type PreviewInputSignal =
   | { readonly kind: "pointer"; readonly x: number; readonly y: number; readonly button: number }
   | { readonly kind: "key"; readonly key: string; readonly code: string };
@@ -494,6 +504,7 @@ interface BrowserControlSession {
     event: Electron.Event,
     method: string,
     params: Record<string, unknown>,
+    sessionId?: string,
   ) => void;
 }
 
@@ -734,6 +745,23 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     new Set(),
   );
   const pickSessionsRef = yield* Ref.make<ReadonlyMap<string, PickSession>>(new Map());
+  const cdpRelays = makeCdpRelaySessions({
+    emit: (relayId, messages) =>
+      runFork(
+        Effect.gen(function* () {
+          const mainWindow = yield* Ref.get(mainWindowRef);
+          if (Option.isNone(mainWindow) || mainWindow.value.isDestroyed()) return;
+          yield* attempt({ operation: "cdpRelay.emit" }, () =>
+            mainWindow.value.webContents.send(PREVIEW_CDP_MESSAGES_CHANNEL, relayId, messages),
+          );
+        }).pipe(Effect.ignore),
+      ),
+    browserVersion: () => ({
+      product: `Chrome/${process.versions.chrome}`,
+      userAgent: app.userAgentFallback,
+      jsVersion: process.versions.v8,
+    }),
+  });
   const controlSessionsRef = yield* SynchronizedRef.make<
     ReadonlyMap<number, BrowserControlSession>
   >(new Map());
@@ -1439,7 +1467,13 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
             }
             yield* captureDiagnosticMessage(wc.id, method, params);
           });
-          const onMessage: BrowserControlSession["onMessage"] = (_event, method, params) => {
+          const onMessage: BrowserControlSession["onMessage"] = (
+            _event,
+            method,
+            params,
+            sessionId,
+          ) => {
+            if (cdpRelays.route(wc.id, method, params, sessionId)) return;
             runFork(handleDebuggerMessage(method, params));
           };
           yield* Scope.addFinalizer(
@@ -1455,6 +1489,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
                   wcDebugger.off("message", onMessage);
                   if (wcDebugger.isAttached()) wcDebugger.detach();
                 }).pipe(Effect.ignore),
+                Effect.sync(() => cdpRelays.detachWebContents(wc.id)),
               ],
               { discard: true },
             ),
@@ -4772,6 +4807,66 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     );
   });
 
+  const cdpAttach = Effect.fn("PreviewManager.cdpAttach")(function* (
+    tabId: string,
+    relayId: string,
+  ): Effect.fn.Return<DesktopPreviewCdpAttachResult, PreviewManagerError> {
+    const wc = yield* requireWebContents(tabId);
+    const control = yield* ensureControlSession(wc);
+    const existing = cdpRelays.pageFor(relayId, wc.id);
+    if (existing) return existing;
+    const decodeFailure = (operation: string) => (cause: unknown) =>
+      new PreviewOperationError({ operation, tabId, webContentsId: wc.id, cause });
+    const { targetInfo } = yield* attemptPromise(
+      { operation: "cdpAttach.getTargetInfo", tabId, webContentsId: wc.id },
+      () => control.debugger.sendCommand("Target.getTargetInfo"),
+    ).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(CdpTargetInfoResponse)),
+      Effect.mapError(decodeFailure("cdpAttach.getTargetInfo")),
+    );
+    const { sessionId } = yield* attemptPromise(
+      { operation: "cdpAttach.attachToTarget", tabId, webContentsId: wc.id },
+      () =>
+        control.debugger.sendCommand("Target.attachToTarget", {
+          targetId: targetInfo["targetId"],
+          flatten: true,
+        }),
+    ).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(CdpAttachToTargetResponse)),
+      Effect.mapError(decodeFailure("cdpAttach.attachToTarget")),
+    );
+    const current = (yield* SynchronizedRef.get(controlSessionsRef)).get(wc.id);
+    if (current !== control) {
+      return yield* new PreviewAutomationControlInterruptedError({
+        operation: "cdpAttach",
+        tabId,
+        webContentsId: wc.id,
+      });
+    }
+    const attached = cdpRelays.attach({
+      relayId,
+      webContentsId: wc.id,
+      sessionId,
+      targetInfo,
+      debugger: control.debugger,
+      reload: (ignoreCache) => (ignoreCache ? wc.reloadIgnoringCache() : wc.reload()),
+    });
+    if (!attached) {
+      return yield* new PreviewOperationError({
+        operation: "cdpAttach.relayClosed",
+        tabId,
+        webContentsId: wc.id,
+        cause: new Error("The browser relay closed while attaching."),
+      });
+    }
+    return { sessionId, targetInfo };
+  });
+
+  const cdpSend = (relayId: string, message: DesktopPreviewCdpMessage) =>
+    Effect.sync(() => cdpRelays.send(relayId, message));
+
+  const cdpDetach = (relayId: string) => Effect.sync(() => cdpRelays.detachRelay(relayId));
+
   const subscribe = <A>(
     ref: Ref.Ref<ReadonlySet<A>>,
     listener: A,
@@ -4806,6 +4901,9 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   return {
     automationClick,
     automationEvaluate,
+    cdpAttach,
+    cdpDetach,
+    cdpSend,
     automationPress,
     automationScroll,
     automationSnapshot,
@@ -5255,6 +5353,12 @@ export class PreviewManager extends Context.Service<
     readonly subscribeRecordingFrames: (
       listener: RecordingFrameListener,
     ) => Effect.Effect<void, never, Scope.Scope>;
+    readonly cdpAttach: (
+      tabId: string,
+      relayId: string,
+    ) => Effect.Effect<DesktopPreviewCdpAttachResult, PreviewManagerError>;
+    readonly cdpSend: (relayId: string, message: DesktopPreviewCdpMessage) => Effect.Effect<void>;
+    readonly cdpDetach: (relayId: string) => Effect.Effect<void>;
   }
 >()("@t3tools/desktop/preview/Manager/PreviewManager") {}
 
@@ -5346,6 +5450,9 @@ export const make = Effect.gen(function* PreviewManagerMake() {
     subscribePointerEvents: operations.subscribePointerEvents,
     subscribeRecordingFrames: operations.subscribeRecordingFrames,
     subscribeRecordingInputs: operations.subscribeRecordingInputs,
+    cdpAttach: operations.cdpAttach,
+    cdpSend: operations.cdpSend,
+    cdpDetach: operations.cdpDetach,
   });
 }).pipe(Effect.withSpan("PreviewManager.make"));
 

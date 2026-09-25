@@ -249,6 +249,18 @@ its routes without deleting saved pins.
 
 Assistant messages can be read aloud with Google Gemini text-to-speech (`gemini-3.1-flash-tts-preview`). Add a Gemini API key under **Settings → General → Text to speech**, where you also pick a voice (Alnilam by default, Achernar, or Kore) and the default reading speed. A speaker button then appears next to each message's copy button; clicking it generates the audio and then plays it, clicking again stops it, and a speed button beside it cycles the speed while listening. Code blocks and Markdown syntax are skipped. The key is stored on the device only, and the browser calls Gemini directly.
 
+### Agent browser (Playwright CLI)
+
+Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to drive the same browser tabs you see. When browser access is on for the project, Blackbird starts each agent session with `PLAYWRIGHT_CLI_SESSION` and `PLAYWRIGHT_MCP_CDP_ENDPOINT` in its environment, so plain `playwright-cli open <url>`, `click`, `snapshot`, `tab-new`, `video-start` and so on work without flags, endpoints or setup. The endpoint lives as long as the agent session, and agents no longer get the old `preview_*` browser tools. Your own screenshot and Shift-click recording in the browser toolbar are unchanged.
+
+- Playwright sees the chat's browser tabs except the Linear and GitHub PR tabs. `open <url>` navigates the current tab (a bare `open` sends it to `about:blank`), pages it opens become new tabs, and closing a page closes its tab. If you close the agent's tabs while it is still connected, its next command opens a new blank tab.
+- `playwright-cli close` only disconnects; your tabs stay open. Disconnecting resets everything Playwright changed in the tabs (routes, emulation, injected scripts).
+- You can keep using the tabs while the agent works, and each agent gets its own isolated session per tab.
+- The connection runs through the agent's own server (local or remote) and the existing environment connection, so it only works while the desktop app is connected.
+- Agents stay inside their tabs: they cannot reach Blackbird's own window, other windows, local files, or navigate to anything other than http, https, about and data URLs.
+- There is one shared browser profile, so extra browser contexts, downloads and PDF export are not available. Cookie commands fail when the chat's tabs mix browser profiles.
+- `playwright-cli` has to be installed on the agent's machine. It is installed on the local Mac and remote, not on remote-example-2.
+
 ### Linear, GitHub, and links
 
 The normal right panel has browser-backed integration tabs:

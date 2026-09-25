@@ -1359,3 +1359,45 @@ it.effect("keeps a host that responds with an operation timeout", () =>
     }),
   ),
 );
+
+it.effect("routes pinned invocations only to the named desktop client", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const broker = yield* makeBroker;
+      const answer = (clientId: string) =>
+        Effect.gen(function* () {
+          const requests = requestsFrom(yield* broker.connect(makeHost({ clientId })));
+          yield* Stream.runForEach(requests, (request) =>
+            broker.respond({
+              clientId,
+              connectionId: request.connectionId,
+              requestId: request.requestId,
+              ok: true,
+              result: { clientId },
+            }),
+          ).pipe(Effect.forkScoped);
+        });
+      yield* answer("desktop-a");
+      yield* answer("desktop-b");
+      yield* Effect.yieldNow;
+
+      const pinned = yield* broker.invoke<{ clientId: string }>({
+        scope,
+        clientId: "desktop-a",
+        operation: "status",
+        input: {},
+      });
+      const missing = yield* broker
+        .invoke<{ clientId: string }>({
+          scope,
+          clientId: "desktop-gone",
+          operation: "status",
+          input: {},
+        })
+        .pipe(Effect.flip);
+
+      expect(pinned).toEqual({ clientId: "desktop-a" });
+      expect(missing).toBeInstanceOf(PreviewAutomationNoAvailableHostError);
+    }),
+  ),
+);

@@ -43,6 +43,8 @@ export const PREVIEW_AUTOMATION_OPERATIONS = [
   ...PREVIEW_AUTOMATION_V1_OPERATIONS,
   "resize",
   "setColorScheme",
+  "cdpConnect",
+  "cdpAttach",
 ] as const;
 
 export const PreviewAutomationOperation = Schema.Literals(PREVIEW_AUTOMATION_OPERATIONS);
@@ -564,6 +566,29 @@ export const PreviewAutomationRecordingArtifact = Schema.Struct({
   createdAt: Schema.String,
 });
 export type PreviewAutomationRecordingArtifact = typeof PreviewAutomationRecordingArtifact.Type;
+
+export const PREVIEW_CDP_HOST_ROUTE_PREFIX = "/api/preview/cdp";
+
+export const PreviewCdpRelayId = TrimmedNonEmptyString.check(Schema.isMaxLength(64));
+export type PreviewCdpRelayId = typeof PreviewCdpRelayId.Type;
+
+export const PreviewAutomationCdpRelayInput = Schema.Struct({ relayId: PreviewCdpRelayId });
+export type PreviewAutomationCdpRelayInput = typeof PreviewAutomationCdpRelayInput.Type;
+
+export const PreviewCdpTargetInfo = Schema.Record(Schema.String, Schema.Unknown);
+export type PreviewCdpTargetInfo = typeof PreviewCdpTargetInfo.Type;
+
+export const PreviewAutomationCdpConnectResult = Schema.Struct({
+  clientId: TrimmedNonEmptyString.check(Schema.isMaxLength(128)),
+});
+export type PreviewAutomationCdpConnectResult = typeof PreviewAutomationCdpConnectResult.Type;
+
+export const PreviewAutomationCdpAttachResult = Schema.Struct({
+  tabId: PreviewTabId,
+  sessionId: TrimmedNonEmptyString,
+  targetInfo: PreviewCdpTargetInfo,
+});
+export type PreviewAutomationCdpAttachResult = typeof PreviewAutomationCdpAttachResult.Type;
 
 export const PreviewAutomationClientId = TrimmedNonEmptyString.check(Schema.isMaxLength(128));
 export type PreviewAutomationClientId = typeof PreviewAutomationClientId.Type;

@@ -954,10 +954,18 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         const deviceEnvironment = capabilities.has("device")
           ? yield* agentDeviceEnvironment
           : undefined;
+        const agentEnvironment = {
+          ...deviceEnvironment,
+          ...(credential.cdpEndpoint
+            ? McpProviderSession.playwrightEnvironment(credential.config, credential.cdpEndpoint)
+            : {}),
+        };
         yield* Effect.sync(() =>
           McpProviderSession.setMcpProviderSession({
             ...credential.config,
-            ...(deviceEnvironment ? { agentDeviceEnvironment: deviceEnvironment } : {}),
+            ...(Object.keys(agentEnvironment).length > 0
+              ? { agentDeviceEnvironment: agentEnvironment }
+              : {}),
           }),
         );
       }

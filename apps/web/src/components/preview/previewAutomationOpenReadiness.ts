@@ -36,7 +36,10 @@ export function shouldAutoShowPreviewForAutomationUse(input: {
   readonly presentationSuppressed: boolean;
 }): boolean {
   return (
-    input.operation !== "open" && input.autoShowFloatingPreview && !input.presentationSuppressed
+    input.operation !== "open" &&
+    input.operation !== "cdpAttach" &&
+    input.autoShowFloatingPreview &&
+    !input.presentationSuppressed
   );
 }
 
