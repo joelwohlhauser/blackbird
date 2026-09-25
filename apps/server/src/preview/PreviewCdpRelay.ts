@@ -4,6 +4,7 @@ import {
   PreviewAutomationCdpAttachResult,
   PreviewAutomationCdpConnectResult,
   type PreviewAutomationStatus,
+  PreviewViewportSize,
   type PreviewTabId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -53,6 +54,8 @@ interface CdpMessage {
 }
 
 type CdpCommand = CdpMessage & { readonly id: number; readonly method: string };
+
+const isViewportSize = Schema.is(PreviewViewportSize);
 
 type AttachClaim =
   | { readonly _tag: "page"; readonly page: RelayPage }
@@ -361,6 +364,7 @@ export const make = Effect.gen(function* PreviewCdpRelayMake() {
           clientId,
           operation: "open",
           input: {
+            open: false,
             reuseExistingTab: false,
             ...(typeof url === "string" && url.length > 0 && url !== "about:blank" ? { url } : {}),
           },
@@ -526,9 +530,44 @@ export const make = Effect.gen(function* PreviewCdpRelayMake() {
         }
       }).pipe(Effect.catchCause(() => Effect.void));
 
+    const resizeTab = (page: RelayPage, message: CdpCommand) => {
+      const size = { width: message.params?.["width"], height: message.params?.["height"] };
+      if (!isViewportSize(size)) {
+        return respondError(
+          message,
+          "Blackbird browser tabs resize to whole-pixel sizes between 240 and 3840 pixels per side.",
+        );
+      }
+      return broker
+        .invoke({
+          scope,
+          clientId,
+          operation: "resize",
+          tabId: page.tabId,
+          input: { mode: "freeform", ...size },
+          updateCurrentTab: false,
+        })
+        .pipe(
+          Effect.flatMap(() => respond(message, {})),
+          Effect.catch((error) => respondError(message, errorMessage(error))),
+        );
+    };
+
+    const handleSessionMessage = (message: CdpMessage) =>
+      Effect.gen(function* () {
+        if (message.method !== "Emulation.setDeviceMetricsOverride" || message.id === undefined) {
+          return yield* sendHost(message);
+        }
+        const page = yield* findPage((candidate) => candidate.sessionId === message.sessionId);
+        if (!page) return yield* sendHost(message);
+        yield* resizeTab(page, { ...message, id: message.id, method: message.method }).pipe(
+          Effect.forkScoped,
+        );
+      });
+
     const agentLoop = readFrames(agentReader, (message) =>
       message.sessionId
-        ? sendHost(message)
+        ? handleSessionMessage(message)
         : message.method === undefined || message.id === undefined
           ? Effect.void
           : handleRootCommand({ ...message, id: message.id, method: message.method }).pipe(

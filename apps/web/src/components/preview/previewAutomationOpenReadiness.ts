@@ -1,5 +1,4 @@
 import {
-  FILL_PREVIEW_VIEWPORT,
   type PreviewAutomationOperation,
   type PreviewAutomationOpenInput,
   type PreviewSessionSnapshot,
@@ -7,15 +6,16 @@ import {
 } from "@t3tools/contracts";
 
 /**
- * Viewport an agent-opened tab falls back to when the user has no configured
+ * Viewport every agent-opened tab starts at, independent of the user's own
  * browser default. Agents screenshot and assert against what they open, so a
- * brand-new tab left in fill mode would be sized by whatever the panel happens
- * to be — deterministic beats incidental here.
+ * brand-new tab sized by whatever the panel happens to be would make results
+ * incidental.
  */
 export const DEFAULT_PREVIEW_AUTOMATION_VIEWPORT = {
-  _tag: "freeform",
-  width: 1280,
-  height: 800,
+  _tag: "preset",
+  presetId: "macbook-air-13",
+  width: 1470,
+  height: 956,
 } as const satisfies PreviewViewportSetting;
 
 /**
@@ -38,6 +38,7 @@ export function shouldAutoShowPreviewForAutomationUse(input: {
   return (
     input.operation !== "open" &&
     input.operation !== "cdpAttach" &&
+    input.operation !== "resize" &&
     input.autoShowFloatingPreview &&
     !input.presentationSuppressed
   );
@@ -52,21 +53,4 @@ export function previewAutomationOpenNeedsOverlay(
   snapshot: PreviewSessionSnapshot,
 ): boolean {
   return input.url !== undefined || snapshot.navStatus._tag !== "Idle";
-}
-
-/**
- * Whether a freshly opened automation tab still needs a viewport applied.
- *
- * A configured browser default is sent with `preview.open`, so the snapshot
- * already carries it and nothing is needed here. Fill means the user has no
- * stated preference, which is where the agent fallback applies.
- */
-export function previewAutomationDefaultViewport(
-  reusedExistingTab: boolean,
-  snapshot: PreviewSessionSnapshot,
-): PreviewViewportSetting | null {
-  const viewport = snapshot.viewport ?? FILL_PREVIEW_VIEWPORT;
-  return !reusedExistingTab && viewport._tag === "fill"
-    ? DEFAULT_PREVIEW_AUTOMATION_VIEWPORT
-    : null;
 }

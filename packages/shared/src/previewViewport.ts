@@ -16,9 +16,24 @@ export interface PreviewViewportPreset {
 
 type PreviewViewportPresetDefinition = Omit<PreviewViewportPreset, "id">;
 
-// Keep this in Chrome DevTools' default-device order. Dimensions are CSS
-// viewport sizes from Chromium's EmulatedDevices.ts standard catalog.
+// MacBook Air sizes are the displays' default scaled resolutions. The rest
+// keep Chrome DevTools' default-device order, with CSS viewport sizes from
+// Chromium's EmulatedDevices.ts standard catalog.
 const PREVIEW_VIEWPORT_PRESET_DEFINITIONS = {
+  "macbook-air-13": {
+    label: "MacBook Air 13″",
+    category: "Desktop",
+    detail: "1470 × 956",
+    width: 1470,
+    height: 956,
+  },
+  "macbook-air-15": {
+    label: "MacBook Air 15″",
+    category: "Desktop",
+    detail: "1710 × 1107",
+    width: 1710,
+    height: 1107,
+  },
   "iphone-se": {
     label: "iPhone SE",
     category: "Phone",

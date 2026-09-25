@@ -50,11 +50,7 @@ import {
   acquireBrowserSurfaceActivity,
   useBrowserSurfaceStore,
 } from "~/browser/browserSurfaceStore";
-import {
-  browserDefaultOpenProfileId,
-  browserDefaultOpenViewport,
-  resolveBrowserDefaults,
-} from "~/browser/browserDefaults";
+import { browserDefaultOpenProfileId, resolveBrowserDefaults } from "~/browser/browserDefaults";
 import { runBrowserViewportMutation } from "~/browser/browserViewportActions";
 import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
 import { isElectron } from "~/env";
@@ -78,8 +74,8 @@ import {
   PreviewAutomationViewportTimeoutError,
 } from "./previewAutomationErrors";
 import {
+  DEFAULT_PREVIEW_AUTOMATION_VIEWPORT,
   explicitlySuppressesPreviewMiniPlayer,
-  previewAutomationDefaultViewport,
   previewAutomationOpenNeedsOverlay,
   shouldAutoShowPreviewForAutomationUse,
   shouldOpenPreviewMiniPlayer,
@@ -439,9 +435,7 @@ function PreviewAutomationHost(props: { readonly environmentId: EnvironmentId })
                 input: {
                   threadId: request.threadId,
                   ...(resolvedInputUrl ? { url: resolvedInputUrl } : {}),
-                  // An agent that didn't state a size gets the user's
-                  // configured default, same as a hand-opened tab.
-                  viewport: browserDefaultOpenViewport(defaults),
+                  viewport: DEFAULT_PREVIEW_AUTOMATION_VIEWPORT,
                   profileId: browserDefaultOpenProfileId(defaults),
                 },
               });
@@ -459,38 +453,6 @@ function PreviewAutomationHost(props: { readonly environmentId: EnvironmentId })
               readThreadPreviewState(threadRef).serverEpoch,
               activeTabId,
             );
-            if (activeSnapshot) {
-              const defaultViewport = previewAutomationDefaultViewport(
-                reusedExistingTab,
-                activeSnapshot,
-              );
-              if (defaultViewport) {
-                const resizeResult = await runBrowserViewportMutation(
-                  activeRuntimeTabId,
-                  async () => {
-                    assertPreviewRuntimeCurrent(
-                      threadRef,
-                      activeTabId,
-                      activeRuntimeTabId,
-                      request,
-                    );
-                    return await resize({
-                      environmentId,
-                      input: {
-                        threadId: request.threadId,
-                        tabId: activeTabId,
-                        viewport: defaultViewport,
-                      },
-                    });
-                  },
-                );
-                if (resizeResult._tag === "Failure") {
-                  return raiseAtomCommandFailure(resizeResult);
-                }
-                activeSnapshot = resizeResult.value;
-                updatePreviewServerSnapshot(threadRef, resizeResult.value);
-              }
-            }
             const shouldPresentPreview = shouldOpenPreviewMiniPlayer(
               input,
               (await resolveBrowserDefaults()).autoShowFloatingPreview,

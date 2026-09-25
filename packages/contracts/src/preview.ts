@@ -60,6 +60,8 @@ export const PreviewRenderedViewportSize = Schema.Struct({
 export type PreviewRenderedViewportSize = typeof PreviewRenderedViewportSize.Type;
 
 export const PREVIEW_VIEWPORT_PRESET_IDS = [
+  "macbook-air-13",
+  "macbook-air-15",
   "iphone-se",
   "iphone-xr",
   "iphone-12-pro",

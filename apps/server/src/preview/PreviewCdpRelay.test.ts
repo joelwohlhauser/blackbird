@@ -80,6 +80,7 @@ const makeHarness = Effect.gen(function* () {
   const opened = { value: false };
   const hostMessages: Array<Message> = [];
   const hosts: Array<WebSocket> = [];
+  const resizes: Array<{ readonly tabId: unknown; readonly input: unknown }> = [];
 
   const answerAsHost = (socket: WebSocket) =>
     socket.addEventListener("message", (event) => {
@@ -136,6 +137,9 @@ const makeHarness = Effect.gen(function* () {
               sessionId: `session-${input.tabId}`,
               targetInfo: { targetId: `target-${input.tabId}`, type: "webview" },
             };
+          case "resize":
+            resizes.push({ tabId: input.tabId, input: input.input });
+            return {};
           case "open":
             opened.value = true;
             yield* publishOpened(openedTab);
@@ -180,7 +184,7 @@ const makeHarness = Effect.gen(function* () {
     { disableListenLog: true, disableLogger: true },
   ).pipe(Layer.provide(services), Layer.build);
 
-  return { origin, closedTabs, hostMessages, hosts, profiles };
+  return { origin, closedTabs, hostMessages, hosts, profiles, resizes };
 });
 
 it.live("emulates the browser target for Playwright and pipes page sessions to the desktop", () =>
@@ -285,6 +289,44 @@ it.live("refuses browser-wide cookie commands when tabs span several profiles", 
       send({ id: 4, method: "Storage.clearCookies" });
       expect((yield* response(4)).error?.message).toContain("more than one browser profile");
       expect(harness.hostMessages.some((m) => m.id === 4)).toBe(false);
+      agent.socket.close();
+      yield* Effect.promise(() => agent.closed);
+    }),
+  ).pipe(Effect.provide([NodeHttpServer.layerTest, NodeServices.layer])),
+);
+
+it.live("resizes the real tab when Playwright sets a viewport", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const harness = yield* makeHarness;
+      const agent = yield* connect(`${harness.origin}/mcp/cdp/agent-token`);
+      const send = (message: Message) => agent.socket.send(encodeJson(message));
+      const response = (id: number) => waitFor(() => agent.received.find((m) => m.id === id));
+
+      send({ id: 1, method: "Target.setAutoAttach", params: { autoAttach: true, flatten: true } });
+      yield* response(1);
+      send({
+        id: 2,
+        sessionId: "session-tab-existing",
+        method: "Emulation.setDeviceMetricsOverride",
+        params: { width: 1470, height: 956, deviceScaleFactor: 1, mobile: false },
+      });
+      expect((yield* response(2)).result).toEqual({});
+      expect(harness.resizes).toEqual([
+        { tabId: existingTab, input: { mode: "freeform", width: 1470, height: 956 } },
+      ]);
+
+      send({
+        id: 3,
+        sessionId: "session-tab-existing",
+        method: "Emulation.setDeviceMetricsOverride",
+        params: { width: 100, height: 956 },
+      });
+      expect((yield* response(3)).error?.message).toContain("between 240 and 3840");
+      expect(harness.resizes).toHaveLength(1);
+      expect(
+        harness.hostMessages.some((m) => m.method === "Emulation.setDeviceMetricsOverride"),
+      ).toBe(false);
       agent.socket.close();
       yield* Effect.promise(() => agent.closed);
     }),

@@ -33,8 +33,10 @@ describe("previewViewport", () => {
     });
   });
 
-  it("matches Chrome's standard device catalog ordering", () => {
+  it("lists the MacBook Airs, then Chrome's standard device catalog ordering", () => {
     expect(PREVIEW_VIEWPORT_PRESETS.map((preset) => preset.label)).toEqual([
+      "MacBook Air 13″",
+      "MacBook Air 15″",
       "iPhone SE",
       "iPhone XR",
       "iPhone 12 Pro",
