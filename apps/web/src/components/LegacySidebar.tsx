@@ -17,6 +17,7 @@ import {
   prStatusIndicator,
   PrStatusTooltipContent,
   terminalStatusFromRunningIds,
+  synchronizeTerminalPulse,
   ThreadStatusLabel,
   ThreadWorktreeIndicator,
   useLinkedThreadPullRequest,
@@ -241,7 +242,7 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   separate: "Keep separate",
 };
 const SIDEBAR_ICON_ACTION_BUTTON_CLASS =
-  "inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring";
+  "inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-0.75 text-muted-foreground/60 hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring";
 
 function SidebarThreadDetailPrewarmer({ threadRef }: { readonly threadRef: ScopedThreadRef }) {
   useEnvironmentThread(threadRef.environmentId, threadRef.threadId);
@@ -769,7 +770,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   <button
                     type="button"
                     aria-label={`Open localhost:${discoveredPorts[0]?.port ?? ""}`}
-                    className="inline-flex cursor-pointer items-center justify-center text-emerald-600 outline-hidden focus-visible:ring-1 focus-visible:ring-ring dark:text-emerald-400"
+                    className="inline-flex cursor-pointer items-center justify-center text-success-foreground outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     onClick={handleOpenDiscoveredPort}
                   />
                 }
@@ -794,7 +795,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 }
               >
                 <TerminalIcon
-                  className={`size-3 ${terminalStatus.pulse ? "animate-status-pulse" : ""}`}
+                  className={`size-3 ${terminalStatus.pulse ? "motion-safe:animate-status-pulse" : ""}`}
+                  onAnimationStart={synchronizeTerminalPulse}
                 />
               </TooltipTrigger>
               <TooltipPopup side="top">{terminalStatus.label}</TooltipPopup>
@@ -808,7 +810,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 data-thread-selection-safe
                 data-testid={`thread-archive-confirm-${thread.id}`}
                 aria-label={`Confirm archive ${thread.title}`}
-                className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-md bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
+                className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-md bg-destructive/12 px-2 text-3xs font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
                 onPointerDown={stopPropagationOnPointerDown}
                 onClick={handleConfirmArchiveClick}
               >
@@ -2401,7 +2403,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 {project.displayName}
               </span>
               {project.groupedProjectCount > 1 ? (
-                <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                <span className="shrink-0 text-3xs text-muted-foreground/60">
                   {project.groupedProjectCount} projects
                 </span>
               ) : null}
@@ -2619,7 +2621,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
 const SidebarProjectListRow = memo(function SidebarProjectListRow(props: SidebarProjectItemProps) {
   return (
-    <SidebarMenuItem className="rounded-md">
+    <SidebarMenuItem>
       <SidebarProjectItem {...props} />
     </SidebarMenuItem>
   );
@@ -2734,7 +2736,7 @@ function ProjectSortMenu({
       <Tooltip>
         <TooltipTrigger
           render={
-            <MenuTrigger className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground" />
+            <MenuTrigger className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-0.75 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground" />
           }
         >
           <ArrowUpDownIcon className="size-3.5" />
@@ -2787,7 +2789,7 @@ function ProjectSortMenu({
           <div className="px-2 py-1">
             <NumberField
               aria-label="Visible thread count"
-              className="w-28 gap-0"
+              className="w-28"
               max={MAX_SIDEBAR_THREAD_PREVIEW_COUNT}
               min={MIN_SIDEBAR_THREAD_PREVIEW_COUNT}
               onValueChange={handleThreadPreviewCountChange}
@@ -2795,14 +2797,13 @@ function ProjectSortMenu({
               step={1}
               value={threadPreviewCount}
             >
-              <NumberFieldGroup className="h-7 rounded-md sm:h-6.5">
+              <NumberFieldGroup>
                 <NumberFieldDecrement
                   aria-label="Decrease visible thread count"
-                  className="px-2 sm:px-2 [&_svg]:size-3.5"
+                  className="[&_svg]:size-3.5"
                 />
                 <NumberFieldInput
                   aria-label="Visible thread count"
-                  className="h-7 w-9 grow-0 px-0 text-xs leading-7 sm:h-6.5 sm:leading-6.5"
                   inputMode="numeric"
                   onKeyDownCapture={(event) => {
                     event.stopPropagation();
@@ -2810,7 +2811,7 @@ function ProjectSortMenu({
                 />
                 <NumberFieldIncrement
                   aria-label="Increase visible thread count"
-                  className="px-2 sm:px-2 [&_svg]:size-3.5"
+                  className="[&_svg]:size-3.5"
                 />
               </NumberFieldGroup>
             </NumberField>
@@ -2971,12 +2972,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           <SidebarMenu>
             <SidebarMenuItem>
               <CommandDialogTrigger
-                render={
-                  <SidebarMenuButton
-                    className="focus-visible:ring-0"
-                    data-testid="command-palette-trigger"
-                  />
-                }
+                render={<SidebarMenuButton data-testid="command-palette-trigger" />}
               >
                 <SearchIcon />
                 <span className="flex-1 truncate">Search</span>
@@ -3040,7 +3036,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                   aria-label="New quick chat"
                   aria-busy={quickChatPending || undefined}
                   disabled={!canCreateQuickChat || quickChatPending}
-                  className="pointer-events-none inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 opacity-0 transition-[color,background-color,opacity] duration-150 hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/section-header:pointer-events-auto group-hover/section-header:opacity-100 group-focus-within/section-header:pointer-events-auto group-focus-within/section-header:opacity-100"
+                  className="pointer-events-none inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-0.75 text-muted-foreground/60 opacity-0 transition-[color,background-color,opacity] duration-150 hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/section-header:pointer-events-auto group-hover/section-header:opacity-100 group-focus-within/section-header:pointer-events-auto group-focus-within/section-header:opacity-100"
                   onClick={handleNewQuickChat}
                 />
               }
@@ -3117,7 +3113,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                     variant="ghost-muted"
                     aria-label="Add project"
                     data-testid="sidebar-add-project-trigger"
-                    className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    className="inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-0.75 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                     onClick={openAddProject}
                   />
                 }

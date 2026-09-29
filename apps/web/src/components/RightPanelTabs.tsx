@@ -413,7 +413,7 @@ export function NewTabPage(props: {
                 {(action.badgeCount ?? 0) > 0 ? (
                   <span
                     aria-hidden
-                    className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-info px-1 text-[9px] font-semibold tabular-nums text-white"
+                    className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-info px-1 text-3xs font-semibold tabular-nums text-white"
                   >
                     {action.badgeCount}
                   </span>
@@ -489,7 +489,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           // separate inset when the panel reaches the window edge.
           ownsDesktopTitleBar &&
             props.reserveNativeControlsInset !== false &&
-            "wco:pr-[var(--workspace-native-controls-inset)]",
+            "wco:pr-(--workspace-native-controls-inset)",
         )}
         data-right-panel-tabbar
       >

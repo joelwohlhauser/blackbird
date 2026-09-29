@@ -21,7 +21,7 @@ const DynamicIcon = lazy(() =>
 );
 
 function DynamicProjectIconFallback() {
-  return <FolderCodeIcon className="size-full text-[inherit]" />;
+  return <FolderCodeIcon className="size-full text-inherit" />;
 }
 
 // Pass the project record so its saved favicon and icon override stay together.
@@ -135,7 +135,7 @@ function ProjectFaviconImage({
         <img
           src={displayedSrc}
           alt=""
-          className={cn("size-3.5 shrink-0 rounded-[37.5%] object-contain", className)}
+          className={cn("size-3.5 shrink-0 rounded-[25%] object-contain", className)}
           onError={() => handleLoadError(displayedSrc)}
         />
       ) : null}

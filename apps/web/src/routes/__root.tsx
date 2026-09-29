@@ -27,8 +27,10 @@ import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPrompt
 import { SnapShotCoordinator } from "../components/desktop/SnapShotCoordinator";
 import { DesktopAppActivationCoordinator } from "../components/desktop/DesktopAppActivationCoordinator";
 import { AgentStopNotifications } from "../components/AgentStopNotifications";
+import { RunningThreadKeepAlive } from "../components/desktop/RunningThreadKeepAlive";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
 import { ThreadNotificationCoordinator } from "../components/ThreadNotificationCoordinator";
+import { QueuedMessageSender } from "../components/QueuedMessageSender";
 import { ProjectCloneToastCoordinator } from "../components/ProjectCloneToastCoordinator";
 import { SlowRpcRequestToastCoordinator } from "../components/SlowRpcRequestToastCoordinator";
 import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
@@ -44,9 +46,9 @@ import {
   toastManager,
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
+import { isElectron } from "../env";
 import { applyAppearanceFontVariables } from "~/appearanceFonts";
 import { applyAppearanceContrast } from "~/appearanceContrast";
-import { isElectron } from "../env";
 import { useClientSettings } from "../hooks/useSettings";
 import { useStartQuickChat } from "../hooks/useStartQuickChat";
 import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
@@ -225,11 +227,13 @@ function RootRouteView() {
         >
           {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
           {primaryEnvironmentAuthenticated ? <DesktopAppActivationCoordinator /> : null}
+          {isElectron ? <RunningThreadKeepAlive /> : null}
           <RelayClientInstallDialog />
           <ConnectOnboardingDialog />
           <SshPasswordPromptDialog />
           <SnapShotCoordinator />
           <ThreadNotificationCoordinator />
+          <QueuedMessageSender />
           <ConfirmDialogHost />
           <CustomSnoozeDialogHost />
           <SlowRpcRequestToastCoordinator />
@@ -288,6 +292,11 @@ function ContrastAppearanceSync() {
   useEffect(() => {
     document.documentElement.dataset.diffColorScheme = diffColorScheme;
   }, [diffColorScheme]);
+
+  const chatWidth = useClientSettings((settings) => settings.chatWidth);
+  useEffect(() => {
+    document.documentElement.dataset.chatWidth = chatWidth;
+  }, [chatWidth]);
 
   useEffect(() => {
     applyAppearanceContrast(document.documentElement, appearanceContrast);

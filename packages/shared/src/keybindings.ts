@@ -20,6 +20,8 @@ type WhenToken =
 
 export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+b", command: "sidebar.toggle" },
+  { key: "mod+[", command: "navigation.back", when: "!terminalFocus" },
+  { key: "mod+]", command: "navigation.forward", when: "!terminalFocus" },
   { key: "mod+j", command: "terminal.toggle" },
   // rightPanel.toggle intentionally ships unbound: the panel opens through
   // tab placement and closes when its last tab closes.
@@ -52,6 +54,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
     command: "projectSearch.toggle",
     when: "!terminalFocus",
   },
+  { key: "mod+u", command: "usage.open", when: "!terminalFocus" },
   { key: "mod+alt+a", command: "theme.select", when: "!terminalFocus" },
   {
     key: "mod+alt+shift+a",
@@ -115,6 +118,13 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
     command,
     when: "modelPickerOpen && isDesktop",
   })),
+  { key: "c", command: "usage.cost", when: "usagePageOpen" },
+  { key: "t", command: "usage.tokens", when: "usagePageOpen" },
+  { key: "l", command: "usage.limits", when: "usagePageOpen" },
+  { key: "mod+shift+1", command: "usage.period.day", when: "usagePageOpen" },
+  { key: "mod+shift+2", command: "usage.period.week", when: "usagePageOpen" },
+  { key: "mod+shift+3", command: "usage.period.month", when: "usagePageOpen" },
+  { key: "mod+shift+4", command: "usage.period.quarter", when: "usagePageOpen" },
 ];
 
 function normalizeKeyToken(token: string): string {
