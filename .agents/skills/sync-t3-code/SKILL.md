@@ -28,7 +28,7 @@ Watch for these recurring hazards:
 - Keep the two distinct right-side surfaces and Blackbird's keyboard shortcuts.
 - Keep GitHub and Linear links inside Blackbird's internal browser-backed tabs.
 - Keep GitHub Actions unnecessary for the personal fork.
-- Keep telemetry off: the server must provide the no-op `AnalyticsService.layerTest`, and any new upstream analytics or tracing exporter must stay disabled.
+- Keep telemetry out: Blackbird deleted upstream's PostHog analytics (`AnalyticsService`, `analytics.record` calls, analytics-only `/ws` client params). Take Blackbird's side of conflicts in that code, delete any newly added analytics events or modules, and keep any new upstream tracing exporter disabled.
 - If both sides add the same migration number, retain the upstream number and move the unapplied Blackbird migration to the next free number. Rename its source and focused test together. Never renumber an older applied migration.
 
 ## Verify and finish

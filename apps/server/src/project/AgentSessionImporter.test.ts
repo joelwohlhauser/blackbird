@@ -54,7 +54,6 @@ import * as ProviderSessionDirectory from "../provider/Services/ProviderSessionD
 import { makeAdapterRegistryMock } from "../provider/testUtils/providerAdapterRegistryMock.ts";
 import { makeProviderRegistryLayer } from "../provider/testUtils/providerRegistryMock.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
-import * as AnalyticsService from "../telemetry/AnalyticsService.ts";
 import { TextGeneration } from "../textGeneration/TextGeneration.ts";
 import { TerminalManager } from "../terminal/Manager.ts";
 import { VcsStatusBroadcaster } from "../vcs/VcsStatusBroadcaster.ts";
@@ -903,7 +902,6 @@ it.layer(integrationLayer)("AgentSessionImporter integration", (it) => {
             Layer.succeed(ProviderSessionDirectory.ProviderSessionDirectory, directory),
           ),
           Layer.provide(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
-          Layer.provide(AnalyticsService.layerTest),
         );
         const reactorLayer = ProviderCommandReactorLive.pipe(
           Layer.provideMerge(providerLayer),
