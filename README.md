@@ -218,10 +218,16 @@ Quick chats are for questions and small tasks that do not belong to a project,
 repository, or specific folder. They run from the user's home directory, use
 the headline **"How can I help you?"**, and omit project Git actions.
 
-The orchestration layer still requires a project, so Blackbird uses a reserved
-internal `blackbird-quick-chats` project. That project is deliberately hidden
-from Projects and project pickers. The legacy `blackboard-quick-chats` id is
-recognized only for migration.
+Quick chats are Blackbird's version of T3 Code's "start without a project". A
+new project draft offers **or start a quick chat** under its heading, the
+command palette's **New thread in...** lists **Quick chat**, and a Quick chat
+draft can be moved into a project from the picker under its heading.
+
+The orchestration layer still requires a project, so the server creates a
+reserved internal `blackbird-quick-chats` project on demand
+(`projects.ensureScratch`) on the primary environment. That project is
+deliberately hidden from Projects and project pickers. The legacy
+`blackboard-quick-chats` id is recognized only for migration.
 
 ### Pinned sites
 

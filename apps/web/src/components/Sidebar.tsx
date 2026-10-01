@@ -119,7 +119,7 @@ import {
 } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import { useStartQuickChat } from "../hooks/useStartQuickChat";
+import { useScratchProject } from "../hooks/useScratchProject";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";
@@ -1497,11 +1497,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   const accessibleTitle = isRenaming ? null : <span className="sr-only">{thread.title}</span>;
 
   // Stacks show their layer count; multiple unrelated links show their total count.
-  // Plain clicks open T3; individual PR links also support opening the host in a new tab.
+  // Either opens the thread's pull requests tab; a single PR link opens that PR and still
+  // supports opening the host in a new tab.
   const prBadgeShape = supportsMultiplePullRequests
     ? resolveThreadPullRequestBadge(thread.pullRequests)
     : null;
-  const handlePrStackClick = useCallback(() => {
+  const handlePrListClick = useCallback(() => {
     useRightPanelStore.getState().open(threadRef, "pull-requests");
     if (!props.isActive) onThreadActivate(threadRef);
   }, [onThreadActivate, props.isActive, threadRef]);
@@ -1513,7 +1514,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         number={pr?.number ?? currentLinkedPr?.number}
         url={pr?.url ?? currentLinkedPr?.url}
         status={prStatus}
-        onOpenStack={handlePrStackClick}
+        onOpenList={handlePrListClick}
         onOpenPullRequest={handlePrClick}
       />
     ) : null;
@@ -2257,7 +2258,7 @@ export default function Sidebar() {
     },
   });
   const newThreadContext = useHandleNewThread();
-  const startQuickChat = useStartQuickChat();
+  const { scratchEnvironmentId, startScratchThread } = useScratchProject();
   const openAddProjectCommandPalette = useCallback(
     () => openCommandPalette({ open: "add-project" }),
     [],
@@ -4466,10 +4467,11 @@ export default function Sidebar() {
                         type="button"
                         className="relative shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
                         aria-label="New quick chat"
-                        disabled={primaryEnvironmentId === null}
+                        disabled={scratchEnvironmentId === null}
                         onClick={() => {
+                          if (scratchEnvironmentId === null) return;
                           if (isMobile) setOpenMobile(false);
-                          void startQuickChat();
+                          void startScratchThread(scratchEnvironmentId);
                         }}
                       />
                     }

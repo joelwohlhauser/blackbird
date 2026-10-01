@@ -52,7 +52,7 @@ import { isElectron } from "../env";
 import { applyAppearanceFontVariables } from "~/appearanceFonts";
 import { applyAppearanceContrast } from "~/appearanceContrast";
 import { useClientSettings } from "../hooks/useSettings";
-import { useStartQuickChat } from "../hooks/useStartQuickChat";
+import { useScratchProject } from "../hooks/useScratchProject";
 import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
 import {
   deriveLogicalProjectKeyFromSettings,
@@ -263,21 +263,22 @@ function RootRouteView() {
 
 function QuickChatGlobalShortcut() {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const startQuickChat = useStartQuickChat();
+  const { scratchEnvironmentId, startScratchThread } = useScratchProject();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isCommandPaletteOpen()) return;
       if (resolveShortcutCommand(event, keybindings) !== "chat.newLocal") return;
+      if (scratchEnvironmentId === null) return;
 
       event.preventDefault();
       event.stopPropagation();
-      void startQuickChat();
+      void startScratchThread(scratchEnvironmentId);
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [keybindings, startQuickChat]);
+  }, [keybindings, scratchEnvironmentId, startScratchThread]);
   return null;
 }
 

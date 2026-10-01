@@ -199,7 +199,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { CommandDialogTrigger } from "./ui/command";
 import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
-import { primaryServerKeybindingsAtom, primaryServerProvidersAtom } from "../state/server";
+import { primaryServerKeybindingsAtom } from "../state/server";
 import {
   derivePhysicalProjectKey,
   deriveProjectGroupingOverrideKey,
@@ -214,13 +214,8 @@ import {
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
-import { resolveDefaultProviderModelSelection } from "../providerInstances";
-import {
-  isQuickChatsProject,
-  QUICK_CHATS_PROJECT_ID,
-  QUICK_CHATS_PROJECT_TITLE,
-  QUICK_CHATS_WORKSPACE_ROOT,
-} from "../quickChats";
+import { isQuickChatsProject, QUICK_CHATS_PROJECT_TITLE } from "../quickChats";
+import { useScratchProject } from "../hooks/useScratchProject";
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -3221,9 +3216,6 @@ export default function Sidebar() {
   const sidebarThreadPreviewCount = useClientSettings((s) => s.sidebarThreadPreviewCount);
   const updateSettings = useUpdateClientSettings();
   const handleNewThread = useNewThreadHandler();
-  const createProject = useAtomCommand(projectEnvironment.create, {
-    reportFailure: false,
-  });
   const { archiveThread, deleteThread } = useThreadActions();
   const { isMobile, setOpenMobile } = useSidebar();
   const routeTarget = useParams({
@@ -3244,7 +3236,6 @@ export default function Sidebar() {
       : false,
   );
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const serverProviders = useAtomValue(primaryServerProvidersAtom);
   const openAddProjectCommandPalette = useCallback(
     () => openCommandPalette({ open: "add-project" }),
     [],
@@ -3349,13 +3340,6 @@ export default function Sidebar() {
       ) ?? null,
     [sidebarProjects],
   );
-  const quickChatsProjectId = useMemo(
-    () =>
-      quickChatsProject?.memberProjects.find(
-        (member) => member.environmentId === primaryEnvironmentId && isQuickChatsProject(member),
-      )?.id ?? null,
-    [primaryEnvironmentId, quickChatsProject],
-  );
   const regularSidebarProjects = useMemo(
     () =>
       sidebarProjects.filter(
@@ -3363,71 +3347,18 @@ export default function Sidebar() {
       ),
     [sidebarProjects],
   );
+  const { scratchEnvironmentId, startScratchThread } = useScratchProject();
   const [quickChatPending, setQuickChatPending] = useState(false);
   const handleNewQuickChat = useCallback(async () => {
-    if (primaryEnvironmentId === null || quickChatPending) return;
+    if (scratchEnvironmentId === null || quickChatPending) return;
     if (isMobile) setOpenMobile(false);
     setQuickChatPending(true);
     try {
-      if (quickChatsProjectId === null) {
-        const createResult = await createProject({
-          environmentId: primaryEnvironmentId,
-          input: {
-            projectId: QUICK_CHATS_PROJECT_ID,
-            title: QUICK_CHATS_PROJECT_TITLE,
-            workspaceRoot: QUICK_CHATS_WORKSPACE_ROOT,
-            defaultModelSelection: resolveDefaultProviderModelSelection(serverProviders, null),
-          },
-        });
-        if (createResult._tag === "Failure") {
-          if (!isAtomCommandInterrupted(createResult)) {
-            const error = squashAtomCommandFailure(createResult);
-            toastManager.add(
-              stackedThreadToast({
-                type: "error",
-                title: "Failed to start a quick chat",
-                description: error instanceof Error ? error.message : "An error occurred.",
-              }),
-            );
-          }
-          return;
-        }
-      }
-
-      const navigationResult = await settlePromise(() =>
-        handleNewThread(
-          scopeProjectRef(primaryEnvironmentId, quickChatsProjectId ?? QUICK_CHATS_PROJECT_ID),
-          {
-            branch: null,
-            worktreePath: null,
-            envMode: "local",
-            startFromOrigin: false,
-          },
-        ),
-      );
-      if (navigationResult._tag === "Failure") {
-        const error = squashAtomCommandFailure(navigationResult);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to start a quick chat",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          }),
-        );
-      }
+      await startScratchThread(scratchEnvironmentId);
     } finally {
       setQuickChatPending(false);
     }
-  }, [
-    createProject,
-    handleNewThread,
-    isMobile,
-    primaryEnvironmentId,
-    quickChatPending,
-    quickChatsProjectId,
-    serverProviders,
-    setOpenMobile,
-  ]);
+  }, [isMobile, quickChatPending, scratchEnvironmentId, setOpenMobile, startScratchThread]);
   const sidebarThreadByKey = useMemo(
     () =>
       new Map(
@@ -3942,7 +3873,7 @@ export default function Sidebar() {
             handleNewThread={handleNewThread}
             archiveThread={archiveThread}
             deleteThread={deleteThread}
-            canCreateQuickChat={primaryEnvironmentId !== null}
+            canCreateQuickChat={scratchEnvironmentId !== null}
             quickChatPending={quickChatPending}
             handleNewQuickChat={() => void handleNewQuickChat()}
             quickChatsProject={quickChatsProject}
