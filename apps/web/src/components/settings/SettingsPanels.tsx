@@ -640,10 +640,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.worktreeEnvFileMode !== DEFAULT_UNIFIED_SETTINGS.worktreeEnvFileMode
         ? ["Worktree environment files"]
         : []),
-      ...(settings.installWorktreeDependencies !==
-      DEFAULT_UNIFIED_SETTINGS.installWorktreeDependencies
-        ? ["Install worktree dependencies"]
-        : []),
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
         ? ["Add project base directory"]
         : []),
@@ -691,7 +687,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.followUpBehavior,
       settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
-      settings.installWorktreeDependencies,
       settings.newWorktreesStartFromOrigin,
       settings.worktreeEnvFileMode,
       settings.worktreesRoot,
@@ -833,7 +828,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       newWorktreesStartFromOrigin: DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
       worktreesRoot: DEFAULT_UNIFIED_SETTINGS.worktreesRoot,
       worktreeEnvFileMode: DEFAULT_UNIFIED_SETTINGS.worktreeEnvFileMode,
-      installWorktreeDependencies: DEFAULT_UNIFIED_SETTINGS.installWorktreeDependencies,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
@@ -3249,36 +3243,6 @@ export function GeneralSettingsPanel() {
                 </SelectItem>
               </SelectPopup>
             </Select>
-          }
-        />
-
-        <SettingsRow
-          {...searchableSetting("worktree-dependencies")}
-          description="Run pnpm install in the background after creating a worktree."
-          resetAction={
-            settings.installWorktreeDependencies !==
-            DEFAULT_UNIFIED_SETTINGS.installWorktreeDependencies ? (
-              <SettingResetButton
-                label="install worktree dependencies"
-                onClick={() =>
-                  updateSettings({
-                    installWorktreeDependencies:
-                      DEFAULT_UNIFIED_SETTINGS.installWorktreeDependencies,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <Switch
-              checked={settings.installWorktreeDependencies}
-              onCheckedChange={(checked) =>
-                updateSettings({
-                  installWorktreeDependencies: Boolean(checked),
-                })
-              }
-              aria-label="Install dependencies in new worktrees"
-            />
           }
         />
 

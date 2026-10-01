@@ -151,7 +151,6 @@ it.effect("creates the handoff on the owning environment's project root", () => 
     const result = yield* service.request(threadId, {
       branchName: "eng-123",
       baseBranch: "main",
-      installDependencies: false,
     });
 
     expect(result).toEqual({
@@ -167,7 +166,7 @@ it.effect("creates the handoff on the owning environment's project root", () => 
         baseRefName: "main",
         path: null,
       },
-      { installDependencies: false, startFromOrigin: true },
+      { startFromOrigin: true },
     );
     expect(runSetupScript).toHaveBeenCalledWith({
       threadId,
@@ -324,13 +323,12 @@ it.effect("checks out an existing branch into a new worktree instead of recreati
     const service = yield* make;
     const result = yield* service.request(threadId, {
       branchName: "eng-123",
-      installDependencies: false,
     });
 
     expect(result.worktreePath).toBe("/remote/worktrees/blackbird/eng-123");
     expect(createWorktree).toHaveBeenCalledWith(
       { cwd: "/remote/repos/blackbird", refName: "eng-123", path: null },
-      { installDependencies: false, startFromOrigin: false },
+      { startFromOrigin: false },
     );
     expect(runSetupScript).toHaveBeenCalledTimes(1);
   }).pipe(Effect.provide(testLayer));

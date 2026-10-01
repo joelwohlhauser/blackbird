@@ -16,7 +16,6 @@ it("exposes the bounded workspace handoff contract to providers", () => {
   expect(Object.keys(schema.properties ?? {}).toSorted()).toEqual([
     "baseBranch",
     "branchName",
-    "installDependencies",
     "repositoryPath",
   ]);
 });

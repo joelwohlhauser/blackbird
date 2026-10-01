@@ -34,7 +34,6 @@ import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 
 export interface CreateWorktreeOptions extends GitVcsDriver.CreateWorktreeOptions {
-  readonly installDependencies?: boolean;
   readonly startFromOrigin?: boolean;
 }
 
@@ -303,9 +302,6 @@ export const make = Effect.gen(function* () {
     yield* worktreeLifecycle.prepareCreatedWorktree({
       projectCwd: input.cwd,
       worktreePath: result.worktree.path,
-      ...(options?.installDependencies !== undefined
-        ? { installDependencies: options.installDependencies }
-        : {}),
     });
     return result;
   });

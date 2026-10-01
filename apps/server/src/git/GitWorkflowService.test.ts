@@ -61,25 +61,21 @@ describe("GitWorkflowService", () => {
 
     return Effect.gen(function* () {
       const workflow = yield* GitWorkflowService.GitWorkflowService;
-      const result = yield* workflow.createWorktree(
-        {
-          cwd: "/repo",
-          refName: "develop",
-          newRefName: "feature/configurable-base",
-          baseRefName: "develop",
-          path: null,
-        },
-        { installDependencies: false },
-      );
+      const result = yield* workflow.createWorktree({
+        cwd: "/repo",
+        refName: "develop",
+        newRefName: "feature/configurable-base",
+        baseRefName: "develop",
+        path: null,
+      });
 
       expect(createWorktree).toHaveBeenCalledWith(
         expect.objectContaining({ path: "/configured/worktree", refName: "develop" }),
-        expect.anything(),
+        undefined,
       );
       expect(prepareCreatedWorktree).toHaveBeenCalledWith({
         projectCwd: "/repo",
         worktreePath: "/configured/worktree",
-        installDependencies: false,
       });
       expect(result.worktree.refName).toBe("feature/configurable-base");
     }).pipe(Effect.provide(testLayer));

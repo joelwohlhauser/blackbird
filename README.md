@@ -186,13 +186,12 @@ New worktrees:
   `~/repositories/.worktrees`;
 - use a repository/branch directory layout;
 - link `.env` files from the main checkout;
-- install project dependencies automatically;
 - initialize submodules recursively unless the environment's **Submodules**
   setting or the repository's `t3.json` limits or disables that; and
 - run all filesystem and Git operations on the environment that owns the
   project.
 
-Agents can start the same workflow from an active chat through Blackbird's MCP tool. An existing branch reuses its checkout or gets a new worktree; an unknown branch creates a new worktree. Agents can pass a destination repository to leave a Quick chat or change projects, or pass an existing folder without a branch to switch there directly. The same conversation keeps its history and resumes in the destination after the current turn ends. Git workspaces are checkpointed before leaving; ordinary folders do not require a checkpoint. The composer, Files and Changes navigator, and newly opened workspace tabs follow the destination. Paths and worktree setup run on the owning environment, including remote. Dependency installation follows the environment setting unless explicitly skipped, and new worktrees honor the environment's **Start from origin** setting and project setup script.
+Agents can start the same workflow from an active chat through Blackbird's MCP tool. An existing branch reuses its checkout or gets a new worktree; an unknown branch creates a new worktree. Agents can pass a destination repository to leave a Quick chat or change projects, or pass an existing folder without a branch to switch there directly. The same conversation keeps its history and resumes in the destination after the current turn ends. Git workspaces are checkpointed before leaving; ordinary folders do not require a checkpoint. The composer, Files and Changes navigator, and newly opened workspace tabs follow the destination. Paths and worktree setup run on the owning environment, including remote. New worktrees honor the environment's **Start from origin** setting and project setup script.
 
 An active worktree chat shows a **Delete it** action. It removes the worktree
 directly, including when it has uncommitted changes, without a confirmation

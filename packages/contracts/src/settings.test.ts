@@ -870,7 +870,6 @@ describe("ServerSettings worktree defaults", () => {
       newWorktreesStartFromOrigin: true,
       worktreesRoot: "~/repositories/.worktrees",
       worktreeEnvFileMode: "link",
-      installWorktreeDependencies: true,
     });
   });
 
@@ -901,13 +900,11 @@ describe("ServerSettings worktree defaults", () => {
         newWorktreesStartFromOrigin: false,
         worktreesRoot: "  /tmp/worktrees  ",
         worktreeEnvFileMode: "copy",
-        installWorktreeDependencies: false,
       }),
     ).toMatchObject({
       newWorktreesStartFromOrigin: false,
       worktreesRoot: "/tmp/worktrees",
       worktreeEnvFileMode: "copy",
-      installWorktreeDependencies: false,
     });
   });
 

@@ -34,12 +34,6 @@ export const CreateWorktreeAndSwitchInput = Schema.Struct({
         "Existing branch to create a new branch from. Ignored when branchName already exists. Defaults to the repository's default branch.",
     }),
   ),
-  installDependencies: Schema.optional(
-    Schema.Boolean.annotate({
-      description:
-        "Whether to install dependencies in a newly created worktree. Defaults to the environment setting, which is enabled by default. Ignored when switching to an existing worktree.",
-    }),
-  ),
 });
 export type CreateWorktreeAndSwitchInput = typeof CreateWorktreeAndSwitchInput.Type;
 

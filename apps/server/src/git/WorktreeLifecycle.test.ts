@@ -12,7 +12,6 @@ const TestLayer = WorktreeLifecycle.layer.pipe(
   Layer.provide(
     ServerSettings.ServerSettingsService.layerTest({
       worktreeEnvFileMode: "link",
-      installWorktreeDependencies: false,
     }),
   ),
   Layer.provideMerge(NodeServices.layer),

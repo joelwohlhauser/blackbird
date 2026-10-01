@@ -453,11 +453,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
-    id: "worktree-dependencies",
-    title: "Install worktree dependencies",
-    to: "/settings/general",
-  },
-  {
     id: "add-project-starts-in",
     title: "Add project starts in",
     to: "/settings/general",

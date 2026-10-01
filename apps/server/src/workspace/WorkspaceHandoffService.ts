@@ -224,10 +224,6 @@ export const make = Effect.gen(function* () {
     input: CreateWorktreeAndSwitchInput & { readonly branchName: string },
   ) {
     const settings = yield* serverSettings.getSettings;
-    const installDependencies =
-      input.installDependencies === undefined
-        ? {}
-        : { installDependencies: input.installDependencies };
 
     const localRefs = yield* git.listRefs({
       cwd,
@@ -247,7 +243,7 @@ export const make = Effect.gen(function* () {
     if (existingBranch) {
       const created = yield* git.createWorktree(
         { cwd, refName: existingBranch.name, path: null },
-        { startFromOrigin: false, ...installDependencies },
+        { startFromOrigin: false },
       );
       yield* runSetupScript(threadId, projectId, cwd, created.worktree.path);
       return created.worktree;
@@ -272,7 +268,7 @@ export const make = Effect.gen(function* () {
         baseRefName: baseBranch,
         path: null,
       },
-      { startFromOrigin: settings.newWorktreesStartFromOrigin, ...installDependencies },
+      { startFromOrigin: settings.newWorktreesStartFromOrigin },
     );
     yield* runSetupScript(threadId, projectId, cwd, created.worktree.path);
     return created.worktree;

@@ -10,8 +10,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
 import { expandHomePath } from "../pathExpansion.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -77,7 +75,6 @@ export function resolveConfiguredWorktreePath(input: {
 export interface PrepareCreatedWorktreeInput {
   readonly projectCwd: string;
   readonly worktreePath: string;
-  readonly installDependencies?: boolean;
 }
 
 export class WorktreeLifecycle extends Context.Service<
@@ -92,7 +89,6 @@ export class WorktreeLifecycle extends Context.Service<
 
 export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
 
   const readSettings = serverSettings.getSettings.pipe(
@@ -225,26 +221,6 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const installDependencies = Effect.fn("WorktreeLifecycle.installDependencies")(function* (
-    worktreePath: string,
-  ) {
-    yield* fileSystem.makeDirectory(NodePath.join(worktreePath, "node_modules"), {
-      recursive: true,
-    });
-    const command = ChildProcess.make("pnpm", ["i"], {
-      cwd: worktreePath,
-      detached: true,
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    yield* spawner.spawn(command).pipe(
-      Effect.flatMap((handle) => handle.unref),
-      Effect.asVoid,
-      Effect.scoped,
-    );
-  });
-
   const resolveCreateInput: WorktreeLifecycle["Service"]["resolveCreateInput"] = Effect.fn(
     "WorktreeLifecycle.resolveCreateInput",
   )(function* (input) {
@@ -273,15 +249,6 @@ export const make = Effect.gen(function* () {
             projectCwd: input.projectCwd,
             worktreePath: input.worktreePath,
           }),
-        ),
-      ),
-    );
-    if (!(input.installDependencies ?? settings.installWorktreeDependencies)) return;
-
-    yield* installDependencies(input.worktreePath).pipe(
-      Effect.catch((cause) =>
-        Effect.logWarning("Unable to start worktree dependency installation.").pipe(
-          Effect.annotateLogs({ cause, worktreePath: input.worktreePath }),
         ),
       ),
     );

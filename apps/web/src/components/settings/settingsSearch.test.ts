@@ -64,7 +64,6 @@ describe("searchSettings", () => {
       "worktree-location",
       "worktree-environment-files",
       "workspaces",
-      "worktree-dependencies",
       "network-access",
       "project-defaults",
       "environment-identification",

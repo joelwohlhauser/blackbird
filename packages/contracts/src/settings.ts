@@ -1296,9 +1296,6 @@ export const ServerSettings = Schema.Struct({
   worktreeEnvFileMode: WorktreeEnvFileMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("link" as const satisfies WorktreeEnvFileMode)),
   ),
-  installWorktreeDependencies: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(true)),
-  ),
   /**
    * Null defers to the repository's t3.json, then to recursive. A value
    * picked on a newer server decodes as null here rather than failing the
@@ -1611,7 +1608,6 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   worktreeEnvFileMode: Schema.optionalKey(WorktreeEnvFileMode),
-  installWorktreeDependencies: Schema.optionalKey(Schema.Boolean),
   worktreeSubmodules: Schema.optionalKey(Schema.NullOr(WorktreeSubmodules)),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
