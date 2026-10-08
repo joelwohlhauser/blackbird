@@ -486,6 +486,7 @@ import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
+import { subagentTabTitle, ThreadTranscriptPanel } from "./chat/ThreadTranscriptPanel";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveTimelineIsAtEnd, worktreeSetupAgentStarted } from "./chat/MessagesTimeline.logic";
@@ -8187,12 +8188,17 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeThread, environmentId, interruptThreadTurn, setThreadError]);
   const onOpenRelatedThread = useCallback(
     (threadId: ThreadId) => {
+      const subagentTitle = subagentTabTitle(serverProjection, threadId);
+      if (subagentTitle !== null && activeThreadRef) {
+        useRightPanelStore.getState().openThread(activeThreadRef, threadId, subagentTitle);
+        return;
+      }
       void navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(scopeThreadRef(environmentId, threadId)),
       });
     },
-    [environmentId, navigate],
+    [activeThreadRef, environmentId, navigate, serverProjection],
   );
 
   // Commands such as /compact and /goal clear run as their own turn. The draft
@@ -11958,6 +11964,24 @@ export default function ChatView(props: ChatViewProps) {
               }
             />
           </Suspense>
+        );
+      case "thread":
+        return (
+          <ThreadTranscriptPanel
+            key={surface.id}
+            environmentId={activeThreadRef.environmentId}
+            parentThreadId={activeThreadRef.threadId}
+            threadId={surface.threadId}
+            markdownCwd={gitCwd ?? undefined}
+            workspaceRoot={activeWorkspaceRoot}
+            resolvedTheme={resolvedTheme}
+            timestampFormat={timestampFormat}
+            providerStatuses={
+              environmentById.get(activeThreadRef.environmentId)?.serverConfig?.providers ??
+              EMPTY_PROVIDERS
+            }
+            onImageExpand={onExpandTimelineImage}
+          />
         );
       case "terminal":
         return (

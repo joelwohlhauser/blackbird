@@ -1,0 +1,186 @@
+import type {
+  EnvironmentId,
+  OrchestrationV2ThreadProjection,
+  ServerProvider,
+  ThreadId,
+} from "@t3tools/contracts";
+import type { TimestampFormat } from "@t3tools/contracts/settings";
+import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import {
+  deriveRunlessWorkStartedAt,
+  deriveThreadActivityRun,
+  deriveThreadRuntime,
+} from "@t3tools/client-runtime/state/thread-execution";
+import { formatSubagentDisplayTitle } from "@t3tools/client-runtime/state/subagent-display";
+import { type LegendListRef } from "@legendapp/list/react";
+import { useNavigate } from "@tanstack/react-router";
+import { ExternalLinkIcon } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+
+import { useTurnDiffSummaries } from "../../hooks/useTurnDiffSummaries";
+import { useRightPanelStore } from "../../rightPanelStore";
+import {
+  deriveActiveWorkStartedAt,
+  derivePhase,
+  deriveTimelineEntriesFromVisibleTurnItemsWithState,
+  isLatestRunSettled,
+} from "../../session-logic";
+import {
+  resolveThreadDetailRef,
+  useThreadProjection,
+  useThreadShell,
+  useThreadVisibleTurnItems,
+} from "../../state/entities";
+import { buildThreadRouteParams } from "../../threadRoutes";
+import { Button } from "../ui/button";
+import type { ExpandedImagePreview } from "./ExpandedImagePreview";
+import { MessagesTimeline } from "./MessagesTimeline";
+
+export function subagentTabTitle(
+  projection: OrchestrationV2ThreadProjection | null | undefined,
+  threadId: ThreadId,
+): string | null {
+  const subagent = projection?.subagents.find((agent) => agent.childThreadId === threadId);
+  return subagent ? formatSubagentDisplayTitle(subagent.title ?? "Subagent") : null;
+}
+
+const noop = () => {};
+
+export function ThreadTranscriptPanel(props: {
+  environmentId: EnvironmentId;
+  parentThreadId: ThreadId;
+  threadId: ThreadId;
+  markdownCwd: string | undefined;
+  workspaceRoot: string | undefined;
+  resolvedTheme: "light" | "dark";
+  timestampFormat: TimestampFormat;
+  providerStatuses: ReadonlyArray<ServerProvider>;
+  onImageExpand: (preview: ExpandedImagePreview) => void;
+}) {
+  const navigate = useNavigate();
+  const listRef = useRef<LegendListRef | null>(null);
+  const [isAtEnd, setIsAtEnd] = useState(true);
+  const parentRef = useMemo(
+    () => scopeThreadRef(props.environmentId, props.parentThreadId),
+    [props.environmentId, props.parentThreadId],
+  );
+  const threadRef = useMemo(
+    () => scopeThreadRef(props.environmentId, props.threadId),
+    [props.environmentId, props.threadId],
+  );
+  const shell = useThreadShell(threadRef);
+  const detailRef = resolveThreadDetailRef(threadRef, {
+    shellExists: shell !== null,
+    waitForShell: false,
+  });
+  const projection = useThreadProjection(detailRef)?.projection ?? null;
+  const visibleTurnItems = useThreadVisibleTurnItems(detailRef);
+  const { turnDiffSummaries } = useTurnDiffSummaries(projection);
+
+  const timelineEntries = useMemo(
+    () =>
+      deriveTimelineEntriesFromVisibleTurnItemsWithState(
+        {
+          visibleTurnItems,
+          optimisticMessages: [],
+          ...(projection === null
+            ? {}
+            : {
+                attempts: projection.attempts,
+                nodes: projection.nodes,
+                plans: projection.plans,
+              }),
+        },
+        null,
+      ).entries,
+    [visibleTurnItems, projection],
+  );
+  const activityRun = useMemo(
+    () => (projection === null ? null : deriveThreadActivityRun(projection)),
+    [projection],
+  );
+  const runtime = useMemo(
+    () => (projection === null ? null : deriveThreadRuntime(projection)),
+    [projection],
+  );
+  const runlessWorkStartedAt = useMemo(
+    () => (projection === null ? null : deriveRunlessWorkStartedAt(projection)),
+    [projection],
+  );
+  const isWorking = derivePhase(runtime) === "running" || runlessWorkStartedAt !== null;
+
+  const openChat = useCallback(
+    (threadId: ThreadId) => {
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(scopeThreadRef(props.environmentId, threadId)),
+      });
+    },
+    [navigate, props.environmentId],
+  );
+  const onOpenThread = useCallback(
+    (threadId: ThreadId) => {
+      const title = subagentTabTitle(projection, threadId);
+      if (title === null) {
+        openChat(threadId);
+        return;
+      }
+      useRightPanelStore.getState().openThread(parentRef, threadId, title);
+    },
+    [openChat, parentRef, projection],
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <span className="min-w-0 truncate text-xs text-muted-foreground">
+          {shell?.title ?? "Subagent"}
+        </span>
+        <Button size="xs" variant="ghost" onClick={() => openChat(props.threadId)}>
+          <ExternalLinkIcon />
+          Open chat
+        </Button>
+      </div>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <MessagesTimeline
+          isWorking={isWorking}
+          runlessWorkActive={runlessWorkStartedAt !== null}
+          activeTurnInProgress={isWorking || !isLatestRunSettled(activityRun, runtime)}
+          activeTurnStartedAt={
+            deriveActiveWorkStartedAt(activityRun, runtime, null) ?? runlessWorkStartedAt
+          }
+          listRef={listRef}
+          timelineEntries={timelineEntries}
+          providerStatuses={props.providerStatuses}
+          runs={projection?.runs ?? []}
+          latestRun={activityRun}
+          runningRunId={runtime?.activeRunId ?? null}
+          turnDiffSummaries={turnDiffSummaries}
+          activeThreadEnvironmentId={props.environmentId}
+          routeThreadKey={scopedThreadKey(parentRef)}
+          displayThreadKey={`${scopedThreadKey(threadRef)}:panel`}
+          onOpenTurnDiff={noop}
+          onOpenThread={onOpenThread}
+          onForkFromRun={async () => {}}
+          onRollbackCheckpoint={noop}
+          supportsConversationRollback={false}
+          onRevertToTurnCount={noop}
+          isRevertingCheckpoint={false}
+          onImageExpand={props.onImageExpand}
+          markdownCwd={props.markdownCwd}
+          resolvedTheme={props.resolvedTheme}
+          timestampFormat={props.timestampFormat}
+          workspaceRoot={props.workspaceRoot}
+          anchorMessageId={null}
+          onAnchorReady={noop}
+          onAnchorSizeChanged={noop}
+          contentInsetEndAdjustment={0}
+          liveFollowEnabled={isAtEnd}
+          onIsAtEndChange={setIsAtEnd}
+          onManualNavigation={noop}
+          hideEmptyPlaceholder={projection === null}
+        />
+      </div>
+    </div>
+  );
+}

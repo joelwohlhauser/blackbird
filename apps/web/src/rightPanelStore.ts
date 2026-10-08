@@ -38,6 +38,7 @@ export const RIGHT_PANEL_KINDS = [
   "github-pr",
   "pull-request",
   "pull-requests",
+  "thread",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -104,7 +105,8 @@ export type RightPanelSurface =
       url?: string;
     }
   /** The thread's linked pull requests, one singleton tab beside any number of `pull-request` tabs. */
-  | { id: "pull-requests"; kind: "pull-requests" };
+  | { id: "pull-requests"; kind: "pull-requests" }
+  | { id: `thread:${string}`; kind: "thread"; threadId: ThreadId; title?: string };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 const RIGHT_PANEL_STORAGE_VERSION = 15;
@@ -169,8 +171,9 @@ export function resolveAdjacentRightPanelSurface(
   return state.surfaces[nextIndex] ?? null;
 }
 
-export const WORKSPACE_NAVIGATOR_TABS = ["file", "changes", "pr", "details"] as const;
+export const WORKSPACE_NAVIGATOR_TABS = ["details", "file", "changes", "pr"] as const;
 export type WorkspaceNavigatorTab = (typeof WORKSPACE_NAVIGATOR_TABS)[number];
+const DEFAULT_WORKSPACE_NAVIGATOR_TAB: WorkspaceNavigatorTab = "details";
 
 interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
@@ -194,7 +197,7 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request"
+      "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request" | "thread"
     >,
   ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null, url?: string | null) => void;
@@ -235,6 +238,7 @@ interface RightPanelStoreState {
     options?: { pinned?: boolean },
   ) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
+  openThread: (ref: ScopedThreadRef, threadId: ThreadId, title?: string) => void;
   splitTerminal: (
     ref: ScopedThreadRef,
     surfaceId: string,
@@ -273,7 +277,7 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request"
+      "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request" | "thread"
     >,
   ) => void;
   setWorkspaceNavigatorTab: (ref: ScopedThreadRef, tab: WorkspaceNavigatorTab) => void;
@@ -292,7 +296,14 @@ const EMPTY_THREAD_STATE: ThreadRightPanelState = {
 const singletonSurface = (
   kind: Exclude<
     RightPanelKind,
-    "file" | "file-diff" | "preview" | "terminal" | "linear" | "github-pr" | "pull-request"
+    | "file"
+    | "file-diff"
+    | "preview"
+    | "terminal"
+    | "linear"
+    | "github-pr"
+    | "pull-request"
+    | "thread"
   >,
 ): RightPanelSurface => {
   switch (kind) {
@@ -632,8 +643,9 @@ const withWorkspaceNavigatorTab = (
   threadKey: string,
   tab: WorkspaceNavigatorTab,
 ): Record<string, WorkspaceNavigatorTab> => {
-  if ((tabsByThreadKey[threadKey] ?? "file") === tab) return tabsByThreadKey;
-  if (tab === "file") {
+  if ((tabsByThreadKey[threadKey] ?? DEFAULT_WORKSPACE_NAVIGATOR_TAB) === tab)
+    return tabsByThreadKey;
+  if (tab === DEFAULT_WORKSPACE_NAVIGATOR_TAB) {
     const { [threadKey]: _removed, ...rest } = tabsByThreadKey;
     return rest;
   }
@@ -1044,6 +1056,26 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                 : opened;
             },
           ),
+        })),
+      openThread: (ref, threadId, title) =>
+        set((state) => ({
+          ...userAction(state, scopedThreadKey(ref), (current) => {
+            const surface: RightPanelSurface = {
+              id: `thread:${threadId}`,
+              kind: "thread",
+              threadId,
+              ...(title ? { title } : {}),
+            };
+            if (findSurface(current, (entry) => entry.id === surface.id)) {
+              return upsertSurface(current, surface);
+            }
+            return {
+              ...current,
+              isOpen: true,
+              surfaces: [...current.surfaces, surface],
+              activeSurfaceId: surface.id,
+            };
+          }),
         })),
       openFile: (ref, requestedPath, line) =>
         set((state) => ({
@@ -1754,6 +1786,7 @@ useRightPanelStore.subscribe((next, previous) => {
         surface.kind === "github-pr" ||
         surface.kind === "file-diff" ||
         surface.kind === "new-tab" ||
+        surface.kind === "thread" ||
         (surface.kind === "preview" && surface.resourceId !== null)
       )
         continue;
@@ -1782,7 +1815,9 @@ export function selectWorkspaceNavigatorTab(
   ref: ScopedThreadRef | null | undefined,
 ): WorkspaceNavigatorTab {
   const tab = ref ? workspaceNavigatorTabByThreadKey[scopedThreadKey(ref)] : undefined;
-  return tab !== undefined && WORKSPACE_NAVIGATOR_TABS.includes(tab) ? tab : "file";
+  return tab !== undefined && WORKSPACE_NAVIGATOR_TABS.includes(tab)
+    ? tab
+    : DEFAULT_WORKSPACE_NAVIGATOR_TAB;
 }
 
 export function selectActiveRightPanel(

@@ -10,7 +10,13 @@
  * of the sidebar's scope logic. `searchFieldRef` lands on the search field so
  * the picker's popup can anchor to that width rather than to its 28px trigger.
  */
-import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
+import {
+  FolderPlusIcon,
+  MessageCirclePlusIcon,
+  SearchIcon,
+  SquarePenIcon,
+  XIcon,
+} from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -36,9 +42,11 @@ export interface SidebarThreadHeaderProps {
   onNewThread: (event: ReactMouseEvent) => void;
   newThreadDisabled: boolean;
   newThreadShortcutLabel: string | null | undefined;
-  newThreadInProjectShortcutLabel: string | null | undefined;
   /** Shift+click only matters once there is more than one project to pick. */
   showNewThreadInProjectHint: boolean;
+  onNewQuickChat: () => void;
+  newQuickChatDisabled: boolean;
+  quickChatShortcutLabel: string | null | undefined;
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -57,8 +65,10 @@ export function SidebarThreadHeader({
   onNewThread,
   newThreadDisabled,
   newThreadShortcutLabel,
-  newThreadInProjectShortcutLabel,
   showNewThreadInProjectHint,
+  onNewQuickChat,
+  newQuickChatDisabled,
+  quickChatShortcutLabel,
   searchInputRef,
   searchQuery,
   onSearchQueryChange,
@@ -74,8 +84,8 @@ export function SidebarThreadHeader({
   // screen reader on nothing.
   const activeResultExists = resultsVisible && activeSearchResultIndex < searchResultCount;
   const newThreadLabel = newThreadShortcutLabel
-    ? `New thread (${newThreadShortcutLabel})`
-    : "New thread";
+    ? `New chat (${newThreadShortcutLabel})`
+    : "New chat";
 
   return (
     <div className="flex items-center gap-1">
@@ -133,15 +143,12 @@ export function SidebarThreadHeader({
           </>
         ) : null}
         <SidebarHeaderIconButton
-          label="New thread"
+          label="New chat"
           tooltip={
             showNewThreadInProjectHint ? (
               <span className="flex flex-col gap-0.5">
                 <span>{newThreadLabel}</span>
-                <span className="text-muted-foreground">
-                  New thread in current project: Shift+click
-                  {newThreadInProjectShortcutLabel ? ` (${newThreadInProjectShortcutLabel})` : ""}
-                </span>
+                <span className="text-muted-foreground">Choose project: Shift+click</span>
               </span>
             ) : (
               newThreadLabel
@@ -151,6 +158,14 @@ export function SidebarThreadHeader({
           onClick={onNewThread}
         >
           <SquarePenIcon />
+        </SidebarHeaderIconButton>
+        <SidebarHeaderIconButton
+          label="New quick chat"
+          tooltip={quickChatShortcutLabel ? `Quick chat (${quickChatShortcutLabel})` : "Quick chat"}
+          disabled={newQuickChatDisabled}
+          onClick={onNewQuickChat}
+        >
+          <MessageCirclePlusIcon />
         </SidebarHeaderIconButton>
       </div>
     </div>

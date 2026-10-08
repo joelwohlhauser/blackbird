@@ -11,6 +11,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
+  BotIcon,
   FileDiff,
   Files,
   Globe2,
@@ -103,6 +104,8 @@ export function surfaceTitle(
       return "Pull Requests";
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
+    case "thread":
+      return surface.title ?? "Subagent";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -203,6 +206,8 @@ export function SurfaceIcon({
       ) : (
         <Smartphone className="size-3 shrink-0" />
       );
+    case "thread":
+      return <BotIcon className="size-3 shrink-0" />;
   }
 }
 

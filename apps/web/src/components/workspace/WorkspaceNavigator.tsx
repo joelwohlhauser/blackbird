@@ -42,10 +42,10 @@ export type WorkspaceNavigatorDiffTarget =
     };
 
 const TABS: ReadonlyArray<{ id: WorkspaceNavigatorTab; label: string }> = [
+  { id: "details", label: "Details" },
   { id: "file", label: "Files" },
   { id: "changes", label: "Changes" },
   { id: "pr", label: "PR" },
-  { id: "details", label: "Details" },
 ];
 
 const WORKSPACE_NAVIGATOR_WIDTH_STORAGE_KEY = "blackbird:workspace-navigator-width:v1";

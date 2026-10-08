@@ -67,13 +67,10 @@ import {
   CheckIcon,
   CircleAlertIcon,
   CircleCheckIcon,
-  ChevronDownIcon,
   CircleDashedIcon,
   ClockIcon,
   FolderIcon,
-  FolderPlusIcon,
   GitBranchIcon,
-  MessageCirclePlusIcon,
   MessageCircleQuestionIcon,
   PinIcon,
   PinOffIcon,
@@ -268,10 +265,10 @@ import {
   ComboboxTrigger,
   useComboboxFilter,
 } from "./ui/combobox";
-import { Input } from "./ui/input";
-import { SidebarContent, SidebarGroup, SidebarMenuButton, useSidebar } from "./ui/sidebar";
+import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarPinnedSites } from "./sidebar/SidebarPinnedSites";
+import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { MiddleTruncate } from "./ui/middle-truncate";
@@ -1279,7 +1276,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
           icon: "working" as const,
           // No shimmer: a label that animates forever is noise in a sidebar
           // full of them (and repaints every vsync on high-refresh displays).
-          className: "text-info",
+          className: "text-sky-600 dark:text-sky-400",
         }
       : status === "waiting"
         ? {
@@ -2865,6 +2862,7 @@ export default function Sidebar() {
   ]);
 
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
+  const headerSearchRef = useRef<HTMLDivElement | null>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0);
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
@@ -4929,113 +4927,11 @@ export default function Sidebar() {
           // header and would otherwise paint across the search row's outline.
           <>
             <SidebarPinnedSites className="px-[var(--sidebar-content-inset)] pt-[var(--sidebar-content-inset)] pb-0" />
-            <SidebarGroup className="relative z-[1] gap-1 p-[var(--sidebar-content-inset)]">
-              <div className="flex items-center gap-1">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <SidebarMenuButton
-                        type="button"
-                        className="min-w-0 flex-1 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-                        onClick={handleNewThreadClick}
-                        disabled={projects.length === 0}
-                      />
-                    }
-                  >
-                    <SquarePenIcon />
-                    <span>New chat</span>
-                  </TooltipTrigger>
-                  <TooltipPopup side="right">
-                    <span className="flex flex-col gap-0.5">
-                      <span>
-                        {newThreadShortcutLabel
-                          ? `New chat (${newThreadShortcutLabel})`
-                          : "New chat"}
-                      </span>
-                      {projectGroups.length > 1 ? (
-                        <span className="text-muted-foreground">Choose project: Shift+click</span>
-                      ) : null}
-                    </span>
-                  </TooltipPopup>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <SidebarMenuButton
-                        size="icon"
-                        type="button"
-                        className="relative shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-                        aria-label="New quick chat"
-                        disabled={scratchEnvironmentId === null}
-                        onClick={() => {
-                          if (scratchEnvironmentId === null) return;
-                          if (isMobile) setOpenMobile(false);
-                          void startScratchThread(scratchEnvironmentId);
-                        }}
-                      />
-                    }
-                  >
-                    <MessageCirclePlusIcon />
-                    <span
-                      className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
-                      aria-hidden="true"
-                    />
-                  </TooltipTrigger>
-                  <TooltipPopup side="right">
-                    {quickChatShortcutLabel
-                      ? `Quick chat (${quickChatShortcutLabel})`
-                      : "Quick chat"}
-                  </TooltipPopup>
-                </Tooltip>
-              </div>
-              <div className="flex h-8 min-w-0 items-center gap-[var(--sidebar-control-gap)] rounded-md px-[var(--sidebar-row-content-inset)] py-1.5 text-sm font-medium text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
-                <SearchIcon className="size-4 shrink-0 text-sidebar-muted-foreground/80" />
-                <Input
-                  ref={threadSearchInputRef}
-                  nativeInput
-                  unstyled
-                  type="search"
-                  value={threadSearchQuery}
-                  onChange={(event) => {
-                    setThreadSearchQuery(event.currentTarget.value);
-                    setActiveSearchResultIndex(0);
-                  }}
-                  onKeyDown={handleThreadSearchKeyDown}
-                  placeholder="Search"
-                  aria-label="Search threads"
-                  role="combobox"
-                  aria-autocomplete="list"
-                  aria-expanded={isSearchingThreads && threadSearchResults.length > 0}
-                  aria-controls={
-                    isSearchingThreads && threadSearchResults.length > 0
-                      ? "sidebar-thread-search-results"
-                      : undefined
-                  }
-                  aria-activedescendant={
-                    isSearchingThreads && threadSearchResults[activeSearchResultIndex]
-                      ? `sidebar-thread-search-result-${activeSearchResultIndex}`
-                      : undefined
-                  }
-                  className="min-w-0 flex-1 [&_[data-slot=input]]:h-auto [&_[data-slot=input]]:p-0 [&_[data-slot=input]]:leading-normal [&_[data-slot=input]]:text-sm [&_[data-slot=input]]:font-medium [&_[data-slot=input]]:text-sidebar-foreground [&_[data-slot=input]]:placeholder:text-sidebar-muted-foreground/80 [&_[data-slot=input]]:placeholder:opacity-100"
-                />
-                {isSearchingThreads ? (
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    className="size-5 shrink-0 rounded-sm text-sidebar-muted-foreground hover:bg-sidebar-control-surface hover:text-sidebar-foreground"
-                    aria-label="Clear thread search"
-                    onClick={() => {
-                      clearThreadSearch();
-                      threadSearchInputRef.current?.focus();
-                    }}
-                  >
-                    <XIcon className="size-3" />
-                  </Button>
-                ) : null}
-              </div>
-              {projectGroups.length > 0 ? (
-                <div className="flex items-center gap-1">
+            <SidebarGroup className="relative z-[1] p-[var(--sidebar-content-inset)]">
+              <SidebarThreadHeader
+                searchFieldRef={headerSearchRef}
+                hasProjects={projectGroups.length > 0}
+                projectScope={
                   <Combobox
                     items={projectScopeItems}
                     filteredItems={filteredProjectScopeItems}
@@ -5062,25 +4958,27 @@ export default function Sidebar() {
                   >
                     <ComboboxTrigger
                       render={
-                        <SidebarMenuButton
-                          aria-label="Filter threads by project"
-                          className="min-w-0 flex-1 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+                        <SidebarHeaderIconButton
+                          label={
+                            scopedProjectGroup
+                              ? `Filter chats by project: ${scopedProjectGroup.displayName}`
+                              : "Filter chats by project"
+                          }
                         />
                       }
                     >
                       {scopedProjectGroup ? (
-                        <ProjectFavicon project={scopedProjectGroup} className="size-4 shrink-0" />
+                        <span className="flex shrink-0">
+                          <ProjectFavicon project={scopedProjectGroup} className="size-4" />
+                        </span>
                       ) : (
-                        <FolderIcon className="size-4 shrink-0" />
+                        <FolderIcon className="size-4" />
                       )}
-                      <span className="min-w-0 flex-1 truncate">
-                        {scopedProjectGroup?.displayName ?? "All projects"}
-                      </span>
-                      <ChevronDownIcon className="-mr-px size-4 shrink-0" />
                     </ComboboxTrigger>
                     <ComboboxPopup
                       align="start"
-                      className="w-(--anchor-width) min-w-0 overflow-hidden"
+                      anchor={headerSearchRef}
+                      className="max-w-[min(18rem,var(--available-width))] overflow-hidden"
                     >
                       <div className="shrink-0 px-3 pt-2.5">
                         <div className="relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">
@@ -5173,28 +5071,31 @@ export default function Sidebar() {
                       </ComboboxList>
                     </ComboboxPopup>
                   </Combobox>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <SidebarMenuButton
-                          size="icon"
-                          className="relative shrink-0 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-                          onClick={openAddProjectCommandPalette}
-                          type="button"
-                          aria-label="New project"
-                        />
-                      }
-                    >
-                      <FolderPlusIcon />
-                      <span
-                        className="pointer-events-none absolute left-1/2 top-1/2 size-[max(100%,3rem)] -translate-1/2 pointer-fine:hidden"
-                        aria-hidden="true"
-                      />
-                    </TooltipTrigger>
-                    <TooltipPopup side="right">New project</TooltipPopup>
-                  </Tooltip>
-                </div>
-              ) : null}
+                }
+                onNewProject={openAddProjectCommandPalette}
+                onNewThread={handleNewThreadClick}
+                newThreadDisabled={projects.length === 0}
+                newThreadShortcutLabel={newThreadShortcutLabel}
+                showNewThreadInProjectHint={projectGroups.length > 1}
+                onNewQuickChat={() => {
+                  if (scratchEnvironmentId === null) return;
+                  if (isMobile) setOpenMobile(false);
+                  void startScratchThread(scratchEnvironmentId);
+                }}
+                newQuickChatDisabled={scratchEnvironmentId === null}
+                quickChatShortcutLabel={quickChatShortcutLabel}
+                searchInputRef={threadSearchInputRef}
+                searchQuery={threadSearchQuery}
+                onSearchQueryChange={(value) => {
+                  setThreadSearchQuery(value);
+                  setActiveSearchResultIndex(0);
+                }}
+                onSearchKeyDown={handleThreadSearchKeyDown}
+                isSearching={isSearchingThreads}
+                searchResultCount={threadSearchResults.length}
+                activeSearchResultIndex={activeSearchResultIndex}
+                onClearSearch={clearThreadSearch}
+              />
             </SidebarGroup>
           </>
         }

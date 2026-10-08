@@ -809,13 +809,13 @@ describe("rightPanelStore", () => {
         useRightPanelStore.getState().workspaceNavigatorTabByThreadKey,
         refA,
       ),
-    ).toBe("file");
+    ).toBe("details");
 
-    store.setWorkspaceNavigatorTab(refA, "details");
+    store.setWorkspaceNavigatorTab(refA, "file");
     store.setWorkspaceNavigatorTab(refB, "changes");
 
     const tabs = useRightPanelStore.getState().workspaceNavigatorTabByThreadKey;
-    expect(selectWorkspaceNavigatorTab(tabs, refA)).toBe("details");
+    expect(selectWorkspaceNavigatorTab(tabs, refA)).toBe("file");
     expect(selectWorkspaceNavigatorTab(tabs, refB)).toBe("changes");
     expect(
       selectWorkspaceNavigatorOpen(
@@ -824,7 +824,7 @@ describe("rightPanelStore", () => {
       ),
     ).toBe(false);
 
-    store.setWorkspaceNavigatorTab(refA, "file");
+    store.setWorkspaceNavigatorTab(refA, "details");
     expect(useRightPanelStore.getState().workspaceNavigatorTabByThreadKey).toEqual({
       "env-1:thread-B": "changes",
     });
@@ -841,19 +841,33 @@ describe("rightPanelStore", () => {
   });
 
   it("persists the navigator tab and ignores unknown persisted tabs", () => {
-    useRightPanelStore.getState().setWorkspaceNavigatorTab(refA, "details");
+    useRightPanelStore.getState().setWorkspaceNavigatorTab(refA, "pr");
     const persisted = useRightPanelStore.persist
       .getOptions()
       .partialize?.(useRightPanelStore.getState());
     expect(persisted).toMatchObject({
-      workspaceNavigatorTabByThreadKey: { "env-1:thread-A": "details" },
+      workspaceNavigatorTabByThreadKey: { "env-1:thread-A": "pr" },
     });
     expect(
       selectWorkspaceNavigatorTab(
         { "env-1:thread-A": "agents" } as unknown as Record<string, WorkspaceNavigatorTab>,
         refA,
       ),
-    ).toBe("file");
+    ).toBe("details");
+  });
+
+  it("opens a subagent thread in the panel and reuses its tab", () => {
+    const childId = ThreadId.make("child-1");
+    useRightPanelStore.getState().openThread(refA, childId, "Reviewer");
+    useRightPanelStore.getState().openThread(refA, childId, "Reviewer");
+
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(state.isOpen).toBe(true);
+    expect(state.mainSurfaces).toEqual([]);
+    expect(state.surfaces).toEqual([
+      { id: "thread:child-1", kind: "thread", threadId: childId, title: "Reviewer" },
+    ]);
+    expect(state.activeSurfaceId).toBe("thread:child-1");
   });
 
   it("open sets the active panel for a thread", () => {
@@ -1255,7 +1269,7 @@ describe("rightPanelStore", () => {
   it("removeThread clears persisted state", () => {
     useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
-    useRightPanelStore.getState().setWorkspaceNavigatorTab(refA, "details");
+    useRightPanelStore.getState().setWorkspaceNavigatorTab(refA, "pr");
     useRightPanelStore.getState().removeThread(refA);
     expect(useRightPanelStore.getState().workspaceNavigatorTabByThreadKey).toEqual({});
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBeNull();

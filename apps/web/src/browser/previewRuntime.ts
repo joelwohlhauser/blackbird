@@ -3,6 +3,7 @@ import type { EnvironmentId, PreviewRuntime, PreviewSessionSnapshot } from "@t3t
 
 import { isElectron } from "~/env";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 import {
   readEnvironmentSupportsServerBrowser,
@@ -10,6 +11,9 @@ import {
 } from "~/state/entities";
 
 export function previewRuntimeFor(environmentId: EnvironmentId): PreviewRuntime | undefined {
+  if (isElectron && environmentId !== appAtomRegistry.get(primaryEnvironmentIdAtom)) {
+    return undefined;
+  }
   return readEnvironmentSupportsServerBrowser(environmentId) ? "server" : undefined;
 }
 

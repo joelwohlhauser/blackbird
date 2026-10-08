@@ -25,9 +25,7 @@ panels that reveal tools without dominating the conversation.
 
 The left sidebar includes:
 
-- a top **New chat** action and a separate **Quick chat** button in sidebar v2,
-  above the search field and project filter. New chat uses the current project;
-  Shift-click opens the project picker;
+- one compact header row: the search field, then icon buttons for the project filter, New project, **New chat**, and **Quick chat**. New chat uses the current project; Shift-click opens the project picker;
 - Command+N on the new-chat page opens the project picker. Blackbird does not offer repository initialization; add an existing Git repository to use Git actions;
 - a dedicated, collapsible **Quick chats** section above Projects;
 - an optional, collapsible **Pinned sites** section for persistent full-window browser views;
@@ -125,6 +123,7 @@ panel closed they open in the chat area unless the window is very wide
 case the panel opens. Both tab bars have a Plus button that opens the full New
 Tab page in that container (Browser, Terminal, Diff, Linear, GitHub PR, and Pull
 request).
+Clicking a subagent in the chat always opens it as a read-only, live transcript tab in the right panel, with an Open chat button for the full conversation.
 A title-bar button toggles the normal right panel; there is no ⌥⌘B binding or
 maximize control.
 Control+Tab opens the tab switcher described above. Browser-backed tabs
@@ -141,15 +140,15 @@ The second surface is the narrow, independently resizable **workspace
 navigator**, also referred to as the new right sidebar or sidepanel. It has
 four tabs:
 
+- **Details** (the default) — the chat's environment, worktree mode, branch,
+  PR status and watches, editor and project-script actions, automations, and
+  related chats (no Git actions; Changes owns those);
 - **Files** — the repository tree, search, new-file, and new-folder actions;
 - **Changes** — live branch changes including uncommitted and untracked work,
   colored per-file line counts, a branch-vs-base summary, and the primary
   commit/push/PR action;
 - **PR** — the exact files changed by the pull request associated with the
-  current branch, with an explicit refresh action for the PR and its files;
-- **Details** — the chat's environment, worktree mode, branch, PR status and
-  watches, editor and project-script actions, automations, and related chats
-  (no Git actions; Changes owns those).
+  current branch, with an explicit refresh action for the PR and its files.
 
 Selecting a file opens it in the normal right panel. Selecting an item from
 Changes or PR opens a dedicated whole-file diff tab rather than replacing the
