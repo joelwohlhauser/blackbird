@@ -68,6 +68,15 @@ describe("KeybindingsSettings.logic", () => {
       "Appearance",
       "Other",
     ]);
+    const navigation = groups.find((group) => group.id === "navigation");
+    expect(navigation?.rows.map((row) => row.command)).toEqual(
+      expect.arrayContaining([
+        "workspaceNavigator.toggle",
+        "workspaceNavigator.changes",
+        "workspaceNavigator.pullRequest",
+        "workspaceNavigator.details",
+      ]),
+    );
     const composer = groups.find((group) => group.id === "composer");
     expect(composer?.rows.map((row) => row.command)).toEqual(
       expect.arrayContaining(["composer.effort", "modelPicker.toggle"]),
@@ -286,6 +295,7 @@ describe("KeybindingsSettings.logic", () => {
     expect(commandLabel("workspaceNavigator.toggle")).toBe("Toggle Files Sidebar");
     expect(commandLabel("workspaceNavigator.changes")).toBe("Open Changes Sidebar");
     expect(commandLabel("workspaceNavigator.pullRequest")).toBe("Open Pull Request Sidebar");
+    expect(commandLabel("workspaceNavigator.details")).toBe("Open Details Sidebar");
     expect(commandLabel("themeEditor.toggle")).toBe("Theme Editor: Toggle");
     expect(commandLabel("view.reopenClosed")).toBe("Reopen Closed Tab");
     expect(commandLabel("script.setup-db.run")).toBe("Run Script: Setup Db");

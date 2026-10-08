@@ -78,6 +78,7 @@ describe("searchSettings", () => {
       "keybinding-composer.previousWorktree",
       "keybinding-composer.workspace",
       "keybinding-workspaceNavigator.changes",
+      "keybinding-workspaceNavigator.details",
       "keybinding-workspaceNavigator.pullRequest",
       "keybinding-workspaceNavigator.toggle",
     ]);

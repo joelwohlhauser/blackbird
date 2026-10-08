@@ -25,6 +25,7 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 import type { ProviderAdapterV2Shape } from "./ProviderAdapter.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
@@ -42,6 +43,7 @@ const layerDatabase = SqlitePersistence.layerMemory;
 const layerTest = Layer.mergeAll(
   layerDatabase,
   ProjectionStore.layer.pipe(Layer.provide(layerDatabase)),
+  ProjectStore.layer.pipe(Layer.provide(layerDatabase)),
   ProviderReplayHarness.layerWithRegistry(
     { name: "control-reads" },
     ProviderAdapterRegistry.layerFromAdapters([adapter]),
@@ -623,4 +625,127 @@ it.effect("keeps delegated child pull-request links independent of the parent", 
     assert.deepEqual(parentAfterChildLink.thread.linkedPullRequest, parentPullRequest);
     assert.deepEqual(parentAfterChildLink.thread.pullRequests, parent.thread.pullRequests);
   }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect(
+  "moves a thread and its scheduled tasks to another project and detaches its session",
+  () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const sql = yield* SqlClient.SqlClient;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const projects = yield* ProjectStore.ProjectStoreV2;
+      const threadId = ThreadId.make("thread:move-project");
+      const sourceProjectId = ProjectId.make("project:move-source");
+      const destinationProjectId = ProjectId.make("project:move-destination");
+      const now = yield* DateTime.now;
+      yield* projects.apply({
+        sequence: 0,
+        eventId: EventId.make("seed:move-destination"),
+        aggregateKind: "project",
+        aggregateId: destinationProjectId,
+        occurredAt: DateTime.formatIso(now),
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "project.created",
+        payload: {
+          projectId: destinationProjectId,
+          title: "Destination",
+          workspaceRoot: "/repos/destination",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: DateTime.formatIso(now),
+          updatedAt: DateTime.formatIso(now),
+        },
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("create-move-project"),
+        threadId,
+        projectId: sourceProjectId,
+        title: "Quick question",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const nowIso = DateTime.formatIso(now);
+      for (const [taskId, boundThreadId] of [
+        ["task:bound", threadId],
+        ["task:other-thread", "thread:other"],
+      ] as const) {
+        yield* sql`INSERT INTO scheduled_tasks (
+        task_id, title, prompt, enabled, schedule_json, project_id, thread_id,
+        workspace_strategy_json, model_selection_json, runtime_mode, interaction_mode,
+        created_by, creation_source, created_at, updated_at, next_run_at, last_run_at,
+        last_run_status, last_run_error, run_count
+      ) VALUES (
+        ${taskId}, 'Task', 'Prompt', 1, '{}', ${sourceProjectId}, ${boundThreadId},
+        '{}', '{}', 'full-access', 'default', 'user', 'web', ${nowIso}, ${nowIso},
+        NULL, NULL, 'never', NULL, 0
+      )`;
+      }
+      yield* projections.apply({
+        id: EventId.make("attach-move-project"),
+        type: "provider-session.attached",
+        threadId,
+        occurredAt: now,
+        payload: {
+          id: ProviderSessionId.make("session:move-project"),
+          driver: adapter.driver,
+          providerInstanceId: instanceId,
+          status: "ready",
+          cwd: "/home/user",
+          model: modelSelection.model,
+          capabilities: CodexProviderCapabilitiesV2,
+          createdAt: now,
+          updatedAt: now,
+          lastError: null,
+        },
+      });
+
+      const missing = yield* Effect.exit(
+        orchestrator.dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("move-to-missing-project"),
+          threadId,
+          projectId: ProjectId.make("project:missing"),
+        }),
+      );
+      assert.equal(missing._tag, "Failure");
+      assert.equal((yield* projections.getThread(threadId)).projectId, sourceProjectId);
+
+      yield* orchestrator.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("move-to-destination-project"),
+        threadId,
+        projectId: destinationProjectId,
+        branch: "main",
+        expectedWorktreePath: null,
+      });
+      const thread = yield* projections.getThread(threadId);
+      assert.equal(thread.projectId, destinationProjectId);
+      assert.equal(thread.branch, "main");
+      assert.isNull(thread.worktreePath);
+      assert.equal((yield* projections.getThreadShell(threadId))?.projectId, destinationProjectId);
+      assert.deepEqual(
+        (yield* projections.getThreadProviderContext(threadId)).providerSessions,
+        [],
+      );
+      const tasks = yield* sql<{ readonly task_id: string; readonly project_id: string }>`
+      SELECT task_id, project_id FROM scheduled_tasks ORDER BY task_id
+    `;
+      assert.deepEqual(
+        tasks.map((task) => [task.task_id, task.project_id]),
+        [
+          ["task:bound", destinationProjectId],
+          ["task:other-thread", sourceProjectId],
+        ],
+      );
+    }).pipe(Effect.provide(layerTest)),
 );

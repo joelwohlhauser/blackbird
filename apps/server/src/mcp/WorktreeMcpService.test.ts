@@ -1,4 +1,7 @@
+// @effect-diagnostics nodeBuiltinImport:off
 import { describe, expect, it, vi } from "@effect/vitest";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   CommandId,
@@ -7,6 +10,7 @@ import {
   type Project,
   ProjectId,
   ProviderInstanceId,
+  QUICK_CHATS_PROJECT_ID,
   ThreadId,
   WorktreeMcpHandoffInput,
 } from "@t3tools/contracts";
@@ -29,6 +33,7 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsStatusBroadcaster from "../vcs/VcsStatusBroadcaster.ts";
 import type * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
@@ -37,6 +42,7 @@ const environmentId = EnvironmentId.make("environment-worktree-test");
 const threadId = ThreadId.make("thread-worktree-test");
 const projectId = ProjectId.make("project-worktree-test");
 const workspaceRoot = "/repo/project";
+const destinationProjectId = ProjectId.make("project-destination");
 
 const makeScope = (
   capabilities: ReadonlySet<McpInvocationContext.McpCapability>,
@@ -54,6 +60,7 @@ const makeScope = (
 });
 
 interface ThreadFixture {
+  readonly projectId?: ProjectId;
   readonly branch?: string | null;
   readonly worktreePath?: string | null;
   readonly archivedAt?: string | null;
@@ -111,6 +118,7 @@ interface HarnessOptions {
   readonly removeWorktreeFails?: boolean;
   readonly deleteLocalBranchFails?: boolean;
   readonly createWorktreeGate?: Effect.Effect<void>;
+  readonly detectedRepository?: { readonly rootPath: string; readonly metadataPath: string };
 }
 
 const makeHarness = (options: HarnessOptions = {}) => {
@@ -193,10 +201,38 @@ const makeHarness = (options: HarnessOptions = {}) => {
     options.projectReadFails
       ? (Effect.fail("simulated project read failure") as never)
       : Effect.succeed(
-          id === projectId && options.projectMissing !== true
-            ? Option.some(project)
-            : Option.none(),
+          id === QUICK_CHATS_PROJECT_ID
+            ? Option.some({ ...project, id, workspaceRoot: "/home/user" })
+            : id === projectId && options.projectMissing !== true
+              ? Option.some(project)
+              : Option.none(),
         ),
+  );
+  const bootstrap = vi.fn(
+    (input: { readonly workspaceRoot: string; readonly title: string }) =>
+      Effect.succeed({
+        project: {
+          ...project,
+          id: destinationProjectId,
+          title: input.title,
+          workspaceRoot: input.workspaceRoot,
+        },
+        created: true,
+      }) as never,
+  );
+  const detect = vi.fn((_: unknown) =>
+    Effect.succeed(
+      options.detectedRepository === undefined
+        ? null
+        : ({
+            kind: "git",
+            repository: {
+              kind: "git",
+              rootPath: options.detectedRepository.rootPath,
+              metadataPath: options.detectedRepository.metadataPath,
+            },
+          } as never),
+    ),
   );
   const removeWorktree = vi.fn((_: unknown) =>
     options.removeWorktreeFails
@@ -217,15 +253,19 @@ const makeHarness = (options: HarnessOptions = {}) => {
       : Effect.succeed({ commitSha: "abc123", remoteRefName: "origin/dev" }),
   );
   const createWorktree = vi.fn(
-    (input: { readonly newRefName?: string | undefined; readonly path: string | null }) =>
+    (input: {
+      readonly refName: string;
+      readonly newRefName?: string | undefined;
+      readonly path: string | null;
+    }) =>
       options.createWorktreeFails
         ? (Effect.fail("simulated worktree creation failure") as never)
         : (options.createWorktreeGate ?? Effect.void).pipe(
             Effect.andThen(
               Effect.succeed({
                 worktree: {
-                  path: input.path ?? `/worktrees/project/${input.newRefName}`,
-                  refName: input.newRefName ?? "detached",
+                  path: input.path ?? `/worktrees/project/${input.newRefName ?? input.refName}`,
+                  refName: input.newRefName ?? input.refName,
                 },
               }),
             ),
@@ -314,7 +354,11 @@ const makeHarness = (options: HarnessOptions = {}) => {
         } satisfies Partial<ThreadManagementService.ThreadManagementService["Service"]>),
         Layer.mock(ProjectService.ProjectService)({
           getById,
+          bootstrap,
         } satisfies Partial<ProjectService.ProjectService["Service"]>),
+        Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
+          detect,
+        } satisfies Partial<VcsDriverRegistry.VcsDriverRegistry["Service"]>),
         ServerSettings.layerTest({
           newWorktreesStartFromOrigin: options.newWorktreesStartFromOrigin ?? false,
         }),
@@ -351,6 +395,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
     deleteLocalBranch,
     localStatus,
     runForThread,
+    bootstrap,
   };
 };
 
@@ -550,17 +595,22 @@ describe("t3_worktree_handoff", () => {
     });
   });
 
-  it.effect("fails when the thread is already attached to a worktree", () => {
+  it.effect("hands off a thread that already works in a worktree", () => {
     const harness = makeHarness({
       thread: { branch: "feature/existing", worktreePath: "/worktrees/project/existing" },
     });
     return Effect.gen(function* () {
-      const exit = yield* Effect.exit(runHandoff(harness, { branch: "feature/second" }));
-      expectTypedFailure(exit, {
-        _tag: "WorktreeMcpFailure",
-        code: "already_in_worktree",
-      });
-      expect(harness.createWorktree).not.toHaveBeenCalled();
+      const result = yield* runHandoff(harness, { branch: "feature/second" });
+      expect(result.worktreePath).toBe("/worktrees/project/feature/second");
+      expect(harness.createWorktree).toHaveBeenCalledTimes(1);
+      expect(harness.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "thread.metadata.update",
+          branch: "feature/second",
+          worktreePath: "/worktrees/project/feature/second",
+          expectedWorktreePath: "/worktrees/project/existing",
+        }),
+      );
     });
   });
 
@@ -618,31 +668,158 @@ describe("t3_worktree_handoff", () => {
     });
   });
 
-  it.effect("rejects an existing branch with an actionable error naming its checkout", () => {
+  it.effect("switches to the worktree that already has an existing branch checked out", () => {
     const harness = makeHarness({ existingBranchWorktreePath: "/elsewhere/checkout" });
     return Effect.gen(function* () {
-      const exit = yield* Effect.exit(runHandoff(harness, { branch: "feature/taken" }));
-      if (!Exit.isFailure(exit)) {
-        return expect.fail("expected a failure exit");
-      }
-      const reason = exit.cause.reasons[0];
-      expect(reason?._tag).toBe("Fail");
-      const error = (reason as { readonly error: { code: string; message: string } }).error;
-      expect(error.code).toBe("invalid_request");
-      expect(error.message).toContain("feature/taken");
-      expect(error.message).toContain("already exists");
-      expect(error.message).toContain("/elsewhere/checkout");
+      const result = yield* runHandoff(harness, { branch: "feature/taken" });
+      expect(result).toMatchObject({
+        worktreePath: "/elsewhere/checkout",
+        branch: "feature/taken",
+        baseRef: null,
+        setupScript: { status: "skipped" },
+      });
       expect(harness.createWorktree).not.toHaveBeenCalled();
+      expect(harness.fetchRemote).not.toHaveBeenCalled();
+      expect(harness.runForThread).not.toHaveBeenCalled();
+      expect(harness.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "thread.metadata.update",
+          branch: "feature/taken",
+          worktreePath: "/elsewhere/checkout",
+          expectedWorktreePath: null,
+        }),
+      );
+    });
+  });
+
+  it.effect("checks out an existing branch that is not checked out anywhere", () => {
+    const harness = makeHarness({ existingBranchWorktreePath: null });
+    return Effect.gen(function* () {
+      const result = yield* runHandoff(harness, { branch: "feature/taken-idle" });
+      expect(result.branch).toBe("feature/taken-idle");
+      expect(result.baseRef).toBeNull();
+      expect(harness.createWorktree).toHaveBeenCalledWith({
+        cwd: workspaceRoot,
+        refName: "feature/taken-idle",
+        path: null,
+      });
       expect(harness.fetchRemote).not.toHaveBeenCalled();
     });
   });
 
-  it.effect("rejects an existing branch that is not checked out anywhere", () => {
-    const harness = makeHarness({ existingBranchWorktreePath: null });
+  it.effect("keeps a reused branch when the binding fails", () => {
+    const harness = makeHarness({ existingBranchWorktreePath: null, dispatchFails: true });
     return Effect.gen(function* () {
       const exit = yield* Effect.exit(runHandoff(harness, { branch: "feature/taken-idle" }));
+      expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "operation_failed" });
+      expect(harness.removeWorktree).toHaveBeenCalledTimes(1);
+      expect(harness.deleteLocalBranch).not.toHaveBeenCalled();
+    });
+  });
+
+  it.effect("requires branch or repositoryPath", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(runHandoff(harness, {}));
+      expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "invalid_request" });
+      expect(harness.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  it.effect("requires repositoryPath to leave a Quick chat", () => {
+    const harness = makeHarness({ thread: { projectId: QUICK_CHATS_PROJECT_ID } });
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(runHandoff(harness, { branch: "feature/quick" }));
       expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "invalid_request" });
       expect(harness.createWorktree).not.toHaveBeenCalled();
+    });
+  });
+
+  it.effect("moves a Quick chat into a repository without creating a worktree", () => {
+    const harness = makeHarness({
+      thread: { projectId: QUICK_CHATS_PROJECT_ID },
+      detectedRepository: { rootPath: "/repos/other", metadataPath: ".git" },
+    });
+    return Effect.gen(function* () {
+      const result = yield* runHandoff(harness, {
+        repositoryPath: NodeOS.tmpdir(),
+        continuationPrompt: "Keep going",
+      });
+      expect(result).toMatchObject({
+        projectId: destinationProjectId,
+        worktreePath: "/repos/other",
+        branch: "dev",
+        setupScript: { status: "skipped" },
+      });
+      expect(harness.bootstrap).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceRoot: "/repos/other", title: "other" }),
+      );
+      expect(harness.createWorktree).not.toHaveBeenCalled();
+      expect(harness.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "thread.metadata.update",
+          projectId: destinationProjectId,
+          branch: "dev",
+          worktreePath: null,
+          expectedWorktreePath: null,
+        }),
+      );
+      expect(harness.sendToThread).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: destinationProjectId, text: "Keep going" }),
+      );
+    });
+  });
+
+  it.effect("creates a worktree in another repository's project", () => {
+    const harness = makeHarness({
+      detectedRepository: { rootPath: "/repos/other", metadataPath: ".git" },
+    });
+    return Effect.gen(function* () {
+      const result = yield* runHandoff(harness, {
+        repositoryPath: NodeOS.tmpdir(),
+        branch: "feature/elsewhere",
+        baseRef: "main",
+      });
+      expect(result.projectId).toBe(destinationProjectId);
+      expect(harness.createWorktree).toHaveBeenCalledWith({
+        cwd: "/repos/other",
+        refName: "main",
+        newRefName: "feature/elsewhere",
+        baseRefName: "main",
+        path: null,
+      });
+      expect(harness.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: destinationProjectId,
+          worktreePath: "/worktrees/project/feature/elsewhere",
+        }),
+      );
+    });
+  });
+
+  it.effect("switches to a plain folder as its own project", () => {
+    const harness = makeHarness({ notARepo: true });
+    const folder = NodeFS.realpathSync(NodeOS.tmpdir());
+    return Effect.gen(function* () {
+      const result = yield* runHandoff(harness, { repositoryPath: NodeOS.tmpdir() });
+      expect(result).toMatchObject({ worktreePath: folder, projectId: destinationProjectId });
+      expect(harness.bootstrap).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceRoot: folder }),
+      );
+      expect(harness.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: destinationProjectId, worktreePath: null }),
+      );
+    });
+  });
+
+  it.effect("rejects a repositoryPath that is not a directory", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        runHandoff(harness, { repositoryPath: "/definitely/not/a/folder/t3-handoff" }),
+      );
+      expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "invalid_request" });
+      expect(harness.bootstrap).not.toHaveBeenCalled();
     });
   });
 
@@ -869,21 +1046,19 @@ describe("t3_worktree_handoff", () => {
   });
 
   it.effect("releases the per-thread guard after a failed handoff", () => {
-    const harness = makeHarness({
-      thread: { worktreePath: "/worktrees/project/existing" },
-    });
+    const harness = makeHarness();
     return Effect.gen(function* () {
       const service = yield* resolveService(harness);
 
       const first = yield* Effect.exit(
-        service.handoff(harness.scope, { branch: "feature/guard-1" }),
+        service.handoff(harness.scope, { branch: "feature/guard-1", path: "worktrees/nested" }),
       );
-      expectTypedFailure(first, { _tag: "WorktreeMcpFailure", code: "already_in_worktree" });
+      expectTypedFailure(first, { _tag: "WorktreeMcpFailure", code: "invalid_request" });
       // A leaked guard would surface as handoff_in_progress here.
       const second = yield* Effect.exit(
-        service.handoff(harness.scope, { branch: "feature/guard-2" }),
+        service.handoff(harness.scope, { branch: "feature/guard-2", path: "worktrees/nested" }),
       );
-      expectTypedFailure(second, { _tag: "WorktreeMcpFailure", code: "already_in_worktree" });
+      expectTypedFailure(second, { _tag: "WorktreeMcpFailure", code: "invalid_request" });
     });
   });
 
@@ -1053,9 +1228,8 @@ describe("WorktreeMcpHandoffInput schema", () => {
     }),
   );
 
-  it.effect("rejects a missing or blank branch", () =>
+  it.effect("rejects a blank branch", () =>
     Effect.gen(function* () {
-      expect(Exit.isFailure(yield* Effect.exit(decode({})))).toBe(true);
       expect(Exit.isFailure(yield* Effect.exit(decode({ branch: "   " })))).toBe(true);
     }),
   );

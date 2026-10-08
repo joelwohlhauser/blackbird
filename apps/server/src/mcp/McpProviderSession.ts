@@ -17,12 +17,12 @@ export interface McpProviderSessionConfig {
   /** Capabilities the credential grants ("preview", "device"). */
   readonly capabilities?: ReadonlySet<string>;
   /**
-   * Set when the session may drive devices or the browser. Adapters spread this
-   * into the provider subprocess environment so the `agent-device` CLI is on PATH
-   * and pointed at the server's daemon, and `playwright-cli` attaches to the
-   * thread's browser tabs; the agent never handles a token.
+   * Set when the session may drive devices. Adapters spread this into the
+   * provider subprocess environment so the `agent-device` CLI is on PATH and
+   * already pointed at the server's daemon; the agent never handles a token.
    */
   readonly agentDeviceEnvironment?: Readonly<Record<string, string>>;
+  readonly browserEnvironment?: Readonly<Record<string, string>>;
 }
 
 export const playwrightEnvironment = (

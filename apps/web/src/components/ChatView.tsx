@@ -250,6 +250,7 @@ import {
   selectSelectedRightPanelSurface,
   selectThreadRightPanelState,
   selectWorkspaceNavigatorOpen,
+  selectWorkspaceNavigatorTab,
   rightPanelFileDiffSurfaceId,
   type RightPanelSurface,
   type WorkspaceTabContainer,
@@ -317,6 +318,7 @@ import WorkspaceNavigator, {
   type WorkspaceNavigatorDiffTarget,
   type WorkspaceNavigatorTab,
 } from "./workspace/WorkspaceNavigator";
+import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
 import { checkoutPullRequestReference } from "./workspace/WorkspaceNavigator.logic";
 import {
   pullRequestPanelContext,
@@ -2327,7 +2329,16 @@ export default function ChatView(props: ChatViewProps) {
   const workspaceNavigatorOpen = useRightPanelStore((state) =>
     selectWorkspaceNavigatorOpen(state.workspaceNavigatorOpenByThreadKey, activeThreadRef),
   );
-  const [workspaceNavigatorTab, setWorkspaceNavigatorTab] = useState<WorkspaceNavigatorTab>("file");
+  const workspaceNavigatorTab = useRightPanelStore((state) =>
+    selectWorkspaceNavigatorTab(state.workspaceNavigatorTabByThreadKey, activeThreadRef),
+  );
+  const setWorkspaceNavigatorTab = useCallback(
+    (tab: WorkspaceNavigatorTab) => {
+      if (!activeThreadRef) return;
+      useRightPanelStore.getState().setWorkspaceNavigatorTab(activeThreadRef, tab);
+    },
+    [activeThreadRef],
+  );
   const previewSurfaceRestoreInFlightRef = useRef(new Set<string>());
   const attachedSurfaceOpenInFlightRef = useRef(new Set<string>());
   const activeRightPanelSurface = useRightPanelStore((state) =>
@@ -6481,12 +6492,9 @@ export default function ChatView(props: ChatViewProps) {
   const openWorkspaceNavigatorTab = useCallback(
     (tab: WorkspaceNavigatorTab) => {
       if (!workspaceNavigatorAvailable || !activeThreadRef) return;
-      setWorkspaceNavigatorTab(tab);
-      if (!workspaceNavigatorOpen) {
-        useRightPanelStore.getState().toggleWorkspaceNavigator(activeThreadRef);
-      }
+      useRightPanelStore.getState().openWorkspaceNavigatorTab(activeThreadRef, tab);
     },
-    [activeThreadRef, workspaceNavigatorAvailable, workspaceNavigatorOpen],
+    [activeThreadRef, workspaceNavigatorAvailable],
   );
   const cleanupRightPanelSurfaces = useCallback(
     (surfaces: readonly RightPanelSurface[]) => {
@@ -8826,6 +8834,13 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
 
+      if (command === "workspaceNavigator.details") {
+        event.preventDefault();
+        event.stopPropagation();
+        openWorkspaceNavigatorTab("details");
+        return;
+      }
+
       if (command === "rightPanel.close") {
         // Nothing open: leave the event alone so the shortcut keeps its
         // native meaning (close window on desktop, close tab in a browser).
@@ -10639,7 +10654,9 @@ export default function ChatView(props: ChatViewProps) {
                     prepareWorktree: {
                       projectCwd: activeProject.workspaceRoot,
                       baseBranch: baseBranchForWorktree,
-                      ...(shouldCreateNewBranch ? { branch: newBranchNameForWorktree } : {}),
+                      ...(shouldCreateNewBranch
+                        ? { branch: newBranchNameForWorktree }
+                        : { checkoutExistingBranch: true }),
                       ...(startFromOrigin ? { startFromOrigin: true } : {}),
                     },
                     runSetupScript: true,
@@ -11810,6 +11827,65 @@ export default function ChatView(props: ChatViewProps) {
       />
     </div>
   );
+  const workspaceNavigatorDetails = (
+    <ThreadDetailsPanel
+      forceNewWorktree={multipleModelSelections !== null}
+      environmentId={activeThread.environmentId}
+      threadId={activeThread.id}
+      {...(draftId ? { draftId } : {})}
+      activeProjectScripts={activeProject && !isQuickChat ? activeProjectScripts : undefined}
+      preferredScriptId={
+        activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
+      }
+      keybindings={keybindings}
+      availableEditors={availableEditors}
+      showOpenInPicker={showOpenInPicker}
+      gitCwd={gitCwd}
+      isGitRepo={isGitRepo}
+      envLocked={envLocked}
+      availableEnvironments={logicalProjectEnvironments}
+      autoEnvironmentLabel={autoEnvironmentLabel}
+      onAutoEnvironment={
+        draftId &&
+        !envLocked &&
+        canAutoBalanceEnvironments &&
+        loadBalancingSettings.loadBalancingEnabled
+          ? onAutoEnvironment
+          : undefined
+      }
+      onEnvironmentChange={onEnvironmentChange}
+      onEnvModeChange={onEnvModeChange}
+      envMode={envMode}
+      {...(canOverrideServerThreadEnvMode
+        ? {
+            activeThreadBranchOverride: activeThreadBranch,
+            onActiveThreadBranchOverrideChange: setPendingServerThreadBranch,
+          }
+        : {})}
+      startFromOrigin={startFromOrigin}
+      onStartFromOriginChange={onStartFromOriginChange}
+      newBranchName={newBranchName}
+      onNewBranchNameChange={onNewBranchNameChange}
+      {...(canCheckoutPullRequestIntoThread
+        ? { onCheckoutPullRequestRequest: openPullRequestDialog }
+        : {})}
+      onComposerFocusRequest={scheduleComposerFocus}
+      versionMismatch={
+        showVersionMismatchBanner && versionMismatch
+          ? {
+              clientVersion: versionMismatch.clientVersion,
+              serverVersion: versionMismatch.serverVersion,
+              serverLabel: versionMismatchServerLabel,
+            }
+          : null
+      }
+      onDismissVersionMismatch={handleDismissVersionMismatch}
+      onRunProjectScript={runProjectScript}
+      onAddProjectScript={saveProjectScript}
+      onUpdateProjectScript={updateProjectScript}
+      onDeleteProjectScript={deleteProjectScript}
+    />
+  );
   // Shared between the two tab containers so a surface renders identically
   // wherever its tab currently lives.
   const renderSurfaceContent = (surface: RightPanelSurface, visible = true) => {
@@ -12885,6 +12961,7 @@ export default function ChatView(props: ChatViewProps) {
               workspaceMutationId={workspaceMutationId}
               activeTab={workspaceNavigatorTab}
               layoutControls={workspaceNavigatorLayoutControls}
+              details={workspaceNavigatorDetails}
               onRefreshPullRequest={() =>
                 gitStatusCwd === null
                   ? Promise.resolve()

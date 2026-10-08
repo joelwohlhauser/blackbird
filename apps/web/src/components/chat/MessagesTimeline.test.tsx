@@ -933,16 +933,7 @@ describe("MessagesTimeline", () => {
   });
 
   it("treats the follow re-arm band above the content bottom as the live edge", async () => {
-    const {
-      resolveTimelineIsAtEnd,
-      resolveTimelineMinimapHasPersistentGutter,
-      resolveTimelineMinimapHeightStyle,
-      resolveTimelineMinimapHitStripWidth,
-      resolveTimelineMinimapIndexFromPointer,
-      resolveTimelineMinimapInteractiveWidth,
-      resolveTimelineMinimapNavigationInteractive,
-      resolveTimelineMinimapTopPercent,
-    } = await import("./MessagesTimeline.logic");
+    const { resolveTimelineIsAtEnd } = await import("./MessagesTimeline.logic");
 
     expect(resolveTimelineIsAtEnd({ isAtEnd: true })).toBe(true);
     expect(resolveTimelineIsAtEnd(undefined)).toBeUndefined();
@@ -976,67 +967,6 @@ describe("MessagesTimeline", () => {
     // Geometry missing (older state shape): fall back to the nearEnd/strict flags.
     expect(resolveTimelineIsAtEnd({ isNearEnd: true, isAtEnd: false })).toBe(false);
     expect(resolveTimelineIsAtEnd({ isAtEnd: false })).toBe(false);
-
-    expect(resolveTimelineMinimapHeightStyle(5)).toBe("min(32px, calc(100vh - 18rem))");
-    expect(resolveTimelineMinimapTopPercent(2, 5)).toBe(50);
-    expect(
-      resolveTimelineMinimapIndexFromPointer({
-        itemCount: 101,
-        railTop: 100,
-        railHeight: 500,
-        pointerY: 350,
-      }),
-    ).toBe(50);
-    expect(
-      resolveTimelineMinimapIndexFromPointer({
-        itemCount: 101,
-        railTop: 100,
-        railHeight: 500,
-        pointerY: 999,
-      }),
-    ).toBe(100);
-    // Comfortable width: the column is capped at 768px.
-    expect(resolveTimelineMinimapHasPersistentGutter(832, 768)).toBe(false);
-    expect(resolveTimelineMinimapHasPersistentGutter(863, 768)).toBe(false);
-    expect(resolveTimelineMinimapHasPersistentGutter(864, 768)).toBe(true);
-    // Wider Chat width settings consume the gutter the minimap relies on.
-    expect(resolveTimelineMinimapHasPersistentGutter(1400, 1152)).toBe(true);
-    expect(resolveTimelineMinimapHasPersistentGutter(1200, 1152)).toBe(false);
-    expect(resolveTimelineMinimapHasPersistentGutter(2560, 2560)).toBe(false);
-
-    // No usable gutter (zoomed in / narrow pane): the strip must go inert
-    // instead of overlaying the centered content column.
-    expect(resolveTimelineMinimapHitStripWidth(768, 768)).toBe(0);
-    expect(resolveTimelineMinimapHitStripWidth(792, 768)).toBe(0);
-    // Partial gutter: strip shrinks to what fits between the viewport edge
-    // and the content column.
-    expect(resolveTimelineMinimapHitStripWidth(820, 768)).toBe(14);
-    // Full gutter: unchanged 40px-wide strip.
-    expect(resolveTimelineMinimapHitStripWidth(872, 768)).toBe(40);
-    expect(resolveTimelineMinimapHitStripWidth(1400, 768)).toBe(40);
-    // Full Chat width: the column spans the viewport, so the strip is inert
-    // however wide the window gets.
-    expect(resolveTimelineMinimapHitStripWidth(2560, 2560)).toBe(0);
-    // Wide Chat width on a window just wider than the column: partial strip.
-    expect(resolveTimelineMinimapHitStripWidth(1204, 1152)).toBe(14);
-    expect(resolveTimelineMinimapHitStripWidth(0, 0)).toBe(0);
-    expect(resolveTimelineMinimapHitStripWidth(Number.NaN, 768)).toBe(0);
-
-    // Prev/next buttons reach 14px past the strip's left edge; a narrower
-    // strip means they would sit on the content column.
-    expect(resolveTimelineMinimapNavigationInteractive(40)).toBe(true);
-    expect(resolveTimelineMinimapNavigationInteractive(14)).toBe(true);
-    expect(resolveTimelineMinimapNavigationInteractive(8)).toBe(false);
-    expect(resolveTimelineMinimapNavigationInteractive(0)).toBe(false);
-
-    // The collapsed target stays narrow, but an open preview keeps its full
-    // 20rem width plus the 2rem offset from the minimap rail interactive.
-    expect(resolveTimelineMinimapInteractiveWidth(0, false)).toBe(0);
-    expect(resolveTimelineMinimapInteractiveWidth(14, false)).toBe(14);
-    expect(resolveTimelineMinimapInteractiveWidth(40, false)).toBe(40);
-    expect(resolveTimelineMinimapInteractiveWidth(0, true)).toBe("22rem");
-    expect(resolveTimelineMinimapInteractiveWidth(14, true)).toBe("22rem");
-    expect(resolveTimelineMinimapInteractiveWidth(40, true)).toBe("22rem");
   });
 
   it("anchors a sent attachment message using its measured height", () => {

@@ -132,6 +132,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+b", command: "workspaceNavigator.toggle" },
   { key: "mod+shift+g", command: "workspaceNavigator.changes" },
   { key: "mod+shift+h", command: "workspaceNavigator.pullRequest" },
+  { key: "mod+shift+i", command: "workspaceNavigator.details" },
   { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
   {
     key: "mod+shift+d",

@@ -21,8 +21,7 @@ import ProjectScriptsControl, {
   type ProjectScriptActionResult,
 } from "../ProjectScriptsControl";
 import { Button } from "../ui/button";
-import type { ComponentProps } from "react";
-import { ThreadDetailsCard } from "./ThreadDetailsCard";
+import { ScrollArea } from "../ui/scroll-area";
 import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
@@ -34,10 +33,7 @@ interface VersionMismatchIssue {
   readonly serverLabel: string;
 }
 
-export interface ThreadDetailsPanelProps extends Pick<
-  ComponentProps<typeof ThreadDetailsCard>,
-  "anchor" | "handle" | "onPresentationChange"
-> {
+export interface ThreadDetailsPanelProps {
   forceNewWorktree?: boolean;
   environmentId: EnvironmentId;
   threadId: ThreadId;
@@ -115,113 +111,99 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
   };
 
   return (
-    <ThreadDetailsCard
-      threadRef={{ environmentId: props.environmentId, threadId: props.threadId }}
-      anchor={props.anchor}
-      handle={props.handle}
-      onPresentationChange={props.onPresentationChange}
-    >
-      {(density) => (
-        <>
-          <ThreadDetailsSection
-            headingId="thread-details-workspace-heading"
-            title="Workspace"
-            separated={false}
-            showHeading={false}
-          >
-            {props.versionMismatch ? (
-              <div className="mx-1 mb-2 flex gap-2 rounded-xl border border-warning/30 bg-warning/6 p-3">
-                <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium">Client and server versions differ</p>
-                  <p className="mt-1 text-2xs leading-relaxed text-muted-foreground">
-                    Client {props.versionMismatch.clientVersion} ·{" "}
-                    {props.versionMismatch.serverLabel} {props.versionMismatch.serverVersion}
-                  </p>
-                </div>
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  aria-label="Dismiss version mismatch warning"
-                  onClick={props.onDismissVersionMismatch}
-                >
-                  <XIcon className="size-3.5" />
-                </Button>
+    <ScrollArea scrollFade className="min-h-0 flex-1">
+      <div data-thread-details-panel>
+        <ThreadDetailsSection
+          headingId="thread-details-workspace-heading"
+          title="Workspace"
+          separated={false}
+          showHeading={false}
+        >
+          {props.versionMismatch ? (
+            <div className="mx-1 mb-2 flex gap-2 rounded-xl border border-warning/30 bg-warning/6 p-3">
+              <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium">Client and server versions differ</p>
+                <p className="mt-1 text-2xs leading-relaxed text-muted-foreground">
+                  Client {props.versionMismatch.clientVersion} · {props.versionMismatch.serverLabel}{" "}
+                  {props.versionMismatch.serverVersion}
+                </p>
               </div>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                aria-label="Dismiss version mismatch warning"
+                onClick={props.onDismissVersionMismatch}
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col">
+            {showEnvironment ? (
+              <BranchToolbarEnvironmentSelector
+                displayMode="panel"
+                autoEnvironmentLabel={props.autoEnvironmentLabel}
+                onAutoEnvironment={props.onAutoEnvironment}
+                envLocked={props.envLocked}
+                environmentId={props.environmentId}
+                availableEnvironments={props.availableEnvironments}
+                {...(canPickEnvironment ? { onEnvironmentChange: props.onEnvironmentChange } : {})}
+              />
             ) : null}
 
+            <BranchToolbar layout="panel" panelSection="workspace" {...branchToolbarProps} />
+
+            {props.showOpenInPicker ? (
+              <OpenInPicker
+                keybindings={props.keybindings}
+                environmentId={props.environmentId}
+                availableEditors={props.availableEditors}
+                openInCwd={props.gitCwd}
+                displayMode="panel"
+              />
+            ) : null}
+
+            {props.activeProjectScripts ? (
+              <ProjectScriptsControl
+                environmentId={props.environmentId}
+                displayMode="panel"
+                scripts={props.activeProjectScripts}
+                fileScripts={fileScripts}
+                preferredScriptId={props.preferredScriptId}
+                onRunScript={props.onRunProjectScript}
+                onAddScript={props.onAddProjectScript}
+                onUpdateScript={props.onUpdateProjectScript}
+                onDeleteScript={props.onDeleteProjectScript}
+              />
+            ) : null}
+          </div>
+        </ThreadDetailsSection>
+
+        {props.gitCwd ? (
+          <ThreadDetailsSection
+            headingId="thread-details-version-control-heading"
+            title="Version Control"
+            showHeading={false}
+            separated
+          >
             <div className="flex flex-col">
-              {density === "full" && showEnvironment ? (
-                <BranchToolbarEnvironmentSelector
-                  displayMode="panel"
-                  autoEnvironmentLabel={props.autoEnvironmentLabel}
-                  onAutoEnvironment={props.onAutoEnvironment}
-                  envLocked={props.envLocked}
-                  environmentId={props.environmentId}
-                  availableEnvironments={props.availableEnvironments}
-                  {...(canPickEnvironment
-                    ? { onEnvironmentChange: props.onEnvironmentChange }
-                    : {})}
-                />
-              ) : null}
-
-              {density === "full" ? (
-                <BranchToolbar layout="panel" panelSection="workspace" {...branchToolbarProps} />
-              ) : null}
-
-              {density !== "essential" && props.showOpenInPicker ? (
-                <OpenInPicker
-                  keybindings={props.keybindings}
-                  environmentId={props.environmentId}
-                  availableEditors={props.availableEditors}
-                  openInCwd={props.gitCwd}
-                  displayMode="panel"
-                />
-              ) : null}
-
-              {props.activeProjectScripts ? (
-                <ProjectScriptsControl
-                  environmentId={props.environmentId}
-                  displayMode="panel"
-                  scripts={props.activeProjectScripts}
-                  fileScripts={fileScripts}
-                  preferredScriptId={props.preferredScriptId}
-                  onRunScript={props.onRunProjectScript}
-                  onAddScript={props.onAddProjectScript}
-                  onUpdateScript={props.onUpdateProjectScript}
-                  onDeleteScript={props.onDeleteProjectScript}
-                />
+              {props.isGitRepo ? (
+                <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
               ) : null}
             </div>
           </ThreadDetailsSection>
+        ) : null}
 
-          {props.gitCwd ? (
-            <ThreadDetailsSection
-              headingId="thread-details-version-control-heading"
-              title="Version Control"
-              showHeading={false}
-              separated={density === "full"}
-            >
-              <div className="flex flex-col">
-                {props.isGitRepo ? (
-                  <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
-                ) : null}
-              </div>
-            </ThreadDetailsSection>
-          ) : null}
+        {!props.draftId ? (
+          <ThreadAutomationsPanel environmentId={props.environmentId} threadId={props.threadId} />
+        ) : null}
 
-          {density === "full" && !props.draftId ? (
-            <ThreadAutomationsPanel environmentId={props.environmentId} threadId={props.threadId} />
-          ) : null}
-
-          {density === "full" && !props.draftId ? (
-            <ThreadRelationshipsPanel
-              environmentId={props.environmentId}
-              threadId={props.threadId}
-            />
-          ) : null}
-        </>
-      )}
-    </ThreadDetailsCard>
+        {!props.draftId ? (
+          <ThreadRelationshipsPanel environmentId={props.environmentId} threadId={props.threadId} />
+        ) : null}
+      </div>
+    </ScrollArea>
   );
 }

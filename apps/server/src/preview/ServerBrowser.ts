@@ -43,6 +43,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as Context from "effect/Context";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";
 import * as Layer from "effect/Layer";
@@ -60,6 +61,7 @@ import type {
   Dialog,
   Download,
   FileChooser,
+  Frame,
   Page,
 } from "playwright-core";
 
@@ -68,6 +70,12 @@ import * as ServerConfig from "../config.ts";
 import { resolveRootCliCommand } from "../cli/invocation.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as PreviewAutomationBroker from "../mcp/PreviewAutomationBroker.ts";
+import {
+  isMutatingCdpCommand,
+  type AgentCdpChild,
+  type AgentCdpPage,
+  type AgentCdpPageListener,
+} from "./AgentCdpConnection.ts";
 import * as DesktopBrowserChannel from "./DesktopBrowserChannel.ts";
 import * as PreviewManager from "./Manager.ts";
 import * as ServerBrowserPage from "./ServerBrowserPage.ts";
@@ -238,8 +246,21 @@ export class ServerBrowser extends Context.Service<
     }) => Effect.Effect<Option.Option<{ readonly path: string; readonly fileName: string }>>;
     /** Deletes a human profile's server-side storage, closing its open tabs first. */
     readonly clearProfile: (profileId: string) => Effect.Effect<void, PreviewClearProfileError>;
+    readonly openAgentPage: (input: {
+      readonly threadId: string;
+      readonly tabId: string;
+      readonly agentSessionId: string;
+      readonly listener: AgentCdpPageListener;
+    }) => Effect.Effect<AgentCdpPage, ServerBrowserTabNotFoundError | ServerBrowserLaunchError>;
   }
 >()("t3/preview/ServerBrowser") {}
+
+interface RawCdpSession {
+  send(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  on(event: "event", listener: (event: { method: string; params?: unknown }) => void): unknown;
+  on(event: "close", listener: () => void): unknown;
+  detach(): Promise<void>;
+}
 
 interface ViewerState {
   readonly id: string;
@@ -497,7 +518,7 @@ const make = Effect.gen(function* () {
             ? "you"
             : tab.control.controller !== null
               ? "another-viewer"
-              : tab.control.agentId !== null
+              : tab.control.agentId !== null || tab.control.sharedWith !== null
                 ? "agent"
                 : "unclaimed",
         generation: tab.control.generation,
@@ -2193,9 +2214,93 @@ const make = Effect.gen(function* () {
       catch: (cause) => new PreviewClearProfileError({ profileId, cause }),
     });
 
+  const openAgentPage: ServerBrowser["Service"]["openAgentPage"] = (input) =>
+    Effect.gen(function* () {
+      const tab = yield* findTab(input.threadId, input.tabId);
+      const attachedAt = yield* Clock.currentTimeMillis;
+      return yield* Effect.tryPromise({
+        try: async (): Promise<AgentCdpPage> => {
+          tab.usedAt = attachedAt;
+          const openSession = async (target: Page | Frame) =>
+            (await tab.page.context().newCDPSession(target)) as unknown as RawCdpSession;
+          const actAsAgent = <A>(run: () => Promise<A>) => {
+            const sharedBefore = tab.control.sharedWith;
+            const result = tab.control.shared(input.agentSessionId, run);
+            if (tab.control.sharedWith !== sharedBefore) broadcastControl(tab);
+            return result;
+          };
+          const guardedSend =
+            (session: RawCdpSession) => (method: string, params: Record<string, unknown>) => {
+              tab.usedAt = Date.now();
+              return isMutatingCdpCommand(method)
+                ? actAsAgent(() => session.send(method, params))
+                : session.send(method, params);
+            };
+          const session = await openSession(tab.page);
+          session.on("event", ({ method, params }) => input.listener.onEvent(method, params));
+          session.on("close", input.listener.onClose);
+          const info = await session.send("Target.getTargetInfo", {});
+          const frameSessions = new Map<Frame, RawCdpSession | null>();
+          let detached = false;
+          let watchFrame: ((frame: Frame) => void) | null = null;
+          const attachChildren: AgentCdpPage["attachChildren"] = (onChild) => {
+            if (watchFrame !== null || detached) return;
+            const attachFrame = async (frame: Frame) => {
+              if (detached || frame === tab.page.mainFrame() || frameSessions.has(frame)) return;
+              frameSessions.set(frame, null);
+              const child = await openSession(frame).catch(() => null);
+              if (child === null || detached) {
+                frameSessions.delete(frame);
+                if (child) void child.detach().catch(constVoid);
+                return;
+              }
+              frameSessions.set(frame, child);
+              const childInfo = await child.send("Target.getTargetInfo", {}).catch(() => null);
+              const handle: AgentCdpChild = {
+                targetInfo: asRecord(asRecord(childInfo)?.["targetInfo"]) ?? {},
+                send: guardedSend(child),
+                detach: () => child.detach().catch(constVoid),
+              };
+              const listener = onChild(handle);
+              child.on("event", ({ method, params }) => listener.onEvent(method, params));
+              child.on("close", () => {
+                if (frameSessions.get(frame) === child) frameSessions.delete(frame);
+                listener.onClose();
+              });
+            };
+            watchFrame = (frame) => void attachFrame(frame);
+            tab.page.on("frameattached", watchFrame);
+            tab.page.on("framenavigated", watchFrame);
+            for (const frame of tab.page.frames()) watchFrame(frame);
+          };
+          return {
+            targetInfo: asRecord(asRecord(info)?.["targetInfo"]) ?? {},
+            send: guardedSend(session),
+            close: () => actAsAgent(async () => dropTab(tab, true)),
+            attachChildren,
+            detach: async () => {
+              if (detached) return;
+              detached = true;
+              if (watchFrame !== null) {
+                tab.page.off("frameattached", watchFrame);
+                tab.page.off("framenavigated", watchFrame);
+              }
+              const children = [...frameSessions.values()];
+              frameSessions.clear();
+              if (tab.control.leave(input.agentSessionId)) broadcastControl(tab);
+              await Promise.all(children.map((child) => child?.detach().catch(constVoid)));
+              await session.detach().catch(constVoid);
+            },
+          };
+        },
+        catch: (cause) => new ServerBrowserLaunchError({ cause }),
+      });
+    });
+
   return ServerBrowser.of({
     attachViewer,
     clearProfile,
+    openAgentPage,
     openDownload,
     answerFileChooser,
   });

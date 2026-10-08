@@ -123,8 +123,8 @@ agents, place themselves automatically: an open panel receives them; with the
 panel closed they open in the chat area unless the window is very wide
 (`WIDE_WORKSPACE_MIN_WIDTH`, 2200px — above any MacBook fullscreen), in which
 case the panel opens. Both tab bars have a Plus button that opens the full New
-Tab page in that container (Browser, Terminal, Diff, Linear, GitHub PR, Pull
-request, and Agents).
+Tab page in that container (Browser, Terminal, Diff, Linear, GitHub PR, and Pull
+request).
 A title-bar button toggles the normal right panel; there is no ⌥⌘B binding or
 maximize control.
 Control+Tab opens the tab switcher described above. Browser-backed tabs
@@ -133,19 +133,23 @@ browser controls. Right-clicking a link can open it in a new workspace tab,
 open it in the default browser, or copy it. Selected text and editable fields
 offer the usual copy, cut, paste, and select-all actions.
 Command+T opens a **New Tab** page with the available Browser, Terminal,
-Diff, Linear, GitHub PR, Pull request, and Agents surfaces. Agents is disabled until the chat has subagents.
+Diff, Linear, GitHub PR, and Pull request surfaces.
 
 Choosing Browser focuses the address bar immediately. Command+L focuses and selects the address while browsing. Home returns pinned GitHub PR and Linear tabs to their linked page; other browser tabs return to the browser start page.
 
 The second surface is the narrow, independently resizable **workspace
 navigator**, also referred to as the new right sidebar or sidepanel. It has
-three tabs:
+four tabs:
 
 - **Files** — the repository tree, search, new-file, and new-folder actions;
-- **Changes** — live uncommitted changes, colored per-file line counts, and the
-  primary commit/push/PR action;
+- **Changes** — live branch changes including uncommitted and untracked work,
+  colored per-file line counts, a branch-vs-base summary, and the primary
+  commit/push/PR action;
 - **PR** — the exact files changed by the pull request associated with the
-  current branch, with an explicit refresh action for the PR and its files.
+  current branch, with an explicit refresh action for the PR and its files;
+- **Details** — the chat's environment, worktree mode, branch, PR status and
+  watches, editor and project-script actions, automations, and related chats
+  (no Git actions; Changes owns those).
 
 Selecting a file opens it in the normal right panel. Selecting an item from
 Changes or PR opens a dedicated whole-file diff tab rather than replacing the
@@ -160,6 +164,7 @@ Useful shortcuts on macOS:
 - Command+Shift+B — toggle the workspace navigator
 - Command+Shift+G — open the workspace navigator on Changes
 - Command+Shift+H — open the workspace navigator on PR
+- Command+Shift+I — open the workspace navigator on Details
 - Control+Tab / Control+Shift+Tab — tab switcher for the current chat's tabs;
   when the chat has no extra tabs, the shortcut does nothing
 - Command+T — open the New Tab page
@@ -191,7 +196,7 @@ New worktrees:
 - run all filesystem and Git operations on the environment that owns the
   project.
 
-Agents can start the same workflow from an active chat through Blackbird's MCP tool. An existing branch reuses its checkout or gets a new worktree; an unknown branch creates a new worktree. Agents can pass a destination repository to leave a Quick chat or change projects, or pass an existing folder without a branch to switch there directly. The same conversation keeps its history and resumes in the destination after the current turn ends. Git workspaces are checkpointed before leaving; ordinary folders do not require a checkpoint. The composer, Files and Changes navigator, and newly opened workspace tabs follow the destination. Paths and worktree setup run on the owning environment, including remote. New worktrees honor the environment's **Start from origin** setting and project setup script.
+Agents can start the same workflow from an active chat with the `t3_worktree_handoff` MCP tool. An existing branch reuses its checkout or gets a new worktree; an unknown branch creates a new worktree. Agents can pass `repositoryPath` to leave a Quick chat or change repositories (Blackbird finds or creates the project for that folder), or pass an existing folder without a branch to switch there directly. The same conversation keeps its history; the current turn ends after the handoff, and a `continuationPrompt` resumes work in the destination. Paths and worktree setup run on the owning environment, including remote. New worktrees honor the environment's **Start from origin** setting and project setup script.
 
 An active worktree chat shows a **Delete it** action. It removes the worktree
 directly, including when it has uncommitted changes, without a confirmation
@@ -256,15 +261,15 @@ Assistant messages can be read aloud with Google Gemini text-to-speech (`gemini-
 
 ### Agent browser (Playwright CLI)
 
-Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to drive the same browser tabs you see. When browser access is on for the project, Blackbird starts each agent session with `PLAYWRIGHT_CLI_SESSION` and `PLAYWRIGHT_MCP_CDP_ENDPOINT` in its environment, so plain `playwright-cli open <url>`, `click`, `snapshot`, `tab-new`, `video-start` and so on work without flags, endpoints or setup. The endpoint lives as long as the agent session, and agents no longer get the old `preview_*` browser tools. Your own screenshot and Shift-click recording in the browser toolbar are unchanged.
+Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to drive the same browser tabs you see, on top of the environment server's browser engine. Each agent session starts with `PLAYWRIGHT_CLI_SESSION` and `PLAYWRIGHT_MCP_CDP_ENDPOINT` in its environment, so plain `playwright-cli open <url>`, `click`, `snapshot`, `tab-new` and so on work without flags or setup. The endpoint is tied to the agent session and revoked with it. Agents do not get upstream's `preview_*` MCP browser tools.
 
-- Playwright sees the chat's browser tabs except the Linear and GitHub PR tabs. `open <url>` navigates the current tab (a bare `open` sends it to `about:blank`), pages it opens become new background tabs (in the open panel, otherwise the chat area) without switching to them or popping up a floating preview, and closing a page closes its tab. If you close the agent's tabs while it is still connected, its next command opens a new blank tab.
-- Tabs an agent opens start at the MacBook Air 13″ size (1470 × 956), whatever your own default viewport is; your tabs keep their size when an agent uses them. `playwright-cli resize` resizes the real tab instead of emulating a size inside it. The device toolbar also offers MacBook Air 13″ and 15″ presets.
-- `playwright-cli close` only disconnects; your tabs stay open. Disconnecting resets everything Playwright changed in the tabs (routes, emulation, injected scripts).
-- You can keep using the tabs while the agent works, and each agent gets its own isolated session per tab. Agent typing, pasting and clicking stay inside the page, so your composer keeps its focus and text.
-- The connection runs through the agent's own server (local or remote) and the existing environment connection, so it only works while the desktop app is connected.
-- Agents stay inside their tabs: they cannot reach Blackbird's own window, other windows, local files, or navigate to anything other than http, https, about and data URLs.
-- There is one shared browser profile, so extra browser contexts, downloads and PDF export are not available. Cookie commands fail when the chat's tabs mix browser profiles.
+- Playwright sees the chat's browser tabs. `open <url>` navigates the current tab, and pages the agent opens become new agent tabs.
+- Tabs an agent opens start at the MacBook Air 13″ size (1470 × 956). `playwright-cli resize` resizes the real tab.
+- `playwright-cli close` only disconnects; your tabs stay open.
+- Agent typing and pasting go to the page as native input, and focus returns to what you were typing in after an agent click.
+- Chats on the MacBook drive the tab shown in the desktop app. Chats on remote use a headless Chrome on remote that is streamed into the app, so `localhost` on remote works but your Mac's logins do not.
+- While you hold control of a tab, the agent's clicks, typing, scripts, navigation and closes fail until you release it.
+- Agents only reach the chat's own tabs, can navigate only to http, https, about and data URLs, and get no extra browser contexts. Cross-site iframes work in remote tabs but not in desktop tabs.
 - `playwright-cli` has to be installed on the agent's machine. It is installed on the local Mac and remote, not on remote-example-2.
 
 ### Linear, GitHub, and links

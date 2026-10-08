@@ -655,6 +655,37 @@ describe("CodexAdapterV2 process spawning", () => {
     }
   });
 
+  it("gives the thread's shell commands the agent browser connection", () => {
+    const threadId = ThreadId.make("thread-codex-browser");
+    McpProviderSession.setMcpProviderSession({
+      environmentId: EnvironmentId.make("environment-codex-browser"),
+      threadId,
+      providerSessionId: "mcp-session-browser",
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      endpoint: "http://127.0.0.1:43123/mcp",
+      authorizationHeader: "Bearer secret-codex-token",
+      browserToolsAvailable: true,
+      browserEnvironment: {
+        PLAYWRIGHT_CLI_SESSION: "blackbird-thread",
+        PLAYWRIGHT_MCP_CDP_ENDPOINT: "ws://127.0.0.1:43123/api/agent-cdp/cdp-token",
+      },
+    });
+
+    try {
+      const { config } = CodexAdapterV2.codexThreadRuntimeParams({ threadId });
+      assert.equal(
+        config["shell_environment_policy.set.PLAYWRIGHT_MCP_CDP_ENDPOINT"],
+        "ws://127.0.0.1:43123/api/agent-cdp/cdp-token",
+      );
+      assert.equal(
+        config["shell_environment_policy.set.PLAYWRIGHT_CLI_SESSION"],
+        "blackbird-thread",
+      );
+    } finally {
+      McpProviderSession.clearMcpProviderSession(threadId);
+    }
+  });
+
   it.effect("resolves Windows command shims through the shared spawn policy", () =>
     Effect.gen(function* () {
       const command = yield* CodexAdapterV2.makeCodexAppServerSpawnCommand({

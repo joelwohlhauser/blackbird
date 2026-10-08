@@ -98,6 +98,7 @@ const adapter = {
 interface HarnessOptions {
   readonly createWorktree?: GitWorkflow.GitWorkflowService["Service"]["createWorktree"];
   readonly fetchRemote?: GitWorkflow.GitWorkflowService["Service"]["fetchRemote"];
+  readonly listRefs?: GitWorkflow.GitWorkflowService["Service"]["listRefs"];
   readonly hasCommit?: GitWorkflow.GitWorkflowService["Service"]["hasCommit"];
   readonly renameBranch?: GitWorkflow.GitWorkflowService["Service"]["renameBranch"];
   readonly runSetup?: ProjectSetupScriptRunner.ProjectSetupScriptRunner["Service"]["runForThread"];
@@ -125,6 +126,7 @@ function makeHarness(options: HarnessOptions = {}) {
           worktree: { path: "/repo-worktrees/feature", refName: input.newRefName, headSha: "abc" },
         } as never)),
   );
+  const fetchRemote = vi.fn(options.fetchRemote ?? (() => Effect.void));
   const renameBranch = vi.fn(
     options.renameBranch ?? ((input) => Effect.succeed({ branch: input.newBranch })),
   );
@@ -166,7 +168,17 @@ function makeHarness(options: HarnessOptions = {}) {
     Layer.mock(GitWorkflow.GitWorkflowService)({
       createWorktree,
       renameBranch,
-      fetchRemote: options.fetchRemote ?? (() => Effect.void),
+      fetchRemote,
+      listRefs:
+        options.listRefs ??
+        (() =>
+          Effect.succeed({
+            refs: [],
+            isRepo: true,
+            hasPrimaryRemote: true,
+            nextCursor: null,
+            totalCount: 0,
+          })),
       hasCommit: options.hasCommit ?? (() => Effect.succeed(false)),
       remoteExists: () => Effect.succeed(true),
       remoteBranchExists: () => Effect.succeed(true),
@@ -230,6 +242,7 @@ function makeHarness(options: HarnessOptions = {}) {
       layerExternalServices,
     ),
     createWorktree,
+    fetchRemote,
     removeWorktree,
     renameBranch,
     generateBranchName,
@@ -1171,6 +1184,83 @@ it.effect("keeps an explicit branch name instead of generating one", () =>
       yield* waitUntil(() => Effect.sync(() => harness.createWorktree.mock.calls.length === 1));
       assert.equal(harness.generateBranchName.mock.calls.length, 0);
       assert.equal(harness.createWorktree.mock.calls[0]?.[0]?.newRefName, "my-feature");
+    }).pipe(Effect.provide(harness.layer));
+  }),
+);
+
+it.effect("checks out an existing branch in a new worktree without renaming it", () =>
+  Effect.gen(function* () {
+    const harness = makeHarness({
+      createWorktree: (input) =>
+        Effect.succeed({
+          worktree: { path: "/repo-worktrees/existing", refName: input.refName },
+        }),
+    });
+    yield* Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const launched = yield* launches.launch(
+        launchInput({
+          command: "command:launch:existing-branch",
+          thread: "thread:launch:existing-branch",
+          message: "Continue the feature",
+          workspace: {
+            type: "worktree",
+            baseRef: "feature/existing",
+            startFromOrigin: true,
+            checkoutExisting: true,
+          },
+        }),
+      );
+      yield* waitUntil(() => Effect.sync(() => harness.runSetup.mock.calls.length === 1));
+      const created = harness.createWorktree.mock.calls[0]?.[0];
+      assert.equal(created?.refName, "feature/existing");
+      assert.isUndefined(created?.newRefName);
+      assert.equal(harness.fetchRemote.mock.calls.length, 0);
+      assert.equal(harness.generateBranchName.mock.calls.length, 0);
+      assert.equal(harness.renameBranch.mock.calls.length, 0);
+      const thread = (yield* threads.getThreadProjection(launched.threadId)).thread;
+      assert.equal(thread.branch, "feature/existing");
+      assert.equal(thread.worktreePath, "/repo-worktrees/existing");
+    }).pipe(Effect.provide(harness.layer));
+  }),
+);
+
+it.effect("reuses the worktree that already has the existing branch checked out", () =>
+  Effect.gen(function* () {
+    const harness = makeHarness({
+      listRefs: () =>
+        Effect.succeed({
+          refs: [
+            {
+              name: "feature/existing",
+              current: false,
+              isDefault: false,
+              worktreePath: "/repo-worktrees/already-there",
+            },
+          ],
+          isRepo: true,
+          hasPrimaryRemote: true,
+          nextCursor: null,
+          totalCount: 1,
+        }),
+    });
+    yield* Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const launched = yield* launches.launch(
+        launchInput({
+          command: "command:launch:reused-branch",
+          thread: "thread:launch:reused-branch",
+          message: "Continue the feature",
+          workspace: { type: "worktree", baseRef: "feature/existing", checkoutExisting: true },
+        }),
+      );
+      yield* waitUntil(() => Effect.sync(() => harness.runSetup.mock.calls.length === 1));
+      assert.equal(harness.createWorktree.mock.calls.length, 0);
+      const thread = (yield* threads.getThreadProjection(launched.threadId)).thread;
+      assert.equal(thread.branch, "feature/existing");
+      assert.equal(thread.worktreePath, "/repo-worktrees/already-there");
     }).pipe(Effect.provide(harness.layer));
   }),
 );

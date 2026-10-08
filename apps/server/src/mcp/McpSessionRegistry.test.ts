@@ -180,3 +180,41 @@ it.effect("does not keep credentials of other threads alive", () =>
     expect(yield* registry.resolve(token)).toBeUndefined();
   }),
 );
+
+it.effect("gives browser sessions a separate CDP endpoint that dies with the session", () =>
+  Effect.gen(function* () {
+    let timestamp = 1_000;
+    const registry = yield* makeRegistry(() => timestamp);
+    const withoutBrowser = yield* registry.issue({
+      threadId: ThreadId.make("thread-no-browser"),
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      capabilities: new Set(),
+    });
+    expect(withoutBrowser.config.browserEnvironment).toBeUndefined();
+
+    const issued = yield* registry.issue({
+      threadId: ThreadId.make("thread-cdp"),
+      providerInstanceId: ProviderInstanceId.make("codex"),
+      capabilities: new Set(["preview"]),
+    });
+    const endpoint = issued.config.browserEnvironment?.["PLAYWRIGHT_MCP_CDP_ENDPOINT"] ?? "";
+    expect(endpoint).toMatch(/^ws:\/\/127\.0\.0\.1:43123\/api\/agent-cdp\/[\w-]{20,}$/);
+    expect(issued.config.browserEnvironment?.["PLAYWRIGHT_CLI_SESSION"]).toMatch(/^blackbird-/);
+    const cdpToken = endpoint.slice(endpoint.lastIndexOf("/") + 1);
+    const mcpToken = issued.config.authorizationHeader.replace(/^Bearer\s+/, "");
+
+    expect((yield* registry.resolveCdp(cdpToken))?.thread.providerSessionId).toBe(
+      issued.config.providerSessionId,
+    );
+    expect(yield* registry.resolve(cdpToken)).toBeUndefined();
+    expect(yield* registry.resolveCdp(mcpToken)).toBeUndefined();
+    expect(yield* registry.isCdpTokenLive(cdpToken)).toBe(true);
+
+    timestamp += 200;
+    expect(yield* registry.isCdpTokenLive(cdpToken)).toBe(false);
+    timestamp -= 200;
+    yield* registry.revokeProviderSession(issued.config.providerSessionId);
+    expect(yield* registry.isCdpTokenLive(cdpToken)).toBe(false);
+    expect(yield* registry.resolveCdp(cdpToken)).toBeUndefined();
+  }),
+);

@@ -23,7 +23,6 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { useClosedViewStore } from "./closedViewStore";
 import { resolveStorage } from "./lib/storage";
-import type { ThreadPanelPresentation } from "./rightPanelLayout";
 import type { ChatFileAttachment } from "./types";
 
 export const RIGHT_PANEL_KINDS = [
@@ -170,15 +169,13 @@ export function resolveAdjacentRightPanelSurface(
   return state.surfaces[nextIndex] ?? null;
 }
 
-export interface ThreadPanelVisibility {
-  inlineOpen: boolean;
-  popoverOpen: boolean;
-}
+export const WORKSPACE_NAVIGATOR_TABS = ["file", "changes", "pr", "details"] as const;
+export type WorkspaceNavigatorTab = (typeof WORKSPACE_NAVIGATOR_TABS)[number];
 
 interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
   workspaceNavigatorOpenByThreadKey: Record<string, true>;
-  threadPanelVisibilityByThreadKey: Record<string, ThreadPanelVisibility>;
+  workspaceNavigatorTabByThreadKey: Record<string, WorkspaceNavigatorTab>;
   /** Session-only count of user panel choices per thread. Automatic updates do not advance it. */
   userActionRevisionByThreadKey: Record<string, number>;
   closeRevisionByThreadKey: Record<string, number>;
@@ -279,12 +276,8 @@ interface RightPanelStoreState {
       "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request"
     >,
   ) => void;
-  setThreadPanelOpen: (
-    ref: ScopedThreadRef,
-    presentation: ThreadPanelPresentation,
-    open: boolean,
-  ) => void;
-  toggleThreadPanel: (ref: ScopedThreadRef, presentation: ThreadPanelPresentation) => void;
+  setWorkspaceNavigatorTab: (ref: ScopedThreadRef, tab: WorkspaceNavigatorTab) => void;
+  openWorkspaceNavigatorTab: (ref: ScopedThreadRef, tab: WorkspaceNavigatorTab) => void;
   removeThread: (ref: ScopedThreadRef) => void;
 }
 
@@ -294,11 +287,6 @@ const EMPTY_THREAD_STATE: ThreadRightPanelState = {
   surfaces: [],
   mainSurfaces: [],
   activeMainSurfaceId: null,
-};
-
-const DEFAULT_THREAD_PANEL_VISIBILITY: ThreadPanelVisibility = {
-  inlineOpen: true,
-  popoverOpen: false,
 };
 
 const singletonSurface = (
@@ -639,20 +627,17 @@ const updateThread = (
   return { ...byThreadKey, [threadKey]: next };
 };
 
-const updateThreadPanelVisibilityMap = (
-  byThreadKey: Record<string, ThreadPanelVisibility>,
+const withWorkspaceNavigatorTab = (
+  tabsByThreadKey: Record<string, WorkspaceNavigatorTab>,
   threadKey: string,
-  updater: (current: ThreadPanelVisibility) => ThreadPanelVisibility,
-): Record<string, ThreadPanelVisibility> => {
-  const current = byThreadKey[threadKey] ?? DEFAULT_THREAD_PANEL_VISIBILITY;
-  const next = updater(current);
-  if (next.inlineOpen && !next.popoverOpen) {
-    if (!(threadKey in byThreadKey)) return byThreadKey;
-    const { [threadKey]: _removed, ...rest } = byThreadKey;
+  tab: WorkspaceNavigatorTab,
+): Record<string, WorkspaceNavigatorTab> => {
+  if ((tabsByThreadKey[threadKey] ?? "file") === tab) return tabsByThreadKey;
+  if (tab === "file") {
+    const { [threadKey]: _removed, ...rest } = tabsByThreadKey;
     return rest;
   }
-  if (next === current) return byThreadKey;
-  return { ...byThreadKey, [threadKey]: next };
+  return { ...tabsByThreadKey, [threadKey]: tab };
 };
 
 function normalizeRevealLine(line: number | undefined): number | null {
@@ -874,7 +859,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
     (set, get) => ({
       byThreadKey: {},
       workspaceNavigatorOpenByThreadKey: {},
-      threadPanelVisibilityByThreadKey: {},
+      workspaceNavigatorTabByThreadKey: {},
       userActionRevisionByThreadKey: {},
       closeRevisionByThreadKey: {},
       getUserActionRevision: (ref) =>
@@ -1670,36 +1655,39 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             return upsertSurface(current, singletonSurface(kind));
           }),
         })),
-      setThreadPanelOpen: (ref, presentation, open) =>
-        set((state) => ({
-          threadPanelVisibilityByThreadKey: updateThreadPanelVisibilityMap(
-            state.threadPanelVisibilityByThreadKey,
+      setWorkspaceNavigatorTab: (ref, tab) =>
+        set((state) => {
+          const workspaceNavigatorTabByThreadKey = withWorkspaceNavigatorTab(
+            state.workspaceNavigatorTabByThreadKey,
             scopedThreadKey(ref),
-            (visibility) => {
-              const key = presentation === "inline" ? "inlineOpen" : "popoverOpen";
-              return visibility[key] === open ? visibility : { ...visibility, [key]: open };
-            },
-          ),
-        })),
-      toggleThreadPanel: (ref, presentation) =>
-        set((state) => ({
-          threadPanelVisibilityByThreadKey: updateThreadPanelVisibilityMap(
-            state.threadPanelVisibilityByThreadKey,
-            scopedThreadKey(ref),
-            (visibility) =>
-              presentation === "inline"
-                ? { ...visibility, inlineOpen: !visibility.inlineOpen }
-                : { ...visibility, popoverOpen: !visibility.popoverOpen },
-          ),
-        })),
+            tab,
+          );
+          return workspaceNavigatorTabByThreadKey === state.workspaceNavigatorTabByThreadKey
+            ? state
+            : { workspaceNavigatorTabByThreadKey };
+        }),
+      openWorkspaceNavigatorTab: (ref, tab) =>
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          return {
+            workspaceNavigatorTabByThreadKey: withWorkspaceNavigatorTab(
+              state.workspaceNavigatorTabByThreadKey,
+              threadKey,
+              tab,
+            ),
+            workspaceNavigatorOpenByThreadKey: state.workspaceNavigatorOpenByThreadKey[threadKey]
+              ? state.workspaceNavigatorOpenByThreadKey
+              : { ...state.workspaceNavigatorOpenByThreadKey, [threadKey]: true },
+          };
+        }),
       removeThread: (ref) =>
         set((state) => {
           const threadKey = scopedThreadKey(ref);
           const { [threadKey]: _removedPanel, ...restPanels } = state.byThreadKey;
           const { [threadKey]: _removedNavigator, ...restNavigators } =
             state.workspaceNavigatorOpenByThreadKey;
-          const { [threadKey]: _removedVisibility, ...restVisibility } =
-            state.threadPanelVisibilityByThreadKey;
+          const { [threadKey]: _removedNavigatorTab, ...restNavigatorTabs } =
+            state.workspaceNavigatorTabByThreadKey;
           const { [threadKey]: _removedRevision, ...restRevisions } =
             state.userActionRevisionByThreadKey;
           const { [threadKey]: _removedCloseRevision, ...restCloseRevisions } =
@@ -1707,7 +1695,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           if (
             _removedPanel === undefined &&
             _removedNavigator === undefined &&
-            _removedVisibility === undefined &&
+            _removedNavigatorTab === undefined &&
             _removedRevision === undefined &&
             _removedCloseRevision === undefined
           )
@@ -1715,7 +1703,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           return {
             byThreadKey: restPanels,
             workspaceNavigatorOpenByThreadKey: restNavigators,
-            threadPanelVisibilityByThreadKey: restVisibility,
+            workspaceNavigatorTabByThreadKey: restNavigatorTabs,
             userActionRevisionByThreadKey: restRevisions,
             closeRevisionByThreadKey: restCloseRevisions,
           };
@@ -1734,6 +1722,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           ),
         ),
         workspaceNavigatorOpenByThreadKey: state.workspaceNavigatorOpenByThreadKey,
+        workspaceNavigatorTabByThreadKey: state.workspaceNavigatorTabByThreadKey,
       }),
       migrate: migratePersistedRightPanelState,
     },
@@ -1788,21 +1777,12 @@ export function selectWorkspaceNavigatorOpen(
   return ref ? workspaceNavigatorOpenByThreadKey[scopedThreadKey(ref)] === true : false;
 }
 
-export function selectThreadPanelVisibility(
-  byThreadKey: Record<string, ThreadPanelVisibility>,
+export function selectWorkspaceNavigatorTab(
+  workspaceNavigatorTabByThreadKey: Record<string, WorkspaceNavigatorTab>,
   ref: ScopedThreadRef | null | undefined,
-): ThreadPanelVisibility {
-  if (!ref) return DEFAULT_THREAD_PANEL_VISIBILITY;
-  return byThreadKey[scopedThreadKey(ref)] ?? DEFAULT_THREAD_PANEL_VISIBILITY;
-}
-
-export function selectThreadPanelOpen(
-  byThreadKey: Record<string, ThreadPanelVisibility>,
-  ref: ScopedThreadRef | null | undefined,
-  presentation: ThreadPanelPresentation,
-): boolean {
-  const visibility = selectThreadPanelVisibility(byThreadKey, ref);
-  return presentation === "inline" ? visibility.inlineOpen : visibility.popoverOpen;
+): WorkspaceNavigatorTab {
+  const tab = ref ? workspaceNavigatorTabByThreadKey[scopedThreadKey(ref)] : undefined;
+  return tab !== undefined && WORKSPACE_NAVIGATOR_TABS.includes(tab) ? tab : "file";
 }
 
 export function selectActiveRightPanel(

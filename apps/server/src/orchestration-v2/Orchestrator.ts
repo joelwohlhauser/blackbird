@@ -2457,6 +2457,20 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: `Thread ${command.threadId} worktree changed before the metadata update could be applied.`,
       });
     }
+    if (
+      command.type === "thread.metadata.update" &&
+      command.projectId !== undefined &&
+      command.projectId !== thread.projectId
+    ) {
+      const project = yield* projects.get(command.projectId).pipe(mapDispatchError(command));
+      if (Option.isNone(project) || project.value.deletedAt !== null) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: `Project ${command.projectId} does not exist.`,
+        });
+      }
+    }
     if (command.type === "thread.metadata.update" && command.expectedEmpty === true) {
       const records = yield* projectionStore
         .getThreadRecords(command.threadId, ["runs"])
@@ -2627,15 +2641,17 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       }
     }
 
+    const workspaceChanged =
+      command.type === "thread.metadata.update" &&
+      ((command.worktreePath !== undefined && command.worktreePath !== thread.worktreePath) ||
+        (command.projectId !== undefined && command.projectId !== thread.projectId));
     const needsProviderState =
       command.type === "thread.runtime-mode.set" ||
       command.type === "thread.model-selection.set" ||
       command.type === "provider.switch" ||
       command.type === "thread.archive" ||
       command.type === "thread.settle" ||
-      (command.type === "thread.metadata.update" &&
-        command.worktreePath !== undefined &&
-        command.worktreePath !== thread.worktreePath);
+      workspaceChanged;
     const providerContext = needsProviderState
       ? yield* projectionStore
           .getThreadProviderContext(
@@ -2912,6 +2928,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                     Date.parse(thread.limitRecovery.resetAt)
                 ? { snoozedUntil: null, snoozedAt: null }
                 : {}),
+            ...(command.projectId === undefined ? {} : { projectId: command.projectId }),
             ...(command.branch === undefined ? {} : { branch: command.branch }),
             ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
             ...(command.linkedPullRequest === undefined
@@ -3296,9 +3313,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     const detachSessionIds = new Set(
       command.type === "thread.archive" || command.type === "thread.settle"
         ? (providerContext?.providerSessions ?? []).map((session) => session.id)
-        : command.type === "thread.metadata.update" &&
-            command.worktreePath !== undefined &&
-            command.worktreePath !== thread.worktreePath
+        : workspaceChanged
           ? (providerContext?.providerSessions ?? []).map((session) => session.id)
           : command.type === "thread.runtime-mode.set"
             ? (providerContext?.providerSessions ?? [])

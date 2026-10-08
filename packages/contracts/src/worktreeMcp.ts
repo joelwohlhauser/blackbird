@@ -1,23 +1,34 @@
 import * as Schema from "effect/Schema";
 
-import { TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 /**
  * Input for the `t3_worktree_handoff` MCP tool.
  *
- * Creates a git worktree for the calling agent thread and re-points the
- * thread at it. Changing the thread's workspace detaches the live provider
- * session, so the current turn ends shortly after the handoff is recorded;
- * the conversation continues inside the worktree on the thread's next run.
+ * Moves the calling agent thread to another workspace: a git worktree of its
+ * repository, or another repository or folder on this environment, and
+ * re-points the thread at it. Changing the thread's workspace detaches the
+ * live provider session, so the current turn ends shortly after the handoff is
+ * recorded; the conversation continues in the new workspace on the thread's
+ * next run.
  */
 export const WorktreeMcpHandoffInput = Schema.Struct({
-  branch: TrimmedNonEmptyString.annotate({
-    description: "Branch name to create for the worktree (e.g. 'feature/my-change').",
-  }),
+  repositoryPath: Schema.optional(
+    TrimmedNonEmptyString.annotate({
+      description:
+        "Destination repository or existing folder on this environment (absolute or ~/ path). Required when leaving a Quick chat or changing repositories. Without branch, switches the thread straight to this folder without creating a worktree.",
+    }),
+  ),
+  branch: Schema.optional(
+    TrimmedNonEmptyString.annotate({
+      description:
+        "Branch for the worktree (e.g. 'feature/my-change'). An existing local branch is reused: the thread switches to its current worktree, or a new worktree checks it out. Any other name creates a new branch from baseRef.",
+    }),
+  ),
   baseRef: Schema.optional(
     TrimmedNonEmptyString.annotate({
       description:
-        "Branch or ref the worktree branch starts from. Defaults to the branch currently checked out in the project workspace.",
+        "Branch or ref a new branch starts from. Ignored when branch already exists. Defaults to the repository's default branch.",
     }),
   ),
   startFromOrigin: Schema.optional(
@@ -85,9 +96,10 @@ export const WorktreeMcpContinuationStatus = Schema.Union([
 export type WorktreeMcpContinuationStatus = typeof WorktreeMcpContinuationStatus.Type;
 
 export const WorktreeMcpHandoffResult = Schema.Struct({
+  projectId: ProjectId,
   worktreePath: TrimmedNonEmptyString,
-  branch: TrimmedNonEmptyString,
-  baseRef: TrimmedNonEmptyString,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  baseRef: Schema.NullOr(TrimmedNonEmptyString),
   startedFromOrigin: Schema.Boolean,
   setupScript: WorktreeMcpSetupScriptStatus,
   continuation: WorktreeMcpContinuationStatus,

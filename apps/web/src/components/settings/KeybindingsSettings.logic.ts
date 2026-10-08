@@ -212,7 +212,15 @@ const KEYBINDING_GROUPS = [
   {
     id: "navigation",
     title: "Navigation",
-    prefixes: ["sidebar", "rightPanel", "commandPalette", "filePicker", "projectSearch", "editor"],
+    prefixes: [
+      "sidebar",
+      "rightPanel",
+      "workspaceNavigator",
+      "commandPalette",
+      "filePicker",
+      "projectSearch",
+      "editor",
+    ],
   },
   { id: "threads", title: "Threads", prefixes: ["thread", "chat", "pullRequest"] },
   { id: "composer", title: "Composer", prefixes: ["composer", "modelPicker"] },
@@ -388,6 +396,9 @@ export function commandLabel(command: KeybindingCommand): string {
   }
   if (raw === "workspaceNavigator.pullRequest") {
     return "Open Pull Request Sidebar";
+  }
+  if (raw === "workspaceNavigator.details") {
+    return "Open Details Sidebar";
   }
   if (raw.startsWith("script.") && raw.endsWith(".run")) {
     return `Run Script: ${titleCaseCommandSegment(raw.slice("script.".length, -".run".length))}`;

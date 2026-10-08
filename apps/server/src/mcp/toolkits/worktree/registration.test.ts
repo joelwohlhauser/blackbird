@@ -21,6 +21,7 @@ import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "../../../secrets/SecretRequests.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
+import * as VcsDriverRegistry from "../../../vcs/VcsDriverRegistry.ts";
 import * as VcsStatusBroadcaster from "../../../vcs/VcsStatusBroadcaster.ts";
 import * as McpHttpServer from "../../McpHttpServer.ts";
 import * as McpSessionRegistry from "../../McpSessionRegistry.ts";
@@ -41,6 +42,7 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(GitWorkflowService.GitWorkflowService)({}),
   Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
   Layer.mock(VcsStatusBroadcaster.VcsStatusBroadcaster)({}),
+  Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({}),
 );
 
 const ToolsListPayload = Schema.fromJsonString(
@@ -125,7 +127,7 @@ it.effect("production mcp layer lists worktree tools over http", () =>
       expect(toolNames).toContain("t3_worktree_status");
       // The worktree registration merges alongside the other toolkits rather
       // than replacing them.
-      expect(toolNames).toContain("preview_status");
+      expect(toolNames).toContain("t3_preview_list");
       expect(toolNames).toContain("delegate_task");
 
       // The handoff tool mutates thread state, reaches the network (origin

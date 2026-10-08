@@ -60,6 +60,7 @@ export type ThreadLaunchWorkspaceStrategy =
       readonly baseRef: string;
       readonly branch?: string | undefined;
       readonly startFromOrigin?: boolean | undefined;
+      readonly checkoutExisting?: boolean | undefined;
     };
 
 export interface ThreadLaunchInitialMessage {
@@ -251,7 +252,10 @@ const make = Effect.gen(function* () {
     if (input.workspaceStrategy.type === "worktree") {
       yield* setupTracker.begin({
         threadId,
-        branch: input.workspaceStrategy.branch ?? null,
+        branch:
+          input.workspaceStrategy.checkoutExisting === true
+            ? input.workspaceStrategy.baseRef
+            : (input.workspaceStrategy.branch ?? null),
         baseRef: input.workspaceStrategy.baseRef,
         stages: ["fetch", "checkout", "setup-script", "agent"],
         fiber: yield* Effect.fiber,
@@ -306,7 +310,11 @@ const make = Effect.gen(function* () {
       // name generation, then rename in the background below.
       const requestedBranch = input.workspaceStrategy.branch;
       let branch: string | null;
-      if (input.workspaceStrategy.type === "worktree" && requestedBranch === undefined) {
+      if (
+        input.workspaceStrategy.type === "worktree" &&
+        input.workspaceStrategy.checkoutExisting !== true &&
+        requestedBranch === undefined
+      ) {
         const uuid = yield* randomUuidV4;
         branch = buildTemporaryWorktreeBranchName(() => uuid.replaceAll("-", ""));
       } else {
@@ -316,7 +324,62 @@ const make = Effect.gen(function* () {
         input.workspaceStrategy.type === "existing_worktree"
           ? input.workspaceStrategy.worktreePath
           : null;
-      if (input.workspaceStrategy.type === "worktree") {
+      if (
+        input.workspaceStrategy.type === "worktree" &&
+        input.workspaceStrategy.checkoutExisting === true
+      ) {
+        if (runId !== null) {
+          yield* threads
+            .dispatch({
+              type: "prepared-run.progress",
+              commandId: CommandId.make(`${input.commandId}:progress:worktree`),
+              threadId,
+              runId,
+              phase: "worktree",
+            })
+            .pipe(Effect.mapError(mapError(input, "update-thread", threadId)));
+        }
+        const existingBranch = input.workspaceStrategy.baseRef;
+        yield* setupTracker.stageStatus(threadId, "fetch", "skipped");
+        yield* setupTracker.stageStatus(threadId, "checkout", "running");
+        const localRefs = yield* git
+          .listRefs({
+            cwd: project.workspaceRoot,
+            query: existingBranch,
+            refKind: "local",
+            refresh: true,
+            limit: 100,
+          })
+          .pipe(Effect.mapError(mapError(input, "provision-worktree", threadId)));
+        const checkedOutAt = localRefs.refs.find(
+          (ref) => ref.name === existingBranch && ref.isRemote !== true,
+        )?.worktreePath;
+        if (checkedOutAt) {
+          worktreePath = checkedOutAt === project.workspaceRoot ? null : checkedOutAt;
+          branch = existingBranch;
+        } else {
+          const worktree = yield* git
+            .createWorktree(
+              { cwd: project.workspaceRoot, refName: existingBranch, path: null },
+              {
+                progress: {
+                  onWorktreeClaimed: (path) =>
+                    Effect.sync(() => {
+                      createdWorktreePath = path;
+                    }),
+                  onCheckoutProgress: (progress) =>
+                    setupTracker.stage(threadId, "checkout", { percent: progress.percent }),
+                },
+              },
+            )
+            .pipe(Effect.mapError(mapError(input, "provision-worktree", threadId)));
+          worktreePath = worktree.worktree.path;
+          branch = worktree.worktree.refName;
+          createdWorktreePath = worktreePath;
+        }
+        yield* setupTracker.update(threadId, (snapshot) => ({ ...snapshot, worktreePath, branch }));
+        yield* setupTracker.stageStatus(threadId, "checkout", "done");
+      } else if (input.workspaceStrategy.type === "worktree") {
         if (runId !== null) {
           yield* threads
             .dispatch({

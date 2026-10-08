@@ -530,6 +530,7 @@ export const OrchestrationV2ThreadLaunchWorkspaceStrategy = Schema.Union([
     baseRef: TrimmedNonEmptyString,
     branch: Schema.optional(TrimmedNonEmptyString),
     startFromOrigin: Schema.optional(Schema.Boolean),
+    checkoutExisting: Schema.optional(Schema.Boolean),
   }),
 ]);
 export type OrchestrationV2ThreadLaunchWorkspaceStrategy =
@@ -2740,6 +2741,7 @@ export const OrchestrationV2Command = Schema.Union([
     title: Schema.optional(TrimmedNonEmptyString),
     /** Kick off (true) or abandon (false) an async title regeneration. */
     regenerateTitle: Schema.optional(Schema.Boolean),
+    projectId: Schema.optional(ProjectId),
     branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
     worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
     expectedWorktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),

@@ -1,5 +1,3 @@
-import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
-import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
 import { Spinner } from "~/components/ui/spinner";
 import {
   ArchiveIcon,
@@ -13,14 +11,9 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import {
-  ChangeRequestStatusIcon,
-  prStatusIndicator,
-  PrStatusTooltipContent,
   terminalStatusFromRunningIds,
   synchronizeTerminalPulse,
   ThreadStatusLabel,
-  ThreadWorktreeIndicator,
-  useLinkedThreadPullRequest,
 } from "./ThreadStatusIndicators";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectFavicon } from "./ProjectFavicon";
@@ -80,8 +73,6 @@ import { isDesktopLocalConnectionTarget, isWslConnectionTarget } from "../connec
 import { useDesktopLocalBootstraps } from "../connection/useDesktopLocalBootstraps";
 import { isElectron } from "../env";
 import { useArchivedThreadSnapshots } from "../lib/archivedThreadsState";
-import { useTerminalFocus } from "../hooks/useTerminalFocus";
-import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { cn, isMacPlatform } from "../lib/utils";
@@ -93,8 +84,6 @@ import {
   useThreadShells,
   useThreadShellsForProjectRefs,
 } from "../state/entities";
-import { useEnvironmentQuery } from "../state/query";
-import { vcsEnvironment } from "../state/vcs";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { useThreadDiscoveredPorts } from "../portDiscoveryState";
@@ -406,7 +395,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     window.addEventListener("dragend", clearFileDrag);
     return () => window.removeEventListener("dragend", clearFileDrag);
   }, [isFileDragOver]);
-  const { leaseLiveStatus, rowRef } = useSidebarRowSubscriptionLease(isActive);
+  const { rowRef } = useSidebarRowSubscriptionLease(isActive);
   const setRowNodeRef = useCallback(
     (node: HTMLLIElement | null) => {
       setSortableNodeRef(node);
@@ -479,19 +468,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       lastVisitedAt,
     },
   });
-  const linkedPullRequestStatus = useLinkedThreadPullRequest(
-    thread.environmentId,
-    thread.linkedPullRequest,
-    leaseLiveStatus,
-    thread.pullRequests,
-    thread.branchPullRequest,
-  );
-  const pr = linkedPullRequestStatus?.pr ?? null;
-  const supportsMultiplePullRequests = useSupportsMultiplePullRequests(thread.environmentId);
-  const currentLinkedPr = supportsMultiplePullRequests
-    ? resolveThreadCurrentPullRequestLink(thread.pullRequests)
-    : null;
-  const prStatus = prStatusIndicator(pr, linkedPullRequestStatus?.sourceControlProvider);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive =
     canOperateThread && confirmingArchiveThreadKey === threadKey && !isThreadRunning;

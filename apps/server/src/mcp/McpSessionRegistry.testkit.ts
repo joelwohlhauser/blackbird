@@ -20,6 +20,8 @@ export const layer = Layer.succeed(
         },
       }),
     resolve: () => Effect.succeed(undefined),
+    resolveCdp: () => Effect.succeed(undefined),
+    isCdpTokenLive: () => Effect.succeed(false),
     touch: () => Effect.void,
     revokeProviderSession: () => Effect.void,
     revokeThread: () => Effect.void,

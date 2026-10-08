@@ -11,12 +11,12 @@ import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectSelectedRightPanelSurface,
-  selectThreadPanelOpen,
-  selectThreadPanelVisibility,
   selectThreadRightPanelState,
   selectWorkspaceNavigatorOpen,
+  selectWorkspaceNavigatorTab,
   useRightPanelStore,
   workspaceLayoutProbe,
+  type WorkspaceNavigatorTab,
 } from "./rightPanelStore";
 
 const refA = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-A"));
@@ -29,7 +29,7 @@ beforeEach(() => {
   useRightPanelStore.setState({
     byThreadKey: {},
     workspaceNavigatorOpenByThreadKey: {},
-    threadPanelVisibilityByThreadKey: {},
+    workspaceNavigatorTabByThreadKey: {},
     userActionRevisionByThreadKey: {},
     closeRevisionByThreadKey: {},
   });
@@ -802,31 +802,58 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("tracks inline and popover visibility independently", () => {
+  it("remembers the selected navigator tab per thread", () => {
     const store = useRightPanelStore.getState();
-
-    expect(selectThreadPanelOpen(store.threadPanelVisibilityByThreadKey, refA, "inline")).toBe(
-      true,
-    );
-    expect(selectThreadPanelOpen(store.threadPanelVisibilityByThreadKey, refA, "popover")).toBe(
-      false,
-    );
-
-    store.setThreadPanelOpen(refA, "inline", false);
-    store.toggleThreadPanel(refA, "popover");
-
     expect(
-      selectThreadPanelVisibility(
-        useRightPanelStore.getState().threadPanelVisibilityByThreadKey,
+      selectWorkspaceNavigatorTab(
+        useRightPanelStore.getState().workspaceNavigatorTabByThreadKey,
         refA,
       ),
-    ).toEqual({ inlineOpen: false, popoverOpen: true });
+    ).toBe("file");
+
+    store.setWorkspaceNavigatorTab(refA, "details");
+    store.setWorkspaceNavigatorTab(refB, "changes");
+
+    const tabs = useRightPanelStore.getState().workspaceNavigatorTabByThreadKey;
+    expect(selectWorkspaceNavigatorTab(tabs, refA)).toBe("details");
+    expect(selectWorkspaceNavigatorTab(tabs, refB)).toBe("changes");
     expect(
-      selectThreadPanelVisibility(
-        useRightPanelStore.getState().threadPanelVisibilityByThreadKey,
-        refB,
+      selectWorkspaceNavigatorOpen(
+        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
+        refA,
       ),
-    ).toEqual({ inlineOpen: true, popoverOpen: false });
+    ).toBe(false);
+
+    store.setWorkspaceNavigatorTab(refA, "file");
+    expect(useRightPanelStore.getState().workspaceNavigatorTabByThreadKey).toEqual({
+      "env-1:thread-B": "changes",
+    });
+  });
+
+  it("opens the navigator on the requested tab and keeps it open", () => {
+    const store = useRightPanelStore.getState();
+    store.openWorkspaceNavigatorTab(refA, "details");
+    store.openWorkspaceNavigatorTab(refA, "pr");
+
+    const state = useRightPanelStore.getState();
+    expect(selectWorkspaceNavigatorOpen(state.workspaceNavigatorOpenByThreadKey, refA)).toBe(true);
+    expect(selectWorkspaceNavigatorTab(state.workspaceNavigatorTabByThreadKey, refA)).toBe("pr");
+  });
+
+  it("persists the navigator tab and ignores unknown persisted tabs", () => {
+    useRightPanelStore.getState().setWorkspaceNavigatorTab(refA, "details");
+    const persisted = useRightPanelStore.persist
+      .getOptions()
+      .partialize?.(useRightPanelStore.getState());
+    expect(persisted).toMatchObject({
+      workspaceNavigatorTabByThreadKey: { "env-1:thread-A": "details" },
+    });
+    expect(
+      selectWorkspaceNavigatorTab(
+        { "env-1:thread-A": "agents" } as unknown as Record<string, WorkspaceNavigatorTab>,
+        refA,
+      ),
+    ).toBe("file");
   });
 
   it("open sets the active panel for a thread", () => {
@@ -1228,7 +1255,9 @@ describe("rightPanelStore", () => {
   it("removeThread clears persisted state", () => {
     useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
+    useRightPanelStore.getState().setWorkspaceNavigatorTab(refA, "details");
     useRightPanelStore.getState().removeThread(refA);
+    expect(useRightPanelStore.getState().workspaceNavigatorTabByThreadKey).toEqual({});
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBeNull();
     expect(
       selectWorkspaceNavigatorOpen(

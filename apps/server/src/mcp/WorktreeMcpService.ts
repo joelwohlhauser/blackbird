@@ -1,7 +1,9 @@
 import {
   CommandId,
+  isQuickChatsProjectId,
   MessageId,
-  type ProjectId,
+  ProjectId,
+  type Project,
   WorktreeMcpFailure,
   type WorktreeMcpContinuationStatus,
   type WorktreeMcpHandoffInput,
@@ -13,15 +15,18 @@ import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
+import { expandHomePathWith } from "../pathExpansion.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsStatusBroadcaster from "../vcs/VcsStatusBroadcaster.ts";
 import type { McpInvocationScope, McpThreadInvocationScope } from "./McpInvocationContext.ts";
 
@@ -58,6 +63,8 @@ const asOperationFailed = (prefix: string) =>
 const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const vcsRegistry = yield* VcsDriverRegistry.VcsDriverRegistry;
   const threadManagement = yield* ThreadManagementService.ThreadManagementService;
   const projects = yield* ProjectService.ProjectService;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
@@ -66,8 +73,8 @@ const make = Effect.gen(function* () {
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
 
   // Serializes handoffs per thread: two concurrent calls could otherwise both
-  // pass the worktreePath === null check and each create a worktree, leaving
-  // one untracked on disk.
+  // pass the workspace check and each create a worktree, leaving one
+  // untracked on disk.
   const handoffThreadsInFlight = new Set<string>();
 
   // Worktree tools act on the calling thread's own checkout binding.
@@ -134,6 +141,8 @@ const make = Effect.gen(function* () {
             ":",
           );
         return {
+          projectId: ProjectId.make(uuid),
+          projectCommandId: CommandId.make(part("command", "worktree-project")),
           commandId: CommandId.make(part("command", "worktree-handoff")),
           continuationCommandId: CommandId.make(part("command", "worktree-continuation")),
           continuationMessageId: MessageId.make(part("message", "worktree-continuation")),
@@ -142,31 +151,91 @@ const make = Effect.gen(function* () {
       Effect.orDie,
     );
 
+  const resolveDestination = Effect.fn("WorktreeMcpService.resolveDestination")(function* (
+    repositoryPath: string,
+  ) {
+    const expanded = expandHomePathWith(repositoryPath, path);
+    if (!path.isAbsolute(expanded)) {
+      return yield* failure(
+        "invalid_request",
+        `repositoryPath must be an absolute or ~/ path, got '${repositoryPath}'.`,
+      );
+    }
+    const info = yield* fileSystem.stat(expanded).pipe(Effect.option);
+    if (Option.isNone(info) || info.value.type !== "Directory") {
+      return yield* failure(
+        "invalid_request",
+        `repositoryPath '${repositoryPath}' is not an existing directory on this environment.`,
+      );
+    }
+    const folder = yield* fileSystem
+      .realPath(expanded)
+      .pipe(asOperationFailed(`Unable to resolve '${repositoryPath}'`));
+    const handle = yield* vcsRegistry
+      .detect({ cwd: folder })
+      .pipe(Effect.orElseSucceed(() => null));
+    if (handle?.kind !== "git") return { folder, projectRoot: folder };
+    const root = handle.repository.rootPath;
+    const commonDir =
+      handle.repository.metadataPath === null
+        ? null
+        : path.resolve(root, handle.repository.metadataPath);
+    return {
+      folder: root,
+      projectRoot:
+        commonDir !== null && path.basename(commonDir) === ".git" ? path.dirname(commonDir) : root,
+    };
+  });
+
+  const findOrCreateProject = (workspaceRoot: string, projectId: ProjectId, commandId: CommandId) =>
+    projects
+      .bootstrap({
+        commandId,
+        projectId,
+        title: path.basename(workspaceRoot) || workspaceRoot,
+        workspaceRoot,
+      })
+      .pipe(
+        Effect.map(({ project }) => project),
+        Effect.catchTags({
+          ProjectConflictError: (conflict) =>
+            projects.getById(conflict.conflictingProjectId).pipe(
+              Effect.flatMap(
+                Option.match({
+                  onNone: () => Effect.fail(conflict),
+                  onSome: (existing) => Effect.succeed(existing),
+                }),
+              ),
+            ),
+        }),
+        asOperationFailed(`Unable to open the project for '${workspaceRoot}'`),
+      );
+
   const performHandoff = Effect.fn("WorktreeMcpService.performHandoff")(function* (
     scope: McpThreadInvocationScope,
     input: WorktreeMcpHandoffInput,
   ) {
-    const alreadyInWorktree = (worktreePath: string) =>
-      failure(
-        "already_in_worktree",
-        `Thread '${scope.thread.threadId}' is already attached to worktree '${worktreePath}'.`,
-      );
-
     const projection = yield* loadThread(scope);
-    if (projection.thread.worktreePath !== null) {
-      return yield* alreadyInWorktree(projection.thread.worktreePath);
-    }
+    const originalWorktreePath = projection.thread.worktreePath;
     // An archived thread would accept the binding but refuse the continuation
     // message (and any other follow-up), so reject the handoff outright.
     if (projection.thread.archivedAt !== null) {
       return yield* failure(
         "invalid_request",
-        `Thread '${scope.thread.threadId}' is archived and cannot be handed off to a worktree.`,
+        `Thread '${scope.thread.threadId}' is archived and cannot be handed off to another workspace.`,
+      );
+    }
+    const inQuickChat = isQuickChatsProjectId(projection.thread.projectId);
+    if (input.repositoryPath === undefined && (inQuickChat || input.branch === undefined)) {
+      return yield* failure(
+        "invalid_request",
+        inQuickChat
+          ? "Pass repositoryPath to move this Quick chat into a repository or folder."
+          : "Pass branch to hand off to a worktree, or repositoryPath to switch to another repository or folder.",
       );
     }
 
-    const project = yield* loadProject(scope, projection.thread.projectId);
-    const projectCwd = project.workspaceRoot;
+    const sourceProject = yield* loadProject(scope, projection.thread.projectId);
 
     if (input.path !== undefined && !path.isAbsolute(input.path)) {
       return yield* failure(
@@ -175,77 +244,97 @@ const make = Effect.gen(function* () {
       );
     }
 
+    const destination =
+      input.repositoryPath === undefined
+        ? { folder: sourceProject.workspaceRoot, projectRoot: sourceProject.workspaceRoot }
+        : yield* resolveDestination(input.repositoryPath);
+    const ids = yield* handoffIds(scope);
+    const project: Project =
+      destination.projectRoot === sourceProject.workspaceRoot && !inQuickChat
+        ? sourceProject
+        : yield* findOrCreateProject(destination.projectRoot, ids.projectId, ids.projectCommandId);
+    const projectCwd = project.workspaceRoot;
+
     // The repo check runs regardless of whether baseRef was supplied, so a
     // non-repository workspace fails with an actionable error instead of an
     // opaque git failure further down.
     const localStatus = yield* gitWorkflow
-      .localStatus({ cwd: projectCwd })
+      .localStatus({ cwd: input.branch === undefined ? destination.folder : projectCwd })
       .pipe(asOperationFailed("Unable to read git status"));
-    if (!localStatus.isRepo) {
+    if (input.branch !== undefined && !localStatus.isRepo) {
       return yield* failure(
         "invalid_request",
-        `Project workspace '${projectCwd}' is not a git repository.`,
+        `Project workspace '${projectCwd}' is not a git repository. Point repositoryPath at the repository, or omit branch to switch to the folder itself.`,
       );
     }
 
-    // Fail fast with an actionable message when the branch already exists:
-    // the git driver deliberately keeps stderr out of its errors, so letting
-    // `git worktree add` fail would surface only an opaque failure. The
-    // existence check uses the complete local branch list (exact match); the
-    // paginated substring search only enriches the message with the checkout
-    // location when available.
-    const localBranchNames = yield* gitWorkflow
-      .listLocalBranchNames(projectCwd)
-      .pipe(asOperationFailed("Unable to list branches"));
-    if (localBranchNames.includes(input.branch)) {
-      const existingRef = yield* gitWorkflow
-        .listRefs({ cwd: projectCwd, query: input.branch, refKind: "local" })
-        .pipe(
-          Effect.map((result) =>
-            result.refs.find((ref) => ref.name === input.branch && ref.isRemote !== true),
-          ),
-          Effect.orElseSucceed(() => undefined),
-        );
-      const checkoutPath = existingRef?.worktreePath ?? null;
-      return yield* failure(
-        "invalid_request",
-        `Branch '${input.branch}' already exists${
-          checkoutPath === null ? "" : ` and is checked out at '${checkoutPath}'`
-        }. Choose a different branch name, or delete the existing branch${
-          checkoutPath === null ? "" : " and its worktree"
-        } first.`,
-      );
-    }
+    // An existing local branch is reused. The existence check uses the
+    // complete local branch list (exact match); the paginated search only
+    // finds where the branch is checked out.
+    const branchExists =
+      input.branch !== undefined &&
+      (yield* gitWorkflow
+        .listLocalBranchNames(projectCwd)
+        .pipe(asOperationFailed("Unable to list branches"))).includes(input.branch);
+    const existingCheckout =
+      branchExists && input.branch !== undefined
+        ? ((yield* gitWorkflow
+            .listRefs({ cwd: projectCwd, query: input.branch, refKind: "local", refresh: true })
+            .pipe(
+              Effect.map((result) =>
+                result.refs.find((ref) => ref.name === input.branch && ref.isRemote !== true),
+              ),
+              asOperationFailed("Unable to list branches"),
+            ))?.worktreePath ?? null)
+        : null;
 
-    let baseRef = input.baseRef;
-    if (baseRef === undefined) {
-      if (localStatus.refName === null) {
+    let baseRef: string | null = null;
+    let startFromOrigin = false;
+    let worktreeBaseRef: string | null = null;
+    if (input.branch !== undefined && !branchExists) {
+      const defaultBranch =
+        input.baseRef === undefined
+          ? yield* gitWorkflow.listRefs({ cwd: projectCwd, refKind: "local", limit: 100 }).pipe(
+              Effect.map((result) => result.refs.find((ref) => ref.isDefault)?.name),
+              Effect.orElseSucceed(() => undefined),
+            )
+          : undefined;
+      baseRef = input.baseRef ?? defaultBranch ?? localStatus.refName;
+      if (baseRef === null) {
         return yield* failure(
           "invalid_request",
-          "Could not determine the current branch of the project workspace (detached HEAD?). Pass baseRef explicitly.",
+          "Could not determine the repository's default branch or the current branch (detached HEAD?). Pass baseRef explicitly.",
         );
       }
-      baseRef = localStatus.refName;
+      startFromOrigin = input.startFromOrigin ?? (yield* readDefaultStartFromOrigin);
+      worktreeBaseRef = baseRef;
+      if (startFromOrigin) {
+        yield* gitWorkflow
+          .fetchRemote({ cwd: projectCwd, remoteName: "origin" })
+          .pipe(asOperationFailed("Unable to fetch origin"));
+        const resolvedRemoteBase = yield* gitWorkflow
+          .resolveRemoteTrackingCommit({
+            cwd: projectCwd,
+            refName: baseRef,
+            fallbackRemoteName: "origin",
+          })
+          .pipe(asOperationFailed(`Unable to resolve the remote-tracking commit of '${baseRef}'`));
+        worktreeBaseRef = resolvedRemoteBase.commitSha;
+      }
     }
 
-    const startFromOrigin = input.startFromOrigin ?? (yield* readDefaultStartFromOrigin);
-
-    let worktreeBaseRef = baseRef;
-    if (startFromOrigin) {
-      yield* gitWorkflow
-        .fetchRemote({ cwd: projectCwd, remoteName: "origin" })
-        .pipe(asOperationFailed("Unable to fetch origin"));
-      const resolvedRemoteBase = yield* gitWorkflow
-        .resolveRemoteTrackingCommit({
-          cwd: projectCwd,
-          refName: baseRef,
-          fallbackRemoteName: "origin",
-        })
-        .pipe(asOperationFailed(`Unable to resolve the remote-tracking commit of '${baseRef}'`));
-      worktreeBaseRef = resolvedRemoteBase.commitSha;
+    const reusedPath = input.branch === undefined ? destination.folder : existingCheckout;
+    const projectChanged = project.id !== projection.thread.projectId;
+    if (
+      reusedPath !== null &&
+      !projectChanged &&
+      (reusedPath === projectCwd ? null : reusedPath) === originalWorktreePath
+    ) {
+      return yield* failure(
+        "invalid_request",
+        `Thread '${scope.thread.threadId}' is already in '${reusedPath}'.`,
+      );
     }
-
-    const ids = yield* handoffIds(scope);
 
     // uninterruptibleMask: only the potentially slow worktree creation itself
     // stays interruptible (restore). From the moment it succeeds, through the
@@ -257,18 +346,30 @@ const make = Effect.gen(function* () {
     // request's connection and interrupt the fiber).
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const worktree = yield* restore(
-          gitWorkflow
-            .createWorktree({
-              cwd: projectCwd,
-              refName: worktreeBaseRef,
-              newRefName: input.branch,
-              baseRefName: baseRef,
-              path: input.path ?? null,
-            })
-            .pipe(asOperationFailed("Unable to create the worktree")),
-        );
-        const worktreePath = worktree.worktree.path;
+        const createdWorktree =
+          reusedPath !== null || input.branch === undefined
+            ? null
+            : yield* restore(
+                gitWorkflow
+                  .createWorktree(
+                    branchExists
+                      ? { cwd: projectCwd, refName: input.branch, path: input.path ?? null }
+                      : {
+                          cwd: projectCwd,
+                          refName: worktreeBaseRef ?? input.branch,
+                          newRefName: input.branch,
+                          ...(baseRef === null ? {} : { baseRefName: baseRef }),
+                          path: input.path ?? null,
+                        },
+                  )
+                  .pipe(asOperationFailed("Unable to create the worktree")),
+              );
+        const worktreePath = createdWorktree?.worktree.path ?? reusedPath ?? projectCwd;
+        const branch =
+          createdWorktree?.worktree.refName ??
+          input.branch ??
+          (localStatus.isRepo ? localStatus.refName : null);
+        const boundWorktreePath = worktreePath === projectCwd ? null : worktreePath;
 
         // Shared shape for "the handoff already succeeded, so report the failure
         // in the result instead of failing the call" (continuation, setup script).
@@ -284,29 +385,43 @@ const make = Effect.gen(function* () {
 
         // suspend: build the rollback only if cleanup actually runs. Removing
         // the worktree must succeed before deleting its freshly created branch;
-        // otherwise the branch may still be checked out there.
-        const removeCreatedWorktree = Effect.suspend(() =>
-          gitWorkflow.removeWorktree({ cwd: projectCwd, path: worktreePath, force: true }).pipe(
-            Effect.andThen(
-              Effect.suspend(() =>
-                gitWorkflow.deleteLocalBranch({
-                  cwd: projectCwd,
-                  refName: worktree.worktree.refName,
-                  force: true,
-                }),
-              ),
-            ),
-          ),
-        ).pipe(Effect.ignoreCause({ log: true }));
+        // otherwise the branch may still be checked out there. A reused branch
+        // or worktree is never removed.
+        const removeCreatedWorktree =
+          createdWorktree === null
+            ? Effect.void
+            : Effect.suspend(() =>
+                gitWorkflow
+                  .removeWorktree({ cwd: projectCwd, path: worktreePath, force: true })
+                  .pipe(
+                    Effect.andThen(
+                      branchExists
+                        ? Effect.void
+                        : Effect.suspend(() =>
+                            gitWorkflow.deleteLocalBranch({
+                              cwd: projectCwd,
+                              refName: createdWorktree.worktree.refName,
+                              force: true,
+                            }),
+                          ),
+                    ),
+                  ),
+              ).pipe(Effect.ignoreCause({ log: true }));
 
         const recheckAndBind = Effect.gen(function* () {
           // The projection was read before the potentially slow git work
           // above; a concurrent binding (for example from the UI) could have
-          // attached the thread in the meantime. Re-check before committing so
+          // moved the thread in the meantime. Re-check before committing so
           // the race cannot leave a second, untracked worktree.
           const recheck = yield* loadThread(scope);
-          if (recheck.thread.worktreePath !== null) {
-            return yield* alreadyInWorktree(recheck.thread.worktreePath);
+          if (
+            recheck.thread.worktreePath !== originalWorktreePath ||
+            recheck.thread.projectId !== projection.thread.projectId
+          ) {
+            return yield* failure(
+              "already_in_worktree",
+              `Thread '${scope.thread.threadId}' moved to '${recheck.thread.worktreePath ?? "its project root"}' while the handoff was being prepared; the handoff was rolled back.`,
+            );
           }
           // Mirror the up-front archived check: the thread may have been
           // archived during the slow git work, and an archived thread must
@@ -322,9 +437,10 @@ const make = Effect.gen(function* () {
               type: "thread.metadata.update",
               commandId: ids.commandId,
               threadId: scope.thread.threadId,
-              branch: worktree.worktree.refName,
-              worktreePath,
-              expectedWorktreePath: null,
+              ...(projectChanged ? { projectId: project.id } : {}),
+              branch,
+              worktreePath: boundWorktreePath,
+              expectedWorktreePath: originalWorktreePath,
             })
             .pipe(
               Effect.catchCause((cause) =>
@@ -337,15 +453,14 @@ const make = Effect.gen(function* () {
                   : Effect.fail(
                       failure(
                         "operation_failed",
-                        `Unable to re-point the thread at the worktree: ${errorMessage(Cause.squash(cause))}`,
+                        `Unable to re-point the thread at the new workspace: ${errorMessage(Cause.squash(cause))}`,
                       ),
                     ),
               ),
             );
         }).pipe(
-          // onError: the worktree was already created, so any failure between
-          // here and the committed binding (recheck read, recheck race,
-          // dispatch typed failure or defect) must remove it again so a failed
+          // onError: a worktree created above must be removed again when
+          // anything between here and the committed binding fails, so a failed
           // handoff leaves nothing behind on disk. Interrupt-only causes skip
           // the removal: the binding may have committed, and force-deleting a
           // worktree the thread now points at would be worse than leaking one.
@@ -357,7 +472,7 @@ const make = Effect.gen(function* () {
         // Queue the continuation right after the binding commits: the detach
         // that the metadata update schedules will terminate the calling
         // session, and a durably queued message is what guarantees the thread
-        // re-launches inside the worktree. When the dying run reaches a
+        // re-launches in the new workspace. When the dying run reaches a
         // terminal state the orchestrator promotes the queued run, which
         // derives its cwd from the updated projection.
         // suspend: build the send effect only when the binding has succeeded,
@@ -368,7 +483,7 @@ const make = Effect.gen(function* () {
               ? Effect.succeed<WorktreeMcpContinuationStatus>({ status: "skipped" })
               : threadManagement
                   .sendToThread({
-                    projectId: projection.thread.projectId,
+                    projectId: project.id,
                     commandId: ids.continuationCommandId,
                     threadId: scope.thread.threadId,
                     messageId: ids.continuationMessageId,
@@ -396,11 +511,11 @@ const make = Effect.gen(function* () {
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach);
 
         let setupScript: WorktreeMcpSetupScriptStatus = { status: "skipped" };
-        if (input.runSetupScript ?? true) {
+        if (createdWorktree !== null && (input.runSetupScript ?? true)) {
           setupScript = yield* setupScriptRunner
             .runForThread({
               threadId: scope.thread.threadId,
-              projectId: projection.thread.projectId,
+              projectId: project.id,
               projectCwd,
               worktreePath,
               project: {
@@ -426,16 +541,17 @@ const make = Effect.gen(function* () {
         }
 
         const result: WorktreeMcpHandoffResult = {
+          projectId: project.id,
           worktreePath,
-          branch: worktree.worktree.refName,
+          branch,
           baseRef,
           startedFromOrigin: startFromOrigin,
           setupScript,
           continuation,
           note:
             continuation.status === "scheduled"
-              ? "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the queued continuation prompt then starts the next turn inside the worktree with the conversation preserved. The worktree is not removed automatically when the thread is deleted."
-              : "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the conversation continues inside the worktree when the thread receives its next message. Pass continuationPrompt to resume automatically. The worktree is not removed automatically when the thread is deleted.",
+              ? "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the queued continuation prompt then starts the next turn in the new workspace with the conversation preserved. Worktrees are not removed automatically when the thread is deleted."
+              : "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the conversation continues in the new workspace when the thread receives its next message. Pass continuationPrompt to resume automatically. Worktrees are not removed automatically when the thread is deleted.",
         };
         return result;
       }),
@@ -500,6 +616,8 @@ export const layer: Layer.Layer<
   never,
   | Crypto.Crypto
   | Path.Path
+  | FileSystem.FileSystem
+  | VcsDriverRegistry.VcsDriverRegistry
   | ThreadManagementService.ThreadManagementService
   | ProjectService.ProjectService
   | ServerSettings.ServerSettingsService

@@ -174,7 +174,7 @@ const selectorDiagnosticsFromInput = (
   return {};
 };
 
-const hostAssignmentKey = (scope: McpInvocationContext.McpThreadInvocationScope): string =>
+export const hostAssignmentKey = (scope: McpInvocationContext.McpThreadInvocationScope): string =>
   `${scope.environmentId}\u0000${scope.thread.providerSessionId}`;
 
 const isPreviewTabId = Schema.is(PreviewTabId);

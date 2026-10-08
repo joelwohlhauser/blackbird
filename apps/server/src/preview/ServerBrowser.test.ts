@@ -1099,3 +1099,52 @@ it.live("a desktop page the desktop takes back reconnects instead of closing", (
     }),
   ).pipe(Effect.provide(layer)),
 );
+
+it.live("an agent's CDP page stops acting while a human controls the tab", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { browser, tabId } = yield* ready;
+      const page = yield* browser.openAgentPage({
+        threadId: scope.thread.threadId,
+        tabId,
+        agentSessionId: Broker.hostAssignmentKey(scope),
+        listener: { onEvent: () => {}, onClose: () => {} },
+      });
+      yield* Effect.promise(() => page.send("Runtime.evaluate", { expression: "1" }));
+
+      const viewer = yield* browser.attachViewer(viewerInput(tabId, true));
+      yield* viewer.input({ type: "takeControl" });
+
+      const blocked = yield* Effect.promise(() =>
+        page.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 1, y: 1 }).then(
+          () => "sent",
+          (error: Error) => error.message,
+        ),
+      );
+      expect(blocked).toBe("A human controls this tab.");
+      const closed = yield* Effect.promise(() =>
+        page.close().then(
+          () => "closed",
+          (error: Error) => error.message,
+        ),
+      );
+      expect(closed).toBe("A human controls this tab.");
+      yield* Effect.promise(() => page.send("DOM.getDocument", {}));
+
+      const other = yield* browser.openAgentPage({
+        threadId: scope.thread.threadId,
+        tabId,
+        agentSessionId: Broker.hostAssignmentKey(asSession("agent-b")),
+        listener: { onEvent: () => {}, onClose: () => {} },
+      });
+      yield* viewer.input({ type: "releaseControl" });
+      const mismatch = yield* Effect.promise(() =>
+        other.send("Runtime.evaluate", { expression: "1" }).then(
+          () => "sent",
+          (error: Error) => error.message,
+        ),
+      );
+      expect(mismatch).toBe("This tab belongs to another agent.");
+    }),
+  ).pipe(Effect.provide(layer)),
+);

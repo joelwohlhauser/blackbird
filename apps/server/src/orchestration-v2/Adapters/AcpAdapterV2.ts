@@ -709,6 +709,7 @@ function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpC
     endpoint: session.endpoint,
     authorization: session.authorizationHeader,
     processEnvironment: {
+      ...session.browserEnvironment,
       T3_ACP_MCP_ENDPOINT: session.endpoint,
       T3_ACP_MCP_AUTHORIZATION: session.authorizationHeader,
       T3_ACP_MCP_NODE: self.command,

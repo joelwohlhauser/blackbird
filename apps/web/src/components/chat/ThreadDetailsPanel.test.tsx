@@ -1,6 +1,5 @@
 import type { EnvironmentId, T3ProjectFileScript, ThreadId } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PopoverCreateHandle } from "../ui/popover";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const testState = vi.hoisted(() => ({
@@ -27,9 +26,8 @@ vi.mock("./ThreadAutomationsPanel", () => ({
 vi.mock("./ThreadRelationshipsControl", () => ({
   ThreadRelationshipsPanel: () => null,
 }));
-vi.mock("./ThreadDetailsCard", () => ({
-  ThreadDetailsCard: ({ children }: { children: (density: "full") => React.ReactNode }) =>
-    children("full"),
+vi.mock("../ui/scroll-area", () => ({
+  ScrollArea: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 import { ThreadDetailsPanel, type ThreadDetailsPanelProps } from "./ThreadDetailsPanel";
@@ -53,9 +51,6 @@ describe("ThreadDetailsPanel", () => {
     testState.useT3ProjectFileScripts.mockReturnValue(fileScripts);
 
     const props: ThreadDetailsPanelProps = {
-      anchor: { current: null },
-      handle: PopoverCreateHandle(),
-      onPresentationChange: vi.fn(),
       environmentId,
       threadId: "thread:thread-details" as ThreadId,
       activeProjectScripts: [],

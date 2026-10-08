@@ -18,6 +18,7 @@ import { DiffStatLabel, hasNonZeroStat } from "~/components/chat/DiffStatLabel";
 import { RightPanelResizeHandle } from "~/components/preview/RightPanelResizeHandle";
 import GitActionsControl from "~/components/GitActionsControl";
 import type { DraftId } from "~/composerDraftStore";
+import type { WorkspaceNavigatorTab } from "~/rightPanelStore";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
@@ -29,7 +30,7 @@ import {
 } from "./WorkspaceNavigator.logic";
 import { WorkspaceChangeTree } from "./WorkspaceChangeTree";
 
-export type WorkspaceNavigatorTab = "file" | "changes" | "pr";
+export type { WorkspaceNavigatorTab };
 
 export type WorkspaceNavigatorDiffTarget =
   | { scope: "unstaged"; filePath: string }
@@ -44,6 +45,7 @@ const TABS: ReadonlyArray<{ id: WorkspaceNavigatorTab; label: string }> = [
   { id: "file", label: "Files" },
   { id: "changes", label: "Changes" },
   { id: "pr", label: "PR" },
+  { id: "details", label: "Details" },
 ];
 
 const WORKSPACE_NAVIGATOR_WIDTH_STORAGE_KEY = "blackbird:workspace-navigator-width:v1";
@@ -66,6 +68,7 @@ interface WorkspaceNavigatorProps {
   workspaceMutationId: string | null;
   activeTab: WorkspaceNavigatorTab;
   layoutControls: ReactNode;
+  details: ReactNode;
   onRefreshPullRequest: () => Promise<unknown>;
   onActiveTabChange: (tab: WorkspaceNavigatorTab) => void;
   onOpenFile: (relativePath: string) => void;
@@ -114,6 +117,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
     edge: "left",
   });
   const pullRequest = props.gitStatus?.pr ?? null;
+  const branchChanges = props.gitStatus?.branchChanges;
   const pullRequestKey = props.pullRequestReference
     ? `${props.environmentId}:${props.pullRequestReference.projectId}:${props.pullRequestReference.repository}#${props.pullRequestReference.number}`
     : null;
@@ -199,7 +203,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
       <RightPanelResizeHandle handlers={resizeHandlers} />
       <div className="drag-region flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-0.5 px-2">
         <div
-          className="flex min-w-0 items-center gap-0.5 [-webkit-app-region:no-drag]"
+          className="flex min-w-0 items-center gap-0.5 overflow-x-auto [-webkit-app-region:no-drag] [scrollbar-width:none]"
           role="tablist"
           aria-label="Workspace navigator views"
         >
@@ -212,7 +216,7 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
                 role="tab"
                 aria-selected={active}
                 className={cn(
-                  "h-7 cursor-pointer rounded-md px-2 text-xs font-medium transition-colors",
+                  "h-7 shrink-0 cursor-pointer rounded-md px-2 text-xs font-medium transition-colors",
                   active
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -240,6 +244,8 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
             workspaceMutationId={props.workspaceMutationId}
             onOpenFile={props.onOpenFile}
           />
+        ) : props.activeTab === "details" ? (
+          props.details
         ) : props.activeTab === "changes" ? (
           <>
             {props.gitStatus?.isRepo !== false ? (
@@ -250,6 +256,13 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
                   {...(props.draftId ? { draftId: props.draftId } : {})}
                 />
               </div>
+            ) : null}
+            {branchChanges?.baseRef ? (
+              <NavigatorHeader
+                label={`Branch changes vs ${branchChanges.baseRef}`}
+                additions={branchChanges.insertions}
+                deletions={branchChanges.deletions}
+              />
             ) : null}
             <NavigatorHeader
               label="Uncommitted changes"

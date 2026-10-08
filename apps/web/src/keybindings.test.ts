@@ -1202,6 +1202,25 @@ describe("resolveShortcutCommand", () => {
     );
   });
 
+  it("matches Command-Shift-I for workspace details by default", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "i", code: "KeyI", metaKey: true, shiftKey: true }),
+        DEFAULT_RESOLVED_KEYBINDINGS,
+        { platform: "MacIntel" },
+      ),
+      "workspaceNavigator.details",
+    );
+    assert.strictEqual(
+      shortcutLabelForCommand(
+        DEFAULT_RESOLVED_KEYBINDINGS,
+        "workspaceNavigator.details",
+        "MacIntel",
+      ),
+      "⇧⌘I",
+    );
+  });
+
   it("matches non-Latin layout letters using the physical key code", () => {
     const keybindings = compile([{ shortcut: modShortcut("d"), command: "diff.toggle" }]);
 
