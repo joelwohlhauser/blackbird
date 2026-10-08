@@ -140,6 +140,7 @@ const CONTROL_FREE_METHODS = new Set([
   "DOM.requestNode",
   "DOM.resolveNode",
   "DOMSnapshot.captureSnapshot",
+  "Emulation.setFocusEmulationEnabled",
   "IO.close",
   "IO.read",
   "Log.clear",
@@ -147,6 +148,7 @@ const CONTROL_FREE_METHODS = new Set([
   "Network.getRequestPostData",
   "Network.getResponseBody",
   "Page.captureScreenshot",
+  "Page.createIsolatedWorld",
   "Page.getFrameTree",
   "Page.getLayoutMetrics",
   "Page.getNavigationHistory",
@@ -157,6 +159,7 @@ const CONTROL_FREE_METHODS = new Set([
   "Page.startScreencast",
   "Page.stopScreencast",
   "Performance.getMetrics",
+  "Runtime.addBinding",
   "Runtime.discardConsoleEntries",
   "Runtime.getHeapUsage",
   "Runtime.getIsolateId",
@@ -171,9 +174,10 @@ const MAX_VIEWPORT_SIDE = 3840;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const cdpCommandNeedsControl = (method: string) =>
+export const cdpCommandNeedsControl = (method: string, params: Record<string, unknown>) =>
   !CONTROL_FREE_METHODS.has(method) &&
-  !(/\.(enable|disable)$/.test(method) && !method.startsWith("Fetch."));
+  !(/\.(enable|disable)$/.test(method) && !method.startsWith("Fetch.")) &&
+  !(method === "Page.addScriptToEvaluateOnNewDocument" && params["runImmediately"] !== true);
 
 const COOKIE_WRITE_METHODS = new Set([
   "Network.setCookie",
@@ -195,12 +199,16 @@ const hostOf = (url: unknown) => {
 
 const cookieHost = (cookie: unknown) => {
   if (!isRecord(cookie)) return undefined;
-  const fromUrl = hostOf(cookie["url"]);
-  if (fromUrl !== undefined) return fromUrl;
-  const domain = cookie["domain"];
-  return typeof domain === "string" && domain.length > 0
-    ? domain.replace(/^\./, "").toLowerCase()
-    : undefined;
+  const fromUrl = cookie["url"] === undefined ? undefined : hostOf(cookie["url"]);
+  if (cookie["url"] !== undefined && fromUrl === undefined) return undefined;
+  const rawDomain = cookie["domain"];
+  if (rawDomain === undefined) return fromUrl;
+  if (typeof rawDomain !== "string" || rawDomain.length === 0) return undefined;
+  const domain = rawDomain.replace(/^\./, "").toLowerCase();
+  if (fromUrl !== undefined && fromUrl !== domain && !fromUrl.endsWith(`.${domain}`)) {
+    return undefined;
+  }
+  return domain;
 };
 
 export const cookieHostAllowed = (host: string | undefined, openHosts: ReadonlySet<string>) =>
@@ -215,7 +223,11 @@ const cookieScopeRejection = (
   if (method === "Network.getCookies") {
     const urls = params["urls"];
     if (urls === undefined) return undefined;
-    return Array.isArray(urls) && urls.every((url) => cookieHostAllowed(hostOf(url), openHosts))
+    return Array.isArray(urls) &&
+      urls.every((url) => {
+        const host = hostOf(url);
+        return host !== undefined && openHosts.has(host);
+      })
       ? undefined
       : outside;
   }

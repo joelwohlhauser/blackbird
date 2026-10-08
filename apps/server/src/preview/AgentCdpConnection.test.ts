@@ -298,14 +298,19 @@ describe("agent CDP connection", () => {
       "Input.dispatchKeyEvent",
       "Runtime.evaluate",
       "Page.setDocumentContent",
-      "Page.addScriptToEvaluateOnNewDocument",
       "Debugger.evaluateOnCallFrame",
       "Fetch.enable",
       "Network.setCookies",
       "Emulation.setScriptExecutionDisabled",
     ]) {
-      expect(cdpCommandNeedsControl(method)).toBe(true);
+      expect(cdpCommandNeedsControl(method, {})).toBe(true);
     }
+    expect(
+      cdpCommandNeedsControl("Page.addScriptToEvaluateOnNewDocument", {
+        source: "window.agent = true",
+        runImmediately: true,
+      }),
+    ).toBe(true);
     for (const method of [
       "Page.enable",
       "Runtime.enable",
@@ -314,9 +319,18 @@ describe("agent CDP connection", () => {
       "Page.captureScreenshot",
       "Target.getTargetInfo",
       "Network.getCookies",
+      "Page.createIsolatedWorld",
+      "Runtime.addBinding",
+      "Emulation.setFocusEmulationEnabled",
     ]) {
-      expect(cdpCommandNeedsControl(method)).toBe(false);
+      expect(cdpCommandNeedsControl(method, {})).toBe(false);
     }
+    expect(
+      cdpCommandNeedsControl("Page.addScriptToEvaluateOnNewDocument", {
+        source: "",
+        worldName: "__playwright_utility_world__",
+      }),
+    ).toBe(false);
   });
 
   it("keeps cookies to the sites open in the chat's tabs", async () => {
@@ -391,5 +405,48 @@ describe("agent CDP connection", () => {
         params: { name: "sid", domain: "example.com" },
       },
     ]);
+  });
+
+  it("checks a cookie's effective domain and exact hosts for requested URLs", async () => {
+    const cdp = connect(["tab-1"]);
+    cdp.command(1, "Target.setAutoAttach", {});
+    await settle();
+    const sessionId = cdp.attachedSessions()[0]!.sessionId;
+
+    cdp.command(
+      2,
+      "Network.setCookie",
+      { name: "a", value: "1", url: "https://app.example.com/", domain: "bank.example.net" },
+      sessionId,
+    );
+    cdp.command(
+      3,
+      "Network.deleteCookies",
+      { name: "a", url: "https://app.example.com/", domain: "evil.test" },
+      sessionId,
+    );
+    cdp.command(4, "Storage.setCookies", {
+      cookies: [{ name: "a", value: "1", url: "https://app.example.com/", domain: "evil.test" }],
+    });
+    cdp.command(
+      5,
+      "Network.setCookie",
+      { name: "a", value: "1", url: "https://app.example.com/", domain: ".example.com" },
+      sessionId,
+    );
+    cdp.command(6, "Network.getCookies", { urls: ["https://example.com/"] }, sessionId);
+    cdp.command(7, "Network.getCookies", { urls: ["https://app.example.com/"] }, sessionId);
+    await settle();
+
+    expect(cdp.reply(2)).toMatchObject({ id: 2, error: { code: -32000 }, sessionId });
+    expect(cdp.reply(3)).toMatchObject({ id: 3, error: { code: -32000 }, sessionId });
+    expect(cdp.reply(4)).toMatchObject({ id: 4, error: { code: -32000 } });
+    expect(cdp.reply(5)).toEqual({ id: 5, result: { echoed: "Network.setCookie" }, sessionId });
+    expect(cdp.reply(6)).toMatchObject({ id: 6, error: { code: -32000 }, sessionId });
+    expect(cdp.reply(7)).toMatchObject({
+      id: 7,
+      result: { cookies: [{ name: "sid" }] },
+      sessionId,
+    });
   });
 });

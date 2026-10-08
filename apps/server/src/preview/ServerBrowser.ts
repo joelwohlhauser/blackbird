@@ -2232,7 +2232,7 @@ const make = Effect.gen(function* () {
           const guardedSend =
             (session: RawCdpSession) => (method: string, params: Record<string, unknown>) => {
               tab.usedAt = Date.now();
-              return cdpCommandNeedsControl(method)
+              return cdpCommandNeedsControl(method, params)
                 ? actAsAgent(() => session.send(method, params))
                 : session.send(method, params);
             };
