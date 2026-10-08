@@ -1,4 +1,4 @@
-import type { EnvironmentId, ResolvedKeybindingsConfig, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -14,8 +14,6 @@ vi.mock("../ProjectFavicon", () => ({
 
 import { ChatHeader } from "./ChatHeader";
 
-const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
-
 function renderHeader(
   showProjectActions: boolean,
   rightPanelOpen = false,
@@ -29,7 +27,6 @@ function renderHeader(
       activeProjectScripts={[]}
       showProjectActions={showProjectActions}
       preferredScriptId={null}
-      keybindings={EMPTY_KEYBINDINGS}
       rightPanelOpen={rightPanelOpen}
       workspaceNavigatorOpen={workspaceNavigatorOpen}
       leading={<span>Chat tab strip</span>}

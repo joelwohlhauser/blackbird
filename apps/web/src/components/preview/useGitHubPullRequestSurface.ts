@@ -1,5 +1,5 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import { AuthPreviewOperateScope, type ScopedThreadRef } from "@t3tools/contracts";
 import { useCallback } from "react";
 
 import {
@@ -8,7 +8,9 @@ import {
   useThreadPreviewState,
 } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
+import { useEnvironmentSupportsServerBrowser } from "~/state/entities";
 import { previewEnvironment } from "~/state/preview";
+import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 
 import { addGitHubPullRequestSurface } from "./addGitHubPullRequestSurface";
@@ -30,13 +32,21 @@ export function activateExistingGitHubPullRequestSurface(
 
 export function useGitHubPullRequestSurface(threadRef: ScopedThreadRef | null) {
   const previewState = useThreadPreviewState(threadRef);
+  const canOperatePreview = useEnvironmentScope(
+    threadRef?.environmentId ?? null,
+    AuthPreviewOperateScope,
+  );
+  const serverBrowserAvailable = useEnvironmentSupportsServerBrowser(
+    threadRef?.environmentId ?? null,
+  );
+  const browserAvailable = isPreviewSupportedInRuntime() || serverBrowserAvailable;
   const openPreview = useAtomCommand(previewEnvironment.open, {
     reportFailure: false,
   });
 
   return useCallback(
     (url: string): boolean => {
-      if (!threadRef || !isPreviewSupportedInRuntime()) return false;
+      if (!threadRef || !canOperatePreview || !browserAvailable) return false;
 
       if (activateExistingGitHubPullRequestSurface(threadRef, previewState.sessions)) return true;
 
@@ -47,6 +57,6 @@ export function useGitHubPullRequestSurface(threadRef: ScopedThreadRef | null) {
       });
       return true;
     },
-    [openPreview, previewState.sessions, threadRef],
+    [browserAvailable, canOperatePreview, openPreview, previewState.sessions, threadRef],
   );
 }

@@ -16,7 +16,6 @@ import {
 } from "../BranchToolbar.logic";
 import { BranchToolbar } from "../BranchToolbar";
 import { BranchToolbarEnvironmentSelector } from "../BranchToolbarEnvironmentSelector";
-import GitActionsControl from "../GitActionsControl";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
   type ProjectScriptActionResult,
@@ -43,7 +42,6 @@ export interface ThreadDetailsPanelProps extends Pick<
   environmentId: EnvironmentId;
   threadId: ThreadId;
   draftId?: DraftId;
-  activeProjectName: string | undefined;
   activeProjectScripts: ReadonlyArray<ProjectScript> | undefined;
   preferredScriptId: string | null;
   keybindings: ResolvedKeybindingsConfig;
@@ -63,9 +61,10 @@ export interface ThreadDetailsPanelProps extends Pick<
   onActiveThreadBranchOverrideChange?: (branch: string | null) => void;
   startFromOrigin: boolean;
   onStartFromOriginChange: (startFromOrigin: boolean) => void;
+  newBranchName: string;
+  onNewBranchNameChange: (newBranchName: string) => void;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest: () => void;
-  onOpenChanges?: () => void;
   versionMismatch: VersionMismatchIssue | null;
   onDismissVersionMismatch: () => void;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -98,6 +97,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
     onEnvModeChange: props.onEnvModeChange,
     startFromOrigin: props.startFromOrigin,
     onStartFromOriginChange: props.onStartFromOriginChange,
+    newBranchName: props.newBranchName,
+    onNewBranchNameChange: props.onNewBranchNameChange,
     envMode: props.envMode,
     ...(props.activeThreadBranchOverride !== undefined
       ? { activeThreadBranchOverride: props.activeThreadBranchOverride }
@@ -204,19 +205,6 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               <div className="flex flex-col">
                 {props.isGitRepo ? (
                   <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
-                ) : null}
-                {props.activeProjectName ? (
-                  <GitActionsControl
-                    displayMode="panel"
-                    compact={density !== "full"}
-                    gitCwd={props.gitCwd}
-                    activeThreadRef={{
-                      environmentId: props.environmentId,
-                      threadId: props.threadId,
-                    }}
-                    {...(props.draftId ? { draftId: props.draftId } : {})}
-                    {...(props.onOpenChanges ? { onOpenChanges: props.onOpenChanges } : {})}
-                  />
                 ) : null}
               </div>
             </ThreadDetailsSection>

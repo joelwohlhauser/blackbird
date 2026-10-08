@@ -140,12 +140,27 @@ describe("planNextReopen", () => {
     catalogReady: true,
     ownerExists: true,
     shellLive: true,
-    panel: { isOpen: false, activeSurfaceId: null, surfaces: [] },
+    panel: {
+      isOpen: false,
+      activeSurfaceId: null,
+      surfaces: [],
+      mainSurfaces: [],
+      activeMainSurfaceId: null,
+    },
   };
   const openDiff: ThreadRightPanelState = {
     isOpen: true,
     activeSurfaceId: "diff",
     surfaces: [{ kind: "diff", id: "diff" }],
+    mainSurfaces: [],
+    activeMainSurfaceId: null,
+  };
+  const mainDiff: ThreadRightPanelState = {
+    isOpen: false,
+    activeSurfaceId: null,
+    surfaces: [],
+    mainSurfaces: [{ kind: "diff", id: "diff" }],
+    activeMainSurfaceId: "diff",
   };
 
   it.each([
@@ -175,6 +190,12 @@ describe("planNextReopen", () => {
       null,
     ],
     ["drops a tab that is already open", [{ ...known, panel: openDiff }, known], ["a"], "b"],
+    [
+      "drops a tab that is already open in the main area",
+      [{ ...known, panel: mainDiff }, known],
+      ["a"],
+      "b",
+    ],
     [
       "restores a tab whose panel is hidden",
       [{ ...known, panel: { ...openDiff, isOpen: false } }],

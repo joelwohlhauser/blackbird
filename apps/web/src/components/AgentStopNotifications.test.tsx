@@ -44,9 +44,9 @@ function shells(waiting = false): EnvironmentThreadShell[] {
         title: `${environmentId} chat`,
         hasPendingApprovals: waiting,
         hasPendingUserInput: false,
-        session: null,
-        latestTurn: null,
-      }) as EnvironmentThreadShell,
+        runtime: null,
+        latestRun: null,
+      }) as unknown as EnvironmentThreadShell,
   );
 }
 

@@ -446,7 +446,10 @@ it.live("streams to a read-only viewer without allowing takeover, input, or view
       const operator = yield* browser.attachViewer(viewerInput(tabId, true));
       yield* operator.input({ type: "takeControl" });
       yield* operator.input({ type: "text", text: "typed" });
-      yield* operator.input({ type: "resize", width: 390, height: 844 });
+      yield* operator.input({
+        type: "viewport",
+        setting: { _tag: "freeform", width: 390, height: 844 },
+      });
       expect(contexts[0]!.sessions.at(-1)!.send).toHaveBeenCalledWith("Input.insertText", {
         text: "typed",
       });

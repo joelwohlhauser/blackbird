@@ -127,6 +127,9 @@ vi.mock("~/lib/utils", () => ({ cn: () => "", randomUUID: () => "action" }));
 vi.mock("~/editorPreferences", () => ({ useOpenInPreferredEditor: () => () => {} }));
 vi.mock("~/browser/useOpenLink", () => ({ useOpenLink: () => () => {} }));
 vi.mock("~/lib/openPullRequestLink", () => ({ useOpenPrLink: () => () => {} }));
+vi.mock("./preview/useGitHubPullRequestSurface", () => ({
+  useGitHubPullRequestSurface: () => () => {},
+}));
 vi.mock("~/components/ui/toast", () => ({
   stackedThreadToast: (input: unknown) => input,
   toastManager: { add: () => "toast", update: () => {}, close: () => {} },

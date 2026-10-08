@@ -2634,8 +2634,8 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
           assert.equal(local.hasUpstream, hasUpstream);
           assert.isTrue(local.hasWorkingTreeChanges);
           assert.deepEqual(local.workingTree.files, [
-            { path: "feature.txt", insertions: 1, deletions: 0 },
-            { path: "untracked.txt", insertions: 0, deletions: 0 },
+            { path: "feature.txt", insertions: 1, deletions: 0, status: "modified" },
+            { path: "untracked.txt", insertions: 0, deletions: 0, status: "untracked" },
           ]);
 
           commands.length = 0;

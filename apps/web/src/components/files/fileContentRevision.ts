@@ -1,4 +1,4 @@
-import type { OrchestrationCheckpointSummary } from "@t3tools/contracts";
+import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
 
 export function fileContentRevision(contents: string): string {
   let hash = 2_166_136_261;
@@ -15,11 +15,11 @@ function normalizedCheckpointPath(path: string): string {
 
 /**
  * Returns a stable revision for the latest checkpoint that touched a file.
- * Mid-turn checkpoint updates replace the same turn entry with a newer
+ * Mid-run checkpoint updates replace the same run entry with a newer
  * `completedAt`, so this changes while an agent is actively editing the file.
  */
 export function projectFileCheckpointRevision(
-  checkpoints: readonly OrchestrationCheckpointSummary[],
+  checkpoints: ReadonlyArray<Pick<ThreadCheckpointSummary, "runId" | "completedAt" | "files">>,
   relativePath: string | null,
 ): string | null {
   if (relativePath === null) return null;
@@ -33,7 +33,7 @@ export function projectFileCheckpointRevision(
     );
     if (!file) continue;
     return [
-      checkpoint.turnId,
+      checkpoint.runId,
       checkpoint.completedAt,
       file.kind,
       file.additions,

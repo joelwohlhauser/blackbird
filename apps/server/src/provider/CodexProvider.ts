@@ -348,7 +348,7 @@ export function buildCodexInitializeParams(): CodexSchema.V1InitializeParams {
   return {
     clientInfo: {
       name: "T3 Code",
-      title: "Blackbird Desktop",
+      title: "T3 Code",
       version: packageJson.version,
     },
     capabilities: {

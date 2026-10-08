@@ -21,6 +21,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../config.ts";
 import { expandHomePathWith } from "../pathExpansion.ts";
@@ -211,35 +212,37 @@ const make = Effect.gen(function* () {
 
   const quickChatsRoot = expandHomePathWith("~", path);
   const scratchRoot = Effect.succeed(Option.some(quickChatsRoot));
+  const scratchProjectLock = yield* Semaphore.make(1);
 
-  const ensureScratchProject: ManagedProjectFolders["Service"]["ensureScratchProject"] = Effect.gen(
-    function* () {
-      const workspaceRoot = quickChatsRoot;
-      const id = yield* crypto.randomUUIDv4.pipe(
-        Effect.mapError((cause) => new ScratchProjectError({ workspaceRoot, cause })),
-      );
-      const bootstrapped = yield* projects
-        .bootstrap({
-          commandId: CommandId.make(`quick-chats-project:${id}`),
-          projectId: QUICK_CHATS_PROJECT_ID,
-          title: "Quick chats",
-          workspaceRoot,
-        })
-        .pipe(
-          // bootstrap looks the root up before taking the workspace lock, so a
-          // racing create loses with a conflict that names the winner.
-          Effect.catchTags({
-            ProjectConflictError: (conflict) =>
-              Effect.succeed({
-                project: { id: conflict.conflictingProjectId },
-                created: false,
-              }),
-          }),
+  const ensureScratchProject: ManagedProjectFolders["Service"]["ensureScratchProject"] =
+    scratchProjectLock.withPermits(1)(
+      Effect.gen(function* () {
+        const workspaceRoot = quickChatsRoot;
+        const id = yield* crypto.randomUUIDv4.pipe(
           Effect.mapError((cause) => new ScratchProjectError({ workspaceRoot, cause })),
         );
-      return { projectId: bootstrapped.project.id };
-    },
-  );
+        const bootstrapped = yield* projects
+          .bootstrap({
+            commandId: CommandId.make(`quick-chats-project:${id}`),
+            projectId: QUICK_CHATS_PROJECT_ID,
+            title: "Quick chats",
+            workspaceRoot,
+          })
+          .pipe(
+            // bootstrap looks the root up before taking the workspace lock, so a
+            // racing create loses with a conflict that names the winner.
+            Effect.catchTags({
+              ProjectConflictError: (conflict) =>
+                Effect.succeed({
+                  project: { id: conflict.conflictingProjectId },
+                  created: false,
+                }),
+            }),
+            Effect.mapError((cause) => new ScratchProjectError({ workspaceRoot, cause })),
+          );
+        return { projectId: bootstrapped.project.id };
+      }),
+    );
 
   // Projects started from just a name live beside worktrees, away from folders
   // the user organizes by hand. Each project gets its own `git init`.

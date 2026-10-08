@@ -4237,11 +4237,11 @@ export default function ChatView(props: ChatViewProps) {
       activeProject
         ? resolveChatTerminalLocation({
             projectCwd: activeProject.workspaceRoot,
-            serverWorktreePath: activeServerThread?.worktreePath,
+            serverWorktreePath: serverThread?.worktreePath,
             draftWorktreePath: draftThread?.worktreePath,
           })
         : null,
-    [activeProject, activeServerThread?.worktreePath, draftThread?.worktreePath],
+    [activeProject, serverThread?.worktreePath, draftThread?.worktreePath],
   );
   const gitCwd = chatTerminalLocation?.cwd ?? null;
   const chatTerminalWorktreePath = chatTerminalLocation?.worktreePath ?? null;
@@ -7569,11 +7569,12 @@ export default function ChatView(props: ChatViewProps) {
   const activeWorktreePath = activeThread?.worktreePath ?? null;
   const worktreeDeletionBlocked =
     activeWorktreePath !== null &&
-    (environmentTerminalSessions.some(
-      (terminal) =>
-        (terminal.state.status === "starting" || terminal.state.status === "running") &&
-        terminal.state.summary?.worktreePath === activeWorktreePath,
-    ) ||
+    (environmentTerminalSessions === null ||
+      environmentTerminalSessions.some(
+        (terminal) =>
+          (terminal.state.status === "starting" || terminal.state.status === "running") &&
+          terminal.state.summary?.worktreePath === activeWorktreePath,
+      ) ||
       threadShells.some(
         (thread) =>
           thread.environmentId === environmentId &&

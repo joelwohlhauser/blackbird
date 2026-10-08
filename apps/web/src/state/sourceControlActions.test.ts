@@ -37,7 +37,7 @@ vi.mock("./use-atom-command", () => ({
     },
 }));
 vi.mock("./vcs", () => ({
-  vcsEnvironment: { init: { action: "init" }, pull: { action: "pull" }, status: () => "status" },
+  vcsEnvironment: { pull: { action: "pull" }, status: () => "status" },
   vcsActionManager: {
     stateAtom: () => "state",
     resetError: () => {},
@@ -57,7 +57,6 @@ import {
   useGitStackedAction,
   usePreparePullRequestThreadAction,
   useSourceControlPublishRepositoryAction,
-  useVcsInitAction,
   useVcsPullAction,
 } from "./sourceControlActions";
 
@@ -66,13 +65,6 @@ const secondary = EnvironmentId.make("secondary");
 const scope = { environmentId: secondary, cwd: "/repo" };
 const threadId = ThreadId.make("thread");
 const cases = [
-  {
-    name: "init",
-    create: () => {
-      const action = useVcsInitAction(scope);
-      return { isAllowed: action.isAllowed, run: () => action.run() };
-    },
-  },
   {
     name: "pull",
     create: () => {

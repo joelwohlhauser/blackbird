@@ -1839,15 +1839,10 @@ function PullRequestsRouteView() {
   const panelToggleControls = (
     <PanelLayoutControls
       showTerminalControl={false}
-      showThreadPanelControl={false}
+      showWorkspaceNavigatorControl={false}
       terminalAvailable={false}
       terminalOpen={false}
       terminalShortcutLabel={null}
-      threadPanelOpen={false}
-      threadPanelPresentation="inline"
-      threadPanelShortcutLabel={null}
-      threadPanelHasAttention={false}
-      onToggleThreadPanel={() => undefined}
       rightPanelAvailable={rightPanelAvailable}
       rightPanelOpen={rightPanelState.isOpen}
       rightPanelShortcutLabel={shortcutLabelForCommand(keybindings, "rightPanel.toggle")}
@@ -2218,8 +2213,6 @@ function PullRequestsRouteView() {
           <RightPanelTabs
             mode="inline"
             open={rightPanelState.isOpen}
-            keybindings={keybindings}
-            getShortcutContext={getShortcutContext}
             widthStorageKey="t3code:pull-request-panel-width"
             // Default to roughly half the viewport: the PR list needs more
             // room than a chat, so the 540px chat-preview default squashes
@@ -2265,7 +2258,7 @@ function PullRequestsRouteView() {
             pullRequestAvailable={false}
             pullRequestsAvailable={false}
             deviceAvailable={false}
-            pullRequestStatusSeeds={listedPullRequestTabStatuses}
+            pullRequestStatuses={listedPullRequestTabStatuses}
           >
             <PullRequestDetailPanel
               getShortcutContext={getShortcutContext}

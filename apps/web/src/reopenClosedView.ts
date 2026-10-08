@@ -44,8 +44,9 @@ export function planNextReopen(
     }
     const alreadyOpen =
       entry.kind === "panel-tab"
-        ? owner.panel.isOpen && owner.panel.surfaces.some((s) => s.id === entry.surface.id)
-        : owner.panel.surfaces.some(
+        ? (owner.panel.isOpen && owner.panel.surfaces.some((s) => s.id === entry.surface.id)) ||
+          owner.panel.mainSurfaces.some((s) => s.id === entry.surface.id)
+        : [...owner.panel.surfaces, ...owner.panel.mainSurfaces].some(
             (s) => s.kind === "preview" && s.resourceId === entry.snapshot.tabId,
           );
     if (alreadyOpen) {
@@ -143,8 +144,16 @@ export async function reopenClosedView(
     case "pull-request":
       panels.openPullRequest(ref, surface);
       break;
-    default:
+    case "diff":
+    case "files":
+    case "pull-requests":
+    case "new-tab":
       panels.open(ref, surface.kind);
+      break;
+    case "linear":
+    case "github-pr":
+    case "file-diff":
+      return false;
   }
   return true;
 }

@@ -15,6 +15,7 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
+import * as DateTime from "effect/DateTime";
 import { useMemo, useState } from "react";
 
 import { isDesktopLocalConnectionTarget } from "../../connection/desktopLocal";
@@ -215,7 +216,14 @@ export function WorkspacesSettingsPanel() {
   const activeChats = useThreadShells().filter(
     (thread) => thread.environmentId === effectiveEnvironmentId,
   );
-  const archivedChats = archivedSnapshots.flatMap(({ snapshot }) => snapshot.threads);
+  const archivedChats = archivedSnapshots.flatMap(({ snapshot }) =>
+    snapshot.threads.map((thread) => ({
+      id: thread.id,
+      worktreePath: thread.worktreePath,
+      updatedAt: DateTime.formatIso(thread.updatedAt),
+      runtime: null,
+    })),
+  );
   const chats = [...activeChats, ...archivedChats];
   const terminalSessions = useKnownTerminalSessions({
     environmentId: effectiveEnvironmentId,
@@ -230,13 +238,15 @@ export function WorkspacesSettingsPanel() {
           return {
             ...worktree,
             chatSummary,
-            hasLiveTerminal: terminalSessions.some(
-              (terminal) =>
-                terminal.state.status !== "closed" &&
-                terminal.state.status !== "exited" &&
-                terminal.state.status !== "error" &&
-                workspacePathsMatch(terminal.state.summary?.worktreePath ?? null, worktree.path),
-            ),
+            hasLiveTerminal:
+              terminalSessions === null ||
+              terminalSessions.some(
+                (terminal) =>
+                  terminal.state.status !== "closed" &&
+                  terminal.state.status !== "exited" &&
+                  terminal.state.status !== "error" &&
+                  workspacePathsMatch(terminal.state.summary?.worktreePath ?? null, worktree.path),
+              ),
             issueId: linearIssueIdForWorkspace({ branch: worktree.branch, path: worktree.path }),
           };
         },
