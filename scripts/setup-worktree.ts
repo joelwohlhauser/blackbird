@@ -22,7 +22,9 @@ if (NodeFS.realpathSync(projectRoot) !== NodeFS.realpathSync(worktree)) {
     const source = NodePath.join(projectRoot, file);
     if (!NodeFS.existsSync(source)) continue;
     const target = NodePath.join(worktree, file);
-    NodeFS.rmSync(target, { force: true });
+    const existing = NodeFS.lstatSync(target, { throwIfNoEntry: false });
+    if (existing && !existing.isSymbolicLink()) continue;
+    if (existing) NodeFS.rmSync(target);
     NodeFS.symlinkSync(source, target);
   }
 }

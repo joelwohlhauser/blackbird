@@ -2,8 +2,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { HttpServer } from "effect/unstable/http";
-import * as NetAddress from "effect/unstable/net/NetAddress";
+import { HttpServer } from "effect/http";
+import * as NetAddress from "effect/net/NetAddress";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
@@ -47,8 +47,10 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
     expect(token.length).toBeGreaterThan(20);
 
     const resolved = yield* registry.resolve(token);
-    expect(resolved?.threadId).toBe(threadId);
-    expect(resolved?.capabilities).toEqual(new Set(["pull-requests", "preview"]));
+    expect(resolved?.thread.threadId).toBe(threadId);
+    expect(resolved?.capabilities).toEqual(
+      new Set(["preview", "orchestration", "worktree", "pull-requests"]),
+    );
 
     yield* registry.revokeThread(threadId);
     expect(yield* registry.resolve(token)).toBeUndefined();
@@ -80,9 +82,23 @@ it.effect("always grants pull-requests and gates browser and device access indep
         .resolve(issued.config.authorizationHeader.replace(/^Bearer\s+/, ""))
         .pipe(Effect.map((scope) => [...(scope?.capabilities ?? [])].sort()));
 
-    expect(yield* capabilitiesOf(withPreview)).toEqual(["preview", "pull-requests"]);
-    expect(yield* capabilitiesOf(withoutPreview)).toEqual(["pull-requests"]);
-    expect(yield* capabilitiesOf(withDevice)).toEqual(["device", "pull-requests"]);
+    expect(yield* capabilitiesOf(withPreview)).toEqual([
+      "orchestration",
+      "preview",
+      "pull-requests",
+      "worktree",
+    ]);
+    expect(yield* capabilitiesOf(withoutPreview)).toEqual([
+      "orchestration",
+      "pull-requests",
+      "worktree",
+    ]);
+    expect(yield* capabilitiesOf(withDevice)).toEqual([
+      "device",
+      "orchestration",
+      "pull-requests",
+      "worktree",
+    ]);
   }),
 );
 
@@ -142,7 +158,7 @@ it.effect("keeps a credential alive across turns that never touch an MCP tool", 
       yield* registry.touch(threadId);
     }
 
-    expect((yield* registry.resolve(token))?.threadId).toBe(threadId);
+    expect((yield* registry.resolve(token))?.thread.threadId).toBe(threadId);
   }),
 );
 
@@ -162,42 +178,5 @@ it.effect("does not keep credentials of other threads alive", () =>
     timestamp += 2;
 
     expect(yield* registry.resolve(token)).toBeUndefined();
-  }),
-);
-
-it.effect("issues a CDP endpoint with browser credentials that dies with the session", () =>
-  Effect.gen(function* () {
-    let timestamp = 1_000;
-    const registry = yield* makeRegistry(() => timestamp);
-    const withoutBrowser = yield* registry.issue({
-      threadId: ThreadId.make("thread-no-browser"),
-      providerInstanceId: ProviderInstanceId.make("codex"),
-      capabilities: new Set(),
-    });
-    expect(withoutBrowser.cdpEndpoint).toBeUndefined();
-
-    const issued = yield* registry.issue({
-      threadId: ThreadId.make("thread-cdp"),
-      providerInstanceId: ProviderInstanceId.make("codex"),
-      capabilities: new Set(["preview"]),
-    });
-    const endpoint = issued.cdpEndpoint ?? "";
-    expect(endpoint).toMatch(/^ws:\/\/127\.0\.0\.1:43123\/mcp\/cdp\/[\w-]{20,}$/);
-    const cdpToken = endpoint.slice(endpoint.lastIndexOf("/") + 1);
-    const mcpToken = issued.config.authorizationHeader.replace(/^Bearer\s+/, "");
-
-    expect((yield* registry.resolveCdp(cdpToken))?.providerSessionId).toBe(
-      issued.config.providerSessionId,
-    );
-    expect(yield* registry.resolve(cdpToken)).toBeUndefined();
-    expect(yield* registry.resolveCdp(mcpToken)).toBeUndefined();
-    expect(yield* registry.isCdpTokenLive(cdpToken)).toBe(true);
-
-    timestamp += 200;
-    expect(yield* registry.isCdpTokenLive(cdpToken)).toBe(false);
-    timestamp -= 200;
-    yield* registry.revokeProviderSession(issued.config.providerSessionId);
-    expect(yield* registry.isCdpTokenLive(cdpToken)).toBe(false);
-    expect(yield* registry.resolveCdp(cdpToken)).toBeUndefined();
   }),
 );

@@ -4,7 +4,7 @@ import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
 } from "@t3tools/shared/threadPullRequests";
-import { Bot, FileDiff, Globe2, Plus, Smartphone, TerminalSquare } from "lucide-react";
+import { FileDiff, Globe2, Plus, Smartphone, TerminalSquare } from "lucide-react";
 import {
   type ElementType,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -62,7 +62,6 @@ interface RightPanelTabsProps {
   onAddFiles: () => void;
   onAddPullRequest?: () => void;
   onAddPullRequests?: () => void;
-  onAddAgents: () => void;
   onAddDevice?: () => void;
   browserAvailable: boolean;
   linearAvailable: boolean;
@@ -73,12 +72,9 @@ interface RightPanelTabsProps {
   filesAvailable?: boolean;
   pullRequestAvailable?: boolean;
   pullRequestsAvailable?: boolean;
-  agentsAvailable?: boolean;
   deviceAvailable?: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   pinnedSurfaceIds?: ReadonlySet<string>;
-  /** Running and waiting subagents shown on the Agents empty-state card. */
-  liveAgentCount: number;
   reserveNativeControlsInset?: boolean;
   children: ReactNode;
 }
@@ -106,7 +102,6 @@ const SURFACE_UNAVAILABLE_HINTS = {
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
-  agents: "No agents in this chat yet.",
   device: "Available from a chat.",
 } as const;
 
@@ -207,7 +202,6 @@ export function NewTabPage(props: {
   onAddDiff: () => void;
   onAddPullRequest?: () => void;
   onAddPullRequests?: () => void;
-  onAddAgents: () => void;
   onAddDevice?: () => void;
   browserAvailable: boolean;
   linearAvailable: boolean;
@@ -217,9 +211,7 @@ export function NewTabPage(props: {
   diffAvailable: boolean;
   pullRequestAvailable?: boolean;
   pullRequestsAvailable?: boolean;
-  agentsAvailable?: boolean;
   deviceAvailable?: boolean;
-  liveAgentCount: number;
 }) {
   const [highlight, setHighlight] = useState(-1);
   const actions: Array<{
@@ -230,7 +222,6 @@ export function NewTabPage(props: {
     available: boolean;
     disabledReason: string;
     onClick: () => void;
-    badgeCount?: number;
   }> = [
     {
       label: "Browser",
@@ -294,16 +285,6 @@ export function NewTabPage(props: {
           },
         ]
       : []),
-    {
-      label: "Agents",
-      description: "Follow subagents and workflows.",
-      icon: Bot,
-      shortcut: "A",
-      available: props.agentsAvailable !== false,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.agents,
-      onClick: props.onAddAgents,
-      badgeCount: props.liveAgentCount,
-    },
     ...(props.onAddDevice
       ? [
           {
@@ -407,19 +388,7 @@ export function NewTabPage(props: {
           {actions.map((action) => {
             const Icon = action.icon;
             const actionHighlightIndex = availableActions.indexOf(action);
-            const icon = (
-              <span className="relative inline-flex shrink-0">
-                <Icon className="size-4" />
-                {(action.badgeCount ?? 0) > 0 ? (
-                  <span
-                    aria-hidden
-                    className="absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-info px-1 text-3xs font-semibold tabular-nums text-white"
-                  >
-                    {action.badgeCount}
-                  </span>
-                ) : null}
-              </span>
-            );
+            const icon = <Icon className="size-4 shrink-0" />;
             return action.available ? (
               <button
                 key={action.label}
@@ -542,7 +511,6 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             {...(props.onAddPullRequests !== undefined
               ? { onAddPullRequests: props.onAddPullRequests }
               : {})}
-            onAddAgents={props.onAddAgents}
             {...(props.onAddDevice !== undefined ? { onAddDevice: props.onAddDevice } : {})}
             browserAvailable={props.browserAvailable}
             linearAvailable={props.linearAvailable}
@@ -558,13 +526,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             {...(props.pullRequestsAvailable !== undefined
               ? { pullRequestsAvailable: props.pullRequestsAvailable }
               : {})}
-            {...(props.agentsAvailable !== undefined
-              ? { agentsAvailable: props.agentsAvailable }
-              : {})}
             {...(props.deviceAvailable !== undefined
               ? { deviceAvailable: props.deviceAvailable }
               : {})}
-            liveAgentCount={props.liveAgentCount}
           />
         ) : (
           props.children

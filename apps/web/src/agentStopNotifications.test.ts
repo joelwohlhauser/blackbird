@@ -12,89 +12,84 @@ function shell(overrides: Partial<EnvironmentThreadShell> = {}): EnvironmentThre
     hasPendingApprovals: false,
     hasPendingUserInput: false,
     hasActionableProposedPlan: false,
-    session: null,
-    latestTurn: null,
+    runtime: null,
+    latestRun: null,
     ...overrides,
   } as EnvironmentThreadShell;
 }
 
-const completedTurn = (completedAt: string) =>
+const completedRun = (completedAt: string) =>
   ({
-    turnId: "turn-1",
-    state: "completed",
+    runId: "run-1",
+    status: "completed",
     requestedAt: completedAt,
     startedAt: completedAt,
     completedAt,
     assistantMessageId: null,
-  }) as EnvironmentThreadShell["latestTurn"];
+  }) as EnvironmentThreadShell["latestRun"];
 
-const runningSession = {
-  threadId: "thread-1",
+const runningRuntime = {
   status: "running",
+  activeRunId: "run-1",
+  providerInstanceId: "codex",
   providerName: null,
-  runtimeMode: "full-access",
-  activeTurnId: "turn-1",
   lastError: null,
   updatedAt: "2026-09-02T10:00:00.000Z",
-} as NonNullable<EnvironmentThreadShell["session"]>;
+} as NonNullable<EnvironmentThreadShell["runtime"]>;
 
 describe("resolveAgentStop", () => {
-  it("returns null while the session is running", () => {
-    expect(resolveAgentStop(shell({ session: runningSession }))).toBeNull();
+  it("returns null while the run is active", () => {
+    expect(resolveAgentStop(shell({ runtime: runningRuntime }))).toBeNull();
   });
 
-  it("ranks approvals and input above a running session", () => {
+  it("ranks approvals and input above an active run", () => {
     expect(
-      resolveAgentStop(shell({ session: runningSession, hasPendingApprovals: true }))?.kind,
+      resolveAgentStop(shell({ runtime: runningRuntime, hasPendingApprovals: true }))?.kind,
     ).toBe("approval");
     expect(
-      resolveAgentStop(shell({ session: runningSession, hasPendingUserInput: true }))?.kind,
+      resolveAgentStop(shell({ runtime: runningRuntime, hasPendingUserInput: true }))?.kind,
     ).toBe("input");
   });
 
   it("keys completions by their completion time", () => {
-    const first = resolveAgentStop(
-      shell({ latestTurn: completedTurn("2026-09-02T10:00:00.000Z") }),
-    );
-    const second = resolveAgentStop(
-      shell({ latestTurn: completedTurn("2026-09-02T11:00:00.000Z") }),
-    );
+    const first = resolveAgentStop(shell({ latestRun: completedRun("2026-09-02T10:00:00.000Z") }));
+    const second = resolveAgentStop(shell({ latestRun: completedRun("2026-09-02T11:00:00.000Z") }));
     expect(first?.kind).toBe("completed");
     expect(first?.key).not.toBe(second?.key);
   });
 
-  it("reports a failed session", () => {
-    expect(resolveAgentStop(shell({ session: { ...runningSession, status: "error" } }))?.kind).toBe(
-      "failed",
-    );
+  it("reports a failed runtime", () => {
+    expect(
+      resolveAgentStop(shell({ runtime: { ...runningRuntime, status: "failed" } }))?.kind,
+    ).toBe("failed");
   });
 });
 
 describe("diffAgentStops", () => {
   it("baselines the first snapshot without reporting stops", () => {
     const { next, stops } = diffAgentStops(null, [
-      shell({ latestTurn: completedTurn("2026-09-02T10:00:00.000Z") }),
+      shell({ latestRun: completedRun("2026-09-02T10:00:00.000Z") }),
     ]);
     expect(stops).toEqual([]);
     expect(next.get("env-1:thread-1")).toBe("completed:2026-09-02T10:00:00.000Z");
   });
 
   it("reports a thread that moves from working to completed", () => {
-    const { next } = diffAgentStops(null, [shell({ session: runningSession })]);
+    const { next } = diffAgentStops(null, [shell({ runtime: runningRuntime })]);
     const { stops } = diffAgentStops(next, [
-      shell({ latestTurn: completedTurn("2026-09-02T10:05:00.000Z") }),
+      shell({ latestRun: completedRun("2026-09-02T10:05:00.000Z") }),
     ]);
     expect(stops.map((stop) => stop.kind)).toEqual(["completed"]);
   });
 
   it("does not repeat an unchanged stop or report unseen threads", () => {
-    const completed = shell({ latestTurn: completedTurn("2026-09-02T10:05:00.000Z") });
+    const completed = shell({ latestRun: completedRun("2026-09-02T10:05:00.000Z") });
     const { next } = diffAgentStops(null, [completed]);
     const { stops } = diffAgentStops(next, [
       completed,
       shell({
         id: "thread-2" as EnvironmentThreadShell["id"],
-        latestTurn: completedTurn("2026-09-02T10:06:00.000Z"),
+        latestRun: completedRun("2026-09-02T10:06:00.000Z"),
       }),
     ]);
     expect(stops).toEqual([]);

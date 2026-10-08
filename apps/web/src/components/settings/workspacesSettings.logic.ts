@@ -1,10 +1,14 @@
+import {
+  threadRuntimeIsActive,
+  type ThreadRuntimeSummary,
+} from "@t3tools/client-runtime/state/shell";
 import type { LinearIssueStatus } from "@t3tools/contracts";
 
 export interface WorkspaceChatLike {
   readonly id: string;
   readonly worktreePath: string | null;
   readonly updatedAt: string;
-  readonly session?: { readonly status: string } | null;
+  readonly runtime?: ThreadRuntimeSummary | null;
 }
 
 export type WorkspaceSortKey = "workspace" | "storage" | "chats" | "linear" | "git" | "lastUsed";
@@ -135,10 +139,7 @@ export function summarizeWorkspaceChats(
       (latest, chat) => (latest === null || chat.updatedAt > latest ? chat.updatedAt : latest),
       null,
     ),
-    hasLiveSession: associatedChats.some(
-      (chat) =>
-        chat.session !== null && chat.session !== undefined && chat.session.status !== "stopped",
-    ),
+    hasLiveSession: associatedChats.some((chat) => threadRuntimeIsActive(chat.runtime)),
   };
 }
 

@@ -15,7 +15,7 @@ import {
   type WorkspaceCleanupListResult,
   type WorkspaceCleanupWorktree,
 } from "@t3tools/contracts";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProcessRunner from "../processRunner.ts";

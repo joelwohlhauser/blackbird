@@ -1,4 +1,7 @@
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import {
+  threadRuntimeIsActive,
+  type EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/shell";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 
 export type AgentStopKind = "approval" | "input" | "failed" | "completed";
@@ -12,7 +15,7 @@ export const AGENT_STOP_LABELS: Record<AgentStopKind, string> = {
 
 type AgentStopShell = Pick<
   EnvironmentThreadShell,
-  "hasPendingApprovals" | "hasPendingUserInput" | "session" | "latestTurn"
+  "hasPendingApprovals" | "hasPendingUserInput" | "runtime" | "latestRun"
 >;
 
 /**
@@ -25,15 +28,14 @@ export function resolveAgentStop(
 ): { readonly kind: AgentStopKind; readonly key: string } | null {
   if (shell.hasPendingApprovals) return { kind: "approval", key: "approval" };
   if (shell.hasPendingUserInput) return { kind: "input", key: "input" };
-  const session = shell.session;
-  if (session?.status === "error")
-    return { kind: "failed", key: `session-error:${session.updatedAt}` };
-  if (session?.status === "running" || session?.status === "starting") return null;
-  const turn = shell.latestTurn;
-  if (turn === null) return null;
-  if (turn.state === "completed")
-    return { kind: "completed", key: `completed:${turn.completedAt}` };
-  if (turn.state === "error") return { kind: "failed", key: `turn-error:${turn.turnId}` };
+  const runtime = shell.runtime;
+  if (threadRuntimeIsActive(runtime)) return null;
+  if (runtime?.status === "failed")
+    return { kind: "failed", key: `runtime-failed:${runtime.updatedAt}` };
+  const run = shell.latestRun;
+  if (run === null) return null;
+  if (run.status === "completed") return { kind: "completed", key: `completed:${run.completedAt}` };
+  if (run.status === "failed") return { kind: "failed", key: `run-failed:${run.runId}` };
   return null;
 }
 

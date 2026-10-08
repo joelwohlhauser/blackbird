@@ -2,6 +2,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { type EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { useClosedViewStore } from "./closedViewStore";
 import {
   migratePersistedRightPanelState,
   resolveAdjacentRightPanelSurface,
@@ -10,6 +11,8 @@ import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectSelectedRightPanelSurface,
+  selectThreadPanelOpen,
+  selectThreadPanelVisibility,
   selectThreadRightPanelState,
   selectWorkspaceNavigatorOpen,
   useRightPanelStore,
@@ -22,14 +25,144 @@ const refB = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-B"))
 const EMPTY_MAIN_TAB_STATE = { mainSurfaces: [], activeMainSurfaceId: null };
 
 beforeEach(() => {
+  useClosedViewStore.setState({ entries: [] });
   useRightPanelStore.setState({
     byThreadKey: {},
     workspaceNavigatorOpenByThreadKey: {},
+    threadPanelVisibilityByThreadKey: {},
     userActionRevisionByThreadKey: {},
+    closeRevisionByThreadKey: {},
   });
 });
 
 describe("rightPanelStore", () => {
+  it("records single and bulk tab closes, newest first", () => {
+    const store = useRightPanelStore.getState();
+    const pr = pullRequestSurface({
+      projectId: "project-a",
+      repository: "pingdotgg/t3code",
+      number: 42,
+    });
+    store.openFile(refA, "src/app.ts");
+    store.open(refA, "device");
+    store.openPullRequest(refA, pr);
+    store.open(refA, "diff");
+    store.closeSurface(refA, pr.id);
+    store.closeSurfacesToRight(refA, "device");
+    store.closeOtherSurfaces(refA, "file:src/app.ts");
+    expect(
+      useClosedViewStore
+        .getState()
+        .entries.map((entry) => (entry.kind === "panel-tab" ? entry.surface.id : null)),
+    ).toEqual(["device", "diff", pr.id]);
+  });
+
+  it("reopens the active tab first after a bulk close", () => {
+    const store = useRightPanelStore.getState();
+    store.open(refA, "files");
+    store.open(refA, "diff");
+    store.open(refA, "device");
+    store.activateSurface(refA, "diff");
+    store.closeAllSurfaces(refA);
+
+    expect(
+      useClosedViewStore
+        .getState()
+        .entries.map((entry) => entry.kind === "panel-tab" && entry.surface.id),
+    ).toEqual(["diff", "device", "files"]);
+  });
+
+  it("does not save an incidental Files replacement when opening an existing file", () => {
+    const store = useRightPanelStore.getState();
+    store.openFile(refA, "src/app.ts");
+    store.open(refA, "files");
+    store.openFile(refA, "src/app.ts");
+
+    expect(useClosedViewStore.getState().entries).toEqual([]);
+  });
+
+  it("ignores session tabs without browser snapshots and records the empty browser tab", () => {
+    const store = useRightPanelStore.getState();
+    store.openBrowser(refA, "tab-1");
+    store.closeSurface(refA, "browser:tab-1");
+    expect(useClosedViewStore.getState().entries).toEqual([]);
+    store.openBrowser(refA, null);
+    store.closeSurface(refA, "browser:new");
+    expect(useClosedViewStore.getState().entries).toMatchObject([
+      { kind: "panel-tab", surface: { id: "browser:new", resourceId: null } },
+    ]);
+  });
+
+  it("keeps a dismissed device hidden after another file opens", () => {
+    const store = useRightPanelStore.getState();
+    const device = {
+      hostId: "nucbox",
+      deviceId: "emulator-5580",
+      name: "Pixel",
+      platform: "android",
+    } as const;
+    store.openFile(refA, "src/app.ts");
+    store.closeSurface(refA, "file:src/app.ts");
+    store.openDevice(refA, device);
+    store.closeSurface(refA, "device:nucbox:emulator-5580");
+
+    store.openFile(refA, "src/app.ts");
+    store.openDevice(refA, device, true);
+
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces,
+    ).toEqual([expect.objectContaining({ id: "file:src/app.ts" })]);
+  });
+
+  it("records only closed tabs when a panel is hidden or a terminal tab closes", () => {
+    const store = useRightPanelStore.getState();
+    store.open(refA, "diff");
+    store.openFile(refA, "src/app.ts");
+    store.closeSurface(refA, "file:src/app.ts");
+    store.close(refA);
+    expect(useClosedViewStore.getState().entries).toMatchObject([
+      { kind: "panel-tab", threadRef: refA, surface: { id: "file:src/app.ts" } },
+    ]);
+    store.toggleVisibility(refA);
+    store.toggle(refA, "diff");
+    store.openTerminal(refA, "term-1");
+    store.closeSurface(refA, "terminal:term-1");
+    expect(useClosedViewStore.getState().entries).toMatchObject([
+      { kind: "panel-tab", threadRef: refA, surface: { id: "file:src/app.ts" } },
+    ]);
+    expect(useClosedViewStore.getState().entries).toHaveLength(1);
+  });
+
+  it("leaves tabs that cannot be reopened out of the closed-tab history", () => {
+    const store = useRightPanelStore.getState();
+    store.openDiffFile(refA, "branch", "src/app.ts", "main", "feature");
+    store.open(refA, "new-tab");
+    store.openLinear(refA, "linear-tab");
+    store.openGitHubPullRequest(refA, "github-tab");
+    store.open(refA, "diff");
+    store.closeAllSurfaces(refA);
+
+    expect(
+      useClosedViewStore
+        .getState()
+        .entries.map((entry) => (entry.kind === "panel-tab" ? entry.surface.id : null)),
+    ).toEqual(["diff"]);
+  });
+
+  it("records closed main-area tabs alongside panel tabs", () => {
+    const store = useRightPanelStore.getState();
+    store.open(refA, "diff");
+    store.openFile(refA, "src/app.ts");
+    store.moveSurface(refA, "diff", { container: "main", index: 0 });
+    store.closeSurface(refA, "diff");
+    store.closeSurface(refA, "file:src/app.ts");
+
+    expect(
+      useClosedViewStore
+        .getState()
+        .entries.map((entry) => (entry.kind === "panel-tab" ? entry.surface.id : null)),
+    ).toEqual(["file:src/app.ts", "diff"]);
+  });
   it("gives each host/device its own tab and preserves renamed tabs", () => {
     const store = useRightPanelStore.getState();
     const android = {
@@ -335,7 +468,7 @@ describe("rightPanelStore", () => {
     const surfaces = [
       { id: "diff", kind: "diff" },
       { id: "files", kind: "files" },
-      { id: "agents", kind: "agents" },
+      { id: "device", kind: "device" },
     ] as const;
 
     expect(
@@ -343,9 +476,9 @@ describe("rightPanelStore", () => {
     ).toBe("files");
     expect(
       resolveAdjacentRightPanelSurface({ activeSurfaceId: "diff", surfaces }, "previous")?.id,
-    ).toBe("agents");
+    ).toBe("device");
     expect(
-      resolveAdjacentRightPanelSurface({ activeSurfaceId: "agents", surfaces }, "next")?.id,
+      resolveAdjacentRightPanelSurface({ activeSurfaceId: "device", surfaces }, "next")?.id,
     ).toBe("diff");
   });
 
@@ -538,20 +671,24 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("drops persisted plan surfaces and does not reopen an empty panel", () => {
+  it.each([
+    { kind: "plan", isOpen: true },
+    { kind: "agents", isOpen: true },
+    { kind: "agents", isOpen: false },
+  ])("drops $kind with isOpen=$isOpen and falls back", ({ kind, isOpen }) => {
     expect(
       migratePersistedRightPanelState({
         byThreadKey: {
           "env-1:thread-A": {
-            isOpen: true,
-            activeSurfaceId: "plan",
-            surfaces: [{ id: "plan", kind: "plan" }],
+            isOpen,
+            activeSurfaceId: kind,
+            surfaces: [{ id: kind, kind }],
           },
           "env-1:thread-B": {
-            isOpen: true,
-            activeSurfaceId: "plan",
+            isOpen,
+            activeSurfaceId: kind,
             surfaces: [
-              { id: "plan", kind: "plan" },
+              { id: kind, kind },
               { id: "diff", kind: "diff" },
             ],
           },
@@ -567,6 +704,95 @@ describe("rightPanelStore", () => {
         },
         "env-1:thread-B": {
           ...EMPTY_MAIN_TAB_STATE,
+          isOpen,
+          activeSurfaceId: "diff",
+          surfaces: [{ id: "diff", kind: "diff" }],
+        },
+      },
+      workspaceNavigatorOpenByThreadKey: {},
+    });
+  });
+
+  it("keeps Blackbird v12 workspace tabs and navigator state while dropping agents tabs", () => {
+    expect(
+      migratePersistedRightPanelState({
+        byThreadKey: {
+          "env-1:thread-A": {
+            isOpen: true,
+            activeSurfaceId: "agents",
+            surfaces: [
+              { id: "agents", kind: "agents" },
+              { id: "browser:tab-1", kind: "preview", resourceId: "tab-1", url: "https://a.test" },
+            ],
+            mainSurfaces: [
+              { id: "linear", kind: "linear", resourceId: "tab-2", url: null },
+              { id: "agents", kind: "agents" },
+              { id: "diff", kind: "diff" },
+            ],
+            activeMainSurfaceId: "agents",
+          },
+          "env-1:thread-B": {
+            isOpen: false,
+            activeSurfaceId: null,
+            surfaces: [],
+            mainSurfaces: [{ id: "file:src/app.ts", kind: "file", relativePath: "src/app.ts" }],
+            activeMainSurfaceId: "file:src/app.ts",
+          },
+        },
+        workspaceNavigatorOpenByThreadKey: { "env-1:thread-A": true },
+      }),
+    ).toEqual({
+      byThreadKey: {
+        "env-1:thread-A": {
+          isOpen: true,
+          activeSurfaceId: "browser:tab-1",
+          surfaces: [
+            { id: "browser:tab-1", kind: "preview", resourceId: "tab-1", url: "https://a.test" },
+          ],
+          mainSurfaces: [
+            { id: "linear", kind: "linear", resourceId: "tab-2", url: null },
+            { id: "diff", kind: "diff" },
+          ],
+          activeMainSurfaceId: null,
+        },
+        "env-1:thread-B": {
+          isOpen: false,
+          activeSurfaceId: null,
+          surfaces: [],
+          mainSurfaces: [
+            {
+              id: "file:src/app.ts",
+              kind: "file",
+              relativePath: "src/app.ts",
+              revealLine: null,
+              revealRequestId: 0,
+            },
+          ],
+          activeMainSurfaceId: "file:src/app.ts",
+        },
+      },
+      workspaceNavigatorOpenByThreadKey: { "env-1:thread-A": true },
+    });
+  });
+
+  it("accepts upstream v14 panel state without main-area tabs", () => {
+    expect(
+      migratePersistedRightPanelState({
+        byThreadKey: {
+          "env-1:thread-A": {
+            isOpen: true,
+            activeSurfaceId: "diff",
+            surfaces: [{ id: "diff", kind: "diff" }],
+          },
+        },
+        threadPanelVisibilityByThreadKey: {
+          "env-1:thread-A": { inlineOpen: false, popoverOpen: false },
+        },
+      }),
+    ).toEqual({
+      byThreadKey: {
+        "env-1:thread-A": {
+          ...EMPTY_MAIN_TAB_STATE,
           isOpen: true,
           activeSurfaceId: "diff",
           surfaces: [{ id: "diff", kind: "diff" }],
@@ -576,6 +802,33 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("tracks inline and popover visibility independently", () => {
+    const store = useRightPanelStore.getState();
+
+    expect(selectThreadPanelOpen(store.threadPanelVisibilityByThreadKey, refA, "inline")).toBe(
+      true,
+    );
+    expect(selectThreadPanelOpen(store.threadPanelVisibilityByThreadKey, refA, "popover")).toBe(
+      false,
+    );
+
+    store.setThreadPanelOpen(refA, "inline", false);
+    store.toggleThreadPanel(refA, "popover");
+
+    expect(
+      selectThreadPanelVisibility(
+        useRightPanelStore.getState().threadPanelVisibilityByThreadKey,
+        refA,
+      ),
+    ).toEqual({ inlineOpen: false, popoverOpen: true });
+    expect(
+      selectThreadPanelVisibility(
+        useRightPanelStore.getState().threadPanelVisibilityByThreadKey,
+        refB,
+      ),
+    ).toEqual({ inlineOpen: true, popoverOpen: false });
+  });
+
   it("open sets the active panel for a thread", () => {
     useRightPanelStore.getState().open(refA, "preview");
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("preview");
@@ -583,7 +836,7 @@ describe("rightPanelStore", () => {
   });
 
   it("opening a different kind keeps both surfaces and activates the new one", () => {
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().open(refA, "preview");
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("preview");
     expect(
@@ -593,7 +846,7 @@ describe("rightPanelStore", () => {
 
   it("reopening an inactive singleton activates its existing surface", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().open(refA, "diff");
 
     expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
@@ -602,7 +855,7 @@ describe("rightPanelStore", () => {
       activeSurfaceId: "diff",
       surfaces: [
         { id: "diff", kind: "diff" },
-        { id: "agents", kind: "agents" },
+        { id: "device", kind: "device" },
       ],
     });
   });
@@ -840,7 +1093,7 @@ describe("rightPanelStore", () => {
 
   it("removes persisted file surfaces when their workspace no longer exists", () => {
     useRightPanelStore.getState().openFile(refA, "src/index.ts");
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().openFile(refA, "README.md");
 
     useRightPanelStore.getState().reconcileFileSurfaces(refA, false);
@@ -848,8 +1101,8 @@ describe("rightPanelStore", () => {
     expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
       ...EMPTY_MAIN_TAB_STATE,
       isOpen: true,
-      activeSurfaceId: "agents",
-      surfaces: [{ id: "agents", kind: "agents" }],
+      activeSurfaceId: "device",
+      surfaces: [{ id: "device", kind: "device" }],
     });
 
     useRightPanelStore.getState().openFile(refB, "conductor.json");
@@ -893,17 +1146,17 @@ describe("rightPanelStore", () => {
   });
 
   it("close hides the panel without clearing its selected surface", () => {
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().close(refA);
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBeNull();
     expect(
       selectSelectedRightPanelSurface(useRightPanelStore.getState().byThreadKey, refA),
-    ).toEqual({ id: "agents", kind: "agents" });
+    ).toEqual({ id: "device", kind: "device" });
     expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
       ...EMPTY_MAIN_TAB_STATE,
       isOpen: false,
-      activeSurfaceId: "agents",
-      surfaces: [{ id: "agents", kind: "agents" }],
+      activeSurfaceId: "device",
+      surfaces: [{ id: "device", kind: "device" }],
     });
   });
 
@@ -968,12 +1221,12 @@ describe("rightPanelStore", () => {
 
   it("toggle to a different kind switches active", () => {
     useRightPanelStore.getState().toggle(refA, "preview");
-    useRightPanelStore.getState().toggle(refA, "agents");
-    expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("agents");
+    useRightPanelStore.getState().toggle(refA, "device");
+    expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("device");
   });
 
   it("removeThread clears persisted state", () => {
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
     useRightPanelStore.getState().removeThread(refA);
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBeNull();
@@ -1343,6 +1596,32 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("does not replace a stale surface with a hidden tab, but preserves explicit opens", () => {
+    const store = useRightPanelStore.getState();
+    store.openBrowser(refA, "stale-tab");
+    store.reconcileBrowserSurfaces(refA, ["hidden-tab"], new Set(["hidden-tab"]));
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA),
+    ).toMatchObject({
+      activeSurfaceId: null,
+      surfaces: [],
+    });
+
+    store.openBrowser(refA, "hidden-tab");
+    store.reconcileBrowserSurfaces(
+      refA,
+      ["hidden-tab", "other-tab"],
+      new Set(["hidden-tab", "other-tab"]),
+    );
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA),
+    ).toMatchObject({
+      isOpen: true,
+      activeSurfaceId: "browser:hidden-tab",
+      surfaces: [{ id: "browser:hidden-tab", kind: "preview", resourceId: "hidden-tab" }],
+    });
+  });
+
   it("reconciles browser surfaces without deleting other surface kinds", () => {
     useRightPanelStore.getState().openTerminal(refA, "term-1");
     useRightPanelStore.getState().openBrowser(refA, "tab-a");
@@ -1442,13 +1721,13 @@ describe("workspace tab containers", () => {
 
   it("reorders tabs within the main area", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().moveSurface(refA, "diff", { container: "main", index: 0 });
-    useRightPanelStore.getState().moveSurface(refA, "agents", { container: "main", index: 1 });
+    useRightPanelStore.getState().moveSurface(refA, "device", { container: "main", index: 1 });
 
-    useRightPanelStore.getState().moveSurface(refA, "agents", { container: "main", index: 0 });
+    useRightPanelStore.getState().moveSurface(refA, "device", { container: "main", index: 0 });
 
-    expect(threadState().mainSurfaces.map((surface) => surface.id)).toEqual(["agents", "diff"]);
+    expect(threadState().mainSurfaces.map((surface) => surface.id)).toEqual(["device", "diff"]);
   });
 
   it("moves a tab from the panel to the main area and activates it there", () => {
@@ -1509,13 +1788,13 @@ describe("workspace tab containers", () => {
   it("ignores moves for unknown surfaces", () => {
     useRightPanelStore.getState().open(refA, "diff");
     const before = threadState();
-    useRightPanelStore.getState().moveSurface(refA, "agents", { container: "main", index: 0 });
+    useRightPanelStore.getState().moveSurface(refA, "device", { container: "main", index: 0 });
     expect(threadState()).toEqual(before);
   });
 
   it("activates surfaces in whichever container owns them", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().moveSurface(refA, "diff", { container: "main", index: 0 });
     useRightPanelStore.getState().activateMainChat(refA);
     expect(threadState().activeMainSurfaceId).toBeNull();
@@ -1523,22 +1802,22 @@ describe("workspace tab containers", () => {
     useRightPanelStore.getState().activateSurface(refA, "diff");
 
     expect(threadState()).toMatchObject({
-      activeSurfaceId: "agents",
+      activeSurfaceId: "device",
       activeMainSurfaceId: "diff",
     });
   });
 
   it("closing a main tab falls back to its neighbor, then to the chat tab", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().moveSurface(refA, "diff", { container: "main", index: 0 });
-    useRightPanelStore.getState().moveSurface(refA, "agents", { container: "main", index: 1 });
+    useRightPanelStore.getState().moveSurface(refA, "device", { container: "main", index: 1 });
     useRightPanelStore.getState().activateSurface(refA, "diff");
 
     useRightPanelStore.getState().closeSurface(refA, "diff");
-    expect(threadState().activeMainSurfaceId).toBe("agents");
+    expect(threadState().activeMainSurfaceId).toBe("device");
 
-    useRightPanelStore.getState().closeSurface(refA, "agents");
+    useRightPanelStore.getState().closeSurface(refA, "device");
     expect(threadState().mainSurfaces).toEqual([]);
     expect(threadState().activeMainSurfaceId).toBeNull();
   });
@@ -1557,14 +1836,14 @@ describe("workspace tab containers", () => {
 
   it("scopes close-others and close-to-right to the container owning the tab", () => {
     useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().openTerminal(refA, "term-1");
     useRightPanelStore.getState().moveSurface(refA, "diff", { container: "main", index: 0 });
-    useRightPanelStore.getState().moveSurface(refA, "agents", { container: "main", index: 1 });
+    useRightPanelStore.getState().moveSurface(refA, "device", { container: "main", index: 1 });
 
-    useRightPanelStore.getState().closeOtherSurfaces(refA, "agents");
+    useRightPanelStore.getState().closeOtherSurfaces(refA, "device");
 
-    expect(threadState().mainSurfaces.map((surface) => surface.id)).toEqual(["agents"]);
+    expect(threadState().mainSurfaces.map((surface) => surface.id)).toEqual(["device"]);
     expect(threadState().surfaces.map((surface) => surface.id)).toEqual(["terminal:term-1"]);
   });
 
@@ -1644,9 +1923,9 @@ describe("workspace tab containers", () => {
     it("always opens new tabs in the panel while it is open", () => {
       workspaceLayoutProbe.isWide = () => false;
       useRightPanelStore.getState().toggleVisibility(refA);
-      useRightPanelStore.getState().open(refA, "agents");
+      useRightPanelStore.getState().open(refA, "device");
 
-      expect(threadState()).toMatchObject({ isOpen: true, activeSurfaceId: "agents" });
+      expect(threadState()).toMatchObject({ isOpen: true, activeSurfaceId: "device" });
       expect(threadState().mainSurfaces).toEqual([]);
     });
 

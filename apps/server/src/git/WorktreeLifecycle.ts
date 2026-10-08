@@ -1,17 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodePath from "node:path";
 
-import {
-  DEFAULT_SERVER_SETTINGS,
-  type VcsCreateWorktreeInput,
-  type WorktreeEnvFileMode,
-} from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, type WorktreeEnvFileMode } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 
-import { expandHomePath } from "../pathExpansion.ts";
 import * as ServerSettings from "../serverSettings.ts";
 
 const ENV_SEARCH_SKIP_ENTRIES = new Set([
@@ -39,39 +34,6 @@ function isPathInside(parent: string, candidate: string): boolean {
   return relative === "" || (!relative.startsWith(`..${NodePath.sep}`) && relative !== "..");
 }
 
-function worktreeBranchSegments(branchName: string): ReadonlyArray<string> {
-  const pathBranchName = branchName.startsWith("origin/")
-    ? branchName.slice("origin/".length)
-    : branchName;
-  const segments = pathBranchName
-    .split(/[\\/]+/)
-    .filter((segment) => segment.length > 0)
-    .map((segment) => (segment === "." || segment === ".." ? "-" : segment));
-  return segments.length > 0 ? [segments.join("-")] : ["worktree"];
-}
-
-/**
- * Uses a flat `${repo}/${branch}` layout inside the configured root while
- * keeping every generated path contained by that root.
- */
-export function resolveConfiguredWorktreePath(input: {
-  readonly worktreesRoot: string;
-  readonly repositoryCwd: string;
-  readonly branchName: string;
-}): string {
-  const root = NodePath.resolve(expandHomePath(input.worktreesRoot));
-  const repositoryName = NodePath.basename(NodePath.resolve(input.repositoryCwd));
-  const resolved = NodePath.resolve(
-    root,
-    repositoryName,
-    ...worktreeBranchSegments(input.branchName),
-  );
-
-  return isPathInside(root, resolved)
-    ? resolved
-    : NodePath.join(root, repositoryName, input.branchName.replace(/[\\/]/g, "-"));
-}
-
 export interface PrepareCreatedWorktreeInput {
   readonly projectCwd: string;
   readonly worktreePath: string;
@@ -80,9 +42,6 @@ export interface PrepareCreatedWorktreeInput {
 export class WorktreeLifecycle extends Context.Service<
   WorktreeLifecycle,
   {
-    readonly resolveCreateInput: (
-      input: VcsCreateWorktreeInput,
-    ) => Effect.Effect<VcsCreateWorktreeInput>;
     readonly prepareCreatedWorktree: (input: PrepareCreatedWorktreeInput) => Effect.Effect<void>;
   }
 >()("t3/git/WorktreeLifecycle") {}
@@ -221,22 +180,6 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const resolveCreateInput: WorktreeLifecycle["Service"]["resolveCreateInput"] = Effect.fn(
-    "WorktreeLifecycle.resolveCreateInput",
-  )(function* (input) {
-    if (input.path !== null) return input;
-
-    const settings = yield* readSettings;
-    return {
-      ...input,
-      path: resolveConfiguredWorktreePath({
-        worktreesRoot: settings.worktreesRoot,
-        repositoryCwd: input.cwd,
-        branchName: input.newRefName ?? input.baseRefName ?? input.refName,
-      }),
-    };
-  });
-
   const prepareCreatedWorktree: WorktreeLifecycle["Service"]["prepareCreatedWorktree"] = Effect.fn(
     "WorktreeLifecycle.prepareCreatedWorktree",
   )(function* (input) {
@@ -255,7 +198,6 @@ export const make = Effect.gen(function* () {
   });
 
   return WorktreeLifecycle.of({
-    resolveCreateInput,
     prepareCreatedWorktree,
   });
 });

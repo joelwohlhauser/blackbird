@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "@effect/vitest";
+import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -25,38 +25,6 @@ const writeTextFile = Effect.fn("WorktreeLifecycleTest.writeTextFile")(function*
   const path = yield* Path.Path;
   yield* fileSystem.makeDirectory(path.dirname(filePath), { recursive: true });
   yield* fileSystem.writeFileString(filePath, contents);
-});
-
-describe("resolveConfiguredWorktreePath", () => {
-  it("flattens branch namespaces into one worktree directory", () => {
-    expect(
-      WorktreeLifecycle.resolveConfiguredWorktreePath({
-        worktreesRoot: "/tmp/.worktrees",
-        repositoryCwd: "/Users/example/Repositories/blackbird",
-        branchName: "feature/base-branch",
-      }),
-    ).toBe("/tmp/.worktrees/blackbird/feature-base-branch");
-  });
-
-  it("omits the origin remote from the worktree directory", () => {
-    expect(
-      WorktreeLifecycle.resolveConfiguredWorktreePath({
-        worktreesRoot: "/tmp/.worktrees",
-        repositoryCwd: "/Users/example/Repositories/example-app",
-        branchName: "origin/eng-456-add-conversation-logs",
-      }),
-    ).toBe("/tmp/.worktrees/example-app/eng-456-add-conversation-logs");
-  });
-
-  it("keeps generated paths inside the configured root", () => {
-    expect(
-      WorktreeLifecycle.resolveConfiguredWorktreePath({
-        worktreesRoot: "/tmp/.worktrees",
-        repositoryCwd: "/Users/example/Repositories/blackbird",
-        branchName: "../escape",
-      }),
-    ).toBe("/tmp/.worktrees/blackbird/--escape");
-  });
 });
 
 it.layer(TestLayer)("WorktreeLifecycle", (it) => {

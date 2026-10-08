@@ -1,3 +1,4 @@
+import type { ThreadRuntimeSummary } from "@t3tools/client-runtime/state/shell";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -11,6 +12,8 @@ import {
   type WorkspaceSortableRow,
 } from "./workspacesSettings.logic";
 
+const runtime = (status: ThreadRuntimeSummary["status"]) => ({ status }) as ThreadRuntimeSummary;
+
 describe("workspace settings", () => {
   it("counts every chat on the same normalized path once", () => {
     expect(
@@ -19,19 +22,19 @@ describe("workspace settings", () => {
           id: "active",
           worktreePath: "/repo/worktrees/AI-42",
           updatedAt: "2026-08-20T12:00:00.000Z",
-          session: { status: "running" },
+          runtime: runtime("completed"),
         },
         {
           id: "active",
           worktreePath: "/repo/worktrees/AI-42/",
           updatedAt: "2026-08-21T12:00:00.000Z",
-          session: { status: "stopped" },
+          runtime: runtime("idle"),
         },
         {
           id: "archived",
           worktreePath: "/repo/worktrees/AI-42",
           updatedAt: "2026-08-22T12:00:00.000Z",
-          session: null,
+          runtime: null,
         },
         {
           id: "other",
@@ -54,7 +57,7 @@ describe("workspace settings", () => {
           id: "chat",
           worktreePath: "C:/repo/AI-42/",
           updatedAt: "2026-08-22T12:00:00.000Z",
-          session: { status: "ready" },
+          runtime: runtime("running"),
         },
       ]).hasLiveSession,
     ).toBe(true);

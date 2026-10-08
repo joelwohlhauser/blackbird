@@ -11,7 +11,6 @@ import { CSS } from "@dnd-kit/utilities";
 import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
-  Bot,
   FileDiff,
   Files,
   Globe2,
@@ -19,10 +18,9 @@ import {
   Plus,
   Smartphone,
   TerminalSquare,
-  Volume2,
-  VolumeOff,
   X,
 } from "lucide-react";
+import { Volume2, VolumeOff } from "lucide";
 import {
   type MouseEvent as ReactMouseEvent,
   type WheelEvent as ReactWheelEvent,
@@ -38,6 +36,7 @@ import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import { MorphIcon } from "~/components/MorphIcon";
 import { faviconUrlForOrigin } from "~/lib/favicon";
 import { useTheme } from "~/hooks/useTheme";
 import {
@@ -104,8 +103,6 @@ export function surfaceTitle(
       return "Pull Requests";
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
-    case "agents":
-      return "Agents";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -206,8 +203,6 @@ export function SurfaceIcon({
       ) : (
         <Smartphone className="size-3 shrink-0" />
       );
-    case "agents":
-      return <Bot className="size-3 shrink-0" />;
   }
 }
 
@@ -507,7 +502,7 @@ function WorkspaceSurfaceTab(props: {
               />
             }
           >
-            {audio === "muted" ? <VolumeOff className="size-3" /> : <Volume2 className="size-3" />}
+            <MorphIcon className="size-3" icon={audio === "muted" ? VolumeOff : Volume2} />
           </TooltipTrigger>
           <TooltipPopup>{audio === "muted" ? "Unmute tab" : "Mute tab"}</TooltipPopup>
         </Tooltip>

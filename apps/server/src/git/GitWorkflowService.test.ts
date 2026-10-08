@@ -13,11 +13,10 @@ import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 
 const WorktreeLifecycleTestLayer = Layer.mock(WorktreeLifecycle.WorktreeLifecycle)({
-  resolveCreateInput: Effect.succeed,
   prepareCreatedWorktree: () => Effect.void,
 });
 
-function makeLayer(input: {
+function layer(input: {
   readonly detect: VcsDriverRegistry.VcsDriverRegistry["Service"]["detect"];
 }) {
   return GitWorkflowService.layer.pipe(
@@ -33,30 +32,25 @@ function makeLayer(input: {
 }
 
 describe("GitWorkflowService", () => {
-  it.effect("applies the shared worktree lifecycle around Git creation", () => {
+  it.effect("prepares the worktree created by GitManager", () => {
     const createWorktree = vi.fn((input) =>
       Effect.succeed({
         worktree: {
-          path: input.path ?? "/unexpected",
+          path: "/configured/worktree",
           refName: input.newRefName ?? input.refName,
         },
       }),
     );
     const prepareCreatedWorktree = vi.fn(() => Effect.void);
-    const testLayer = GitWorkflowService.layer.pipe(
+    const layerTest = GitWorkflowService.layer.pipe(
       Layer.provide(
         Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
           resolve: () => Effect.succeed({ kind: "git" } as VcsDriverRegistry.VcsDriverHandle),
         }),
       ),
-      Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({ createWorktree })),
-      Layer.provide(Layer.mock(GitManager.GitManager)({})),
-      Layer.provide(
-        Layer.mock(WorktreeLifecycle.WorktreeLifecycle)({
-          resolveCreateInput: (input) => Effect.succeed({ ...input, path: "/configured/worktree" }),
-          prepareCreatedWorktree,
-        }),
-      ),
+      Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
+      Layer.provide(Layer.mock(GitManager.GitManager)({ createWorktree })),
+      Layer.provide(Layer.mock(WorktreeLifecycle.WorktreeLifecycle)({ prepareCreatedWorktree })),
     );
 
     return Effect.gen(function* () {
@@ -70,7 +64,7 @@ describe("GitWorkflowService", () => {
       });
 
       expect(createWorktree).toHaveBeenCalledWith(
-        expect.objectContaining({ path: "/configured/worktree", refName: "develop" }),
+        expect.objectContaining({ path: null, refName: "develop" }),
         undefined,
       );
       expect(prepareCreatedWorktree).toHaveBeenCalledWith({
@@ -78,62 +72,9 @@ describe("GitWorkflowService", () => {
         worktreePath: "/configured/worktree",
       });
       expect(result.worktree.refName).toBe("feature/configurable-base");
-    }).pipe(Effect.provide(testLayer));
+    }).pipe(Effect.provide(layerTest));
   });
 
-  it.effect("starts new worktrees from the fetched origin commit when requested", () => {
-    const createWorktree = vi.fn((input) =>
-      Effect.succeed({
-        worktree: {
-          path: input.path ?? "/unexpected",
-          refName: input.newRefName ?? input.refName,
-        },
-      }),
-    );
-    const fetchRemote = vi.fn(() => Effect.void);
-    const testLayer = GitWorkflowService.layer.pipe(
-      Layer.provide(
-        Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
-          resolve: () => Effect.succeed({ kind: "git" } as VcsDriverRegistry.VcsDriverHandle),
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(GitVcsDriver.GitVcsDriver)({
-          createWorktree,
-          remoteExists: () => Effect.succeed(true),
-          fetchRemote,
-          resolveRemoteTrackingCommit: () =>
-            Effect.succeed({ commitSha: "origin-main-sha", remoteRefName: "origin/main" }),
-        }),
-      ),
-      Layer.provide(Layer.mock(GitManager.GitManager)({})),
-      Layer.provide(WorktreeLifecycleTestLayer),
-    );
-
-    return Effect.gen(function* () {
-      const workflow = yield* GitWorkflowService.GitWorkflowService;
-      yield* workflow.createWorktree(
-        {
-          cwd: "/repo",
-          refName: "main",
-          newRefName: "feature/fresh-base",
-          baseRefName: "main",
-          path: "/worktree",
-        },
-        { startFromOrigin: true },
-      );
-
-      expect(fetchRemote).toHaveBeenCalledWith({ cwd: "/repo", remoteName: "origin" });
-      expect(createWorktree).toHaveBeenCalledWith(
-        expect.objectContaining({
-          refName: "origin-main-sha",
-          newRefName: "feature/fresh-base",
-          baseRefName: "main",
-        }),
-        expect.anything(),
-      );
-    }).pipe(Effect.provide(testLayer));
-  });
   it.effect("reports a non-Git VCS repository as not a Git repository", () =>
     Effect.gen(function* () {
       const workflow = yield* GitWorkflowService.GitWorkflowService;
@@ -142,7 +83,7 @@ describe("GitWorkflowService", () => {
       assert.equal(isRepository, false);
     }).pipe(
       Effect.provide(
-        makeLayer({
+        layer({
           detect: () =>
             Effect.succeed({
               kind: "jj",
@@ -182,7 +123,7 @@ describe("GitWorkflowService", () => {
       });
     }).pipe(
       Effect.provide(
-        makeLayer({
+        layer({
           detect: () => Effect.succeed(null),
         }),
       ),
@@ -213,7 +154,7 @@ describe("GitWorkflowService", () => {
       });
     }).pipe(
       Effect.provide(
-        makeLayer({
+        layer({
           detect: () => Effect.succeed(null),
         }),
       ),
@@ -225,7 +166,7 @@ describe("GitWorkflowService", () => {
     const remoteStatus = vi.fn();
     const status = vi.fn();
 
-    const testLayer = GitWorkflowService.layer.pipe(
+    const layerTest = GitWorkflowService.layer.pipe(
       Layer.provide(
         Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
           detect: () => Effect.succeed(null),
@@ -251,7 +192,7 @@ describe("GitWorkflowService", () => {
       assert.equal(localStatus.mock.calls.length, 0);
       assert.equal(remoteStatus.mock.calls.length, 0);
       assert.equal(status.mock.calls.length, 0);
-    }).pipe(Effect.provide(testLayer));
+    }).pipe(Effect.provide(layerTest));
   });
 
   it.effect("returns an empty ref list when no VCS repository is detected", () =>
@@ -268,7 +209,7 @@ describe("GitWorkflowService", () => {
       });
     }).pipe(
       Effect.provide(
-        makeLayer({
+        layer({
           detect: () => Effect.succeed(null),
         }),
       ),
@@ -295,7 +236,7 @@ describe("GitWorkflowService", () => {
       expect(error.message).not.toContain(cause.detail);
     }).pipe(
       Effect.provide(
-        makeLayer({
+        layer({
           detect: () => Effect.fail(cause),
         }),
       ),
@@ -323,7 +264,7 @@ describe("GitWorkflowService", () => {
       expect(error.message).not.toContain(cause.detail);
     }).pipe(
       Effect.provide(
-        makeLayer({
+        layer({
           detect: () => Effect.fail(cause),
         }),
       ),

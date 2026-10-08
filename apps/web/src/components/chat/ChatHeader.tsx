@@ -1,9 +1,4 @@
-import {
-  type EnvironmentId,
-  type ProjectScript,
-  type ResolvedKeybindingsConfig,
-  type ThreadId,
-} from "@t3tools/contracts";
+import { type EnvironmentId, type ProjectScript, type ThreadId } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { memo, type ReactNode } from "react";
 import ProjectScriptsControl, {
@@ -22,12 +17,11 @@ interface ChatHeaderProps {
   activeProjectScripts: ReadonlyArray<ProjectScript> | undefined;
   showProjectActions: boolean;
   preferredScriptId: string | null;
-  keybindings: ResolvedKeybindingsConfig;
   rightPanelOpen: boolean;
   workspaceNavigatorOpen: boolean;
   /** Leading header content: the main-area tab strip with the chat tab. */
   leading: ReactNode;
-  onRunProjectScript: (script: ProjectScript) => void;
+  onRunProjectScript: ((script: ProjectScript) => void) | undefined;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<ProjectScriptActionResult>;
   onUpdateProjectScript: (
     scriptId: string,
@@ -43,7 +37,6 @@ export const ChatHeader = memo(function ChatHeader({
   activeProjectScripts,
   showProjectActions,
   preferredScriptId,
-  keybindings,
   rightPanelOpen,
   workspaceNavigatorOpen,
   leading,
@@ -76,9 +69,9 @@ export const ChatHeader = memo(function ChatHeader({
       >
         {showProjectActions && activeProjectScripts ? (
           <ProjectScriptsControl
+            environmentId={activeThreadEnvironmentId}
             scripts={activeProjectScripts}
             fileScripts={fileScripts}
-            keybindings={keybindings}
             preferredScriptId={preferredScriptId}
             onRunScript={onRunProjectScript}
             onAddScript={onAddProjectScript}

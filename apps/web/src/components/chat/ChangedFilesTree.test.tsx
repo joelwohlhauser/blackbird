@@ -1,4 +1,4 @@
-import { TurnId } from "@t3tools/contracts";
+import { RunId } from "@t3tools/contracts";
 import { act, cloneElement, useState, type ReactElement, type ReactNode } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -19,13 +19,13 @@ describe("ChangedFilesCard", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("starts compact, opens the full diff independently, and toggles the changed files", async () => {
-    const turnId = TurnId.make("turn-1");
+    const runId = RunId.make("run-1");
     const onOpenTurnDiff = vi.fn();
     function Card() {
       const [expanded, setExpanded] = useState(false);
       return (
         <ChangedFilesCard
-          turnId={turnId}
+          runId={runId}
           files={[
             { path: "apps/web/src/App.tsx", kind: "modified", additions: 120, deletions: 20 },
             { path: "README.md", kind: "modified", additions: 3, deletions: 0 },
@@ -52,7 +52,7 @@ describe("ChangedFilesCard", () => {
       expect(JSON.stringify(renderer.toJSON())).not.toContain("App.tsx");
 
       await act(async () => openDiff()!.props.onClick());
-      expect(onOpenTurnDiff).toHaveBeenLastCalledWith(turnId, "apps/web/src/App.tsx");
+      expect(onOpenTurnDiff).toHaveBeenLastCalledWith(runId, "apps/web/src/App.tsx");
       expect(toggle()!.props["aria-expanded"]).toBe(false);
 
       await act(async () => toggle()!.props.onClick());
@@ -120,7 +120,7 @@ describe("ChangedFilesTree", () => {
     ({ files, visibleLabels, hiddenLabels }) => {
       const markup = renderToStaticMarkup(
         <ChangedFilesTree
-          turnId={TurnId.make("turn-1")}
+          runId={RunId.make("run-1")}
           files={files}
           allDirectoriesExpanded={false}
           resolvedTheme="light"
@@ -196,7 +196,7 @@ describe("ChangedFilesTree", () => {
     ({ files, visibleLabels }) => {
       const markup = renderToStaticMarkup(
         <ChangedFilesTree
-          turnId={TurnId.make("turn-1")}
+          runId={RunId.make("run-1")}
           files={files}
           allDirectoriesExpanded
           resolvedTheme="light"

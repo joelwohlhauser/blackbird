@@ -1,3 +1,4 @@
+import type { GitHubSettings } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -7,6 +8,7 @@ const GitHubAuthStatusAccountSchema = Schema.Struct({
   active: Schema.Boolean,
   host: Schema.String,
   login: Schema.String,
+  tokenSource: Schema.optional(Schema.String),
 });
 
 const GitHubAuthStatusSchema = Schema.Struct({
@@ -17,8 +19,8 @@ const decodeGitHubAuthStatusJson = Schema.decodeUnknownOption(
   Schema.fromJsonString(GitHubAuthStatusSchema),
 );
 
-const loggedInAccountPattern = /Logged in to\s+(\S+)\s+account\s+(\S+)/i;
-const failedAccountPattern = /Failed to log in to\s+(\S+)\s+account\s+(\S+)/i;
+const loggedInAccountPattern = /Logged in to\s+(\S+)\s+account\s+(\S+)(?:\s+\(([^)]+)\))?/i;
+const failedAccountPattern = /Failed to log in to\s+(\S+)\s+account\s+(\S+)(?:\s+\(([^)]+)\))?/i;
 const activeAccountPattern = /Active account:\s*(true|false)/i;
 
 export interface GitHubAuthStatusAccount {
@@ -27,12 +29,16 @@ export interface GitHubAuthStatusAccount {
   readonly authenticated: boolean;
   readonly active: boolean;
   readonly error: string | null;
+  /** The variable (GH_TOKEN and kin) the login came from; it overrides every stored login. */
+  readonly environmentVariable: string | null;
 }
 
 export interface GitHubAuthStatus {
   readonly parsed: boolean;
   readonly accounts: ReadonlyArray<GitHubAuthStatusAccount>;
 }
+
+const ENVIRONMENT_TOKEN_SOURCE = /^(?:GH|GITHUB)_(?:ENTERPRISE_)?TOKEN$/u;
 
 function nonEmptyString(value: string): string | null {
   const trimmed = value.trim();
@@ -51,6 +57,7 @@ function parsePlainTextGitHubAuthStatus(text: string): GitHubAuthStatus {
       const host = nonEmptyString(accountMatch[1] ?? "");
       const account = nonEmptyString(accountMatch[2] ?? "");
       if (host === null || account === null) continue;
+      const tokenSource = nonEmptyString(accountMatch[3] ?? "");
 
       accounts.push({
         host: host.toLowerCase(),
@@ -58,6 +65,8 @@ function parsePlainTextGitHubAuthStatus(text: string): GitHubAuthStatus {
         authenticated: loggedInMatch !== null,
         active: false,
         error: null,
+        environmentVariable:
+          tokenSource !== null && ENVIRONMENT_TOKEN_SOURCE.test(tokenSource) ? tokenSource : null,
       });
       currentAccountIndex = accounts.length - 1;
       continue;
@@ -100,6 +109,9 @@ export function parseGitHubAuthStatus(text: string): GitHubAuthStatus {
                 authenticated: account.state === "success",
                 active: account.active,
                 error: account.error?.trim() || null,
+                environmentVariable: ENVIRONMENT_TOKEN_SOURCE.test(account.tokenSource ?? "")
+                  ? (account.tokenSource ?? null)
+                  : null,
               },
             ];
           }),
@@ -114,5 +126,27 @@ export function findAuthenticatedGitHubAccount(
   return (
     accounts.find((account) => account.authenticated && account.active) ??
     accounts.find((account) => account.authenticated)
+  );
+}
+
+/**
+ * The login GitHub requests for a host will use, honoring Settings: an environment token
+ * first (gh's own precedence), then the pinned account, then gh's active login.
+ * Returns undefined when the host is turned off or has no usable login.
+ */
+export function effectiveGitHubAccount(
+  host: string,
+  accounts: ReadonlyArray<GitHubAuthStatusAccount>,
+  settings: GitHubSettings,
+): GitHubAuthStatusAccount | undefined {
+  const choice = settings.hosts[host];
+  if (choice?.enabled === false) return undefined;
+  const usable = accounts.filter((account) => account.host === host && account.authenticated);
+  return (
+    usable.find((account) => account.environmentVariable !== null) ??
+    (choice?.account === undefined
+      ? undefined
+      : usable.find((account) => account.account === choice.account)) ??
+    findAuthenticatedGitHubAccount(usable)
   );
 }
