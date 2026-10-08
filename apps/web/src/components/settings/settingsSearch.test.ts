@@ -61,6 +61,7 @@ describe("searchSettings", () => {
     expect(searchSettings("  WORD   WRAP  ", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
     expect(searchSettings("work").map((item) => item.id)).toEqual([
       "storage-worktrees",
+      "working-shelf",
       "worktree-location",
       "worktree-environment-files",
       "workspaces",

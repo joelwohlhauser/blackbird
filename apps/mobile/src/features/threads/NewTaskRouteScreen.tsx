@@ -154,7 +154,16 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
     : null;
   const screenTitle = incomingShare ? "Start a task" : "Choose project";
   const projectEmptyState = deriveProjectEmptyState(catalogState);
-  const visibleScopes = filterProjectScopes(projectScopes, searchText);
+  const serverConfigs = useServerConfigs();
+  // Scratch projects are reached through the Quick chat row, never as rows
+  // of their own.
+  const listScopes = projectScopes.filter(
+    (scope) =>
+      !scope.projects.every((project) =>
+        isScratchProject(project, serverConfigs.get(project.environmentId)?.scratchWorkspaceRoot),
+      ),
+  );
+  const visibleScopes = filterProjectScopes(listScopes, searchText);
   const resumedDestinationKeyRef = useRef<string | null>(null);
   const reservedDestinationProject = incomingShare?.destination
     ? (projects.find(
@@ -163,14 +172,13 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
           project.id === incomingShare.destination?.projectId,
       ) ?? null)
     : null;
-  const serverConfigs = useServerConfigs();
   const { connectedEnvironments } = useRemoteConnectionStatus();
   const ensureScratch = useAtomCommand(projectEnvironment.ensureScratch, {
     reportFailure: false,
   });
   // Threads without a project need a connected environment that offers them.
-  // The selected environment wins when it has one; otherwise the first that
-  // does, and the entry names that machine whenever there is a choice.
+  // The row starts on the selected environment when it has one, otherwise the
+  // first that does; the draft page's machine picker moves it from there.
   const scratchEnvironments = connectedEnvironments.filter(
     (environment) =>
       canCreateProjectInEnvironment(environment.connectionState) &&
@@ -182,16 +190,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
     ) ??
     scratchEnvironments[0] ??
     null;
-  const scratchWorkspaceRoot = scratchEnvironment
-    ? (serverConfigs.get(scratchEnvironment.environmentId)?.scratchWorkspaceRoot ?? null)
-    : null;
-  // Once the Scratch project exists it is an ordinary row in the list.
-  const scratchProjectExists = projects.some(
-    (project) =>
-      project.environmentId === scratchEnvironment?.environmentId &&
-      isScratchProject(project, scratchWorkspaceRoot),
-  );
-  const canStartScratch = scratchWorkspaceRoot !== null && reservedDestinationProject === null;
+  const canStartScratch = scratchEnvironment !== null && reservedDestinationProject === null;
   const scratchMachineLabel =
     connectedEnvironments.length > 1 ? (scratchEnvironment?.environmentLabel ?? null) : null;
   const startScratchLabel = scratchMachineLabel
@@ -252,7 +251,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
       if (project === null) {
         Alert.alert(
           "Could not start a quick chat",
-          "It has not reached this device yet. Pick Quick chats from the list once it appears.",
+          "It has not reached this device yet. Pick Quick chat again once it appears.",
         );
         return;
       }
@@ -319,12 +318,62 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
               : {}),
           }}
         >
-          {projectScopes.length === 0 ? (
+          {canStartScratch && listScopes.length > 0 ? (
+            Platform.OS === "android" ? (
+              <View collapsable={false} className="overflow-hidden rounded-[28px] bg-grouped-card">
+                <MaterialListRow
+                  className="bg-grouped-card"
+                  title="Quick chat"
+                  subtitle={scratchRowSubtitle}
+                  onPress={() => void startScratch()}
+                  leading={
+                    <SymbolView
+                      name="text.bubble"
+                      size={22}
+                      tintColorClassName="accent-icon-muted"
+                      type="monochrome"
+                    />
+                  }
+                />
+              </View>
+            ) : (
+              <View collapsable={false} className="overflow-hidden rounded-[24px] bg-grouped-card">
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Quick chat"
+                  onPress={() => void startScratch()}
+                  className="flex-row items-center gap-3 bg-grouped-card px-4 py-3.5"
+                >
+                  <View className="h-7 w-7 items-center justify-center">
+                    <SymbolView
+                      name="text.bubble"
+                      size={18}
+                      tintColorClassName="accent-icon-muted"
+                      type="monochrome"
+                    />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-base font-t3-bold leading-snug">Quick chat</Text>
+                    <Text className="text-xs leading-snug text-foreground-muted" numberOfLines={1}>
+                      {scratchRowSubtitle}
+                    </Text>
+                  </View>
+                  <SymbolView
+                    name="chevron.right"
+                    size={14}
+                    tintColorClassName="accent-chevron"
+                    type="monochrome"
+                  />
+                </Pressable>
+              </View>
+            )
+          ) : null}
+          {listScopes.length === 0 ? (
             <View
               collapsable={false}
               className={cn(
                 "items-center gap-3 px-6 py-8",
-                Platform.OS !== "android" && "rounded-[24px] bg-card",
+                Platform.OS !== "android" && "rounded-[24px] bg-grouped-card",
               )}
             >
               {projectEmptyState.loading ? (
@@ -401,8 +450,8 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
               collapsable={false}
               className={
                 Platform.OS === "android"
-                  ? "overflow-hidden rounded-[28px] bg-card"
-                  : "overflow-hidden rounded-[24px] bg-card"
+                  ? "overflow-hidden rounded-[28px] bg-grouped-card"
+                  : "overflow-hidden rounded-[24px] bg-grouped-card"
               }
             >
               {visibleScopes.map((scope, scopeIndex) => {
@@ -414,6 +463,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                 if (Platform.OS === "android") {
                   return (
                     <MaterialListRow
+                      className="bg-grouped-card"
                       key={scope.key}
                       title={scope.title}
                       subtitle={
@@ -448,7 +498,7 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                       accessibilityLabel={scope.title}
                       disabled={reservedDestinationProject !== null}
                       onPress={() => void selectProject(selectionTarget)}
-                      className="flex-row items-center gap-3 bg-card px-4 py-3.5"
+                      className="flex-row items-center gap-3 bg-grouped-card px-4 py-3.5"
                     >
                       {scope.representative.faviconPath || scope.representative.projectIcon ? (
                         <View className="h-7 w-7 items-center justify-center">
@@ -488,55 +538,6 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
               })}
             </View>
           )}
-          {canStartScratch && !scratchProjectExists && projectScopes.length > 0 ? (
-            Platform.OS === "android" ? (
-              <View collapsable={false} className="overflow-hidden rounded-[28px] bg-card">
-                <MaterialListRow
-                  title="Quick chat"
-                  subtitle={scratchRowSubtitle}
-                  onPress={() => void startScratch()}
-                  leading={
-                    <SymbolView
-                      name="text.bubble"
-                      size={22}
-                      tintColorClassName="accent-icon-muted"
-                      type="monochrome"
-                    />
-                  }
-                />
-              </View>
-            ) : (
-              <View collapsable={false} className="overflow-hidden rounded-[24px] bg-card">
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Quick chat"
-                  onPress={() => void startScratch()}
-                  className="flex-row items-center gap-3 bg-card px-4 py-3.5"
-                >
-                  <View className="h-7 w-7 items-center justify-center">
-                    <SymbolView
-                      name="text.bubble"
-                      size={18}
-                      tintColorClassName="accent-icon-muted"
-                      type="monochrome"
-                    />
-                  </View>
-                  <View className="min-w-0 flex-1">
-                    <Text className="text-base font-t3-bold leading-snug">Quick chat</Text>
-                    <Text className="text-xs leading-snug text-foreground-muted" numberOfLines={1}>
-                      {scratchRowSubtitle}
-                    </Text>
-                  </View>
-                  <SymbolView
-                    name="chevron.right"
-                    size={14}
-                    tintColorClassName="accent-chevron"
-                    type="monochrome"
-                  />
-                </Pressable>
-              </View>
-            )
-          ) : null}
         </ScrollView>
       </MaterialScreenContent>
     </View>
