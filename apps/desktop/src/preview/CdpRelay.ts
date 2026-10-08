@@ -81,6 +81,48 @@ export function createCdpRelayConnection(
     sessions.set(sessionId, kind);
     return sessionId;
   };
+  const frameTargets = new Map<string, string>();
+  const frameSessions = new Map<
+    string,
+    { readonly childSessionId: string; readonly targetId: string }
+  >();
+  const newFrameSession = (targetId: string, childSessionId: string) => {
+    const sessionId = `t3-preview-frame-${++sessionSequence}`;
+    frameSessions.set(sessionId, { childSessionId, targetId });
+    return sessionId;
+  };
+  const readString = (value: unknown, key: string) => {
+    const field = typeof value === "object" && value !== null ? Reflect.get(value, key) : undefined;
+    return typeof field === "string" ? field : undefined;
+  };
+  const trackFrames = (method: string, params: unknown) => {
+    if (method === "Target.attachedToTarget") {
+      const info =
+        typeof params === "object" && params !== null
+          ? Reflect.get(params, "targetInfo")
+          : undefined;
+      const targetId = readString(info, "targetId");
+      const childSessionId = readString(params, "sessionId");
+      if (readString(info, "type") === "iframe" && targetId && childSessionId) {
+        frameTargets.set(targetId, childSessionId);
+      }
+    } else if (method === "Target.detachedFromTarget") {
+      const childSessionId = readString(params, "sessionId");
+      for (const [targetId, sessionId] of frameTargets) {
+        if (sessionId === childSessionId) frameTargets.delete(targetId);
+      }
+      for (const [alias, frame] of frameSessions) {
+        if (frame.childSessionId !== childSessionId) continue;
+        frameSessions.delete(alias);
+        if (attached) {
+          send({
+            method: "Target.detachedFromTarget",
+            params: { sessionId: alias, targetId: frame.targetId },
+          });
+        }
+      }
+    }
+  };
   const targetInfo = async () => ({
     targetId: await target.targetId(),
     type: "page",
@@ -130,14 +172,19 @@ export function createCdpRelayConnection(
         return { sessionId: newSession("browser") };
       case "Target.attachToTarget": {
         const targetId = command.params?.["targetId"];
-        if (targetId !== (await target.targetId()))
-          throw new Error("Only this preview tab's page can be attached.");
-        return { sessionId: newSession("page") };
+        if (targetId === (await target.targetId())) return { sessionId: newSession("page") };
+        const childSessionId =
+          typeof targetId === "string" ? frameTargets.get(targetId) : undefined;
+        if (typeof targetId !== "string" || childSessionId === undefined)
+          throw new Error("Only this preview tab's page and its frames can be attached.");
+        return { sessionId: newFrameSession(targetId, childSessionId) };
       }
       case "Target.detachFromTarget": {
         const sessionId = command.params?.["sessionId"];
-        if (typeof sessionId === "string" && sessionId !== PAGE_SESSION_ID)
+        if (typeof sessionId === "string" && sessionId !== PAGE_SESSION_ID) {
           sessions.delete(sessionId);
+          frameSessions.delete(sessionId);
+        }
         return {};
       }
       case "Target.setAutoAttach": {
@@ -160,6 +207,8 @@ export function createCdpRelayConnection(
   const pageCommand = (command: CdpCommand): Promise<unknown> => {
     // The page is already running; nothing waits for a debugger.
     if (command.method === "Runtime.runIfWaitingForDebugger") return Promise.resolve({});
+    const frame = frameSessions.get(command.sessionId!);
+    if (frame) return target.send(command.method, command.params ?? {}, frame.childSessionId);
     const child = sessions.get(command.sessionId!) === "page" ? undefined : command.sessionId;
     return target.send(command.method, command.params ?? {}, child);
   };
@@ -201,6 +250,7 @@ export function createCdpRelayConnection(
       );
     },
     event: (method, params, sessionId) => {
+      trackFrames(method, params);
       if (!attached) return;
       // Download events are the browser's; Playwright listens on its root session.
       if (method.startsWith("Browser.download")) {
@@ -210,6 +260,8 @@ export function createCdpRelayConnection(
       // Electron reports the page's own events with an empty session id.
       if (sessionId) {
         send({ method, params, sessionId });
+        for (const [alias, frame] of frameSessions)
+          if (frame.childSessionId === sessionId) send({ method, params, sessionId: alias });
         return;
       }
       for (const [id, kind] of sessions)

@@ -71,7 +71,7 @@ import { resolveRootCliCommand } from "../cli/invocation.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as PreviewAutomationBroker from "../mcp/PreviewAutomationBroker.ts";
 import {
-  isMutatingCdpCommand,
+  cdpCommandNeedsControl,
   type AgentCdpChild,
   type AgentCdpPage,
   type AgentCdpPageListener,
@@ -2232,7 +2232,7 @@ const make = Effect.gen(function* () {
           const guardedSend =
             (session: RawCdpSession) => (method: string, params: Record<string, unknown>) => {
               tab.usedAt = Date.now();
-              return isMutatingCdpCommand(method)
+              return cdpCommandNeedsControl(method)
                 ? actAsAgent(() => session.send(method, params))
                 : session.send(method, params);
             };
@@ -2243,12 +2243,26 @@ const make = Effect.gen(function* () {
           const frameSessions = new Map<Frame, RawCdpSession | null>();
           let detached = false;
           let watchFrame: ((frame: Frame) => void) | null = null;
+          let frameAttachWarned = false;
           const attachChildren: AgentCdpPage["attachChildren"] = (onChild) => {
             if (watchFrame !== null || detached) return;
             const attachFrame = async (frame: Frame) => {
               if (detached || frame === tab.page.mainFrame() || frameSessions.has(frame)) return;
               frameSessions.set(frame, null);
-              const child = await openSession(frame).catch(() => null);
+              const child = await openSession(frame).catch((cause: unknown) => {
+                if (
+                  !frameAttachWarned &&
+                  !String(cause).includes("does not have a separate CDP session")
+                ) {
+                  frameAttachWarned = true;
+                  runFork(
+                    Effect.logWarning("agent browser could not attach a cross-origin frame", {
+                      cause,
+                    }),
+                  );
+                }
+                return null;
+              });
               if (child === null || detached) {
                 frameSessions.delete(frame);
                 if (child) void child.detach().catch(constVoid);

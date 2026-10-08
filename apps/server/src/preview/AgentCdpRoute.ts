@@ -15,7 +15,8 @@ import * as PreviewManager from "./Manager.ts";
 import * as ServerBrowser from "./ServerBrowser.ts";
 
 const OPEN_TAB_TIMEOUT_MS = 30_000;
-const TOKEN_LIVENESS_INTERVAL = "30 seconds";
+const TOKEN_LIVENESS_INTERVAL = "5 seconds";
+const SESSION_ENDED = "The agent session ended.";
 const textDecoder = new TextDecoder();
 
 const closeReason = (reason: string) => reason.slice(0, 120);
@@ -98,21 +99,20 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
   const connection = createAgentCdpConnection(host, (message) => {
     Queue.offerUnsafe(outbox, message);
   });
+  yield* Effect.addFinalizer(() => Effect.promise(() => connection.close()));
 
   const drainOutbox = Effect.forever(
     Queue.take(outbox).pipe(Effect.flatMap((message) => writer.write(message))),
   ).pipe(Effect.ignore);
-  const readAgent = Effect.forever(
-    reader.pull.pipe(
-      Effect.flatMap((chunks) =>
-        Effect.sync(() => {
-          for (const chunk of chunks) {
-            connection.receive(typeof chunk === "string" ? chunk : textDecoder.decode(chunk));
-          }
-        }),
-      ),
-    ),
-  ).pipe(Effect.catchCause(() => Effect.succeed("Playwright disconnected.")));
+  const readAgent = Effect.gen(function* () {
+    while (true) {
+      const chunks = yield* reader.pull;
+      if (!(yield* registry.isCdpTokenLive(rawToken))) return SESSION_ENDED;
+      for (const chunk of chunks) {
+        connection.receive(typeof chunk === "string" ? chunk : textDecoder.decode(chunk));
+      }
+    }
+  }).pipe(Effect.catchCause(() => Effect.succeed("Playwright disconnected.")));
   const followTabs = Stream.runForEach(manager.events, (event) =>
     Effect.sync(() => {
       if (event.threadId !== threadId) return;
@@ -126,14 +126,13 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
   const tokenLiveness = Effect.gen(function* () {
     while (true) {
       yield* Effect.sleep(TOKEN_LIVENESS_INTERVAL);
-      if (!(yield* registry.isCdpTokenLive(rawToken))) return "The agent session ended.";
+      if (!(yield* registry.isCdpTokenLive(rawToken))) return SESSION_ENDED;
     }
   });
 
   yield* drainOutbox.pipe(Effect.forkScoped);
   yield* followTabs.pipe(Effect.forkScoped);
   const reason = yield* Effect.raceAll([readAgent, tokenLiveness, Deferred.await(ended)]);
-  yield* Effect.promise(() => connection.close());
   yield* Effect.logDebug("agent browser connection closed", { reason });
   yield* writer.write(new Socket.CloseEvent(1000, closeReason(reason))).pipe(Effect.ignore);
 });

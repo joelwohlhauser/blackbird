@@ -135,6 +135,63 @@ describe("CDP relay extra sessions", () => {
   });
 });
 
+describe("CDP relay frames", () => {
+  it("attaches only the tab's own out-of-process frames and routes them by session", async () => {
+    const send = vi.fn(async () => ({}));
+    const written: Array<Record<string, unknown>> = [];
+    const relay = createCdpRelayConnection(makeTarget(send), (raw) =>
+      written.push(JSON.parse(raw)),
+    );
+    relay.receive(JSON.stringify({ id: 1, method: "Target.setAutoAttach", params: {} }));
+    relay.receive(JSON.stringify({ id: 2, method: "Target.attachToBrowserTarget" }));
+    await settle();
+    const browserSession = (written.find((m) => m["id"] === 2)!["result"] as { sessionId: string })
+      .sessionId;
+    relay.event(
+      "Target.attachedToTarget",
+      {
+        sessionId: "CHILD-SESSION",
+        targetInfo: { targetId: "FRAME-TARGET", type: "iframe" },
+        waitingForDebugger: false,
+      },
+      "",
+    );
+    const attach = (id: number, targetId: string) =>
+      relay.receive(
+        JSON.stringify({
+          id,
+          method: "Target.attachToTarget",
+          params: { targetId, flatten: true },
+          sessionId: browserSession,
+        }),
+      );
+    attach(3, "FRAME-TARGET");
+    attach(4, "OTHER-TAB-FRAME");
+    await settle();
+    const frameSession = (written.find((m) => m["id"] === 3)!["result"] as { sessionId: string })
+      .sessionId;
+    expect(written.find((m) => m["id"] === 4)).toHaveProperty("error");
+
+    relay.receive(JSON.stringify({ id: 5, method: "DOM.getDocument", sessionId: frameSession }));
+    await settle();
+    expect(send).toHaveBeenLastCalledWith("DOM.getDocument", {}, "CHILD-SESSION");
+
+    written.length = 0;
+    relay.event("Runtime.consoleAPICalled", { type: "log" }, "CHILD-SESSION");
+    expect(written.map((m) => m["sessionId"])).toEqual(["CHILD-SESSION", frameSession]);
+
+    written.length = 0;
+    relay.event("Target.detachedFromTarget", { sessionId: "CHILD-SESSION" }, "");
+    expect(written).toContainEqual({
+      method: "Target.detachedFromTarget",
+      params: { sessionId: frameSession, targetId: "FRAME-TARGET" },
+    });
+    attach(6, "FRAME-TARGET");
+    await settle();
+    expect(written.find((m) => m["id"] === 6)).toHaveProperty("error");
+  });
+});
+
 describe("CDP relay downloads", () => {
   it("applies the server's download directory and reports downloads on the root session", async () => {
     const send = vi.fn(async () => ({}));

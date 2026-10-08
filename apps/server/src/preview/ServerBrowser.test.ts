@@ -1122,6 +1122,13 @@ it.live("an agent's CDP page stops acting while a human controls the tab", () =>
         ),
       );
       expect(blocked).toBe("A human controls this tab.");
+      const rewritten = yield* Effect.promise(() =>
+        page.send("Page.setDocumentContent", { frameId: "main", html: "<p>agent</p>" }).then(
+          () => "sent",
+          (error: Error) => error.message,
+        ),
+      );
+      expect(rewritten).toBe("A human controls this tab.");
       const closed = yield* Effect.promise(() =>
         page.close().then(
           () => "closed",

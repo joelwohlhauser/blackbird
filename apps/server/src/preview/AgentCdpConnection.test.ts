@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
+  cdpCommandNeedsControl,
   createAgentCdpConnection,
   type AgentCdpChild,
   type AgentCdpHost,
@@ -23,6 +24,12 @@ const makeHost = (tabs: Array<string>) => {
         targetInfo: { targetId: `TARGET-${tabId}`, type: "webview", url: "https://example.com/" },
         send: async (method: string, params: Record<string, unknown>) => {
           sent.push({ tabId, method, params });
+          if (method === "Target.getTargetInfo") {
+            return { targetInfo: { targetId: `TARGET-${tabId}`, url: "https://app.example.com/" } };
+          }
+          if (method === "Network.getCookies") {
+            return { cookies: [{ name: "sid", domain: ".example.com", path: "/" }] };
+          }
           return { echoed: method };
         },
         close: async () => void closedTabs.push(tabId),
@@ -284,5 +291,105 @@ describe("agent CDP connection", () => {
     cdp.command(6, "Runtime.evaluate", {}, frameSessionId);
     await settle();
     expect(cdp.reply(6)).toMatchObject({ error: { code: -32000 }, sessionId: frameSessionId });
+  });
+
+  it("needs control for every page command that is not a read", () => {
+    for (const method of [
+      "Input.dispatchKeyEvent",
+      "Runtime.evaluate",
+      "Page.setDocumentContent",
+      "Page.addScriptToEvaluateOnNewDocument",
+      "Debugger.evaluateOnCallFrame",
+      "Fetch.enable",
+      "Network.setCookies",
+      "Emulation.setScriptExecutionDisabled",
+    ]) {
+      expect(cdpCommandNeedsControl(method)).toBe(true);
+    }
+    for (const method of [
+      "Page.enable",
+      "Runtime.enable",
+      "DOM.getDocument",
+      "Accessibility.getFullAXTree",
+      "Page.captureScreenshot",
+      "Target.getTargetInfo",
+      "Network.getCookies",
+    ]) {
+      expect(cdpCommandNeedsControl(method)).toBe(false);
+    }
+  });
+
+  it("keeps cookies to the sites open in the chat's tabs", async () => {
+    const cdp = connect(["tab-1"]);
+    cdp.command(1, "Target.setAutoAttach", {});
+    await settle();
+    const sessionId = cdp.attachedSessions()[0]!.sessionId;
+
+    cdp.command(2, "Storage.getCookies", {});
+    cdp.command(3, "Storage.setCookies", {
+      cookies: [{ name: "a", value: "1", url: "https://app.example.com/" }],
+    });
+    cdp.command(4, "Storage.setCookies", {
+      cookies: [{ name: "a", value: "1", domain: "bank.example.net", path: "/" }],
+    });
+    cdp.command(5, "Storage.clearCookies", {});
+    const refused = [
+      ["Network.getAllCookies", {}],
+      ["Network.clearBrowserCookies", {}],
+      ["Network.clearBrowserCache", {}],
+      ["Network.getCookies", { urls: ["https://bank.example.net/"] }],
+      ["Network.deleteCookies", { name: "sid", domain: "bank.example.net" }],
+      ["Network.deleteCookies", { name: "sid" }],
+      ["Network.setCookie", { name: "x", value: "1", domain: "bank.example.net" }],
+    ] as const;
+    refused.forEach(([method, params], index) =>
+      cdp.command(10 + index, method, params, sessionId),
+    );
+    cdp.command(20, "Network.deleteCookies", { name: "sid", domain: "example.com" }, sessionId);
+    cdp.command(21, "Network.getCookies", {}, sessionId);
+    await settle();
+
+    expect(cdp.reply(2)).toEqual({
+      id: 2,
+      result: { cookies: [{ name: "sid", domain: ".example.com", path: "/" }] },
+    });
+    expect(cdp.sent).toContainEqual({
+      tabId: "tab-1",
+      method: "Network.getCookies",
+      params: { urls: ["https://app.example.com/", "http://app.example.com/"] },
+    });
+    expect(cdp.reply(3)).toEqual({ id: 3, result: {} });
+    expect(cdp.sent).toContainEqual({
+      tabId: "tab-1",
+      method: "Network.setCookies",
+      params: { cookies: [{ name: "a", value: "1", url: "https://app.example.com/" }] },
+    });
+    expect(cdp.reply(4)).toMatchObject({ id: 4, error: { code: -32000 } });
+    expect(cdp.reply(5)).toMatchObject({ id: 5, error: { code: -32000 } });
+    refused.forEach((_, index) =>
+      expect(cdp.reply(10 + index)).toMatchObject({ error: { code: -32000 }, sessionId }),
+    );
+    expect(cdp.reply(20)).toEqual({
+      id: 20,
+      result: { echoed: "Network.deleteCookies" },
+      sessionId,
+    });
+    expect(cdp.reply(21)).toMatchObject({ id: 21, sessionId });
+    expect(
+      cdp.sent.filter(
+        ({ method }) => method.startsWith("Network.") && method !== "Network.getCookies",
+      ),
+    ).toEqual([
+      {
+        tabId: "tab-1",
+        method: "Network.setCookies",
+        params: { cookies: [{ name: "a", value: "1", url: "https://app.example.com/" }] },
+      },
+      {
+        tabId: "tab-1",
+        method: "Network.deleteCookies",
+        params: { name: "sid", domain: "example.com" },
+      },
+    ]);
   });
 });

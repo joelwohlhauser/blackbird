@@ -80,11 +80,6 @@ const ACKNOWLEDGED_SESSION_METHODS = new Set([
   "Runtime.runIfWaitingForDebugger",
   "Emulation.clearDeviceMetricsOverride",
 ]);
-const COOKIE_METHODS: Readonly<Record<string, string>> = {
-  "Storage.getCookies": "Network.getAllCookies",
-  "Storage.setCookies": "Network.setCookies",
-  "Storage.clearCookies": "Network.clearBrowserCookies",
-};
 const SESSION_DOMAINS = new Set([
   "Accessibility",
   "Animation",
@@ -119,26 +114,56 @@ const BLOCKED_SESSION_METHODS = new Set([
   "DOM.setFileInputFiles",
   "Input.imeSetComposition",
   "Network.loadNetworkResource",
+  "Network.clearBrowserCookies",
+  "Network.clearBrowserCache",
+  "Network.getAllCookies",
   "Page.crash",
   "Page.setDownloadBehavior",
 ]);
 const NAVIGABLE_PROTOCOLS = new Set(["http:", "https:", "about:", "data:"]);
-const MUTATING_METHODS = new Set([
-  "Runtime.evaluate",
-  "Runtime.callFunctionOn",
-  "Runtime.runScript",
-  "Page.navigate",
-  "Page.reload",
-  "Page.navigateToHistoryEntry",
-  "Page.resetNavigationHistory",
-  "Page.handleJavaScriptDialog",
-  "DOM.focus",
-  "DOM.removeAttribute",
-  "DOM.removeNode",
-  "DOM.setAttributeValue",
-  "DOM.setAttributesAsText",
-  "DOM.setNodeValue",
-  "DOM.setOuterHTML",
+const CONTROL_FREE_METHODS = new Set([
+  "Accessibility.getFullAXTree",
+  "Accessibility.getPartialAXTree",
+  "Accessibility.queryAXTree",
+  "CSS.getComputedStyleForNode",
+  "CSS.getMatchedStylesForNode",
+  "DOM.describeNode",
+  "DOM.getAttributes",
+  "DOM.getBoxModel",
+  "DOM.getContentQuads",
+  "DOM.getDocument",
+  "DOM.getFrameOwner",
+  "DOM.getNodeForLocation",
+  "DOM.getOuterHTML",
+  "DOM.querySelector",
+  "DOM.querySelectorAll",
+  "DOM.requestNode",
+  "DOM.resolveNode",
+  "DOMSnapshot.captureSnapshot",
+  "IO.close",
+  "IO.read",
+  "Log.clear",
+  "Network.getCookies",
+  "Network.getRequestPostData",
+  "Network.getResponseBody",
+  "Page.captureScreenshot",
+  "Page.getFrameTree",
+  "Page.getLayoutMetrics",
+  "Page.getNavigationHistory",
+  "Page.getResourceContent",
+  "Page.getResourceTree",
+  "Page.screencastFrameAck",
+  "Page.setLifecycleEventsEnabled",
+  "Page.startScreencast",
+  "Page.stopScreencast",
+  "Performance.getMetrics",
+  "Runtime.discardConsoleEntries",
+  "Runtime.getHeapUsage",
+  "Runtime.getIsolateId",
+  "Runtime.getProperties",
+  "Runtime.releaseObject",
+  "Runtime.releaseObjectGroup",
+  "Target.getTargetInfo",
 ]);
 const MIN_VIEWPORT_SIDE = 240;
 const MAX_VIEWPORT_SIDE = 3840;
@@ -146,8 +171,61 @@ const MAX_VIEWPORT_SIDE = 3840;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const isMutatingCdpCommand = (method: string) =>
-  method.startsWith("Input.") || MUTATING_METHODS.has(method);
+export const cdpCommandNeedsControl = (method: string) =>
+  !CONTROL_FREE_METHODS.has(method) &&
+  !(/\.(enable|disable)$/.test(method) && !method.startsWith("Fetch."));
+
+const COOKIE_WRITE_METHODS = new Set([
+  "Network.setCookie",
+  "Network.setCookies",
+  "Network.deleteCookies",
+]);
+
+const hostOf = (url: unknown) => {
+  if (typeof url !== "string") return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.hostname.toLowerCase()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const cookieHost = (cookie: unknown) => {
+  if (!isRecord(cookie)) return undefined;
+  const fromUrl = hostOf(cookie["url"]);
+  if (fromUrl !== undefined) return fromUrl;
+  const domain = cookie["domain"];
+  return typeof domain === "string" && domain.length > 0
+    ? domain.replace(/^\./, "").toLowerCase()
+    : undefined;
+};
+
+export const cookieHostAllowed = (host: string | undefined, openHosts: ReadonlySet<string>) =>
+  host !== undefined && [...openHosts].some((open) => open === host || open.endsWith(`.${host}`));
+
+const cookieScopeRejection = (
+  method: string,
+  params: Record<string, unknown>,
+  openHosts: ReadonlySet<string>,
+): string | undefined => {
+  const outside = "Blackbird only shares cookies for sites open in this chat's browser tabs.";
+  if (method === "Network.getCookies") {
+    const urls = params["urls"];
+    if (urls === undefined) return undefined;
+    return Array.isArray(urls) && urls.every((url) => cookieHostAllowed(hostOf(url), openHosts))
+      ? undefined
+      : outside;
+  }
+  const cookies = method === "Network.setCookies" ? params["cookies"] : [params];
+  return Array.isArray(cookies) &&
+    cookies.length > 0 &&
+    cookies.every((cookie) => cookieHostAllowed(cookieHost(cookie), openHosts))
+    ? undefined
+    : outside;
+};
 
 export const parseCdpCommand = (raw: string): CdpCommand | undefined => {
   let value: unknown;
@@ -353,18 +431,67 @@ export function createAgentCdpConnection(
   const findByTargetId = (targetId: unknown) =>
     [...pages.values()].find((attached) => attached.targetInfo["targetId"] === targetId);
 
+  const pageHosts = async () => {
+    const located = await Promise.all(
+      [...pages.values()].map(async (attached) => {
+        const info = await attached.page.send("Target.getTargetInfo", {}).catch(() => undefined);
+        const targetInfo = isRecord(info) ? info["targetInfo"] : undefined;
+        return { attached, host: hostOf(isRecord(targetInfo) ? targetInfo["url"] : undefined) };
+      }),
+    );
+    return located.flatMap(({ attached, host }) =>
+      host === undefined ? [] : [{ attached, host }],
+    );
+  };
+
+  const readCookies = async () => {
+    const located = await pageHosts();
+    const seen = new Set<string>();
+    const cookies: Array<unknown> = [];
+    for (const { attached, host } of located) {
+      const result = await attached.page.send("Network.getCookies", {
+        urls: [`https://${host}/`, `http://${host}/`],
+      });
+      const found = isRecord(result) && Array.isArray(result["cookies"]) ? result["cookies"] : [];
+      for (const cookie of found) {
+        const key = JSON.stringify(
+          isRecord(cookie) ? [cookie["name"], cookie["domain"], cookie["path"]] : cookie,
+        );
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cookies.push(cookie);
+      }
+    }
+    return { cookies };
+  };
+
+  const writeCookies = async (cookies: unknown) => {
+    const located = await pageHosts();
+    if (!Array.isArray(cookies) || cookies.length === 0) return {};
+    const targets = cookies.map((cookie) => {
+      const host = cookieHost(cookie);
+      return located.find(({ host: open }) => cookieHostAllowed(host, new Set([open])));
+    });
+    if (targets.some((target) => target === undefined)) {
+      throw new Error("Blackbird only shares cookies for sites open in this chat's browser tabs.");
+    }
+    for (const [index, cookie] of cookies.entries()) {
+      await targets[index]?.attached.page.send("Network.setCookies", { cookies: [cookie] });
+    }
+    return {};
+  };
+
   const rootCommand = async (command: CdpCommand): Promise<unknown> => {
     if (ACKNOWLEDGED_ROOT_METHODS.has(command.method)) return {};
-    const cookieMethod = COOKIE_METHODS[command.method];
-    if (cookieMethod !== undefined) {
-      const attached = pages.values().next().value;
-      if (!attached) throw new Error("Open a page before using cookies.");
-      return attached.page.send(
-        cookieMethod,
-        command.method === "Storage.setCookies" ? { cookies: command.params["cookies"] ?? [] } : {},
-      );
-    }
     switch (command.method) {
+      case "Storage.getCookies":
+        return readCookies();
+      case "Storage.setCookies":
+        return writeCookies(command.params["cookies"]);
+      case "Storage.clearCookies":
+        throw new Error(
+          "Clearing every cookie is not available in Blackbird's shared browser. Delete specific cookies instead.",
+        );
       case "Browser.getVersion":
         return BROWSER_VERSION;
       case "Browser.close":
@@ -435,7 +562,18 @@ export function createAgentCdpConnection(
     }
     const rejection = sessionCommandRejection(command.method, command.params);
     if (rejection !== undefined) return Promise.reject(new Error(rejection));
-    return forward(command.method, command.params);
+    if (command.method !== "Network.getCookies" && !COOKIE_WRITE_METHODS.has(command.method)) {
+      return forward(command.method, command.params);
+    }
+    return pageHosts().then((located) => {
+      const scopeRejection = cookieScopeRejection(
+        command.method,
+        command.params,
+        new Set(located.map(({ host }) => host)),
+      );
+      if (scopeRejection !== undefined) throw new Error(scopeRejection);
+      return forward(command.method, command.params);
+    });
   };
 
   const pageCommand = (attached: AttachedPage, command: CdpCommand): Promise<unknown> => {
