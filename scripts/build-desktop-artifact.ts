@@ -3931,7 +3931,11 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     bin: { t3: "./dist/bin.mjs" },
     files: ["dist"],
     engines: serverPackageJson.engines,
-    dependencies: resolvedServerDependencies,
+    dependencies: Object.fromEntries(
+      Object.entries(resolvedServerDependencies).filter(
+        ([, spec]) => !spec.startsWith("workspace:"),
+      ),
+    ),
   };
   yield* fs.writeFileString(
     path.join(remoteServerPackageDir, "package.json"),
