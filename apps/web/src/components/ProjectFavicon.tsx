@@ -6,7 +6,7 @@ import {
 } from "@t3tools/shared/projectFavicon";
 import { FolderCodeIcon } from "lucide-react";
 import type { IconName } from "lucide-react/dynamic";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { useAssetUrlState } from "../assets/assetUrls";
 import { useAtomValue } from "@effect/atom-react";
 import { projectFaviconUrlAtom } from "../state/assets";
@@ -32,6 +32,7 @@ export type ProjectFaviconProject = Pick<
 export function ProjectFavicon(input: {
   project: ProjectFaviconProject;
   className?: string | undefined;
+  fallback?: ReactNode;
 }) {
   const { project } = input;
   const src = useAtomValue(
@@ -72,7 +73,9 @@ export function ProjectFavicon(input: {
       </span>
     );
   }
-  if (!project.faviconPath || !src || isProjectFaviconFallbackUrl(src)) return null;
+  if (!project.faviconPath || !src || isProjectFaviconFallbackUrl(src)) {
+    return input.fallback ?? null;
+  }
 
   const cacheKey = getProjectFaviconResourceKey(
     project.environmentId,

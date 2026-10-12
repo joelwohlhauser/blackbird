@@ -1280,11 +1280,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         }
       : status === "waiting"
         ? {
-            // Waiting is calm background presence (post-settle background
-            // roster), not active progress, so the label keeps full strength.
             label: "Waiting",
-            icon: null,
-            className: "text-muted-foreground",
+            icon: "working" as const,
+            className: "text-sky-600 dark:text-sky-400",
           }
         : status === "approval"
           ? {
@@ -4969,7 +4967,11 @@ export default function Sidebar() {
                     >
                       {scopedProjectGroup ? (
                         <span className="flex shrink-0">
-                          <ProjectFavicon project={scopedProjectGroup} className="size-4" />
+                          <ProjectFavicon
+                            project={scopedProjectGroup}
+                            className="size-4"
+                            fallback={<FolderIcon className="size-4" />}
+                          />
                         </span>
                       ) : (
                         <FolderIcon className="size-4" />
