@@ -60,6 +60,7 @@ const busyTurnPrefix = (providerThreadId: ProviderThreadId) => `${providerThread
 const busyTurnKey = (providerThreadId: ProviderThreadId, runOrdinal: number) =>
   `${busyTurnPrefix(providerThreadId)}${runOrdinal}`;
 const UNLOAD_THREAD_TIMEOUT_MS = 10 * 1000;
+const DETACH_TERMINAL_TIMEOUT_MS = 5 * 1000;
 
 export const ProviderSessionReleaseReason = Schema.Literals([
   "idle_timeout",
@@ -2303,6 +2304,10 @@ export const layerWithOptions = (
                 const activeTurns = projection.value.providerTurns.filter(
                   (turn) => turn.status === "running" && providerThreads.has(turn.providerThreadId),
                 );
+                const terminalWatch =
+                  activeTurns.length === 0 || currentEntry.supportsMultipleProviderThreads
+                    ? null
+                    : yield* makeEventSubscription(currentEntry.eventSubscribers);
                 yield* Effect.forEach(
                   activeTurns,
                   (turn) =>
@@ -2326,6 +2331,21 @@ export const layerWithOptions = (
                       ),
                   { concurrency: 1, discard: true },
                 );
+                if (terminalWatch !== null) {
+                  const pendingTurnIds = new Set<string>(activeTurns.map((turn) => turn.id));
+                  yield* terminalWatch.events.pipe(
+                    Stream.takeUntil(
+                      (event) =>
+                        event.type === "turn.terminal" &&
+                        pendingTurnIds.delete(event.providerTurnId) &&
+                        pendingTurnIds.size === 0,
+                    ),
+                    Stream.runDrain,
+                    Effect.timeout(DETACH_TERMINAL_TIMEOUT_MS),
+                    Effect.ignore,
+                    Effect.ensuring(terminalWatch.close),
+                  );
+                }
               }
             }
             const detachResult = yield* Ref.modify(sessions, (current) => {

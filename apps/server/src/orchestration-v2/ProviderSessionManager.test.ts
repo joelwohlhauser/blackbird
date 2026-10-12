@@ -320,6 +320,7 @@ const makeProviderAdapter = Effect.fnUntraced(function* (
     readonly hasPendingBackgroundWorkForThread?: Effect.Effect<boolean>;
     readonly hangSessionScopeClose?: boolean;
     readonly startTurn?: Effect.Effect<void>;
+    readonly interruptEmitsTerminal?: boolean;
     readonly beforeUnload?: Effect.Effect<void>;
     /** Registers the process's closeCount finalizer before `beforeOpen` runs. */
     readonly spawnBeforeOpen?: boolean;
@@ -416,11 +417,26 @@ const makeProviderAdapter = Effect.fnUntraced(function* (
             })).pipe(Effect.as(threadInput.providerThread)),
           startTurn: () => options.startTurn ?? Effect.void,
           steerTurn: () => Effect.void,
-          interruptTurn: () =>
+          interruptTurn: (interruptInput) =>
             Ref.update(state, (current) => ({
               ...current,
               interruptCount: current.interruptCount + 1,
-            })),
+            })).pipe(
+              Effect.andThen(
+                options.interruptEmitsTerminal === true
+                  ? Queue.offer(events, {
+                      type: "turn.terminal",
+                      driver: CODEX_DRIVER,
+                      providerThreadId: interruptInput.providerThread.id,
+                      providerTurnId: interruptInput.providerTurnId,
+                      runOrdinal: 1,
+                      status: "interrupted",
+                      failure: null,
+                      threadDisposition: "reusable",
+                    })
+                  : Effect.void,
+              ),
+            ),
           unloadThread: ({ providerThread }) =>
             (options.beforeUnload ?? Effect.void).pipe(
               Effect.andThen(
@@ -467,6 +483,7 @@ function layerTest(input: {
   readonly hasPendingBackgroundWorkForThread?: Effect.Effect<boolean>;
   readonly hangSessionScopeClose?: boolean;
   readonly startTurn?: Effect.Effect<void>;
+  readonly interruptEmitsTerminal?: boolean;
   readonly beforeUnload?: Effect.Effect<void>;
   readonly spawnBeforeOpen?: boolean;
   readonly scopeCloseReached?: Deferred.Deferred<void>;
@@ -497,6 +514,9 @@ function layerTest(input: {
         ? {}
         : { hangSessionScopeClose: input.hangSessionScopeClose }),
       ...(input.startTurn === undefined ? {} : { startTurn: input.startTurn }),
+      ...(input.interruptEmitsTerminal === undefined
+        ? {}
+        : { interruptEmitsTerminal: input.interruptEmitsTerminal }),
       ...(input.beforeUnload === undefined ? {} : { beforeUnload: input.beforeUnload }),
       ...(input.spawnBeforeOpen === undefined ? {} : { spawnBeforeOpen: input.spawnBeforeOpen }),
       ...(input.scopeCloseReached === undefined
@@ -4243,7 +4263,7 @@ it.effect(
 );
 
 it.effect(
-  "ProviderSessionManagerV2 interrupts a single-thread session's running turn before releasing it on detach",
+  "ProviderSessionManagerV2 delivers a single-thread session's interrupted turn before releasing it on detach",
   () =>
     Effect.gen(function* () {
       const state = yield* Ref.make(emptyState);
@@ -4304,17 +4324,30 @@ it.effect(
             },
           ],
         });
-        yield* manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy });
+        const runtime = yield* manager.open({
+          threadId,
+          providerSessionId,
+          modelSelection,
+          runtimePolicy,
+        });
+        const subscription = yield* runtime.subscribeEvents!;
 
         yield* manager.detach({ providerSessionId, threadId, detail: "Workspace changed." });
 
         assert.equal((yield* Ref.get(state)).interruptCount, 1);
+        const [first] = yield* subscription.events.pipe(Stream.take(1), Stream.runCollect);
+        assert.equal(first?.type === "turn.terminal" ? first.status : null, "interrupted");
         assert.isTrue(Option.isNone(yield* manager.get(providerSessionId)));
       });
 
       yield* effect.pipe(
         Effect.provide(
-          layerTest({ state, idleTimeoutMs: 1000, capabilities: ExclusiveCapabilities }),
+          layerTest({
+            state,
+            idleTimeoutMs: 1000,
+            capabilities: ExclusiveCapabilities,
+            interruptEmitsTerminal: true,
+          }),
         ),
       );
     }),
