@@ -24,7 +24,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../config.ts";
-import { expandHomePathWith } from "../pathExpansion.ts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProjectService from "./ProjectService.ts";
 
@@ -210,7 +210,7 @@ const make = Effect.gen(function* () {
     }
   });
 
-  const quickChatsRoot = expandHomePathWith("~", path);
+  const quickChatsRoot = yield* HostProcess.HomeDirectory;
   const scratchRoot = Effect.succeed(Option.some(quickChatsRoot));
   const scratchProjectLock = yield* Semaphore.make(1);
 

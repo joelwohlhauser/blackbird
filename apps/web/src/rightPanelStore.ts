@@ -1485,21 +1485,24 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                 surface.kind === "preview" ? [surface.id] : [],
               ),
             );
-            const nonBrowser = current.surfaces.filter(
-              (surface) =>
-                surface.kind !== "preview" &&
-                ((surface.kind !== "linear" && surface.kind !== "github-pr") ||
-                  validTabIds.has(surface.resourceId)),
+            // Filtered in place so browser tabs keep the order the user dragged them into.
+            const kept = current.surfaces.filter((surface) => {
+              if (surface.kind === "preview") {
+                return (
+                  surface.id !== "browser:new" &&
+                  surface.resourceId !== null &&
+                  validIds.has(surface.id) &&
+                  !dedicatedBrowserTabIds.has(surface.resourceId)
+                );
+              }
+              if (surface.kind === "linear" || surface.kind === "github-pr") {
+                return validTabIds.has(surface.resourceId);
+              }
+              return true;
+            });
+            const knownIds = new Set(
+              kept.flatMap((surface) => (surface.kind === "preview" ? [surface.id] : [])),
             );
-            const existingBrowser = current.surfaces.filter(
-              (surface): surface is Extract<RightPanelSurface, { kind: "preview" }> =>
-                surface.kind === "preview" &&
-                surface.id !== "browser:new" &&
-                surface.resourceId !== null &&
-                validIds.has(surface.id) &&
-                !dedicatedBrowserTabIds.has(surface.resourceId),
-            );
-            const knownIds = new Set(existingBrowser.map((surface) => surface.id));
             const added = tabIds
               .filter(
                 (tabId) =>
@@ -1513,11 +1516,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             const mainSurfaces = placeAddedInMain
               ? [...retainedMainSurfaces, ...added]
               : retainedMainSurfaces;
-            const surfaces = [
-              ...nonBrowser,
-              ...existingBrowser,
-              ...(placeAddedInMain ? [] : added),
-            ];
+            const surfaces = [...kept, ...(placeAddedInMain ? [] : added)];
             const activeStillExists = surfaces.some(
               (surface) => surface.id === current.activeSurfaceId,
             );

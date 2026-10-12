@@ -1743,6 +1743,23 @@ describe("workspace tab containers", () => {
   const threadState = () =>
     selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
 
+  it("moves a surface to a new index and keeps it there through browser reconciliation", () => {
+    const store = useRightPanelStore.getState();
+    store.openTerminal(refA, "term-1");
+    store.openBrowser(refA, "tab-a");
+    store.open(refA, "diff");
+    const surfaceIds = () => threadState().surfaces.map((surface) => surface.id);
+
+    store.moveSurface(refA, "browser:tab-a", { container: "panel", index: 0 });
+    expect(surfaceIds()).toEqual(["browser:tab-a", "terminal:term-1", "diff"]);
+    store.moveSurface(refA, "browser:tab-a", { container: "panel", index: 2 });
+    expect(surfaceIds()).toEqual(["terminal:term-1", "diff", "browser:tab-a"]);
+    store.moveSurface(refA, "browser:tab-a", { container: "panel", index: 0 });
+
+    store.reconcileBrowserSurfaces(refA, ["tab-a", "tab-b"]);
+    expect(surfaceIds()).toEqual(["browser:tab-a", "terminal:term-1", "diff", "browser:tab-b"]);
+  });
+
   it("reorders tabs within the panel", () => {
     useRightPanelStore.getState().openBrowser(refA, "tab-a");
     useRightPanelStore.getState().open(refA, "diff");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ProjectId } from "@t3tools/contracts";
+import { ProjectId, SourceControlProviderKind } from "@t3tools/contracts";
 
 import {
   advancePullRequestDiffWalk,
@@ -24,7 +24,11 @@ describe("WorkspaceNavigator logic", () => {
             headRef: "ai-1720-take-over-the-v10-pipeline",
             state: "open",
           },
-          sourceControlProvider: { kind: "github", name: "GitHub", baseUrl: "https://github.com" },
+          sourceControlProvider: {
+            kind: SourceControlProviderKind.make("github"),
+            name: "GitHub",
+            baseUrl: "https://github.com",
+          },
         },
         projectId,
         "example-org/example-app",
@@ -51,7 +55,7 @@ describe("WorkspaceNavigator logic", () => {
             state: "open",
           },
           sourceControlProvider: {
-            kind: "azure-devops",
+            kind: SourceControlProviderKind.make("azure-devops"),
             name: "Azure DevOps",
             baseUrl: "https://dev.azure.com",
           },

@@ -37,6 +37,7 @@ const serve = (state: { live: boolean }) =>
       clearProfile: () => Effect.void,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
+      reportProfiles: () => Effect.void,
       openAgentPage: (input) =>
         Effect.succeed({
           targetInfo: { targetId: "PAGE-TARGET", url: "https://example.com/" },

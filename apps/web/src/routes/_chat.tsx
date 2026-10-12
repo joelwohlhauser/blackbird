@@ -12,6 +12,7 @@ import { useEffect, useRef } from "react";
 
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { ThreadRouteView } from "../components/ThreadRouteView";
+import { ThreadLinkPrompt } from "../components/promptLinks/ThreadLinkPrompt";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { isPreviewAvailableFor } from "../browser/previewRuntime";
 import { useEnvironmentScope } from "../state/session";
@@ -223,6 +224,9 @@ function ChatRouteLayout() {
     <>
       <LastChatRoutePersistence />
       <ChatRouteGlobalShortcuts />
+      {threadTarget?.kind === "server" ? (
+        <ThreadLinkPrompt threadRef={threadTarget.threadRef} />
+      ) : null}
       {threadTarget ? <ThreadRouteView target={threadTarget} /> : <Outlet />}
     </>
   );

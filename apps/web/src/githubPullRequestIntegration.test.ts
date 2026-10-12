@@ -1,4 +1,4 @@
-import type { VcsStatusResult } from "@t3tools/contracts";
+import { SourceControlProviderKind, type VcsStatusResult } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { githubPullRequestFromStatus } from "./githubPullRequestIntegration";
@@ -17,7 +17,7 @@ describe("GitHub pull request integration", () => {
     expect(
       githubPullRequestFromStatus({
         sourceControlProvider: {
-          kind: "github",
+          kind: SourceControlProviderKind.make("github"),
           name: "GitHub",
           baseUrl: "https://github.com",
         },
@@ -30,7 +30,7 @@ describe("GitHub pull request integration", () => {
     expect(
       githubPullRequestFromStatus({
         sourceControlProvider: {
-          kind: "gitlab",
+          kind: SourceControlProviderKind.make("gitlab"),
           name: "GitLab",
           baseUrl: "https://gitlab.com",
         },
@@ -43,7 +43,7 @@ describe("GitHub pull request integration", () => {
     expect(
       githubPullRequestFromStatus({
         sourceControlProvider: {
-          kind: "github",
+          kind: SourceControlProviderKind.make("github"),
           name: "GitHub",
           baseUrl: "https://github.com",
         },

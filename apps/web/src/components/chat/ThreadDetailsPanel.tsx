@@ -5,33 +5,20 @@ import type {
   ResolvedKeybindingsConfig,
   ThreadId,
 } from "@t3tools/contracts";
-import { AlertTriangleIcon, XIcon } from "lucide-react";
 
 import type { DraftId } from "../../composerDraftStore";
 import { useT3ProjectFileScripts } from "../../hooks/useT3ProjectFileScripts";
-import {
-  shouldShowEnvironmentIndicator,
-  type EnvMode,
-  type EnvironmentOption,
-} from "../BranchToolbar.logic";
+import { type EnvMode, type EnvironmentOption } from "../BranchToolbar.logic";
 import { BranchToolbar } from "../BranchToolbar";
-import { BranchToolbarEnvironmentSelector } from "../BranchToolbarEnvironmentSelector";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
   type ProjectScriptActionResult,
 } from "../ProjectScriptsControl";
-import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
-
-interface VersionMismatchIssue {
-  readonly clientVersion: string;
-  readonly serverVersion: string;
-  readonly serverLabel: string;
-}
 
 export interface ThreadDetailsPanelProps {
   forceNewWorktree?: boolean;
@@ -61,8 +48,6 @@ export interface ThreadDetailsPanelProps {
   onNewBranchNameChange: (newBranchName: string) => void;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest: () => void;
-  versionMismatch: VersionMismatchIssue | null;
-  onDismissVersionMismatch: () => void;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<ProjectScriptActionResult>;
   onUpdateProjectScript: (
@@ -77,14 +62,6 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
     props.environmentId,
     props.activeProjectScripts ? props.gitCwd : null,
   );
-  // Same rule as the composer strip: a lone remote machine still gets a row,
-  // shown as a static label because there is nothing to pick.
-  const canPickEnvironment = props.availableEnvironments.length > 1;
-  const showEnvironment = shouldShowEnvironmentIndicator({
-    activeEnvironment:
-      props.availableEnvironments.find((env) => env.environmentId === props.environmentId) ?? null,
-    canPickEnvironment,
-  });
   const branchToolbarProps = {
     showGitControls: props.isGitRepo,
     environmentId: props.environmentId,
@@ -119,41 +96,16 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
           separated={false}
           showHeading={false}
         >
-          {props.versionMismatch ? (
-            <div className="mx-1 mb-2 flex gap-2 rounded-xl border border-warning/30 bg-warning/6 p-3">
-              <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium">Client and server versions differ</p>
-                <p className="mt-1 text-2xs leading-relaxed text-muted-foreground">
-                  Client {props.versionMismatch.clientVersion} · {props.versionMismatch.serverLabel}{" "}
-                  {props.versionMismatch.serverVersion}
-                </p>
-              </div>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                aria-label="Dismiss version mismatch warning"
-                onClick={props.onDismissVersionMismatch}
-              >
-                <XIcon className="size-3.5" />
-              </Button>
-            </div>
-          ) : null}
-
           <div className="flex flex-col">
-            {showEnvironment ? (
-              <BranchToolbarEnvironmentSelector
-                displayMode="panel"
-                autoEnvironmentLabel={props.autoEnvironmentLabel}
-                onAutoEnvironment={props.onAutoEnvironment}
-                envLocked={props.envLocked}
-                environmentId={props.environmentId}
-                availableEnvironments={props.availableEnvironments}
-                {...(canPickEnvironment ? { onEnvironmentChange: props.onEnvironmentChange } : {})}
-              />
-            ) : null}
-
-            <BranchToolbar layout="panel" panelSection="workspace" {...branchToolbarProps} />
+            <BranchToolbar
+              layout="panel"
+              panelSection="workspace"
+              availableEnvironments={props.availableEnvironments}
+              onEnvironmentChange={props.onEnvironmentChange}
+              autoEnvironmentLabel={props.autoEnvironmentLabel}
+              onAutoEnvironment={props.onAutoEnvironment}
+              {...branchToolbarProps}
+            />
 
             {props.showOpenInPicker ? (
               <OpenInPicker

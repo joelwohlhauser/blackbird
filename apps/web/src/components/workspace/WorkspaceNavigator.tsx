@@ -6,9 +6,9 @@ import type {
 } from "@t3tools/contracts";
 import { FileDiffIcon, RefreshCwIcon } from "lucide-react";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 
-import { useResizableWidth } from "~/hooks/useResizableWidth";
+import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "~/hooks/useResizableWidth";
 import { cn } from "~/lib/utils";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
@@ -196,7 +196,12 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
   return (
     <aside
       className="relative flex h-full min-h-0 shrink-0 flex-col self-stretch border-l border-border bg-background"
-      style={{ width: `${width}px` }}
+      style={
+        {
+          [RESIZABLE_WIDTH_PROPERTY]: `${width}px`,
+          width: `var(${RESIZABLE_WIDTH_PROPERTY})`,
+        } as CSSProperties
+      }
       aria-label="Workspace navigator"
       data-workspace-navigator
     >

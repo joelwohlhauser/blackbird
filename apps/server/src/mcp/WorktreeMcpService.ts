@@ -21,7 +21,8 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
-import { expandHomePathWith } from "../pathExpansion.ts";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
@@ -63,6 +64,7 @@ const asOperationFailed = (prefix: string) =>
 const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
+  const home = yield* HostProcess.HomeDirectory;
   const fileSystem = yield* FileSystem.FileSystem;
   const vcsRegistry = yield* VcsDriverRegistry.VcsDriverRegistry;
   const threadManagement = yield* ThreadManagementService.ThreadManagementService;
@@ -154,7 +156,7 @@ const make = Effect.gen(function* () {
   const resolveDestination = Effect.fn("WorktreeMcpService.resolveDestination")(function* (
     repositoryPath: string,
   ) {
-    const expanded = expandHomePathWith(repositoryPath, path);
+    const expanded = expandHomePath(repositoryPath, home);
     if (!path.isAbsolute(expanded)) {
       return yield* failure(
         "invalid_request",

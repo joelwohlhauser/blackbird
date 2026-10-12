@@ -323,7 +323,8 @@ export function NewTabPage(props: {
       const action = surfaceShortcutActionForKey(shortcutActionsRef.current, event);
       if (!action) return;
       if (document.querySelector(LAUNCHER_SHORTCUT_BLOCKING_LAYERS)) return;
-      const target = event.target;
+      // The composed path starts at the real target, which may sit inside a shadow root.
+      const target = event.composedPath()[0] ?? event.target;
       if (target instanceof Element && surfaceShortcutTargetsTypingContext(target)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -375,7 +376,7 @@ export function NewTabPage(props: {
       onKeyDown={handleKeyDown}
       aria-label="Open a surface"
       data-surface-launcher-keys={availableActions.map((action) => action.shortcut).join("")}
-      className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 pt-6 pb-[calc(var(--workspace-topbar-height)+--spacing(6))] outline-none"
+      className="scrollbar-gutter-both flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 pt-6 pb-[calc(var(--workspace-topbar-height)+--spacing(6))] outline-none"
     >
       <div className="relative w-full max-w-lg">
         <div className="absolute inset-x-0 bottom-full mb-5 text-center">

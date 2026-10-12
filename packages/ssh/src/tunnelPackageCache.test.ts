@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -60,7 +60,7 @@ ${body}
   Effect.provide(NodeServices.layer),
 );
 
-describe.skipIf(HostProcessPlatform.defaultValue() !== "linux" && !testHost)(
+describe.skipIf(HostProcess.Platform.defaultValue() !== "linux" && !testHost)(
   "remote server cache retention",
   () => {
     it.effect(
