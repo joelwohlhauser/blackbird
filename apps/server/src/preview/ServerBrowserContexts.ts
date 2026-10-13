@@ -198,7 +198,7 @@ export class ServerBrowserContexts {
 
   /**
    * Drives a page the desktop app renders, through the CDP endpoint its relay
-   * serves. The page keeps the desktop's storage, size, and window.
+   * serves. The page keeps the desktop's storage, size, window, and appearance.
    */
   async connectDesktopPage(endpoint: string) {
     const { chromium } = loadPlaywright();
@@ -208,6 +208,7 @@ export class ServerBrowserContexts {
       await browser.close().catch(constVoid);
       throw new Error("The desktop tab has no page.");
     }
+    await page.emulateMedia({ colorScheme: null }).catch(constVoid);
     return { browser, page };
   }
 
