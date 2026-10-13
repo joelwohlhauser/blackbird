@@ -593,6 +593,9 @@ export const isPreviewEditingShortcut = (
   );
 };
 
+const hasKeyboardFocus = (contents: Electron.WebContents): boolean =>
+  contents.isFocused() && contents.focusedFrame !== null;
+
 const isPreviewInputSignal = (value: unknown): value is PreviewInputSignal => {
   if (typeof value !== "object" || value === null || !("kind" in value)) return false;
   if (value.kind === "pointer") {
@@ -1591,8 +1594,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       // Native editing roles must remain available after the page handles the key.
       // Background automation must not edit whichever other renderer has focus.
       contents.setIgnoreMenuShortcuts(
-        !isPreviewEditingShortcut(input, hostPlatform) ||
-          webContents.getFocusedWebContents() !== contents,
+        !isPreviewEditingShortcut(input, hostPlatform) || !hasKeyboardFocus(contents),
       );
     };
     // A popup opens with Electron's default handler, so the page inside it could
@@ -1655,7 +1657,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         !input.isComposing &&
         host &&
         !host.isDestroyed() &&
-        webContents.getFocusedWebContents() === wc &&
+        hasKeyboardFocus(wc) &&
         !(
           hostPlatform !== "darwin" &&
           input.control &&

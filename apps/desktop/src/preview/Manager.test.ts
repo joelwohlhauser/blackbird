@@ -252,7 +252,6 @@ const {
   clipboardItemConstructor,
   createFromPath,
   fromId,
-  getFocusedWebContents,
   menuPopup,
   mkdir,
   openExternal,
@@ -272,7 +271,6 @@ const {
     toPNG: () => Buffer.from("png"),
   })),
   fromId: vi.fn<(_id?: number) => Electron.WebContents | null>((_id?: number) => null),
-  getFocusedWebContents: vi.fn(() => null),
   menuPopup: vi.fn(),
   mkdir: vi.fn((_path: string) => undefined),
   openExternal: vi.fn(async (_url: string) => undefined),
@@ -310,7 +308,6 @@ vi.mock("electron", () => ({
   },
   webContents: {
     fromId,
-    getFocusedWebContents,
   },
 }));
 
@@ -522,6 +519,7 @@ const makeFaviconWebContents = (options?: {
   let currentUrl = options?.url ?? "http://localhost:3200/";
   let destroyed = false;
   let loading = false;
+  let focused = false;
   const fetch = vi.fn(
     options?.fetch ??
       (async () =>
@@ -544,6 +542,10 @@ const makeFaviconWebContents = (options?: {
     id: options?.id ?? 42,
     hostWebContents: options?.hostWebContents,
     isDestroyed: () => destroyed,
+    isFocused: () => true,
+    get focusedFrame() {
+      return focused ? {} : null;
+    },
     getType: () => "webview",
     getURL: () => currentUrl,
     getTitle: () => "Preview",
@@ -586,6 +588,9 @@ const makeFaviconWebContents = (options?: {
     setWindowOpenHandler,
     setDestroyed: (value: boolean) => {
       destroyed = value;
+    },
+    setFocused: (value: boolean) => {
+      focused = value;
     },
     setLoading: (value: boolean) => {
       loading = value;
@@ -650,8 +655,6 @@ describe("PreviewManager", () => {
     buildFromTemplate.mockReset();
     buildFromTemplate.mockReturnValue({ popup: menuPopup });
     fromId.mockClear();
-    getFocusedWebContents.mockReset();
-    getFocusedWebContents.mockReturnValue(null);
     mkdir.mockClear();
     menuPopup.mockClear();
     openExternal.mockClear();
@@ -822,7 +825,7 @@ describe("PreviewManager", () => {
         const hostWebContents = { sendInputEvent, isDestroyed: () => false };
         Object.assign(preview.webContents, { hostWebContents });
         fromId.mockReturnValue(preview.webContents);
-        getFocusedWebContents.mockReturnValue(preview.webContents as never);
+        preview.setFocused(true);
         yield* manager.setMainWindow({
           isDestroyed: () => false,
           once: vi.fn(),
@@ -887,7 +890,7 @@ describe("PreviewManager", () => {
             hostWebContents: { isDestroyed: () => false, send },
           });
           fromId.mockReturnValue(preview.webContents);
-          getFocusedWebContents.mockReturnValue(preview.webContents as never);
+          preview.setFocused(true);
           yield* manager.createTab("tab_reopen");
           yield* manager.registerWebview("tab_reopen", 42);
           const shortcut = parseKeybindingShortcut(chord)!;
@@ -916,12 +919,12 @@ describe("PreviewManager", () => {
             expect(preventDefault).toHaveBeenCalledTimes("isAutoRepeat" in overrides ? 1 : 0);
             expect(send).toHaveBeenCalledOnce();
           }
-          getFocusedWebContents.mockReturnValue(null);
+          preview.setFocused(false);
           preventDefault.mockClear();
           beforeInput({ preventDefault } as never, input as never);
           expect(preventDefault).not.toHaveBeenCalled();
           expect(send).toHaveBeenCalledOnce();
-          getFocusedWebContents.mockReturnValue(preview.webContents as never);
+          preview.setFocused(true);
           yield* manager.setForwardedShortcuts([]);
           beforeInput({ preventDefault } as never, input as never);
           expect(preventDefault).not.toHaveBeenCalled();
@@ -949,7 +952,7 @@ describe("PreviewManager", () => {
               hostWebContents: { isDestroyed: () => false, send },
             });
             fromId.mockReturnValue(preview.webContents);
-            getFocusedWebContents.mockReturnValue(preview.webContents as never);
+            preview.setFocused(true);
             yield* manager.createTab("tab_alt_graph");
             yield* manager.registerWebview("tab_alt_graph", 42);
             yield* manager.setForwardedShortcuts([
@@ -991,7 +994,7 @@ describe("PreviewManager", () => {
 
         for (const browser of [preview, popup]) {
           const contents = browser.webContents as Electron.WebContents;
-          getFocusedWebContents.mockReturnValue(browser.webContents as never);
+          browser.setFocused(true);
           const beforeInput = browser.listeners.get("before-input-event")!;
           const preventDefault = vi.fn();
           const input = {
@@ -1015,7 +1018,7 @@ describe("PreviewManager", () => {
           expect(contents.setIgnoreMenuShortcuts).toHaveBeenLastCalledWith(true);
 
           // An injected paste in an unfocused guest cannot edit the active renderer.
-          getFocusedWebContents.mockReturnValue(null);
+          browser.setFocused(false);
           beforeInput({ preventDefault } as never, input as never);
           expect(contents.setIgnoreMenuShortcuts).toHaveBeenLastCalledWith(true);
           expect(preventDefault).not.toHaveBeenCalled();
