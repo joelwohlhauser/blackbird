@@ -6,6 +6,7 @@ import type {
 } from "@t3tools/contracts";
 import { FileDiffIcon, RefreshCwIcon } from "lucide-react";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { diffFileTier } from "~/components/pullRequest/pullRequestFileOrder.logic";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "~/hooks/useResizableWidth";
@@ -20,6 +21,7 @@ import GitActionsControl from "~/components/GitActionsControl";
 import type { DraftId } from "~/composerDraftStore";
 import type { WorkspaceNavigatorTab } from "~/rightPanelStore";
 import { Button } from "~/components/ui/button";
+import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
 import {
@@ -47,6 +49,16 @@ const TABS: ReadonlyArray<{ id: WorkspaceNavigatorTab; label: string }> = [
   { id: "changes", label: "Changes" },
   { id: "pr", label: "PR" },
 ];
+
+const PULL_REQUEST_FILE_FILTERS = [
+  { id: "all", label: "All", emptyMessage: "" },
+  {
+    id: "implementation",
+    label: "Implementation",
+    emptyMessage: "No implementation files changed in this pull request.",
+  },
+  { id: "tests", label: "Tests", emptyMessage: "No test files changed in this pull request." },
+] as const;
 
 const WORKSPACE_NAVIGATOR_WIDTH_STORAGE_KEY = "blackbird:workspace-navigator-width:v1";
 const WORKSPACE_NAVIGATOR_DEFAULT_WIDTH = 292;
@@ -124,6 +136,9 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
   const [pullRequestDiffWalk, setPullRequestDiffWalk] = useState(EMPTY_PULL_REQUEST_DIFF_WALK);
   const [pullRequestRefreshRequest, setPullRequestRefreshRequest] = useState(0);
   const [pullRequestRefreshing, setPullRequestRefreshing] = useState(false);
+  const [pullRequestFileFilter, setPullRequestFileFilter] = useState<
+    (typeof PULL_REQUEST_FILE_FILTERS)[number]
+  >(PULL_REQUEST_FILE_FILTERS[0]);
   const invalidatePullRequest = useAtomCommand(pullRequestEnvironment.invalidate, {
     reportFailure: false,
   });
@@ -165,6 +180,16 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
   const pullRequestFiles = useMemo(
     () => pullRequestDiffSlicesToFileChanges(currentPullRequestDiffWalk.slices),
     [currentPullRequestDiffWalk.slices],
+  );
+  const filteredPullRequestFiles = useMemo(
+    () =>
+      pullRequestFileFilter.id === "all"
+        ? pullRequestFiles
+        : pullRequestFiles.filter(
+            (file) =>
+              (diffFileTier(file.path) === "test") === (pullRequestFileFilter.id === "tests"),
+          ),
+    [pullRequestFileFilter, pullRequestFiles],
   );
   const pullRequestStat = useMemo(
     () =>
@@ -344,27 +369,55 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
             ) : pullRequestFiles.length === 0 && currentPullRequestDiffWalk.complete ? (
               <NavigatorMessage icon="pr">No files changed in this pull request.</NavigatorMessage>
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col py-2">
-                {!currentPullRequestDiffWalk.complete ? (
-                  <p className="mx-2 mb-2 rounded-md bg-muted px-2 py-1.5 text-[11px] text-muted-foreground">
-                    Loading remaining pull request files…
-                  </p>
-                ) : null}
-                <div className="min-h-0 flex-1">
-                  <WorkspaceChangeTree
-                    ariaLabel={`Files changed in pull request #${pullRequest.number}`}
-                    files={pullRequestFiles}
-                    onOpenFile={(filePath) =>
-                      props.onOpenDiffFile({
-                        scope: "branch",
-                        filePath,
-                        baseRef: pullRequest.baseRef,
-                        headRef: pullRequest.headRef,
-                      })
-                    }
-                  />
+              <>
+                <div className="shrink-0 border-b border-border/60 px-2.5 py-2">
+                  <ToggleGroup
+                    aria-label="Pull request files"
+                    className="w-full"
+                    variant="segmented"
+                    value={[pullRequestFileFilter.id]}
+                    onValueChange={(value) => {
+                      const next = PULL_REQUEST_FILE_FILTERS.find(
+                        (filter) => filter.id === value[0],
+                      );
+                      if (next) setPullRequestFileFilter(next);
+                    }}
+                  >
+                    {PULL_REQUEST_FILE_FILTERS.map((filter) => (
+                      <Toggle key={filter.id} className="flex-1" value={filter.id}>
+                        {filter.label}
+                      </Toggle>
+                    ))}
+                  </ToggleGroup>
                 </div>
-              </div>
+                <div className="flex min-h-0 flex-1 flex-col py-2">
+                  {!currentPullRequestDiffWalk.complete ? (
+                    <p className="mx-2 mb-2 rounded-md bg-muted px-2 py-1.5 text-[11px] text-muted-foreground">
+                      Loading remaining pull request files…
+                    </p>
+                  ) : null}
+                  {filteredPullRequestFiles.length === 0 ? (
+                    <NavigatorMessage icon="pr">
+                      {pullRequestFileFilter.emptyMessage}
+                    </NavigatorMessage>
+                  ) : (
+                    <div className="min-h-0 flex-1">
+                      <WorkspaceChangeTree
+                        ariaLabel={`Files changed in pull request #${pullRequest.number}`}
+                        files={filteredPullRequestFiles}
+                        onOpenFile={(filePath) =>
+                          props.onOpenDiffFile({
+                            scope: "branch",
+                            filePath,
+                            baseRef: pullRequest.baseRef,
+                            headRef: pullRequest.headRef,
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </>
         )}

@@ -148,7 +148,9 @@ four tabs:
   colored per-file line counts, a branch-vs-base summary, and the primary
   commit/push/PR action;
 - **PR** — the exact files changed by the pull request associated with the
-  current branch, with an explicit refresh action for the PR and its files.
+  current branch, with an explicit refresh action for the PR and its files and
+  an All / Implementation / Tests switcher that filters the tree to or away from
+  test files.
 
 Selecting a file opens it in the normal right panel. Selecting an item from
 Changes or PR opens a dedicated whole-file diff tab rather than replacing the
