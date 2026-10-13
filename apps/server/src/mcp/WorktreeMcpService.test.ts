@@ -475,12 +475,18 @@ describe("t3_worktree_handoff", () => {
     });
   });
 
-  it.effect("skips the continuation when no continuationPrompt is given", () => {
+  it.effect("queues a default continuation when no continuationPrompt is given", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const result = yield* runHandoff(harness, { branch: "feature/no-continuation" });
-      expect(result.continuation).toEqual({ status: "skipped" });
-      expect(harness.sendToThread).not.toHaveBeenCalled();
+      expect(result.continuation).toEqual({ status: "scheduled", delivery: "queued" });
+      expect(harness.sendToThread).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId,
+          text: "You are now in /worktrees/project/feature/no-continuation on branch feature/no-continuation. Continue with the task, or briefly confirm the switch if nothing is left to do.",
+          mode: "queue",
+        }),
+      );
     });
   });
 

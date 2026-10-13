@@ -55,7 +55,7 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
   continuationPrompt: Schema.optional(
     TrimmedNonEmptyString.check(Schema.isMaxLength(120_000)).annotate({
       description:
-        "Message queued as the thread's next turn after the handoff. The handoff detaches the current provider session, so pass the remaining work here to automatically resume inside the worktree; omit it to stop after the handoff and wait for the next message.",
+        "Message queued as the thread's next turn after the handoff. The handoff detaches the current provider session, so pass the remaining work here to resume inside the worktree; omitted, a generic prompt to continue the task is queued instead.",
     }),
   ),
 });

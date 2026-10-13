@@ -481,29 +481,29 @@ const make = Effect.gen(function* () {
         // so a failed dispatch never even constructs the continuation call.
         const queueContinuation: Effect.Effect<WorktreeMcpContinuationStatus, WorktreeMcpFailure> =
           Effect.suspend(() =>
-            input.continuationPrompt === undefined
-              ? Effect.succeed<WorktreeMcpContinuationStatus>({ status: "skipped" })
-              : threadManagement
-                  .sendToThread({
-                    projectId: project.id,
-                    commandId: ids.continuationCommandId,
-                    threadId: scope.thread.threadId,
-                    messageId: ids.continuationMessageId,
-                    text: input.continuationPrompt,
-                    attachments: [],
-                    mode: "queue",
-                    createdBy: "agent",
-                    creationSource: "mcp",
-                  })
-                  .pipe(
-                    Effect.map((sendResult): WorktreeMcpContinuationStatus => ({
-                      status: "scheduled",
-                      delivery: sendResult.delivery,
-                    })),
-                    // catchCause via reportFailed: the binding is already recorded,
-                    // so a failed continuation must be reported, not fail the handoff.
-                    reportFailed("worktree handoff continuation failed to queue"),
-                  ),
+            threadManagement
+              .sendToThread({
+                projectId: project.id,
+                commandId: ids.continuationCommandId,
+                threadId: scope.thread.threadId,
+                messageId: ids.continuationMessageId,
+                text:
+                  input.continuationPrompt ??
+                  `You are now in ${worktreePath}${branch === null ? "" : ` on branch ${branch}`}. Continue with the task, or briefly confirm the switch if nothing is left to do.`,
+                attachments: [],
+                mode: "queue",
+                createdBy: "agent",
+                creationSource: "mcp",
+              })
+              .pipe(
+                Effect.map((sendResult): WorktreeMcpContinuationStatus => ({
+                  status: "scheduled",
+                  delivery: sendResult.delivery,
+                })),
+                // catchCause via reportFailed: the binding is already recorded,
+                // so a failed continuation must be reported, not fail the handoff.
+                reportFailed("worktree handoff continuation failed to queue"),
+              ),
           );
 
         const continuation = yield* recheckAndBind.pipe(Effect.andThen(queueContinuation));
@@ -553,7 +553,7 @@ const make = Effect.gen(function* () {
           note:
             continuation.status === "scheduled"
               ? "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the queued continuation prompt then starts the next turn in the new workspace with the conversation preserved. Worktrees are not removed automatically when the thread is deleted."
-              : "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the conversation continues in the new workspace when the thread receives its next message. Pass continuationPrompt to resume automatically. Worktrees are not removed automatically when the thread is deleted.",
+              : "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the continuation failed to queue, so the conversation continues in the new workspace when the thread receives its next message. Worktrees are not removed automatically when the thread is deleted.",
         };
         return result;
       }),

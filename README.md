@@ -197,7 +197,7 @@ New worktrees:
 - run all filesystem and Git operations on the environment that owns the
   project.
 
-Agents can start the same workflow from an active chat with the `t3_worktree_handoff` MCP tool. An existing branch reuses its checkout or gets a new worktree; an unknown branch creates a new worktree. Agents can pass `repositoryPath` to leave a Quick chat or change repositories (Blackbird finds or creates the project for that folder), or pass an existing folder without a branch to switch there directly. The same conversation keeps its history; the current turn ends after the handoff, and a `continuationPrompt` resumes work in the destination. Paths and worktree setup run on the owning environment, including remote. New worktrees honor the environment's **Start from origin** setting and project setup script.
+Agents can start the same workflow from an active chat with the `t3_worktree_handoff` MCP tool. An existing branch reuses its checkout or gets a new worktree; an unknown branch creates a new worktree. Agents can pass `repositoryPath` to leave a Quick chat or change repositories (Blackbird finds or creates the project for that folder), or pass an existing folder without a branch to switch there directly. The same conversation keeps its history; the current turn ends after the handoff, and a new turn always resumes work in the destination, using the agent's `continuationPrompt` when it gives one. Paths and worktree setup run on the owning environment, including remote. New worktrees honor the environment's **Start from origin** setting and project setup script.
 
 An active worktree chat shows a **Delete it** action. It removes the worktree
 directly, including when it has uncommitted changes, without a confirmation
