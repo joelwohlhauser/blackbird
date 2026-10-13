@@ -333,6 +333,15 @@ export const DesktopCliCommandStateSchema = Schema.Struct({
 });
 export type DesktopCliCommandState = typeof DesktopCliCommandStateSchema.Type;
 
+export const DesktopAwakeStateSchema = Schema.Struct({
+  supported: Schema.Boolean,
+  installed: Schema.Boolean,
+  active: Schema.Boolean,
+  lowPower: Schema.Boolean,
+  message: Schema.NullOr(Schema.String),
+});
+export type DesktopAwakeState = typeof DesktopAwakeStateSchema.Type;
+
 export interface DesktopUpdateActionResult {
   accepted: boolean;
   completed: boolean;
@@ -1246,6 +1255,13 @@ export interface DesktopBridge {
     getState: () => Promise<DesktopCliCommandState>;
     install: () => Promise<DesktopCliCommandState>;
     uninstall: () => Promise<DesktopCliCommandState>;
+  };
+  awake?: {
+    getState: () => Promise<DesktopAwakeState>;
+    setup: () => Promise<DesktopAwakeState>;
+    remove: () => Promise<DesktopAwakeState>;
+    setAgentsWorking: (working: boolean) => Promise<void>;
+    onState: (listener: (state: DesktopAwakeState) => void) => () => void;
   };
   /** Present when the desktop shell accepts `t3 app` activation requests. */
   /**

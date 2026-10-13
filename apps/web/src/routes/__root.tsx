@@ -28,6 +28,7 @@ import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPrompt
 import { SnapShotCoordinator } from "../components/desktop/SnapShotCoordinator";
 import { DesktopAppActivationCoordinator } from "../components/desktop/DesktopAppActivationCoordinator";
 import { AgentStopNotifications } from "../components/AgentStopNotifications";
+import { AwakeAgentsSignal } from "../components/desktop/AwakeAgentsSignal";
 import { DesktopWebLinkCoordinator } from "../components/desktop/DesktopWebLinkCoordinator";
 import { RunningThreadKeepAlive } from "../components/desktop/RunningThreadKeepAlive";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
@@ -272,6 +273,7 @@ function RootRouteView() {
           {primaryEnvironmentAuthenticated ? <QuickChatGlobalShortcut /> : null}
           {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
           {primaryEnvironmentAuthenticated && isElectron ? <AgentStopNotifications /> : null}
+          {primaryEnvironmentAuthenticated && isElectron ? <AwakeAgentsSignal /> : null}
           {/* Hosted Nightly is "hosted-static", not authenticated, and needs it too. */}
           <NightlyMobileBetaNotice />
           {appShell}

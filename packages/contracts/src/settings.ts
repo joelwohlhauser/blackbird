@@ -346,6 +346,7 @@ export type ModelPreferences = {
   readonly favorites: typeof ModelFavorites.Type;
   readonly providerModelPreferences: typeof ProviderModelPreferences.Type;
 };
+export const AwakeBatteryPercent = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }));
 
 export const ClientSettingsSchema = Schema.Struct({
   notificationMode: NotificationMode.pipe(
@@ -415,6 +416,14 @@ export const ClientSettingsSchema = Schema.Struct({
   confirmThreadUnpin: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** Desktop only: post a macOS notification when an agent stops while the window is unfocused. */
   notifyWhenAgentStops: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  awakeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  awakeLowPowerBelowPercent: AwakeBatteryPercent.pipe(
+    Schema.withDecodingDefault(Effect.succeed(40)),
+  ),
+  awakeSleepBelowPercent: AwakeBatteryPercent.pipe(Schema.withDecodingDefault(Effect.succeed(10))),
+  awakeHeatRules: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  awakeHotspotName: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  awakeHotspotPassword: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   continueThreadsAfterServerUpdate: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(false)),
   ),
@@ -1768,6 +1777,12 @@ export const ClientSettingsPatch = Schema.Struct({
   browserDefaultProfileId: Schema.optionalKey(BrowserProfileId),
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
   notifyWhenAgentStops: Schema.optionalKey(Schema.Boolean),
+  awakeEnabled: Schema.optionalKey(Schema.Boolean),
+  awakeLowPowerBelowPercent: Schema.optionalKey(AwakeBatteryPercent),
+  awakeSleepBelowPercent: Schema.optionalKey(AwakeBatteryPercent),
+  awakeHeatRules: Schema.optionalKey(Schema.Boolean),
+  awakeHotspotName: Schema.optionalKey(Schema.String),
+  awakeHotspotPassword: Schema.optionalKey(Schema.String),
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   confirmThreadUnpin: Schema.optionalKey(Schema.Boolean),

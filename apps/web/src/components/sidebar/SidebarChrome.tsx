@@ -1,9 +1,10 @@
-import { ArrowLeftIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import { ArrowLeftIcon, ChartNoAxesColumnIcon, CoffeeIcon, SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import { useDesktopAwakeState } from "../../lib/desktopAwake";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
 import {
@@ -184,6 +185,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     select: (location) => isSidebarUtilityPage(location.pathname),
   });
   const pullRequestsSupported = usePullRequestsSupported();
+  const [awakeState] = useDesktopAwakeState();
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
@@ -199,6 +201,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const handleSettingsClick = useCallback(() => {
     closeMobileSidebar();
     void navigate({ to: "/settings" });
+  }, [closeMobileSidebar, navigate]);
+
+  const handleAwakeClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/settings/awake" });
   }, [closeMobileSidebar, navigate]);
 
   const handleUsageClick = useCallback(() => {
@@ -241,6 +248,17 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label="Usage"
             onClick={handleUsageClick}
           />
+          {awakeState?.active ? (
+            <SidebarUtilityItem
+              icon={<CoffeeIcon />}
+              label={
+                awakeState.lowPower
+                  ? "Keeping the Mac awake in Low Power Mode"
+                  : "Keeping the Mac awake"
+              }
+              onClick={handleAwakeClick}
+            />
+          ) : null}
         </>
       )}
     </SidebarMenu>

@@ -273,6 +273,17 @@ Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to driv
 - Agents only reach the chat's own tabs, can navigate only to http, https, about and data URLs, and get no extra browser contexts. Cross-site iframes work in remote tabs but not in desktop tabs.
 - `playwright-cli` has to be installed on the agent's machine. It is installed on the local Mac and remote, not on remote-example-2.
 
+### Keep awake
+
+**Settings → Keep Awake** keeps the MacBook awake, lid closed included, while any chat on the Mac is Working and for 3 minutes after the last one stops. Chats on remote or remote-example-2 don't count. A coffee cup in the sidebar footer shows while the Mac is kept awake. The ideas come from [Insomnia](https://github.com/krishhgg/Insomnia).
+
+- **Set up…** asks once for the administrator password. It installs a sudoers rule (`/etc/sudoers.d/blackbird-awake`) that allows only `pmset -a disablesleep 0/1` and `pmset -a lowpowermode 0/1` without a password, plus a LaunchAgent that runs every 15 seconds. **Remove** takes both away.
+- When the lid closes, the display is put to sleep. The sleep switch keeps macOS from doing that itself.
+- On battery, Low Power Mode turns on below 40% and the Mac is allowed to sleep below 10%. Low Power Mode also turns on when the Mac gets seriously hot, and the Mac may sleep at critical heat. The thresholds and heat rules are configurable.
+- With a hotspot name and password set, Blackbird joins that hotspot when the internet drops while the Mac is kept awake, retrying with backoff.
+- Blackbird only undoes what it changed. If sleep was already disabled or Low Power Mode was already on, it stays that way afterwards. If the battery can't be read, the Mac is allowed to sleep.
+- Every change is written to `awake-journal.json` in the state directory before it is made. Quitting Blackbird undoes it. If Blackbird crashes or hangs, the LaunchAgent turns sleep and Low Power Mode back on within about a minute. The next launch also cleans up, and a restore that fails is retried rather than forgotten.
+
 ### Linear, GitHub, and links
 
 The normal right panel has browser-backed integration tabs:

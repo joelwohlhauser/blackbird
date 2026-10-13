@@ -20,6 +20,7 @@ export type SettingsPath =
   | "/settings/appearance"
   | "/settings/keybindings"
   | "/settings/snap-shot"
+  | "/settings/awake"
   | "/settings/providers"
   | "/settings/integrations"
   | "/settings/scheduled-tasks"
@@ -100,6 +101,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/appearance": "Appearance",
   "/settings/keybindings": "Keybindings",
   "/settings/snap-shot": "SnapShots",
+  "/settings/awake": "Keep Awake",
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
   "/settings/scheduled-tasks": "Scheduled Tasks",
@@ -718,6 +720,54 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "snap-shot-enabled",
   },
   {
+    id: "awake-enabled",
+    title: "Keep awake",
+    to: "/settings/awake",
+    searchTerms: ["sleep lid closed clamshell caffeinate insomnia agents running"],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
+    id: "awake-low-power",
+    title: "Low Power Mode below",
+    to: "/settings/awake",
+    searchTerms: ["battery low power mode"],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
+    id: "awake-sleep-below",
+    title: "Sleep below",
+    to: "/settings/awake",
+    searchTerms: ["battery floor drain"],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
+    id: "awake-heat",
+    title: "Heat rules",
+    to: "/settings/awake",
+    searchTerms: ["thermal hot temperature overheating"],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
+    id: "awake-hotspot-name",
+    title: "Hotspot",
+    to: "/settings/awake",
+    searchTerms: ["wifi wi-fi failover iphone network internet"],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
+    id: "awake-hotspot-password",
+    title: "Hotspot password",
+    to: "/settings/awake",
+    targetId: "awake-hotspot-name",
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
     id: "providers",
     title: "Providers",
     to: "/settings/providers",
@@ -1073,6 +1123,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/workspaces": null,
   "/settings/appearance": null,
   "/settings/snap-shot": null,
+  "/settings/awake": null,
   // Keybindings fan out to the selection; Providers shows the representative
   // environment at any selection. Neither needs a particular scope to render.
   "/settings/keybindings": null,
