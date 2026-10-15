@@ -33,10 +33,15 @@ import {
 import {
   decideAwake,
   FAILOVER_ONLINE,
+  type HotspotStay,
+  IPHONE_HOTSPOT_GATEWAY,
   parseBattery,
+  parseDefaultGateway,
+  parseKnownNetworks,
   parseLidClosed,
   parsePmsetFlag,
   parseWifiDevice,
+  shouldLeaveHotspot,
   stepFailover,
   wantsAwake,
 } from "./AwakePolicy.ts";
@@ -61,8 +66,14 @@ export class DesktopAwake extends Context.Service<
 const SLEEP_SETTING_SETTLE = "5 seconds";
 const TICK = "5 seconds";
 const CONNECTIVITY_URL = "http://captive.apple.com/hotspot-detect.html";
+const RETURN_CHECK_MS = 30_000;
 const decodeHotspotCredentials = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ name: Schema.String, password: Schema.String })),
+);
+const decodeWifiScan = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({ authorized: Schema.Boolean, names: Schema.Array(Schema.String) }),
+  ),
 );
 
 interface Applied {
@@ -108,6 +119,8 @@ export const make = Effect.gen(function* () {
   let networkNote: string | null = null;
   let failover = FAILOVER_ONLINE;
   let wifiDevice: string | null = null;
+  let hotspotStay: HotspotStay | null = null;
+  let nextReturnCheckAt = 0;
   let lidClosed = false;
   let displaySlept = false;
   let suspensionBlocker: number | null = null;
@@ -250,29 +263,69 @@ export const make = Effect.gen(function* () {
     Effect.orElseSucceed(() => false),
   );
 
-  const hotspotHelper = Effect.gen(function* () {
+  const hotspotApp = Effect.gen(function* () {
     for (const candidate of environment.resolveResourcePathCandidates(
-      path.join("hotspot", "blackbird-hotspot"),
+      path.join("hotspot", "Blackbird Hotspot.app"),
     )) {
       if (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))) return candidate;
     }
     return null;
   });
 
-  const joinHotspot = Effect.gen(function* () {
+  const runHotspotApp = (mode: "scan" | "authorize", timeout: Duration.Input) =>
+    Effect.gen(function* () {
+      const app = yield* hotspotApp;
+      if (app === null) return "";
+      const outputPath = path.join(environment.stateDir, `hotspot-${mode}.json`);
+      yield* fs.remove(outputPath, { force: true }).pipe(Effect.ignore);
+      yield* run(
+        "/usr/bin/open",
+        ["-W", "-n", "-g", "--stdout", outputPath, app, "--args", mode],
+        timeout,
+      );
+      const output = yield* fs.readFileString(outputPath).pipe(Effect.orElseSucceed(() => ""));
+      yield* fs.remove(outputPath, { force: true }).pipe(Effect.ignore);
+      return output;
+    });
+
+  const resolveWifiDevice = Effect.gen(function* () {
     wifiDevice ??= parseWifiDevice(
       (yield* run("/usr/sbin/networksetup", ["-listallhardwareports"])).stdout,
     );
-    if (wifiDevice === null) {
+    return wifiDevice;
+  });
+
+  const knownNetworksInRange = (device: string) =>
+    Effect.gen(function* () {
+      const scan = decodeWifiScan((yield* runHotspotApp("scan", "1 minute")).trim());
+      if (Option.isNone(scan)) return [];
+      if (!scan.value.authorized) {
+        networkNote =
+          "Allow Blackbird Hotspot in System Settings → Privacy & Security → Location Services to switch back to Wi-Fi.";
+      }
+      const known = parseKnownNetworks(
+        (yield* run("/usr/sbin/networksetup", ["-listpreferredwirelessnetworks", device])).stdout,
+      );
+      return scan.value.names.filter((name) => known.includes(name));
+    });
+
+  const joinHotspot = Effect.gen(function* () {
+    const device = yield* resolveWifiDevice;
+    if (device === null) {
       networkNote = "Couldn't find a Wi-Fi interface to join the hotspot.";
       return;
     }
-    const helper = yield* hotspotHelper;
-    if (helper === null) {
+    const app = yield* hotspotApp;
+    if (app === null) {
       networkNote = "This build is missing the hotspot helper.";
       return;
     }
-    const woken = yield* run(helper, [], "1 minute");
+    const knownAtJoin = yield* knownNetworksInRange(device);
+    const woken = yield* run(
+      path.join(app, "Contents", "MacOS", "blackbird-hotspot"),
+      [],
+      "1 minute",
+    );
     const credentials =
       woken.exitCode === 0 ? decodeHotspotCredentials(woken.stdout.trim()) : Option.none();
     if (Option.isNone(credentials)) {
@@ -282,29 +335,57 @@ export const make = Effect.gen(function* () {
     const { name, password } = credentials.value;
     const result = yield* run("/usr/sbin/networksetup", [
       "-setairportnetwork",
-      wifiDevice,
+      device,
       name,
       password,
     ]);
     const output = `${result.stdout}${result.stderr}`.trim();
-    if (result.exitCode === 0 && output.length === 0) {
-      networkNote = `The network dropped, so Blackbird joined the hotspot ${name}.`;
-      yield* notify(networkNote);
-    } else {
+    if (result.exitCode !== 0 || output.length > 0) {
       networkNote = `Couldn't join the hotspot ${name}: ${output || `exit ${result.exitCode}`}`;
+      return;
     }
+    yield* run("/usr/sbin/networksetup", ["-removepreferredwirelessnetwork", device, name]);
+    hotspotStay = { name, since: yield* Clock.currentTimeMillis, knownAtJoin };
+    networkNote = `The network dropped, so Blackbird joined the hotspot ${name}.`;
   });
+
+  const returnToWifi = (now: number) =>
+    Effect.gen(function* () {
+      const stay = hotspotStay;
+      if (stay === null || now < nextReturnCheckAt) return;
+      nextReturnCheckAt = now + RETURN_CHECK_MS;
+      const gateway = parseDefaultGateway(
+        (yield* run("/sbin/route", ["-n", "get", "default"])).stdout,
+      );
+      if (gateway !== IPHONE_HOTSPOT_GATEWAY) {
+        hotspotStay = null;
+        networkNote = null;
+        return;
+      }
+      const device = yield* resolveWifiDevice;
+      if (device === null) return;
+      if (!shouldLeaveHotspot(stay, yield* knownNetworksInRange(device), now)) return;
+      hotspotStay = null;
+      networkNote = null;
+      yield* run("/usr/sbin/networksetup", ["-setairportpower", device, "off"]);
+      yield* run("/usr/sbin/networksetup", ["-setairportpower", device, "on"]);
+    });
 
   const followNetwork = Effect.gen(function* () {
     if (!settings.awakeHotspotFailover) {
       failover = FAILOVER_ONLINE;
+      hotspotStay = null;
       return;
     }
     const online = yield* isOnline;
-    const step = stepFailover(failover, online, yield* Clock.currentTimeMillis);
+    const now = yield* Clock.currentTimeMillis;
+    const step = stepFailover(failover, online, now);
     failover = step.state;
     if (step.join) yield* joinHotspot;
+    else if (online) yield* returnToWifi(now);
   });
+
+  const askForWifiNames = runHotspotApp("authorize", "3 minutes").pipe(Effect.forkDetach);
 
   const currentState = (): DesktopAwakeState => ({
     supported,
@@ -491,6 +572,7 @@ export const make = Effect.gen(function* () {
       () => DEFAULT_CLIENT_SETTINGS,
     );
     yield* checkInstalled;
+    if (settings.awakeHotspotFailover) yield* askForWifiNames;
     yield* Effect.addFinalizer(() =>
       lock.withPermits(1)(Effect.andThen(restoreAll, holdAppAwake(false))),
     );
@@ -500,6 +582,7 @@ export const make = Effect.gen(function* () {
   const configure: DesktopAwake["Service"]["configure"] = (next) =>
     lock.withPermits(1)(
       Effect.gen(function* () {
+        if (next.awakeHotspotFailover && !settings.awakeHotspotFailover) yield* askForWifiNames;
         settings = next;
         failure = null;
         yield* reconcile;

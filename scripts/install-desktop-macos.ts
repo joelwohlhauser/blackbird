@@ -298,9 +298,16 @@ async function installDesktopApp(): Promise<void> {
         ? "[desktop-install] No Apple signing identity in the keychain; signing ad-hoc (notification permission resets on each deploy)."
         : `[desktop-install] Signing with "${signingIdentity}"...`,
     );
-    await timed("Signing", () =>
-      run("codesign", ["--force", "--deep", "--sign", signingIdentity, stagedApp]),
-    );
+    await timed("Signing", async () => {
+      const hotspotApp = NodePath.join(
+        stagedApp,
+        "Contents/Resources/hotspot/Blackbird Hotspot.app",
+      );
+      if (await exists(hotspotApp)) {
+        await run("codesign", ["--force", "--sign", signingIdentity, hotspotApp]);
+      }
+      await run("codesign", ["--force", "--deep", "--sign", signingIdentity, stagedApp]);
+    });
 
     // Install the bundled backend before closing the desktop, so an SSH or
     // dependency-install failure leaves the local app running.

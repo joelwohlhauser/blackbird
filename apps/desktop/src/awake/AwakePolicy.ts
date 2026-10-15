@@ -106,3 +106,36 @@ export function stepFailover(
   const delay = JOIN_BACKOFF_MS[Math.min(joins, JOIN_BACKOFF_MS.length) - 1] ?? FIRST_JOIN_DELAY_MS;
   return { state: { ...state, joins, nextJoinAt: now + delay }, join: true };
 }
+
+export const IPHONE_HOTSPOT_GATEWAY = "172.20.10.1";
+
+export const parseDefaultGateway = (routeGetDefault: string): string | null =>
+  /gateway: (\S+)/.exec(routeGetDefault)?.[1] ?? null;
+
+export const parseKnownNetworks = (preferredNetworks: string): ReadonlyArray<string> =>
+  preferredNetworks
+    .split("\n")
+    .filter((line) => line.startsWith("\t"))
+    .map((line) => line.trim())
+    .filter((name) => name.length > 0);
+
+export interface HotspotStay {
+  readonly name: string;
+  readonly since: number;
+  readonly knownAtJoin: ReadonlyArray<string>;
+}
+
+const RETRY_DROPPED_NETWORK_MS = 10 * 60_000;
+
+export function shouldLeaveHotspot(
+  stay: HotspotStay,
+  knownInRange: ReadonlyArray<string>,
+  now: number,
+): boolean {
+  const candidates = knownInRange.filter((name) => name !== stay.name);
+  if (candidates.length === 0) return false;
+  return (
+    candidates.some((name) => !stay.knownAtJoin.includes(name)) ||
+    now - stay.since >= RETRY_DROPPED_NETWORK_MS
+  );
+}

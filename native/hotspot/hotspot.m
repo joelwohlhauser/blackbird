@@ -1,3 +1,5 @@
+#import <CoreLocation/CoreLocation.h>
+#import <CoreWLAN/CoreWLAN.h>
 #import <Foundation/Foundation.h>
 #import <dlfcn.h>
 #import <objc/runtime.h>
@@ -33,8 +35,44 @@ static int fail(NSString *message) {
   return 1;
 }
 
-int main(void) {
+static int printJSON(id value) {
+  NSData *json = [NSJSONSerialization dataWithJSONObject:value options:0 error:nil];
+  fwrite(json.bytes, 1, json.length, stdout);
+  fputc('\n', stdout);
+  return 0;
+}
+
+static BOOL locationAuthorized(NSTimeInterval wait) {
+  CLLocationManager *location = [CLLocationManager new];
+  if (location.authorizationStatus == kCLAuthorizationStatusNotDetermined) {
+    [location requestWhenInUseAuthorization];
+  }
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:wait];
+  while (location.authorizationStatus == kCLAuthorizationStatusNotDetermined &&
+         deadline.timeIntervalSinceNow > 0) {
+    [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
+  }
+  return location.authorizationStatus == kCLAuthorizationStatusAuthorizedAlways;
+}
+
+static int scan(void) {
+  BOOL authorized = locationAuthorized(3);
+  NSError *error = nil;
+  NSSet<CWNetwork *> *networks =
+      [[CWWiFiClient sharedWiFiClient].interface scanForNetworksWithName:nil error:&error];
+  if (!networks) return fail(error.localizedDescription ?: @"The Wi-Fi scan failed.");
+  NSMutableOrderedSet<NSString *> *names = [NSMutableOrderedSet orderedSet];
+  for (CWNetwork *network in networks) {
+    if (network.ssid.length > 0) [names addObject:network.ssid];
+  }
+  return printJSON(@{@"authorized" : @(authorized), @"names" : names.array});
+}
+
+int main(int argc, const char *argv[]) {
   @autoreleasepool {
+    NSString *mode = argc > 1 ? @(argv[1]) : @"wake";
+    if ([mode isEqualToString:@"scan"]) return scan();
+    if ([mode isEqualToString:@"authorize"]) return printJSON(@{@"authorized" : @(locationAuthorized(120))});
     if (!dlopen("/System/Library/PrivateFrameworks/Sharing.framework/Sharing", RTLD_NOW)) {
       return fail(@"Sharing.framework is unavailable.");
     }
@@ -60,13 +98,9 @@ int main(void) {
     if (![name isKindOfClass:NSString.class] || name.length == 0) {
       return fail(@"The iPhone didn't share its hotspot details.");
     }
-    NSDictionary *result = @{
+    return printJSON(@{
       @"name" : name,
       @"password" : [password isKindOfClass:NSString.class] ? password : @"",
-    };
-    NSData *json = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
-    fwrite(json.bytes, 1, json.length, stdout);
-    fputc('\n', stdout);
-    return 0;
+    });
   }
 }

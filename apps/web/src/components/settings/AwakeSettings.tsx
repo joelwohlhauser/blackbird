@@ -154,7 +154,7 @@ export function AwakeSettings() {
           <SettingsSection id="awake-hotspot" title="Hotspot failover">
             <SettingsRow
               {...searchableSetting("awake-hotspot")}
-              description="When the internet drops while the Mac is kept awake, turn on Personal Hotspot on your iPhone and join it. The iPhone needs to be nearby and signed in to the same Apple Account."
+              description="When the internet drops while the Mac is kept awake, turn on Personal Hotspot on your iPhone and join it, then switch back once a known Wi-Fi network is in range. The iPhone needs to be nearby and signed in to the same Apple Account. Blackbird Hotspot asks once for Location Services to see Wi-Fi names."
               control={
                 <Switch
                   checked={settings.awakeHotspotFailover}

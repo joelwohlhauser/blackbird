@@ -1144,7 +1144,7 @@ export const LINUX_BROWSER_SECRET_EXTRA_RESOURCES = [
 export const MAC_HOTSPOT_EXTRA_RESOURCES = [
   { from: "apps/desktop/prod-resources/hotspot", to: "hotspot" },
 ] as const;
-export const MAC_HOTSPOT_EXECUTABLE = "blackbird-hotspot";
+export const MAC_HOTSPOT_APP = "Blackbird Hotspot.app";
 
 export interface MacPasskeySigningConfiguration {
   readonly appId: string;
@@ -2458,8 +2458,17 @@ export const stageMacHotspot = Effect.fn("stageMacHotspot")(function* (input: {
   if (input.platform !== "mac") return;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const destinationDirectory = path.join(input.stageResourcesDir, "hotspot");
-  yield* fs.makeDirectory(destinationDirectory, { recursive: true });
+  const contentsDirectory = path.join(
+    input.stageResourcesDir,
+    "hotspot",
+    MAC_HOTSPOT_APP,
+    "Contents",
+  );
+  yield* fs.makeDirectory(path.join(contentsDirectory, "MacOS"), { recursive: true });
+  yield* fs.copyFile(
+    path.join(input.repoRoot, "native/hotspot/Info.plist"),
+    path.join(contentsDirectory, "Info.plist"),
+  );
   const archFlags =
     input.arch === "universal"
       ? ["-arch", "arm64", "-arch", "x86_64"]
@@ -2472,9 +2481,13 @@ export const stageMacHotspot = Effect.fn("stageMacHotspot")(function* (input: {
         "-O2",
         "-framework",
         "Foundation",
+        "-framework",
+        "CoreWLAN",
+        "-framework",
+        "CoreLocation",
         ...archFlags,
         "-o",
-        path.join(destinationDirectory, MAC_HOTSPOT_EXECUTABLE),
+        path.join(contentsDirectory, "MacOS", "blackbird-hotspot"),
         path.join(input.repoRoot, "native/hotspot/hotspot.m"),
       ],
       { cwd: input.repoRoot },
