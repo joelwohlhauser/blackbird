@@ -10,8 +10,14 @@ import {
  * on the server. Each pinned site gets a reserved synthetic thread id so its
  * browser tab survives route changes without belonging to a real thread.
  */
+const PINNED_SITE_THREAD_PREFIX = "pinned-site-";
+
 export function pinnedSiteThreadRef(environmentId: EnvironmentId, siteId: string): ScopedThreadRef {
-  return { environmentId, threadId: ThreadId.make(`pinned-site-${siteId}`) };
+  return { environmentId, threadId: ThreadId.make(`${PINNED_SITE_THREAD_PREFIX}${siteId}`) };
+}
+
+export function isPinnedSiteThreadId(threadId: string): boolean {
+  return threadId.startsWith(PINNED_SITE_THREAD_PREFIX);
 }
 
 export function pinnedSiteLabel(site: PinnedSite): string {

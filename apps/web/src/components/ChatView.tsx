@@ -304,6 +304,7 @@ import { addBrowserSurface } from "./preview/addBrowserSurface";
 import { useGitHubPullRequestSurface } from "./preview/useGitHubPullRequestSurface";
 import { addLinearSurface } from "./preview/addLinearSurface";
 import { closePreviewSession } from "./preview/closePreviewSession";
+import { markBrowserThreadViewed } from "../browser/browserTabRetention";
 import { openPreviewSession } from "./preview/openPreviewSession";
 import { ThreadPreviewMiniPlayer } from "./preview/ThreadPreviewMiniPlayer";
 import { usePreviewSession } from "./preview/usePreviewSession";
@@ -2268,6 +2269,9 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadRef = useActiveThreadRef(activeThread);
   const openGitHubPullRequestSurface = useGitHubPullRequestSurface(activeThreadRef);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
+  useEffect(() => {
+    if (activeThreadKey !== null) markBrowserThreadViewed(activeThreadKey);
+  }, [activeThreadKey]);
   const activeEnvironmentServerBrowser = useEnvironmentSupportsServerBrowser(
     activeThreadRef?.environmentId ?? null,
   );

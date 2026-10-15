@@ -9,6 +9,7 @@ import {
 import { useAtomValue } from "@effect/atom-react";
 import { type ComponentProps, useEffect, useEffectEvent, useMemo, useState } from "react";
 
+import { isPinnedSiteThreadId } from "~/pinnedSites";
 import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 
 import { isElectron } from "~/env";
@@ -22,6 +23,8 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { readPreviewAnnotationTheme } from "./annotationTheme";
 import { useBrowserDefaults } from "./browserDefaults";
 import { useBrowserPointerStore } from "./browserPointerStore";
+import { useActiveBrowserRecordingTabIds } from "./browserRecording";
+import { threadAgentActiveAtom, useRecentBrowserThreadsStore } from "./browserTabRetention";
 import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
 import { addBrowserSurface } from "~/components/preview/addBrowserSurface";
 import { HostedBrowserWebview } from "./HostedBrowserWebview";
@@ -34,6 +37,8 @@ export function ElectronBrowserHost() {
   const previewByThreadKey = useActivePreviewSessions();
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: true });
   const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
+  const recentThreadKeys = useRecentBrowserThreadsStore((state) => state.threadKeys);
+  const recordingTabIds = useActiveBrowserRecordingTabIds();
   const sessions = useMemo(
     () =>
       Object.entries(previewByThreadKey).flatMap(([threadKey, previewState]) => {
@@ -48,6 +53,7 @@ export function ElectronBrowserHost() {
               )
               .map((snapshot) => ({
                 threadRef,
+                threadKey,
                 snapshot,
                 runtimeTabId: previewRuntimeTabId(
                   threadRef,
@@ -172,42 +178,61 @@ export function ElectronBrowserHost() {
   if (!isElectron) return null;
   return (
     <div className="contents" data-electron-browser-host>
-      {sessions.map(({ threadRef, snapshot, runtimeTabId, pictureInPicture, zoomFactor }) => {
-        const url = snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
-        return (
-          <AuthorizedBrowserWebview
-            key={runtimeTabId}
-            threadRef={threadRef}
-            tabId={snapshot.tabId}
-            runtimeTabId={runtimeTabId}
-            initialUrl={url}
-            viewport={snapshot.viewport ?? FILL_PREVIEW_VIEWPORT}
-            pictureInPicture={pictureInPicture}
-            profileId={snapshot.profileId}
-            zoomFactor={zoomFactor}
-            serverDriven={snapshot.runtime === "server"}
-            {...(snapshot.runtime === "server"
-              ? {
-                  serverRendering: {
-                    colorScheme: snapshot.colorScheme ?? "system",
-                    zoomFactor: snapshot.zoomFactor ?? 1,
-                  },
-                }
-              : {})}
-          />
-        );
-      })}
+      {sessions.map(
+        ({ threadRef, threadKey, snapshot, runtimeTabId, pictureInPicture, zoomFactor }) => {
+          const url = snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
+          return (
+            <RetainedBrowserWebview
+              key={runtimeTabId}
+              threadKey={threadKey}
+              retained={
+                pictureInPicture ||
+                recordingTabIds.has(runtimeTabId) ||
+                recentThreadKeys.includes(threadKey) ||
+                isPinnedSiteThreadId(threadRef.threadId)
+              }
+              threadRef={threadRef}
+              tabId={snapshot.tabId}
+              runtimeTabId={runtimeTabId}
+              initialUrl={url}
+              viewport={snapshot.viewport ?? FILL_PREVIEW_VIEWPORT}
+              pictureInPicture={pictureInPicture}
+              profileId={snapshot.profileId}
+              zoomFactor={zoomFactor}
+              serverDriven={snapshot.runtime === "server"}
+              {...(snapshot.runtime === "server"
+                ? {
+                    serverRendering: {
+                      colorScheme: snapshot.colorScheme ?? "system",
+                      zoomFactor: snapshot.zoomFactor ?? 1,
+                    },
+                  }
+                : {})}
+            />
+          );
+        },
+      )}
     </div>
   );
 }
 
-function AuthorizedBrowserWebview(props: ComponentProps<typeof HostedBrowserWebview>) {
+function RetainedBrowserWebview({
+  threadKey,
+  retained,
+  ...props
+}: ComponentProps<typeof HostedBrowserWebview> & {
+  readonly threadKey: string;
+  readonly retained: boolean;
+}) {
+  const agentActive = useAtomValue(threadAgentActiveAtom(threadKey));
   const canOperatePreview = useEnvironmentScope(
     props.threadRef.environmentId,
     AuthPreviewOperateScope,
   );
   const profileId = useTabProfileId(props.profileId);
-  return canOperatePreview ? <HostedBrowserWebview {...props} profileId={profileId} /> : null;
+  return canOperatePreview && (retained || agentActive) ? (
+    <HostedBrowserWebview {...props} profileId={profileId} />
+  ) : null;
 }
 
 /**
