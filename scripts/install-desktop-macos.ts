@@ -4,6 +4,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as NodeReadline from "node:readline";
 import * as NodeURL from "node:url";
 
 const repoRoot = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
@@ -11,16 +12,33 @@ const APP_QUIT_TIMEOUT_MS = 15_000;
 const APP_QUIT_POLL_INTERVAL_MS = 250;
 const LEGACY_DESKTOP_PRODUCT_NAMES = ["Blackboard (Alpha)", "Blackbird (Alpha)"] as const;
 
-async function run(command: string, args: readonly string[], input?: string): Promise<void> {
+async function run(
+  command: string,
+  args: readonly string[],
+  options: { readonly input?: string; readonly prefix?: string } = {},
+): Promise<void> {
+  const { input, prefix } = options;
   await new Promise<void>((resolve, reject) => {
     const child = NodeChildProcess.spawn(command, args, {
       cwd: repoRoot,
-      stdio: input === undefined ? "inherit" : ["pipe", "inherit", "inherit"],
+      stdio: [
+        input === undefined ? "inherit" : "pipe",
+        prefix === undefined ? "inherit" : "pipe",
+        prefix === undefined ? "inherit" : "pipe",
+      ],
     });
     child.once("error", reject);
     if (input !== undefined) {
       child.stdin!.on("error", reject);
       child.stdin!.end(input);
+    }
+    if (prefix !== undefined) {
+      NodeReadline.createInterface({ input: child.stdout! }).on("line", (line) =>
+        console.log(`${prefix} ${line}`),
+      );
+      NodeReadline.createInterface({ input: child.stderr! }).on("line", (line) =>
+        console.error(`${prefix} ${line}`),
+      );
     }
     child.once("exit", (code, signal) => {
       if (code === 0) {
@@ -34,6 +52,17 @@ async function run(command: string, args: readonly string[], input?: string): Pr
       );
     });
   });
+}
+
+async function timed<A>(label: string, task: () => Promise<A>): Promise<A> {
+  const startedAt = Date.now();
+  try {
+    return await task();
+  } finally {
+    console.log(
+      `[desktop-install] ${label} took ${((Date.now() - startedAt) / 1_000).toFixed(1)}s.`,
+    );
+  }
 }
 
 async function exists(target: string): Promise<boolean> {
@@ -164,26 +193,38 @@ async function updateRemoteServers(appPath: string): Promise<void> {
     NodePath.join(repoRoot, "scripts/install-remote-server.sh"),
     "utf8",
   );
-  for (const { host, publicUrl } of REMOTE_SERVERS) {
-    const uploadName = `${archiveId}-${NodeCrypto.randomUUID()}.tgz`;
-    console.log(`[desktop-install] Updating the matching Blackbird server on ${host}...`);
-    await run("ssh", ["-o", "BatchMode=yes", host, "mkdir -p ~/.t3/blackbird-server"]);
-    await run("scp", [
-      "-o",
-      "BatchMode=yes",
-      archive,
-      `${host}:.t3/blackbird-server/${uploadName}`,
-    ]);
-    await run(
-      "ssh",
-      [
-        "-o",
-        "BatchMode=yes",
-        host,
-        `bash -s -- "$HOME/.t3/blackbird-server" ${archiveId} ${uploadName} ${host} ${publicUrl}`,
-      ],
-      script,
-    );
+  const results = await Promise.allSettled(
+    REMOTE_SERVERS.map(({ host, publicUrl }) =>
+      timed(`Updating ${host}`, async () => {
+        const prefix = `[${host}]`;
+        const uploadName = `${archiveId}-${NodeCrypto.randomUUID()}.tgz`;
+        console.log(`[desktop-install] Updating the matching Blackbird server on ${host}...`);
+        await run("ssh", ["-o", "BatchMode=yes", host, "mkdir -p ~/.t3/blackbird-server"], {
+          prefix,
+        });
+        await run(
+          "scp",
+          ["-o", "BatchMode=yes", archive, `${host}:.t3/blackbird-server/${uploadName}`],
+          { prefix },
+        );
+        await run(
+          "ssh",
+          [
+            "-o",
+            "BatchMode=yes",
+            host,
+            `bash -s -- "$HOME/.t3/blackbird-server" ${archiveId} ${uploadName} ${host} ${publicUrl}`,
+          ],
+          { input: script, prefix },
+        );
+      }),
+    ),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Updating the remote Blackbird servers failed.");
   }
 }
 
@@ -220,30 +261,34 @@ async function installDesktopApp(): Promise<void> {
     await NodeFSP.mkdir(applicationsDir, { recursive: true });
 
     console.log(`[desktop-install] Building the latest ${productName} desktop app...`);
-    await run("node", [
-      "scripts/build-desktop-artifact.ts",
-      "--platform",
-      "mac",
-      "--target",
-      "dmg",
-      "--output-dir",
-      artifactsDir,
-    ]);
+    await timed("Building", () =>
+      run("node", [
+        "scripts/build-desktop-artifact.ts",
+        "--platform",
+        "mac",
+        "--target",
+        "dmg",
+        "--output-dir",
+        artifactsDir,
+      ]),
+    );
 
-    const dmgName = findSingleDmg(await NodeFSP.readdir(artifactsDir));
-    const dmgPath = NodePath.join(artifactsDir, dmgName);
-    await run("hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mountDir, dmgPath]);
-    mounted = true;
+    await timed("Copying the app out of the DMG", async () => {
+      const dmgName = findSingleDmg(await NodeFSP.readdir(artifactsDir));
+      const dmgPath = NodePath.join(artifactsDir, dmgName);
+      await run("hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mountDir, dmgPath]);
+      mounted = true;
 
-    const bundledApp = NodePath.join(mountDir, `${productName}.app`);
-    if (!(await exists(bundledApp))) {
-      throw new Error(`The desktop image does not contain ${productName}.app.`);
-    }
+      const bundledApp = NodePath.join(mountDir, `${productName}.app`);
+      if (!(await exists(bundledApp))) {
+        throw new Error(`The desktop image does not contain ${productName}.app.`);
+      }
 
-    await NodeFSP.rm(stagedApp, { recursive: true, force: true });
-    await run("ditto", [bundledApp, stagedApp]);
-    await run("hdiutil", ["detach", mountDir]);
-    mounted = false;
+      await NodeFSP.rm(stagedApp, { recursive: true, force: true });
+      await run("ditto", [bundledApp, stagedApp]);
+      await run("hdiutil", ["detach", mountDir]);
+      mounted = false;
+    });
 
     const signingIdentity = resolveSigningIdentity(
       await output("security", ["find-identity", "-v", "-p", "codesigning"]),
@@ -253,11 +298,13 @@ async function installDesktopApp(): Promise<void> {
         ? "[desktop-install] No Apple signing identity in the keychain; signing ad-hoc (notification permission resets on each deploy)."
         : `[desktop-install] Signing with "${signingIdentity}"...`,
     );
-    await run("codesign", ["--force", "--deep", "--sign", signingIdentity, stagedApp]);
+    await timed("Signing", () =>
+      run("codesign", ["--force", "--deep", "--sign", signingIdentity, stagedApp]),
+    );
 
     // Install the bundled backend before closing the desktop, so an SSH or
     // dependency-install failure leaves the local app running.
-    await updateRemoteServers(stagedApp);
+    await timed("Updating the remote servers", () => updateRemoteServers(stagedApp));
 
     // Keep the currently installed app available throughout the expensive build
     // and staging work. Only close it once the replacement is ready for the
@@ -316,7 +363,7 @@ async function installDesktopApp(): Promise<void> {
 }
 
 if (import.meta.main) {
-  installDesktopApp().catch((error: unknown) => {
+  timed("Deploying", installDesktopApp).catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });

@@ -71,10 +71,28 @@ if [ "$previous" = "$release" ]; then
   exit 0
 fi
 
+deps_key=$(tar -xzOf "$archive" package/package.json | node -e '
+let manifest = "";
+process.stdin.on("data", (chunk) => (manifest += chunk));
+process.stdin.on("end", () => {
+  const { dependencies, optionalDependencies } = JSON.parse(manifest);
+  process.stdout.write(JSON.stringify([dependencies, optionalDependencies, process.version]));
+});
+' | sha256sum | cut -c1-64)
+
 if [ ! -f "$release/node_modules/t3/dist/bin.mjs" ]; then
   staging=$(mktemp -d "$server_root/.installing-XXXXXXXX")
-  npm install --omit=dev --no-audit --no-fund --prefix "$staging" "$archive"
+  if [ "$(cat "$previous/.deps-key" 2>/dev/null)" = "$deps_key" ]; then
+    echo "[$host-install] Dependencies unchanged; reusing them from the running build."
+    cp -al "$previous/node_modules" "$staging/node_modules"
+    rm -rf "$staging/node_modules/t3"
+    mkdir "$staging/node_modules/t3"
+    tar -xzf "$archive" -C "$staging/node_modules/t3" --strip-components=1
+  else
+    npm install --omit=dev --no-audit --no-fund --prefix "$staging" "$archive"
+  fi
   test -f "$staging/node_modules/t3/dist/bin.mjs"
+  echo "$deps_key" > "$staging/.deps-key"
   # The server bundle loads fff-node through `require`, but the published
   # package only exports an `import` entry. Local builds get the `require`
   # entry from patches/@ff-labs__fff-node@0.9.4.patch via pnpm; npm installs
