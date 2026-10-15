@@ -152,19 +152,6 @@ describe("isAutoSettlementCandidate", () => {
     ).toBe(false);
   });
 
-  it("settles a thread whose only background work is a command left running", () => {
-    expect(
-      ThreadSettlementService.isAutoSettlementCandidate(
-        shell({
-          pendingBackgroundTasks: [
-            { taskId: "dev", kind: "command", description: "vp run dev --share" },
-          ],
-        }),
-        NOW_MS,
-      ),
-    ).toBe(true);
-  });
-
   it("keeps snoozed threads parked until they wake early on error or completion", () => {
     const snoozed = shell({
       snoozedUntil: at(60 * 60 * 1_000),

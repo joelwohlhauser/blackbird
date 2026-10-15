@@ -64,11 +64,12 @@ export function turnItemUpdateCanEndBackgroundWork(
 
 /**
  * Whether background work left behind by a completed root run holds back its
- * completion alert (desktop/web notification and the mobile push). Commands,
- * such as dev servers and other long-lived shells, do not: the agent is done
- * and may leave them running for hours. Subagents and monitors do, because
- * they wake the agent and it continues (#13625). Work the adapter cannot name,
- * including kinds this build does not know, holds as the conservative choice.
+ * completion alert (desktop/web notification and the mobile push). Every kind
+ * does: subagents and monitors wake the agent (#13625), and Claude and Codex
+ * continue the agent with a background command's result when it exits. A dev
+ * server left running therefore holds until it stops. Work the adapter cannot
+ * name, including kinds this build does not know, holds as the conservative
+ * choice.
  */
 export function backgroundWorkHoldsCompletion(
   tasks: ReadonlyArray<Pick<PendingBackgroundWorkTask, "kind">>,
@@ -79,7 +80,6 @@ export function backgroundWorkHoldsCompletion(
 function backgroundWorkKindHoldsCompletion(kind: PendingBackgroundWorkTask["kind"]): boolean {
   switch (kind) {
     case "command":
-      return false;
     case "subagent":
     case "monitor":
     case "background_task":

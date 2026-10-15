@@ -86,16 +86,8 @@ describe("projectThreadAwarenessV2", () => {
   });
 
   it.each([
-    ["only a dev server", "completed", [{ taskId: "dev", kind: "command" }]],
+    ["a background command", "running", [{ taskId: "wait", kind: "command" }]],
     ["a monitor", "running", [{ taskId: "watch", kind: "monitor" }]],
-    [
-      "a dev server and a subagent",
-      "running",
-      [
-        { taskId: "dev", kind: "command" },
-        { taskId: "review", kind: "subagent" },
-      ],
-    ],
   ] as const)("reports a completed run waiting on %s as %s", (_case, phase, tasks) => {
     expect(
       projectThreadAwarenessV2({

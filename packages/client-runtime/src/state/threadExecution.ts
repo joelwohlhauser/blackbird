@@ -234,8 +234,8 @@ export function deriveThreadRuntime(
   const liveActivityRun = latestMatchingRun(projection, (run) =>
     ACTIVITY_RUN_STATUSES.has(run.status),
   );
-  // Same rule as the shell runtime: only background work that holds the
-  // completion parks the thread at idle; a dev server left running does not.
+  // Same rule as the shell runtime: background work that holds the
+  // completion parks the thread at idle.
   const backgroundWorkHoldsRun = backgroundWorkHoldsCompletion(
     derivePendingBackgroundWork({
       latestRun: latestRunProjection,
@@ -311,14 +311,12 @@ export interface PendingBackgroundWorkItem {
 
 export interface PendingBackgroundWorkPresentation {
   /**
-   * "Waiting on subagent Review src/math.ts", "Waiting on 2 subagents and 1 command",
-   * or "Running: Start the dev server" when only commands remain.
+   * "Waiting on subagent Review src/math.ts" or "Waiting on 2 subagents and 1 command".
    */
   readonly title: string;
   readonly items: ReadonlyArray<PendingBackgroundWorkItem>;
   /**
-   * True when the work will wake the agent (subagents, monitors). False when
-   * only commands remain, such as a dev server: the agent is done.
+   * True when the work will wake the agent.
    */
   readonly waiting: boolean;
 }
@@ -362,7 +360,7 @@ export function presentPendingBackgroundWork(
     const named = only.label !== noun;
     const title = waiting
       ? named
-        ? `${only.kind === "monitor" ? "" : `Waiting on ${noun} `}${only.label}`
+        ? `${only.kind === "monitor" || only.kind === "command" ? "" : `Waiting on ${noun} `}${only.label}`
         : `Waiting on a ${noun}`
       : named
         ? `Running: ${only.label}`
