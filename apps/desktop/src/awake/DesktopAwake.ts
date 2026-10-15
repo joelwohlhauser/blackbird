@@ -241,7 +241,10 @@ export const make = Effect.gen(function* () {
   });
 
   const isOnline = Effect.tryPromise(() =>
-    Electron.net.fetch(CONNECTIVITY_URL, { signal: AbortSignal.timeout(4_000) }),
+    Electron.net.fetch(CONNECTIVITY_URL, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(4_000),
+    }),
   ).pipe(
     Effect.map((response) => response.ok),
     Effect.orElseSucceed(() => false),
