@@ -243,6 +243,7 @@ describe("getChangedBrowserSettingLabels", () => {
         browserRecordingShowKeyPresses: true,
         browserRecordingShowMousePresses: true,
         browserAutoShowFloatingPreview: !DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
+        pullRequestLinksOpenInApp: false,
       }),
     ).toEqual([
       "Browser viewport",
@@ -252,6 +253,7 @@ describe("getChangedBrowserSettingLabels", () => {
       "Recording key presses",
       "Recording mouse presses",
       "Floating preview",
+      "Open pull requests in Blackbird",
     ]);
   });
 });
