@@ -984,6 +984,10 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   "!apps/desktop/resources/browser-secret/**/*",
   "!apps/desktop/prod-resources/browser-secret",
   "!apps/desktop/prod-resources/browser-secret/**/*",
+  "!apps/desktop/resources/hotspot",
+  "!apps/desktop/resources/hotspot/**/*",
+  "!apps/desktop/prod-resources/hotspot",
+  "!apps/desktop/prod-resources/hotspot/**/*",
   // Windows stages the server sidecar below prod-resources so electron-builder
   // can copy it using project-relative extraResources matchers. Keep those
   // staging inputs out of app.asar; they are emitted once at resources/.
@@ -1137,6 +1141,10 @@ export const LINUX_CAPTURE_EXTRA_RESOURCES = [
 export const LINUX_BROWSER_SECRET_EXTRA_RESOURCES = [
   { from: "apps/desktop/prod-resources/browser-secret", to: "browser-secret" },
 ] as const;
+export const MAC_HOTSPOT_EXTRA_RESOURCES = [
+  { from: "apps/desktop/prod-resources/hotspot", to: "hotspot" },
+] as const;
+export const MAC_HOTSPOT_EXECUTABLE = "blackbird-hotspot";
 
 export interface MacPasskeySigningConfiguration {
   readonly appId: string;
@@ -2440,6 +2448,41 @@ export const stageBrowserSecret = Effect.fn("stageBrowserSecret")(function* (inp
   );
 });
 
+export const stageMacHotspot = Effect.fn("stageMacHotspot")(function* (input: {
+  readonly repoRoot: string;
+  readonly stageResourcesDir: string;
+  readonly platform: typeof BuildPlatform.Type;
+  readonly arch: typeof BuildArch.Type;
+  readonly verbose: boolean;
+}) {
+  if (input.platform !== "mac") return;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const destinationDirectory = path.join(input.stageResourcesDir, "hotspot");
+  yield* fs.makeDirectory(destinationDirectory, { recursive: true });
+  const archFlags =
+    input.arch === "universal"
+      ? ["-arch", "arm64", "-arch", "x86_64"]
+      : ["-arch", input.arch === "arm64" ? "arm64" : "x86_64"];
+  yield* runCommand(
+    ChildProcess.make(
+      "clang",
+      [
+        "-fobjc-arc",
+        "-O2",
+        "-framework",
+        "Foundation",
+        ...archFlags,
+        "-o",
+        path.join(destinationDirectory, MAC_HOTSPOT_EXECUTABLE),
+        path.join(input.repoRoot, "native/hotspot/hotspot.m"),
+      ],
+      { cwd: input.repoRoot },
+    ),
+    { label: "build macOS hotspot helper", verbose: input.verbose },
+  );
+});
+
 function generateMacIconSet(
   sourcePng: string,
   targetIcns: string,
@@ -2811,6 +2854,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ...DESKTOP_EXTRA_RESOURCES,
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
+      ...(platform === "mac" ? MAC_HOTSPOT_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
       ...(platform === "win" && wslRuntimeBundled ? WSL_RUNTIME_EXTRA_RESOURCES : []),
     ],
@@ -3793,6 +3837,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       });
   }
   yield* stageBrowserSecret({
+    repoRoot,
+    stageResourcesDir,
+    platform: options.platform,
+    arch: options.arch,
+    verbose: options.verbose,
+  });
+  yield* stageMacHotspot({
     repoRoot,
     stageResourcesDir,
     platform: options.platform,

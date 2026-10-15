@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useClientSettings, useUpdateClientSettings } from "../../hooks/useSettings";
 import { getDesktopAwakeBridge, useDesktopAwakeState } from "../../lib/desktopAwake";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { NumberField, NumberFieldGroup, NumberFieldInput } from "../ui/number-field";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -23,33 +22,6 @@ function awakeStatus(state: DesktopAwakeState | null, enabled: boolean) {
     return state.lowPower ? "Keeping the Mac awake in Low Power Mode." : "Keeping the Mac awake.";
   }
   return enabled ? "On. The Mac stays awake while local agents work." : undefined;
-}
-
-function TextSetting({
-  value,
-  label,
-  type,
-  onCommit,
-}: {
-  value: string;
-  label: string;
-  type: "text" | "password";
-  onCommit: (value: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  return (
-    <Input
-      size="sm"
-      type={type}
-      className="w-48"
-      aria-label={label}
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft !== value) onCommit(draft);
-      }}
-    />
-  );
 }
 
 function PercentSetting({
@@ -181,25 +153,15 @@ export function AwakeSettings() {
 
           <SettingsSection id="awake-hotspot" title="Hotspot failover">
             <SettingsRow
-              {...searchableSetting("awake-hotspot-name")}
-              description="When the internet drops while the Mac is kept awake, join this hotspot. Leave empty to turn failover off."
+              {...searchableSetting("awake-hotspot")}
+              description="When the internet drops while the Mac is kept awake, turn on Personal Hotspot on your iPhone and join it. The iPhone needs to be nearby and signed in to the same Apple Account."
               control={
-                <TextSetting
-                  value={settings.awakeHotspotName}
-                  label="Hotspot name"
-                  type="text"
-                  onCommit={(value) => void updateSettings({ awakeHotspotName: value.trim() })}
-                />
-              }
-            />
-            <SettingsRow
-              {...searchableSetting("awake-hotspot-password")}
-              control={
-                <TextSetting
-                  value={settings.awakeHotspotPassword}
-                  label="Hotspot password"
-                  type="password"
-                  onCommit={(value) => void updateSettings({ awakeHotspotPassword: value })}
+                <Switch
+                  checked={settings.awakeHotspotFailover}
+                  aria-label="Hotspot failover"
+                  onCheckedChange={(checked) =>
+                    void updateSettings({ awakeHotspotFailover: checked })
+                  }
                 />
               }
             />

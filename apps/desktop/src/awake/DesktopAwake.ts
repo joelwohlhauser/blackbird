@@ -61,6 +61,9 @@ export class DesktopAwake extends Context.Service<
 const SLEEP_SETTING_SETTLE = "5 seconds";
 const TICK = "5 seconds";
 const CONNECTIVITY_URL = "http://captive.apple.com/hotspot-detect.html";
+const decodeHotspotCredentials = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ name: Schema.String, password: Schema.String })),
+);
 
 interface Applied {
   readonly sleepDisabled: boolean;
@@ -244,6 +247,15 @@ export const make = Effect.gen(function* () {
     Effect.orElseSucceed(() => false),
   );
 
+  const hotspotHelper = Effect.gen(function* () {
+    for (const candidate of environment.resolveResourcePathCandidates(
+      path.join("hotspot", "blackbird-hotspot"),
+    )) {
+      if (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))) return candidate;
+    }
+    return null;
+  });
+
   const joinHotspot = Effect.gen(function* () {
     wifiDevice ??= parseWifiDevice(
       (yield* run("/usr/sbin/networksetup", ["-listallhardwareports"])).stdout,
@@ -252,12 +264,24 @@ export const make = Effect.gen(function* () {
       networkNote = "Couldn't find a Wi-Fi interface to join the hotspot.";
       return;
     }
-    const name = settings.awakeHotspotName.trim();
+    const helper = yield* hotspotHelper;
+    if (helper === null) {
+      networkNote = "This build is missing the hotspot helper.";
+      return;
+    }
+    const woken = yield* run(helper, [], "1 minute");
+    const credentials =
+      woken.exitCode === 0 ? decodeHotspotCredentials(woken.stdout.trim()) : Option.none();
+    if (Option.isNone(credentials)) {
+      networkNote = `Couldn't turn on the iPhone hotspot: ${woken.stderr.trim() || `exit ${woken.exitCode}`}`;
+      return;
+    }
+    const { name, password } = credentials.value;
     const result = yield* run("/usr/sbin/networksetup", [
       "-setairportnetwork",
       wifiDevice,
       name,
-      settings.awakeHotspotPassword,
+      password,
     ]);
     const output = `${result.stdout}${result.stderr}`.trim();
     if (result.exitCode === 0 && output.length === 0) {
@@ -269,7 +293,7 @@ export const make = Effect.gen(function* () {
   });
 
   const followNetwork = Effect.gen(function* () {
-    if (settings.awakeHotspotName.trim().length === 0) {
+    if (!settings.awakeHotspotFailover) {
       failover = FAILOVER_ONLINE;
       return;
     }
