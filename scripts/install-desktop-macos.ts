@@ -15,12 +15,17 @@ const LEGACY_DESKTOP_PRODUCT_NAMES = ["Blackboard (Alpha)", "Blackbird (Alpha)"]
 async function run(
   command: string,
   args: readonly string[],
-  options: { readonly input?: string; readonly prefix?: string } = {},
+  options: {
+    readonly input?: string;
+    readonly prefix?: string;
+    readonly env?: NodeJS.ProcessEnv;
+  } = {},
 ): Promise<void> {
-  const { input, prefix } = options;
+  const { input, prefix, env } = options;
   await new Promise<void>((resolve, reject) => {
     const child = NodeChildProcess.spawn(command, args, {
       cwd: repoRoot,
+      env: { ...process.env, ...env },
       stdio: [
         input === undefined ? "inherit" : "pipe",
         prefix === undefined ? "inherit" : "pipe",
@@ -170,12 +175,12 @@ export function resolveSigningIdentity(findIdentityOutput: string): string {
   return match?.[1] ?? "-";
 }
 
-export function findSingleDmg(entries: readonly string[]): string {
-  const images = entries.filter((entry) => entry.toLowerCase().endsWith(".dmg"));
-  if (images.length !== 1) {
-    throw new Error(`Expected one desktop DMG, found ${images.length}.`);
+export function findSingleZip(entries: readonly string[]): string {
+  const archives = entries.filter((entry) => entry.toLowerCase().endsWith(".zip"));
+  if (archives.length !== 1) {
+    throw new Error(`Expected one desktop zip, found ${archives.length}.`);
   }
-  return images[0]!;
+  return archives[0]!;
 }
 
 // SSH hosts running a shared `blackbird.service` on port 40959, each with its T3 Connect URL.
@@ -249,45 +254,43 @@ async function installDesktopApp(): Promise<void> {
     NodePath.join(NodeOS.tmpdir(), "blackbird-desktop-install-"),
   );
   const artifactsDir = NodePath.join(workDir, "artifacts");
-  const mountDir = NodePath.join(workDir, "mounted-dmg");
   const stagedApp = NodePath.join(applicationsDir, `.${productName}.app.installing-${process.pid}`);
   const previousApp = NodePath.join(applicationsDir, `.${productName}.app.previous-${process.pid}`);
-  let mounted = false;
+  const unpackDir = NodePath.join(applicationsDir, `.${productName}.app.unpacking-${process.pid}`);
   let previousMoved = false;
 
   try {
     await NodeFSP.mkdir(artifactsDir, { recursive: true });
-    await NodeFSP.mkdir(mountDir, { recursive: true });
     await NodeFSP.mkdir(applicationsDir, { recursive: true });
 
     console.log(`[desktop-install] Building the latest ${productName} desktop app...`);
     await timed("Building", () =>
-      run("node", [
-        "scripts/build-desktop-artifact.ts",
-        "--platform",
-        "mac",
-        "--target",
-        "dmg",
-        "--output-dir",
-        artifactsDir,
-      ]),
+      run(
+        "node",
+        [
+          "scripts/build-desktop-artifact.ts",
+          "--platform",
+          "mac",
+          "--target",
+          "zip",
+          "--output-dir",
+          artifactsDir,
+        ],
+        { env: { T3CODE_WEB_SOURCEMAP: "false" } },
+      ),
     );
 
-    await timed("Copying the app out of the DMG", async () => {
-      const dmgName = findSingleDmg(await NodeFSP.readdir(artifactsDir));
-      const dmgPath = NodePath.join(artifactsDir, dmgName);
-      await run("hdiutil", ["attach", "-readonly", "-nobrowse", "-mountpoint", mountDir, dmgPath]);
-      mounted = true;
+    await timed("Unpacking the app", async () => {
+      const zipName = findSingleZip(await NodeFSP.readdir(artifactsDir));
+      await run("ditto", ["-x", "-k", NodePath.join(artifactsDir, zipName), unpackDir]);
 
-      const bundledApp = NodePath.join(mountDir, `${productName}.app`);
+      const bundledApp = NodePath.join(unpackDir, `${productName}.app`);
       if (!(await exists(bundledApp))) {
-        throw new Error(`The desktop image does not contain ${productName}.app.`);
+        throw new Error(`The desktop zip does not contain ${productName}.app.`);
       }
 
       await NodeFSP.rm(stagedApp, { recursive: true, force: true });
-      await run("ditto", [bundledApp, stagedApp]);
-      await run("hdiutil", ["detach", mountDir]);
-      mounted = false;
+      await NodeFSP.rename(bundledApp, stagedApp);
     });
 
     const signingIdentity = resolveSigningIdentity(
@@ -358,10 +361,8 @@ async function installDesktopApp(): Promise<void> {
     }
     throw error;
   } finally {
-    if (mounted) {
-      await run("hdiutil", ["detach", mountDir]).catch(() => undefined);
-    }
     await NodeFSP.rm(stagedApp, { recursive: true, force: true });
+    await NodeFSP.rm(unpackDir, { recursive: true, force: true });
     if (!previousMoved) {
       await NodeFSP.rm(previousApp, { recursive: true, force: true });
     }

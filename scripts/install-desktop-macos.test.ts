@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   findInstalledDesktopProcessIds,
-  findSingleDmg,
+  findSingleZip,
   resolveInstalledAppPath,
   resolveLegacyInstalledAppPaths,
   resolveSigningIdentity,
@@ -35,16 +35,20 @@ describe("macOS desktop installer", () => {
     ]);
   });
 
-  it("selects the only DMG and ignores update metadata", () => {
-    expect(findSingleDmg(["latest-mac.yml", "T3-Code-0.0.31-arm64.dmg"])).toBe(
-      "T3-Code-0.0.31-arm64.dmg",
-    );
+  it("selects the only zip and ignores update metadata", () => {
+    expect(
+      findSingleZip([
+        "latest-mac.yml",
+        "T3-Code-0.0.31-arm64.zip",
+        "T3-Code-0.0.31-arm64.zip.blockmap",
+      ]),
+    ).toBe("T3-Code-0.0.31-arm64.zip");
   });
 
   it("rejects ambiguous artifact directories", () => {
-    expect(() => findSingleDmg([])).toThrow("Expected one desktop DMG, found 0.");
-    expect(() => findSingleDmg(["arm64.dmg", "x64.dmg"])).toThrow(
-      "Expected one desktop DMG, found 2.",
+    expect(() => findSingleZip([])).toThrow("Expected one desktop zip, found 0.");
+    expect(() => findSingleZip(["arm64.zip", "x64.zip"])).toThrow(
+      "Expected one desktop zip, found 2.",
     );
   });
 
