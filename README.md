@@ -279,6 +279,7 @@ Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to driv
 
 **Settings → Keep Awake** keeps the MacBook awake, lid closed included, while any chat on the Mac is Working and for 3 minutes after the last one stops. Chats on remote or remote-example-2 don't count. A coffee cup in the sidebar footer shows while the Mac is kept awake. The ideas come from [Insomnia](https://github.com/krishhgg/Insomnia).
 
+- **Always** keeps the Mac awake even when no chat is working, so it stays reachable. Battery, heat, and hotspot rules still apply.
 - **Set up…** asks once for the administrator password. It installs a sudoers rule (`/etc/sudoers.d/blackbird-awake`) that allows only `pmset -a disablesleep 0/1` and `pmset -a lowpowermode 0/1` without a password, plus a LaunchAgent that runs every 15 seconds. **Remove** takes both away.
 - When the lid closes, the display is put to sleep. The sleep switch keeps macOS from doing that itself.
 - On battery, Low Power Mode turns on below 40% and the Mac is allowed to sleep below 10%. Low Power Mode also turns on when the Mac gets seriously hot, and the Mac may sleep at critical heat. The thresholds and heat rules are configurable.

@@ -21,6 +21,7 @@ export type AwakeDecision =
 export interface AwakeDemand {
   readonly enabled: boolean;
   readonly installed: boolean;
+  readonly always: boolean;
   readonly working: boolean;
   readonly workEndedAt: number | null;
   readonly now: number;
@@ -29,7 +30,8 @@ export interface AwakeDemand {
 export const wantsAwake = (demand: AwakeDemand): boolean =>
   demand.enabled &&
   demand.installed &&
-  (demand.working ||
+  (demand.always ||
+    demand.working ||
     (demand.workEndedAt !== null && demand.now - demand.workEndedAt < AWAKE_GRACE_MS));
 
 export function decideAwake(

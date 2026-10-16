@@ -417,6 +417,7 @@ export const ClientSettingsSchema = Schema.Struct({
   /** Desktop only: post a macOS notification when an agent stops while the window is unfocused. */
   notifyWhenAgentStops: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   awakeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  awakeAlways: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   awakeLowPowerBelowPercent: AwakeBatteryPercent.pipe(
     Schema.withDecodingDefault(Effect.succeed(40)),
   ),
@@ -1800,6 +1801,7 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmQuit: Schema.optionalKey(QuitConfirmationMode),
   notifyWhenAgentStops: Schema.optionalKey(Schema.Boolean),
   awakeEnabled: Schema.optionalKey(Schema.Boolean),
+  awakeAlways: Schema.optionalKey(Schema.Boolean),
   awakeLowPowerBelowPercent: Schema.optionalKey(AwakeBatteryPercent),
   awakeSleepBelowPercent: Schema.optionalKey(AwakeBatteryPercent),
   awakeHeatRules: Schema.optionalKey(Schema.Boolean),

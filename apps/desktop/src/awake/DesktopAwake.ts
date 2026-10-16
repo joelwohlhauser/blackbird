@@ -415,7 +415,14 @@ export const make = Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     const wanted =
       failure === null &&
-      wantsAwake({ enabled: settings.awakeEnabled, installed, working, workEndedAt, now });
+      wantsAwake({
+        enabled: settings.awakeEnabled,
+        installed,
+        always: settings.awakeAlways,
+        working,
+        workEndedAt,
+        now,
+      });
     if (
       !wanted &&
       !held.sleepDisabled &&

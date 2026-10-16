@@ -728,6 +728,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     macOnly: true,
   },
   {
+    id: "awake-always",
+    title: "Always keep awake",
+    to: "/settings/awake",
+    searchTerms: ["always online reachable remote no agents"],
+    desktopOnly: true,
+    macOnly: true,
+  },
+  {
     id: "awake-low-power",
     title: "Low Power Mode below",
     to: "/settings/awake",

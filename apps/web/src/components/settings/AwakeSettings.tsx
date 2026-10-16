@@ -15,13 +15,16 @@ import {
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
-function awakeStatus(state: DesktopAwakeState | null, enabled: boolean) {
+function awakeStatus(state: DesktopAwakeState | null, enabled: boolean, always: boolean) {
   if (!state?.installed) return "Needs a one-time setup with your administrator password.";
   if (state.message) return state.message;
   if (state.active) {
     return state.lowPower ? "Keeping the Mac awake in Low Power Mode." : "Keeping the Mac awake.";
   }
-  return enabled ? "On. The Mac stays awake while local agents work." : undefined;
+  if (!enabled) return undefined;
+  return always
+    ? "On. The Mac stays awake all the time."
+    : "On. The Mac stays awake while local agents work.";
 }
 
 function PercentSetting({
@@ -90,7 +93,11 @@ export function AwakeSettings() {
           <SettingsRow
             {...searchableSetting("awake-enabled")}
             description="Keep the Mac awake, lid closed included, while local chats are working and for 3 minutes after."
-            status={available ? awakeStatus(state, settings.awakeEnabled) : undefined}
+            status={
+              available
+                ? awakeStatus(state, settings.awakeEnabled, settings.awakeAlways)
+                : undefined
+            }
             control={
               <>
                 <Button
@@ -108,6 +115,18 @@ export function AwakeSettings() {
                   onCheckedChange={(checked) => void updateSettings({ awakeEnabled: checked })}
                 />
               </>
+            }
+          />
+          <SettingsRow
+            {...searchableSetting("awake-always")}
+            description="Keep the Mac awake all the time, even when no agents are working. Battery and heat rules still apply."
+            control={
+              <Switch
+                checked={settings.awakeAlways}
+                disabled={!available || !installed || !settings.awakeEnabled}
+                aria-label="Keep the Mac awake all the time"
+                onCheckedChange={(checked) => void updateSettings({ awakeAlways: checked })}
+              />
             }
           />
         </SettingsUnavailableGroup>

@@ -22,6 +22,7 @@ describe("wantsAwake", () => {
   const base = {
     enabled: true,
     installed: true,
+    always: false,
     working: false,
     workEndedAt: null,
     now: 1_000_000,
@@ -37,6 +38,11 @@ describe("wantsAwake", () => {
   it("needs the feature enabled and set up", () => {
     expect(wantsAwake({ ...base, working: true, enabled: false })).toBe(false);
     expect(wantsAwake({ ...base, working: true, installed: false })).toBe(false);
+  });
+
+  it("stays awake without agents when set to always", () => {
+    expect(wantsAwake({ ...base, always: true })).toBe(true);
+    expect(wantsAwake({ ...base, always: true, enabled: false })).toBe(false);
   });
 });
 
