@@ -351,6 +351,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.invoke(IpcChannels.PREVIEW_NAVIGATE_CHANNEL, { tabId, url }),
     goBack: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_GO_BACK_CHANNEL, { tabId }),
     goForward: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_GO_FORWARD_CHANNEL, { tabId }),
+    findInPage: (tabId, text, options) =>
+      ipcRenderer.invoke(IpcChannels.PREVIEW_FIND_CHANNEL, { tabId, text, ...options }),
+    stopFindInPage: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_STOP_FIND_CHANNEL, { tabId }),
+    copyUrl: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_COPY_URL_CHANNEL, { tabId }),
     refresh: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_REFRESH_CHANNEL, { tabId }),
     zoomIn: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_ZOOM_IN_CHANNEL, { tabId }),
     zoomOut: (tabId) => ipcRenderer.invoke(IpcChannels.PREVIEW_ZOOM_OUT_CHANNEL, { tabId }),
@@ -457,6 +461,25 @@ contextBridge.exposeInMainWorld("desktopBridge", {
           IpcChannels.PREVIEW_CLOSE_TAB_REQUESTED_CHANNEL,
           wrappedListener,
         );
+    },
+    onShortcut: (listener) => {
+      const wrappedListener = (
+        _event: Electron.IpcRendererEvent,
+        tabId: unknown,
+        shortcut: unknown,
+      ) => {
+        if (
+          typeof tabId === "string" &&
+          (shortcut === "back" ||
+            shortcut === "forward" ||
+            shortcut === "copy-url" ||
+            shortcut === "find")
+        )
+          listener(tabId, shortcut);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_SHORTCUT_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(IpcChannels.PREVIEW_SHORTCUT_CHANNEL, wrappedListener);
     },
     onFocusUrl: (listener) => {
       const wrappedListener = (_event: Electron.IpcRendererEvent, tabId: unknown) => {

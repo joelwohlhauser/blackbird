@@ -35,6 +35,8 @@ const COLOR_SCHEME_OPTIONS: ReadonlyArray<{
  * the desktop app, run them through the environment server.
  */
 export interface PreviewMoreMenuActions {
+  readonly find?: () => void;
+  readonly copyUrl?: () => void;
   readonly hardReload: () => void;
   readonly setColorScheme: (colorScheme: DesktopPreviewColorScheme) => void;
   readonly zoomIn: () => void;
@@ -101,6 +103,17 @@ export function PreviewMoreMenu({
     <Menu>
       <MenuTriggerButton />
       <MenuPopup align="end" sideOffset={6}>
+        {actions.find ? (
+          <MenuItem onClick={actions.find} disabled={disabled}>
+            Find in page
+          </MenuItem>
+        ) : null}
+        {actions.copyUrl ? (
+          <MenuItem onClick={actions.copyUrl} disabled={disabled}>
+            Copy URL
+          </MenuItem>
+        ) : null}
+        {actions.find || actions.copyUrl ? <MenuSeparator /> : null}
         <MenuItem onClick={actions.hardReload} disabled={disabled}>
           Hard reload
         </MenuItem>

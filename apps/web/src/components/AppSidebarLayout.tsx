@@ -22,7 +22,7 @@ import {
   shortcutLabelForCommand,
 } from "../keybindings";
 import { isEditableFocused } from "../lib/editableFocus";
-import { isPreviewFocused } from "../lib/previewFocus";
+import { isBrowserTabFocused, isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isModelPickerOpen } from "../modelPickerVisibility";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
@@ -294,6 +294,7 @@ function NavigationHistoryShortcuts() {
               ).terminalOpen
             : false,
           previewFocus: isPreviewFocused(),
+          browserFocus: isBrowserTabFocused(),
           previewOpen: routeThreadRef
             ? selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, routeThreadRef) ===
               "preview"

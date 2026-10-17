@@ -408,7 +408,7 @@ import {
   getComposerProviderState,
 } from "./chat/composerProviderState";
 import { confirmTerminalClose, isTerminalCloseConfirmPending } from "../lib/terminalCloseConfirm";
-import { isPreviewFocused } from "../lib/previewFocus";
+import { isBrowserTabFocused, isPreviewFocused } from "../lib/previewFocus";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
 import {
   preventRepeatedTerminalCloseShortcut,
@@ -8523,6 +8523,7 @@ export default function ChatView(props: ChatViewProps) {
     terminalFocus: getTerminalFocusOwner() !== null,
     terminalOpen: Boolean(terminalUiState.terminalOpen),
     previewFocus: isPreviewFocused(),
+    browserFocus: isBrowserTabFocused(),
     previewOpen: previewPanelOpen,
     editableFocus: isEditableFocused(eventTarget),
     modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,

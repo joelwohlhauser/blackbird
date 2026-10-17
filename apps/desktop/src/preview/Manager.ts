@@ -13,6 +13,7 @@ import type {
   DesktopPreviewAnnotationTheme,
   DesktopPreviewColorScheme,
   DesktopPreviewFavicon,
+  DesktopPreviewFindResult,
   DesktopPreviewOpenLinkEvent,
   DesktopPreviewPointerEvent,
   PreviewAnnotationPayload,
@@ -27,7 +28,7 @@ import type {
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { matchesKeybindingShortcut } from "@t3tools/shared/keybindings";
-import { normalizePreviewUrl } from "@t3tools/shared/preview";
+import { normalizePreviewUrl, resolvePreviewShortcut } from "@t3tools/shared/preview";
 import {
   BrowserWindow,
   Menu,
@@ -68,11 +69,13 @@ import {
   PREVIEW_CLOSE_TAB_REQUESTED_CHANNEL,
   PREVIEW_FOCUS_URL_CHANNEL,
   PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL,
+  PREVIEW_SHORTCUT_CHANNEL,
 } from "../ipc/channels.ts";
 import { parseSafeExternalUrl } from "../electron/ElectronShell.ts";
 import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
 import * as PreviewPasskeys from "./Passkeys.ts";
 import * as BrowserSession from "./BrowserSession.ts";
+import { createFindSession } from "./FindSession.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
   ANNOTATION_SEND_ENABLED_CHANNEL,
@@ -639,6 +642,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   const mainWindowRef = yield* Ref.make<Option.Option<BrowserWindow>>(Option.none());
   const tabsRef = yield* SynchronizedRef.make<ReadonlyMap<string, PreviewTabState>>(new Map());
   const attachedRef = yield* Ref.make<ReadonlyMap<number, ManagedListeners>>(new Map());
+  const findSessions = new Map<number, ReturnType<typeof createFindSession>>();
   const listenersRef = yield* Ref.make<ReadonlySet<Listener>>(new Set());
   const pointerEventListenersRef = yield* Ref.make<ReadonlySet<PointerEventListener>>(new Set());
   const openLinkListenersRef = yield* Ref.make<ReadonlySet<OpenLinkListener>>(new Set());
@@ -1652,6 +1656,24 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         return;
       }
       const host = wc.hostWebContents;
+      const browserShortcut =
+        hostPlatform === "darwin" && input.type === "keyDown"
+          ? resolvePreviewShortcut({
+              key: input.key,
+              code: input.code,
+              metaKey: input.meta,
+              ctrlKey: input.control,
+              shiftKey: input.shift,
+              altKey: input.alt,
+            })
+          : null;
+      if (browserShortcut && host && !host.isDestroyed() && hasKeyboardFocus(wc)) {
+        event.preventDefault();
+        if (input.isAutoRepeat) return;
+        if (browserShortcut === "find") host.focus();
+        host.send(PREVIEW_SHORTCUT_CHANNEL, tabId, browserShortcut);
+        return;
+      }
       const forwarded =
         input.type === "keyDown" &&
         !input.isComposing &&
@@ -1756,6 +1778,8 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       scope,
       attempt({ operation: "detachListeners", tabId, webContentsId: wc.id }, () => {
         cancelFaviconCapture();
+        findSessions.get(wc.id)?.dispose();
+        findSessions.delete(wc.id);
         wc.off("did-start-navigation", navigationStarted);
         wc.off("did-navigate", syncNavigation);
         wc.off("did-navigate-in-page", syncInPageNavigation);
@@ -2305,6 +2329,34 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     withWebContents("goForward", tabId, (wc) => {
       if (wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
     });
+  const findInPage = Effect.fn("PreviewManager.findInPage")(function* (
+    tabId: string,
+    text: string,
+    options: { forward: boolean; findNext: boolean },
+  ) {
+    const wc = yield* requireWebContents(tabId);
+    return yield* attemptPromise({ operation: "findInPage", tabId, webContentsId: wc.id }, () => {
+      let session = findSessions.get(wc.id);
+      if (!session) {
+        session = createFindSession(wc);
+        findSessions.set(wc.id, session);
+      }
+      return session.find(text, options);
+    });
+  });
+  const stopFindInPage = (tabId: string) =>
+    withWebContents("stopFindInPage", tabId, (wc) => {
+      findSessions.get(wc.id)?.stop();
+    });
+  const copyUrl = Effect.fn("PreviewManager.copyUrl")(function* (tabId: string) {
+    const wc = yield* requireWebContents(tabId);
+    return yield* attempt({ operation: "copyUrl", tabId, webContentsId: wc.id }, () => {
+      const url = wc.getURL();
+      if (!url || url === "about:blank") return false;
+      clipboard.writeText(url);
+      return true;
+    });
+  });
   const refresh = (tabId: string) => withWebContents("refresh", tabId, (wc) => wc.reload());
   const hardReload = (tabId: string) =>
     withWebContents("hardReload", tabId, (wc) => wc.reloadIgnoringCache());
@@ -3589,6 +3641,8 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     closeTab,
     copyArtifactToClipboard,
     createTab,
+    copyUrl,
+    findInPage,
     goBack,
     goForward,
     hardReload,
@@ -3616,6 +3670,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       }),
     startRecording,
     closePictureInPicture,
+    stopFindInPage,
     stopRecording,
     subscribePointerEvents: (listener: PointerEventListener) =>
       subscribe(pointerEventListenersRef, listener),
@@ -3797,6 +3852,13 @@ export class PreviewManager extends Context.Service<
     readonly navigate: (tabId: string, url: string) => Effect.Effect<void, PreviewManagerError>;
     readonly goBack: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
     readonly goForward: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
+    readonly findInPage: (
+      tabId: string,
+      text: string,
+      options: { forward: boolean; findNext: boolean },
+    ) => Effect.Effect<DesktopPreviewFindResult | null, PreviewManagerError>;
+    readonly stopFindInPage: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
+    readonly copyUrl: (tabId: string) => Effect.Effect<boolean, PreviewManagerError>;
     readonly refresh: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
     readonly zoomIn: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
     readonly zoomOut: (tabId: string) => Effect.Effect<void, PreviewManagerError>;
@@ -3955,6 +4017,9 @@ export const make = Effect.gen(function* PreviewManagerMake() {
     navigate: operations.navigate,
     goBack: operations.goBack,
     goForward: operations.goForward,
+    findInPage: operations.findInPage,
+    stopFindInPage: operations.stopFindInPage,
+    copyUrl: operations.copyUrl,
     refresh: operations.refresh,
     zoomIn: operations.zoomIn,
     zoomOut: operations.zoomOut,

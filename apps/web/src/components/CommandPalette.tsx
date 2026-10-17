@@ -145,7 +145,7 @@ import {
   resolveProjectPathForDispatch,
 } from "../lib/projectPaths";
 import { onOpenCommandPalette } from "../commandPaletteBus";
-import { isPreviewFocused } from "../lib/previewFocus";
+import { isBrowserTabFocused, isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
   PULL_REQUESTS_PANEL_REF,
@@ -435,6 +435,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           terminalFocus: isTerminalFocused(),
           terminalOpen,
           previewFocus: isPreviewFocused(),
+          browserFocus: isBrowserTabFocused(),
           previewOpen,
           modelPickerOpen: composerHandleRef.current?.isModelPickerOpen() ?? false,
         },

@@ -148,6 +148,11 @@ export function ElectronBrowserHost() {
   useEffect(() => {
     const preview = window.desktopBridge?.preview;
     if (!preview) return;
+    return preview.onShortcut((tabId, shortcut) => dispatchPreviewAction(shortcut, tabId));
+  }, []);
+  useEffect(() => {
+    const preview = window.desktopBridge?.preview;
+    if (!preview) return;
     const isWebview = (element: Element | null) => element?.tagName === "WEBVIEW";
     let pendingPointerDowns = 0;
     let focusTakenByAgent: HTMLElement | null = null;

@@ -121,6 +121,10 @@ export const PREVIEW_POINTER_EVENT_CHANNEL = "desktop:preview-pointer-event";
 export const PREVIEW_OPEN_LINK_CHANNEL = "desktop:preview-open-link";
 
 export const PREVIEW_FOCUS_URL_CHANNEL = "desktop:preview-focus-url";
+export const PREVIEW_SHORTCUT_CHANNEL = "desktop:preview-shortcut";
+export const PREVIEW_FIND_CHANNEL = "desktop:preview-find";
+export const PREVIEW_STOP_FIND_CHANNEL = "desktop:preview-stop-find";
+export const PREVIEW_COPY_URL_CHANNEL = "desktop:preview-copy-url";
 
 export const PREVIEW_AGENT_POINTER_DOWN_CHANNEL = "desktop:preview-agent-pointer-down";
 

@@ -16,6 +16,8 @@ import {
   DesktopPreviewClearDataInputSchema,
   DesktopPreviewImportCookiesInputSchema,
   DesktopPreviewCreateTabInputSchema,
+  DesktopPreviewFindInputSchema,
+  DesktopPreviewFindResultSchema,
   DesktopPreviewTabInputSchema,
   DesktopPreviewWebviewConfigSchema,
   PreviewAnnotationSubmissionResultSchema,
@@ -142,6 +144,34 @@ export const goForward = tabMethod(
   "desktop.ipc.preview.goForward",
   (manager, tabId) => manager.goForward(tabId),
 );
+export const findInPage = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_FIND_CHANNEL,
+  payload: DesktopPreviewFindInputSchema,
+  result: Schema.NullOr(DesktopPreviewFindResultSchema),
+  handler: Effect.fn("desktop.ipc.preview.findInPage")(function* ({
+    tabId,
+    text,
+    forward,
+    findNext,
+  }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    return yield* manager.findInPage(tabId, text, { forward, findNext });
+  }),
+});
+export const stopFindInPage = tabMethod(
+  IpcChannels.PREVIEW_STOP_FIND_CHANNEL,
+  "desktop.ipc.preview.stopFindInPage",
+  (manager, tabId) => manager.stopFindInPage(tabId),
+);
+export const copyUrl = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_COPY_URL_CHANNEL,
+  payload: DesktopPreviewTabInputSchema,
+  result: Schema.Boolean,
+  handler: Effect.fn("desktop.ipc.preview.copyUrl")(function* ({ tabId }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    return yield* manager.copyUrl(tabId);
+  }),
+});
 export const refresh = tabMethod(
   IpcChannels.PREVIEW_REFRESH_CHANNEL,
   "desktop.ipc.preview.refresh",
@@ -442,6 +472,9 @@ export const methods = [
   navigate,
   goBack,
   goForward,
+  findInPage,
+  stopFindInPage,
+  copyUrl,
   refresh,
   zoomIn,
   zoomOut,

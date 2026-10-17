@@ -136,6 +136,8 @@ Diff, Linear, GitHub PR, and Pull request surfaces.
 
 Choosing Browser focuses the address bar immediately. Command+L focuses and selects the address while browsing. Home returns pinned GitHub PR and Linear tabs to their linked page; other browser tabs return to the browser start page.
 
+While a browser tab's page or toolbar has focus on macOS, Command+[ and Command+] go back and forward in that tab, Command+F opens Find in page (Enter and Shift+Enter move between matches, Escape closes it), and Command+Shift+C copies the page URL. Find and Copy URL are also in the browser's More menu. Find isn't available for pages streamed from a remote environment. With focus anywhere else, these shortcuts keep their app meaning.
+
 To save memory, the desktop app keeps browser pages loaded only in the four chats opened most recently, chats whose agent is working, pinned sites, and tabs in picture-in-picture or being recorded. Other tabs keep their URL and title and load the page again when their chat is opened, so scroll position and unsaved form input are lost while logins stay.
 
 The second surface is the narrow, independently resizable **workspace

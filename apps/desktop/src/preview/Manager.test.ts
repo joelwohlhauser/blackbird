@@ -978,6 +978,65 @@ describe("PreviewManager", () => {
       ),
   );
 
+  effectIt.effect("copies the committed guest URL", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const preview = makeFaviconWebContents();
+        fromId.mockReturnValue(preview.webContents);
+        yield* manager.createTab("tab_copy");
+        yield* manager.registerWebview("tab_copy", 42);
+        preview.setUrl("https://example.com/redirected#section");
+        expect(yield* manager.copyUrl("tab_copy")).toBe(true);
+        expect(writeText).toHaveBeenLastCalledWith("https://example.com/redirected#section");
+        writeText.mockClear();
+        preview.setUrl("about:blank");
+        expect(yield* manager.copyUrl("tab_copy")).toBe(false);
+        expect(writeText).not.toHaveBeenCalled();
+      }),
+    ),
+  );
+
+  effectIt.effect("routes browser commands only from the focused guest", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const preview = makeFaviconWebContents();
+        const send = vi.fn();
+        const focus = vi.fn();
+        Object.assign(preview.webContents, {
+          hostWebContents: { isDestroyed: () => false, send, focus },
+        });
+        fromId.mockReturnValue(preview.webContents);
+        yield* manager.createTab("tab_shortcuts");
+        yield* manager.registerWebview("tab_shortcuts", 42);
+        const beforeInput = preview.listeners.get("before-input-event")!;
+        for (const [key, shift, action] of [
+          ["[", false, "back"],
+          ["]", false, "forward"],
+          ["f", false, "find"],
+          ["C", true, "copy-url"],
+        ] as const) {
+          const input = { type: "keyDown", key, meta: true, control: false, alt: false, shift };
+          const preventDefault = vi.fn();
+          preview.setFocused(false);
+          beforeInput({ preventDefault } as never, input as never);
+          expect(preventDefault).not.toHaveBeenCalled();
+          expect(send).not.toHaveBeenCalled();
+          preview.setFocused(true);
+          beforeInput({ preventDefault } as never, input as never);
+          beforeInput({ preventDefault } as never, { ...input, isAutoRepeat: true } as never);
+          expect(preventDefault).toHaveBeenCalledTimes(2);
+          expect(send).toHaveBeenCalledExactlyOnceWith(
+            "desktop:preview-shortcut",
+            "tab_shortcuts",
+            action,
+          );
+          send.mockClear();
+        }
+        expect(focus).toHaveBeenCalledOnce();
+      }),
+    ),
+  );
+
   effectIt.effect("preserves focused browser editing in tabs and sign-in popups", () =>
     withManager((manager) =>
       Effect.gen(function* () {

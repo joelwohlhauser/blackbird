@@ -14,7 +14,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { environmentCatalog } from "../connection/catalog";
 import { effectiveShortcutsForCommand, resolveShortcutCommand } from "../keybindings";
 import { isEditableFocused } from "../lib/editableFocus";
-import { isPreviewFocused } from "../lib/previewFocus";
+import { isBrowserTabFocused, isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isModelPickerOpen } from "../modelPickerVisibility";
 import {
@@ -155,6 +155,7 @@ export function ReopenClosedViewShortcut() {
           terminalFocus: isTerminalFocused(),
           terminalOpen,
           previewFocus: isPreviewFocused(),
+          browserFocus: isBrowserTabFocused(),
           previewOpen,
           editableFocus: isEditableFocused(event.target),
           modelPickerOpen: isModelPickerOpen(),

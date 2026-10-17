@@ -1040,6 +1040,21 @@ export const DesktopPreviewTabInputSchema = Schema.Struct({
   tabId: DesktopPreviewTabIdSchema,
 });
 
+export const DesktopPreviewFindInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  text: Schema.String,
+  forward: Schema.Boolean,
+  findNext: Schema.Boolean,
+});
+
+export const DesktopPreviewFindResultSchema = Schema.Struct({
+  matches: Schema.Number,
+  activeMatchOrdinal: Schema.Number,
+});
+export type DesktopPreviewFindResult = typeof DesktopPreviewFindResultSchema.Type;
+
+export type DesktopPreviewShortcut = "back" | "forward" | "copy-url" | "find";
+
 /**
  * Tab creation carries the client's configured browser defaults so the guest
  * is born already zoomed and color-scheme-emulated. Applying them after
@@ -1302,6 +1317,13 @@ export interface DesktopPreviewBridge {
   navigate: (tabId: string, url: string) => Promise<void>;
   goBack: (tabId: string) => Promise<void>;
   goForward: (tabId: string) => Promise<void>;
+  findInPage: (
+    tabId: string,
+    text: string,
+    options: { forward: boolean; findNext: boolean },
+  ) => Promise<DesktopPreviewFindResult | null>;
+  stopFindInPage: (tabId: string) => Promise<void>;
+  copyUrl: (tabId: string) => Promise<boolean>;
   refresh: (tabId: string) => Promise<void>;
   zoomIn: (tabId: string) => Promise<void>;
   zoomOut: (tabId: string) => Promise<void>;
@@ -1378,6 +1400,7 @@ export interface DesktopPreviewBridge {
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;
   onFocusUrl: (listener: (tabId: string) => void) => () => void;
+  onShortcut: (listener: (tabId: string, shortcut: DesktopPreviewShortcut) => void) => () => void;
   onAgentPointerDown: (listener: (active: boolean) => void) => () => void;
   onCloseTabRequested: (listener: (tabId: string) => void) => () => void;
   onOpenLink: (listener: (event: DesktopPreviewOpenLinkEvent) => void) => () => void;

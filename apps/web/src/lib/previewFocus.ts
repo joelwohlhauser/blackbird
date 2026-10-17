@@ -1,3 +1,11 @@
+function isFocusWithin(selector: string): boolean {
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof HTMLElement)) return false;
+  if (!activeElement.isConnected) return false;
+  if (activeElement.tagName.toLowerCase() === "webview") return true;
+  return activeElement.closest(selector) !== null;
+}
+
 /**
  * Returns true when the user's keyboard focus is somewhere inside the
  * preview panel (URL bar, chrome buttons, or — once detected via Electron
@@ -7,9 +15,9 @@
  * `preview.focusUrl` to only fire while the preview owns focus.
  */
 export function isPreviewFocused(): boolean {
-  const activeElement = document.activeElement;
-  if (!(activeElement instanceof HTMLElement)) return false;
-  if (!activeElement.isConnected) return false;
-  if (activeElement.tagName.toLowerCase() === "webview") return true;
-  return activeElement.closest("[data-preview-panel-mode]") !== null;
+  return isFocusWithin("[data-preview-panel-mode]");
+}
+
+export function isBrowserTabFocused(): boolean {
+  return isFocusWithin("[data-preview-runtime-tab-id]");
 }

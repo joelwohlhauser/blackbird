@@ -19,7 +19,7 @@ import { useEnvironmentScope } from "../state/session";
 import { dispatchPreviewAction } from "../components/preview/previewActionBus";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
-import { isPreviewFocused } from "../lib/previewFocus";
+import { isBrowserTabFocused, isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
   readLastChatPath,
@@ -95,6 +95,7 @@ function ChatRouteGlobalShortcuts() {
           terminalFocus: isTerminalFocused(),
           terminalOpen,
           previewFocus: isPreviewFocused(),
+          browserFocus: isBrowserTabFocused(),
           previewOpen,
           editableFocus: isEditableFocused(event.target),
           modelPickerOpen: isModelPickerOpen(),

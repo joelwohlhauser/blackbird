@@ -15,6 +15,7 @@ import {
   resolveEventKeys,
   type ShortcutEventLike,
 } from "@t3tools/shared/keybindings";
+import { resolvePreviewShortcut } from "@t3tools/shared/preview";
 import { isElectron } from "./env";
 import { projectScriptIdFromCommand } from "./projectScripts";
 
@@ -31,6 +32,7 @@ export interface ShortcutMatchContext {
   /** A text field, textarea, select or rich-text editor owns the keyboard.
       Optional: only chords that collide with native editing consult it. */
   editableFocus?: boolean;
+  browserFocus?: boolean;
   [key: string]: boolean;
 }
 
@@ -61,6 +63,7 @@ function resolveContext(options: ShortcutMatchOptions | undefined): ShortcutMatc
     isWeb: !isElectron,
     isDesktop: isElectron,
     editableFocus: false,
+    browserFocus: false,
     ...options?.context,
   };
 }
@@ -157,6 +160,14 @@ export function resolveShortcutCommand(
 ): KeybindingCommand | null {
   const platform = resolvePlatform(options);
   const context = resolveContext(options);
+  if (
+    context.isDesktop &&
+    context.browserFocus &&
+    isMacPlatform(platform) &&
+    resolvePreviewShortcut(event)
+  ) {
+    return null;
+  }
 
   for (let index = keybindings.length - 1; index >= 0; index -= 1) {
     const binding = keybindings[index];

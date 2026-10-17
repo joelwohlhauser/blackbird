@@ -6,6 +6,7 @@ import {
   normalizePreviewUrl,
   PreviewUrlNormalizationError,
   resolveAddressBarInput,
+  resolvePreviewShortcut,
 } from "./preview.ts";
 
 describe("resolveAddressBarInput", () => {
@@ -138,5 +139,36 @@ describe("normalizePreviewUrl", () => {
         /user|password|access_token|secret|fragment/,
       );
     }
+  });
+});
+
+describe("resolvePreviewShortcut", () => {
+  const press = (
+    key: string,
+    modifiers: Partial<Record<"meta" | "ctrl" | "alt" | "shift", boolean>> = {},
+    code?: string,
+  ) => ({
+    key,
+    ...(code ? { code } : {}),
+    metaKey: modifiers.meta ?? true,
+    ctrlKey: modifiers.ctrl ?? false,
+    altKey: modifiers.alt ?? false,
+    shiftKey: modifiers.shift ?? false,
+  });
+
+  it("maps the browser's Command chords", () => {
+    expect(resolvePreviewShortcut(press("["))).toBe("back");
+    expect(resolvePreviewShortcut(press("]"))).toBe("forward");
+    expect(resolvePreviewShortcut(press("F"))).toBe("find");
+    expect(resolvePreviewShortcut(press("C", { shift: true }))).toBe("copy-url");
+    expect(resolvePreviewShortcut(press("ü", {}, "BracketLeft"))).toBe("back");
+  });
+
+  it("leaves other chords alone", () => {
+    expect(resolvePreviewShortcut(press("c"))).toBeNull();
+    expect(resolvePreviewShortcut(press("f", { shift: true }))).toBeNull();
+    expect(resolvePreviewShortcut(press("[", { meta: false, ctrl: true }))).toBeNull();
+    expect(resolvePreviewShortcut(press("[", { alt: true }))).toBeNull();
+    expect(resolvePreviewShortcut(press("{", { shift: true }, "BracketLeft"))).toBeNull();
   });
 });

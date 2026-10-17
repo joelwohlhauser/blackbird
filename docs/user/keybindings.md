@@ -162,6 +162,8 @@ tab. When nothing remains to close, it closes the window. In a browser, `mod+w`
 closes the browser tab; rebind `rightPanel.close` and `terminal.close` to an available
 shortcut such as `alt+w`.
 
+In the desktop app on macOS, a browser tab whose page or toolbar has focus keeps `mod+[`, `mod+]`, `mod+f`, and `mod+shift+c` for itself. They go back, go forward, open Find in page, and copy the page URL instead of running the commands bound to them.
+
 `mod+shift+t` reopens the last closed tab across the app, including files,
 diffs, pull requests, browsers, and devices, in the order you closed them.
 A browser opens in a fresh session without its old page history. Incognito tabs

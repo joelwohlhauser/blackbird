@@ -4,7 +4,10 @@
  * on what counts as "loopback" and how to normalise a free-form URL string.
  */
 
+import type { DesktopPreviewShortcut } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+
+import { resolveEventKeys, type ShortcutEventLike } from "./keybindings.ts";
 
 const TAB_ID_PREFIX = "tab_";
 let nextPreviewTabSequence = 0;
@@ -163,4 +166,14 @@ export function normalizePreviewUrl(rawUrl: string): string {
     });
   }
   return parsed.href;
+}
+
+export function resolvePreviewShortcut(event: ShortcutEventLike): DesktopPreviewShortcut | null {
+  if (!event.metaKey || event.ctrlKey || event.altKey) return null;
+  const keys = resolveEventKeys(event);
+  if (event.shiftKey) return keys.has("c") ? "copy-url" : null;
+  if (keys.has("[")) return "back";
+  if (keys.has("]")) return "forward";
+  if (keys.has("f")) return "find";
+  return null;
 }

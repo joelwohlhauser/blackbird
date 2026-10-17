@@ -10,6 +10,7 @@ import {
   AuthOrchestrationOperateScope,
   DEFAULT_BROWSER_PROFILE_ID,
   FILL_PREVIEW_VIEWPORT,
+  type DesktopPreviewShortcut,
   type PreviewAnnotationPayload,
   type PreviewViewportSetting,
   type ScopedThreadRef,
@@ -17,7 +18,11 @@ import {
   PREVIEW_ZOOM_LEVELS,
   type PreviewAdjustInput,
 } from "@t3tools/contracts";
-import { normalizePreviewUrl, resolveAddressBarInput } from "@t3tools/shared/preview";
+import {
+  normalizePreviewUrl,
+  resolveAddressBarInput,
+  resolvePreviewShortcut,
+} from "@t3tools/shared/preview";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -60,6 +65,7 @@ import { openPreviewSession } from "./openPreviewSession";
 import { showPreviewPopup } from "./showPreviewPopup";
 import { PreviewChromeRow } from "./PreviewChromeRow";
 import { PreviewEmptyState } from "./PreviewEmptyState";
+import { PreviewFindBar } from "./PreviewFindBar";
 import { PreviewMoreMenu, type PreviewMoreMenuActions } from "./PreviewMoreMenu";
 import {
   commitBrowserViewportChange,
@@ -77,7 +83,7 @@ import { Badge } from "~/components/ui/badge";
 import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
 import { alternatePreviewRuntime, useRendersServerTabNatively } from "~/browser/previewRuntime";
 import { ServerBrowserSurface, type ServerBrowserHandle } from "~/browser/ServerBrowserSurface";
-import { cn } from "~/lib/utils";
+import { cn, isMacPlatform } from "~/lib/utils";
 import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
 import { usePreviewSession } from "./usePreviewSession";
 import { ZoomIndicator } from "./ZoomIndicator";
@@ -156,6 +162,8 @@ export function PreviewView({
   onSendAnnotation,
 }: Props) {
   const [focusUrlNonce, setFocusUrlNonce] = useState<number | undefined>(undefined);
+  const [findTarget, setFindTarget] = useState<{ tabId: string; url: string } | null>(null);
+  const [findFocusNonce, setFindFocusNonce] = useState(0);
   const [pickActive, setPickActive] = useState(false);
   const canSendAnnotation =
     useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope) &&
@@ -448,6 +456,70 @@ export function PreviewView({
     else if (previewBridge && runtimeTabId) void previewBridge.goForward(runtimeTabId);
   }, [isServerTab, runtimeTabId]);
 
+  const handleFind = useCallback(() => {
+    if (!previewBridge || !runtimeTabId || isServerTab) return;
+    if (!desktopOverlay?.hasWebContents || showEmptyState || isUnreachable) return;
+    setFindTarget({ tabId: runtimeTabId, url });
+    setFindFocusNonce((nonce) => nonce + 1);
+  }, [
+    desktopOverlay?.hasWebContents,
+    isServerTab,
+    isUnreachable,
+    runtimeTabId,
+    showEmptyState,
+    url,
+  ]);
+
+  const handleCopyUrl = useCallback(() => {
+    if (!runtimeTabId) return;
+    const copy = isServerTab
+      ? url && navigator.clipboard?.writeText
+        ? navigator.clipboard.writeText(url).then(() => true)
+        : null
+      : previewBridge?.copyUrl(runtimeTabId);
+    void copy?.then(
+      (copied) => {
+        if (copied) toastManager.add({ type: "success", title: "URL copied" });
+      },
+      (error: unknown) =>
+        toastManager.add({
+          type: "error",
+          title: "Unable to copy URL",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+    );
+  }, [isServerTab, runtimeTabId, url]);
+
+  const handleBrowserCommand = useCallback(
+    (shortcut: DesktopPreviewShortcut) => {
+      switch (shortcut) {
+        case "back":
+          return handleBack();
+        case "forward":
+          return handleForward();
+        case "find":
+          return handleFind();
+        case "copy-url":
+          return handleCopyUrl();
+      }
+    },
+    [handleBack, handleCopyUrl, handleFind, handleForward],
+  );
+
+  const findOpen =
+    visible && !loading && findTarget?.tabId === runtimeTabId && findTarget.url === url;
+
+  useEffect(() => {
+    if (!findOpen) setFindTarget(null);
+  }, [findOpen]);
+
+  const closeFind = () => {
+    setFindTarget(null);
+    Array.from(document.querySelectorAll<HTMLElement>("webview[data-preview-tab]"))
+      .find((element) => element.dataset.previewTab === runtimeTabId)
+      ?.focus();
+  };
+
   const handleOpenInBrowser = useCallback(() => {
     if (!localApi || !url) return;
     void localApi.shell.openExternal(url).catch(() => undefined);
@@ -522,8 +594,10 @@ export function PreviewView({
         resetZoom: handleResetZoom,
         clearCookies: () => void adjustServerTab({ clear: "cookies" }),
         clearCache: () => void adjustServerTab({ clear: "cache" }),
+        copyUrl: handleCopyUrl,
         ...(nativeServerTab && previewBridge
           ? {
+              find: handleFind,
               openDevTools: desktopCall(previewBridge.openDevTools),
               toggleNativePictureInPicture: () => handleNativePictureInPicture(),
             }
@@ -531,6 +605,8 @@ export function PreviewView({
       }
     : previewBridge
       ? {
+          find: handleFind,
+          copyUrl: handleCopyUrl,
           hardReload: desktopCall(previewBridge.hardReload),
           setColorScheme: (colorScheme) => {
             if (runtimeTabId)
@@ -962,17 +1038,39 @@ export function PreviewView({
         case "reset-zoom":
           handleResetZoom();
           return;
+        case "back":
+        case "forward":
+        case "find":
+        case "copy-url":
+          handleBrowserCommand(action);
+          return;
         case "toggle-panel":
           return;
       }
     });
-  }, [handleRefresh, handleResetZoom, handleZoomIn, handleZoomOut, visible, runtimeTabId]);
+  }, [
+    handleBrowserCommand,
+    handleRefresh,
+    handleResetZoom,
+    handleZoomIn,
+    handleZoomOut,
+    visible,
+    runtimeTabId,
+  ]);
 
   return (
     <div
       className="flex min-h-0 flex-1 flex-col bg-background"
       data-thread-key={scopedThreadKey(threadRef)}
       data-preview-runtime-tab-id={runtimeTabId ?? undefined}
+      onKeyDownCapture={(event) => {
+        if (!previewBridge || event.defaultPrevented || !isMacPlatform(navigator.platform)) return;
+        const shortcut = resolvePreviewShortcut(event);
+        if (!shortcut || (shortcut === "find" && isServerTab)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) handleBrowserCommand(shortcut);
+      }}
     >
       {showChrome ? (
         <PreviewChromeRow
@@ -1071,6 +1169,15 @@ export function PreviewView({
         />
       ) : null}
 
+      {findOpen && runtimeTabId && previewBridge ? (
+        <PreviewFindBar
+          key={`${runtimeTabId}:${url}`}
+          tabId={runtimeTabId}
+          bridge={previewBridge}
+          focusNonce={findFocusNonce}
+          onClose={closeFind}
+        />
+      ) : null}
       <div ref={serverBodyRef} className="relative min-h-0 flex-1 overflow-hidden">
         {runtimeTabId && snapshot && isServerTab ? (
           <>
