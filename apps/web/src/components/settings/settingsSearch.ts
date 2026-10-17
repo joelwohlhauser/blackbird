@@ -889,6 +889,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["pr links github browser external click default pull request view panel"],
   },
   {
+    id: "pull-request-preview-hosts",
+    title: "Preview deployment hosts",
+    to: "/settings/integrations",
+    searchTerms: ["pr pull request preview deployment staging url pills domains comments"],
+  },
+  {
     id: "browser-auto-show-floating-preview",
     title: "Auto-show floating preview",
     to: "/settings/integrations",

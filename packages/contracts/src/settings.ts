@@ -177,6 +177,10 @@ export const EnvironmentIdentificationMode = Schema.Literals(["artwork", "pill",
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
 export const DEFAULT_LINEAR_ORGANIZATION_SLUG = "acme";
+export const DEFAULT_PULL_REQUEST_PREVIEW_HOSTS: ReadonlyArray<string> = [
+  "*.staging.example.test",
+  "*.staging.example.test",
+];
 export const ExternalLinkOpenMode = Schema.Literals(["ask", "preview", "external"]);
 export type ExternalLinkOpenMode = typeof ExternalLinkOpenMode.Type;
 export const DEFAULT_EXTERNAL_LINK_OPEN_MODE: ExternalLinkOpenMode = "ask";
@@ -489,6 +493,9 @@ export const ClientSettingsSchema = Schema.Struct({
    * GitHub or the repository's other host.
    */
   pullRequestLinksOpenInApp: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  pullRequestPreviewHosts: Schema.Array(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PULL_REQUEST_PREVIEW_HOSTS)),
+  ),
   // Legacy plan mode. The composer's Build/Plan toggle was removed from the
   // default UI; this beta flag restores it (plus the /plan and /default slash
   // commands) for users who still rely on the old workflow.
@@ -1823,6 +1830,7 @@ export const ClientSettingsPatch = Schema.Struct({
     Schema.Record(TrimmedNonEmptyString, PullRequestMergeMethod),
   ),
   pullRequestLinksOpenInApp: Schema.optionalKey(Schema.Boolean),
+  pullRequestPreviewHosts: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   contextWindowMeterEnabled: Schema.optionalKey(Schema.Boolean),
   composerCollapseOnScroll: Schema.optionalKey(Schema.Boolean),

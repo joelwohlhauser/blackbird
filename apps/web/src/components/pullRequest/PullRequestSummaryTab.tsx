@@ -12,6 +12,7 @@ import {
   ArrowDownUpIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  GlobeIcon,
   HammerIcon,
   ListFilterIcon,
   TagIcon,
@@ -28,6 +29,7 @@ import { formatRelativeTimeLabel } from "~/timestampFormat";
 
 import { Button } from "../ui/button";
 import { PullRequestEditButton } from "./PullRequestEditButton";
+import { PullRequestPreviewPills, usePullRequestPreviews } from "./PullRequestPreviews";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
   Menu,
@@ -494,6 +496,7 @@ export function PullRequestSummaryTab({
       })),
   ];
 
+  const previews = usePullRequestPreviews(detail.comments);
   const openLink = useOpenLink(threadRef);
   const openCheck = (url: string) => {
     void openLink(url).catch((error: unknown) => {
@@ -769,6 +772,11 @@ export function PullRequestSummaryTab({
                   />
                 ) : null}
               </span>
+            </MetaRow>
+          ) : null}
+          {previews.length > 0 ? (
+            <MetaRow icon={<GlobeIcon className="size-3.5" />} label="Previews">
+              <PullRequestPreviewPills threadRef={threadRef} previews={previews} />
             </MetaRow>
           ) : null}
         </div>

@@ -25,6 +25,7 @@ import {
   DEFAULT_BROWSER_VIEWPORT,
   DEFAULT_PREVIEW_APPEARANCE,
   DEFAULT_PREVIEW_ZOOM_FACTOR,
+  DEFAULT_PULL_REQUEST_PREVIEW_HOSTS,
   FILL_PREVIEW_VIEWPORT,
   PREVIEW_VIEWPORT_MAX_AREA,
   PREVIEW_VIEWPORT_MAX_DIMENSION,
@@ -45,6 +46,7 @@ import { ScreenRotationIcon } from "~/browser/ScreenRotationIcon";
 import { AnimatedHeight } from "~/components/AnimatedHeight";
 import { resolveEnvironmentOptionLabel } from "~/components/BranchToolbar.logic";
 import { previewBridge } from "~/components/preview/previewBridge";
+import { parsePullRequestPreviewHosts } from "~/components/pullRequest/pullRequestPreviews.logic";
 import { cn, randomUUID } from "~/lib/utils";
 import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
 import { deviceEnvironment, useDeviceState } from "~/state/device";
@@ -610,6 +612,43 @@ function PullRequestLinksOpenInAppSetting() {
             updateSettings({ pullRequestLinksOpenInApp: Boolean(checked) })
           }
           aria-label="Open pull requests in Blackbird"
+        />
+      }
+    />
+  );
+}
+
+function PullRequestPreviewHostsSetting() {
+  const hosts = useClientSettings((settings) => settings.pullRequestPreviewHosts);
+  const updateSettings = useUpdatePrimarySettings();
+  const isDefault =
+    hosts.length === DEFAULT_PULL_REQUEST_PREVIEW_HOSTS.length &&
+    hosts.every((host, index) => host === DEFAULT_PULL_REQUEST_PREVIEW_HOSTS[index]);
+
+  return (
+    <SettingsRow
+      {...searchableSetting("pull-request-preview-hosts")}
+      description="Preview deployment links in pull request comments on these hosts show as pills on the PR tab. Separate hosts with commas; *. matches any subdomain. Leave empty to hide previews."
+      resetAction={
+        isDefault ? null : (
+          <SettingResetButton
+            label="preview deployment hosts"
+            onClick={() =>
+              updateSettings({ pullRequestPreviewHosts: DEFAULT_PULL_REQUEST_PREVIEW_HOSTS })
+            }
+          />
+        )
+      }
+      control={
+        <DraftInput
+          className="w-full sm:w-64"
+          value={hosts.join(", ")}
+          onCommit={(next) =>
+            updateSettings({ pullRequestPreviewHosts: parsePullRequestPreviewHosts(next) })
+          }
+          placeholder="*.staging.example.com"
+          spellCheck={false}
+          aria-label="Preview deployment hosts"
         />
       }
     />
@@ -1559,6 +1598,7 @@ export function IntegrationsSettingsPanel() {
           previewDefaults
         )}
         <PullRequestLinksOpenInAppSetting />
+        <PullRequestPreviewHostsSetting />
       </SettingsSection>
       <DeviceIntegrationSettings />
     </SettingsPageContainer>

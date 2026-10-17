@@ -1,5 +1,6 @@
 import type {
   EnvironmentId,
+  PullRequestComment,
   PullRequestRef,
   ScopedThreadRef,
   VcsStatusResult,
@@ -7,9 +8,14 @@ import type {
 import { FileDiffIcon, RefreshCwIcon } from "lucide-react";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { diffFileTier } from "~/components/pullRequest/pullRequestFileOrder.logic";
+import {
+  PullRequestPreviewPills,
+  usePullRequestPreviews,
+} from "~/components/pullRequest/PullRequestPreviews";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "~/hooks/useResizableWidth";
+import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
@@ -59,6 +65,8 @@ const PULL_REQUEST_FILE_FILTERS = [
   },
   { id: "tests", label: "Tests", emptyMessage: "No test files changed in this pull request." },
 ] as const;
+
+const NO_COMMENTS: ReadonlyArray<PullRequestComment> = [];
 
 const WORKSPACE_NAVIGATOR_WIDTH_STORAGE_KEY = "blackbird:workspace-navigator-width:v1";
 const WORKSPACE_NAVIGATOR_DEFAULT_WIDTH = 292;
@@ -157,6 +165,20 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
           },
         })
       : null,
+  );
+  const previewHostsConfigured = useClientSettings(
+    (settings) => settings.pullRequestPreviewHosts.length > 0,
+  );
+  const pullRequestActivityQuery = useEnvironmentQuery(
+    props.activeTab === "pr" && previewHostsConfigured && pullRequest && props.pullRequestReference
+      ? pullRequestEnvironment.activity({
+          environmentId: props.environmentId,
+          input: props.pullRequestReference,
+        })
+      : null,
+  );
+  const pullRequestPreviews = usePullRequestPreviews(
+    pullRequestActivityQuery.data?.comments ?? NO_COMMENTS,
   );
   useEffect(() => {
     const result = pullRequestDiffQuery.data;
@@ -347,6 +369,15 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
                 </Tooltip>
               }
             />
+            {pullRequest && props.pullRequestReference && pullRequestPreviews.length > 0 ? (
+              <div className="flex shrink-0 items-start gap-2 border-b border-border/60 px-2.5 py-2 text-xs">
+                <span className="shrink-0 leading-4.5 text-muted-foreground">Previews</span>
+                <PullRequestPreviewPills
+                  threadRef={props.activeThreadRef}
+                  previews={pullRequestPreviews}
+                />
+              </div>
+            ) : null}
             {props.gitStatusError && props.gitStatus === null ? (
               <NavigatorMessage>{props.gitStatusError}</NavigatorMessage>
             ) : props.gitStatus === null && props.gitStatusPending ? (

@@ -299,6 +299,11 @@ The normal right panel has browser-backed integration tabs:
 - **PR** uses the authenticated GitHub CLI (`gh`) to detect the pull request for
   the current branch, open the GitHub page inside Blackbird, and populate the
   workspace navigator's PR file tree from the same PR.
+- **Previews** pills at the top of the navigator's PR tab list the preview
+  deployment links found in the PR's comments. Click opens one in an in-app
+  browser tab; right-click copies it. The matched hosts are configurable in
+  Settings > Integrations and default to `*.staging.example.test` and
+  `*.staging.example.test`.
 
 PR chips, composer PR actions, and **View PR** open the internal PR tab rather
 than the system browser. Links opened by a page in the in-app browser navigate
