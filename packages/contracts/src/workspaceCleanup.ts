@@ -31,31 +31,10 @@ export const WorkspaceCleanupListResult = Schema.Struct({
 });
 export type WorkspaceCleanupListResult = typeof WorkspaceCleanupListResult.Type;
 
-export const LinearIssueId = TrimmedNonEmptyString.check(Schema.isPattern(/^[a-z][a-z0-9]*-\d+$/i));
-export type LinearIssueId = typeof LinearIssueId.Type;
-
-export const LinearIssueStatusesInput = Schema.Struct({
-  issueIds: Schema.Array(LinearIssueId).check(Schema.isMaxLength(200)),
-});
-export type LinearIssueStatusesInput = typeof LinearIssueStatusesInput.Type;
-
-export const LinearIssueStatus = Schema.Struct({
-  issueId: LinearIssueId,
-  stateName: TrimmedNonEmptyString,
-  stateType: TrimmedNonEmptyString,
-});
-export type LinearIssueStatus = typeof LinearIssueStatus.Type;
-
-export const LinearIssueStatusesResult = Schema.Struct({
-  configured: Schema.Boolean,
-  issues: Schema.Array(LinearIssueStatus),
-});
-export type LinearIssueStatusesResult = typeof LinearIssueStatusesResult.Type;
-
 export class WorkspaceCleanupError extends Schema.TaggedError<WorkspaceCleanupError>()(
   "WorkspaceCleanupError",
   {
-    operation: Schema.Literals(["list", "linear-status"]),
+    operation: Schema.Literals(["list"]),
     detail: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect()),
   },

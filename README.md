@@ -216,9 +216,9 @@ selected environment at a time. Main checkouts are omitted. Each row shows the
 worktree's storage use, associated active and archived chat count, Git state,
 last chat activity, and the status of a Linear issue inferred from the branch
 or worktree folder name. Deleting a row removes only the worktree and makes the
-row disappear; it never archives or detaches chats. A Linear personal API key
-can be stored under **Settings → General → Linear**. The key stays in the
-server's secret store, while the existing organization slug continues to
+row disappear; it never archives or detaches chats. Issue status comes from the
+desktop app's **Sign in with Linear** under **Settings → General → Linear**, so
+remote environments show it too. The organization slug there continues to
 control Linear URLs opened in workspace tabs.
 
 ### Quick chats
@@ -305,6 +305,8 @@ than the system browser. Links opened by a page in the in-app browser navigate
 that same tab, including links to a different domain. Other chat/terminal links
 can ask each time, always open in the normal right panel, or always open in the
 default browser; this is configurable in Settings.
+
+On desktop, new drafts in a Git project show a Linear issue picker in the composer. It lists your open assigned issues and searches the whole workspace as you type. Picking an issue uses its Linear branch name: a branch already checked out in a worktree selects **Existing worktree**, one checked out in the main checkout selects **Current checkout**, a local or remote branch without a worktree selects **New worktree** for it, and otherwise **New worktree & branch** is prefilled with the branch name. Nothing is created until you send.
 
 ## Local and remote environments
 

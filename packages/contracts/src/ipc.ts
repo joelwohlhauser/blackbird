@@ -13,6 +13,7 @@ import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
+import type { LinearAccount, LinearIssue, LinearIssueStatus } from "./linear.ts";
 import type { PreviewForwardedShortcut } from "./keybindings.ts";
 
 import type {
@@ -1284,6 +1285,15 @@ export interface DesktopBridge {
     remove: () => Promise<DesktopAwakeState>;
     setAgentsWorking: (working: boolean) => Promise<void>;
     onState: (listener: (state: DesktopAwakeState) => void) => () => void;
+  };
+  linear?: {
+    getState: () => Promise<LinearAccount | null>;
+    signIn: () => Promise<LinearAccount>;
+    cancelSignIn: () => Promise<void>;
+    signOut: () => Promise<void>;
+    searchIssues: (query: string) => Promise<readonly LinearIssue[] | null>;
+    issueStatuses: (issueIds: readonly string[]) => Promise<readonly LinearIssueStatus[] | null>;
+    onState: (listener: (account: LinearAccount | null) => void) => () => void;
   };
   /** Present when the desktop shell accepts `t3 app` activation requests. */
   /**

@@ -78,7 +78,6 @@ const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
-const LINEAR_API_KEY_SECRET_NAME = "linear-api-key";
 
 /**
  * Fold the legacy in-config `enabled` flag into the envelope-level
@@ -146,20 +145,11 @@ const normalizeServerSettings = (
   );
 
 export function redactServerSettingsForClient(settings: ServerSettings): ServerSettings {
-  const redacted = mapSettingsSecrets(settings, (secret) =>
+  return mapSettingsSecrets(settings, (secret) =>
     secret.sensitive
       ? { value: "", redacted: secret.redacted || secret.value.length > 0 }
       : { value: secret.value, redacted: false },
   );
-  return {
-    ...redacted,
-    linearApiKey: {
-      value: "",
-      ...(settings.linearApiKey.value.length > 0 || settings.linearApiKey.valueRedacted
-        ? { valueRedacted: true }
-        : {}),
-    },
-  };
 }
 
 export function applyProviderInstanceMutation(
@@ -503,7 +493,6 @@ function fallbackTextGenerationProvider(settings: ServerSettings): ServerSetting
 const ATOMIC_SETTINGS_KEYS: ReadonlySet<string> = new Set([
   "backgroundActivity",
   "automaticGitFetchInterval",
-  "linearApiKey",
   "providerHealthRefreshInterval",
   "sourceControlWriterModelSelection",
   "reviewGuideModelSelection",
@@ -915,41 +904,10 @@ const make = Effect.gen(function* () {
       }));
     });
 
-  const materializeLinearApiKey = (
-    settings: ServerSettings,
-  ): Effect.Effect<ServerSettings, ServerSettingsError> => {
-    if (!settings.linearApiKey.valueRedacted) {
-      return Effect.succeed(settings);
-    }
-    return secretStore.get(LINEAR_API_KEY_SECRET_NAME).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ServerSettingsError({
-            settingsPath,
-            operation: "read-secret",
-            cause,
-          }),
-      ),
-      Effect.map((secret) => ({
-        ...settings,
-        linearApiKey: Option.match(secret, {
-          onNone: () => ({ value: "" }),
-          onSome: (stored) => ({
-            value: textDecoder.decode(stored),
-            valueRedacted: true,
-          }),
-        }),
-      })),
-    );
-  };
-
-  const materializeSecrets = (settings: ServerSettings) =>
-    materializeSettingsSecrets(settings).pipe(Effect.flatMap(materializeLinearApiKey));
-
   const materializeChanges = (changes: Stream.Stream<ServerSettings>) =>
     changes.pipe(
       Stream.mapEffect((settings) =>
-        materializeSecrets(settings).pipe(
+        materializeSettingsSecrets(settings).pipe(
           Effect.catch((error: ServerSettingsError) =>
             Effect.logWarning("failed to materialize settings secrets", {
               operation: error.operation,
@@ -1106,42 +1064,7 @@ const make = Effect.gen(function* () {
     );
   };
 
-  const persistLinearApiKey = (
-    settings: ServerSettings,
-    patch: ServerSettingsPatch["linearApiKey"],
-  ): Effect.Effect<ServerSettings, ServerSettingsError> => {
-    if (patch === undefined || patch.valueRedacted) {
-      return Effect.succeed({
-        ...settings,
-        linearApiKey: settings.linearApiKey.valueRedacted
-          ? { value: "", valueRedacted: true }
-          : { value: "" },
-      });
-    }
-
-    const value = patch.value.trim();
-    const persist =
-      value.length > 0
-        ? secretStore.set(LINEAR_API_KEY_SECRET_NAME, textEncoder.encode(value))
-        : secretStore.remove(LINEAR_API_KEY_SECRET_NAME);
-    return persist.pipe(
-      Effect.mapError(
-        (cause) =>
-          new ServerSettingsError({
-            settingsPath,
-            operation: value.length > 0 ? "write-secret" : "remove-secret",
-            cause,
-          }),
-      ),
-      Effect.as({
-        ...settings,
-        linearApiKey: value.length > 0 ? { value: "", valueRedacted: true } : { value: "" },
-      }),
-    );
-  };
-
   const updateAndPersistSettings = (
-    linearApiKey: ServerSettingsPatch["linearApiKey"],
     update: (current: ServerSettings) => Effect.Effect<ServerSettings, ServerSettingsError>,
   ): Effect.Effect<ServerSettings, ServerSettingsError> =>
     writeSemaphore.withPermits(1)(
@@ -1149,12 +1072,11 @@ const make = Effect.gen(function* () {
         const current = yield* getSettingsFromCache;
         const updated = yield* update(current);
         const persisted = yield* persistSettingsSecrets(current, updated);
-        const withLinearApiKey = yield* persistLinearApiKey(persisted.settings, linearApiKey);
-        const next = yield* normalizeServerSettings(withLinearApiKey);
+        const next = yield* normalizeServerSettings(persisted.settings);
         const materialized = yield* Effect.uninterruptibleMask(() =>
           Effect.gen(function* () {
             const rollbackSecretChanges = yield* applySettingsSecretChanges(persisted.changes);
-            const materializedExit = yield* Effect.exit(materializeSecrets(next));
+            const materializedExit = yield* Effect.exit(materializeSettingsSecrets(next));
             if (Exit.isFailure(materializedExit)) {
               yield* rollbackSecretChanges;
               return yield* Effect.failCause(materializedExit.cause);
@@ -1176,7 +1098,7 @@ const make = Effect.gen(function* () {
   const withSettingsSnapshot: ServerSettingsService["Service"]["withSettingsSnapshot"] = (use) =>
     writeSemaphore.withPermits(1)(
       getSettingsFromCache.pipe(
-        Effect.flatMap(materializeSecrets),
+        Effect.flatMap(materializeSettingsSecrets),
         Effect.map(resolveTextGenerationProvider),
         Effect.flatMap(use),
       ),
@@ -1292,15 +1214,15 @@ const make = Effect.gen(function* () {
     start,
     ready: Deferred.await(startedDeferred),
     getSettings: getSettingsFromCache.pipe(
-      Effect.flatMap(materializeSecrets),
+      Effect.flatMap(materializeSettingsSecrets),
       Effect.map(resolveTextGenerationProvider),
     ),
     updateSettings: (patch) =>
-      updateAndPersistSettings(patch.linearApiKey, (current) =>
+      updateAndPersistSettings((current) =>
         Effect.succeed(applyServerSettingsPatch(current, patch)),
       ),
     updateProviderInstance: (mutation, patch = {}) =>
-      updateAndPersistSettings(patch.linearApiKey, (current) =>
+      updateAndPersistSettings((current) =>
         Effect.gen(function* () {
           yield* ensureProviderInstanceMutationAllowed(current, mutation, settingsPath);
           const patched = applyServerSettingsPatch(current, patch);

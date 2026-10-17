@@ -83,6 +83,7 @@ import {
   uninstallCliCommand,
 } from "./methods/cliCommand.ts";
 import { getAwakeState, removeAwake, setAwakeAgentsWorking, setupAwake } from "./methods/awake.ts";
+import * as LinearIpc from "./methods/linear.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
   const ipc = yield* DesktopIpc.DesktopIpc;
@@ -166,6 +167,12 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(setupAwake);
   yield* ipc.handle(removeAwake);
   yield* ipc.handle(setAwakeAgentsWorking);
+  yield* ipc.handle(LinearIpc.getLinearState);
+  yield* ipc.handle(LinearIpc.signInToLinear);
+  yield* ipc.handle(LinearIpc.cancelLinearSignIn);
+  yield* ipc.handle(LinearIpc.signOutOfLinear);
+  yield* ipc.handle(LinearIpc.searchLinearIssues);
+  yield* ipc.handle(LinearIpc.getLinearIssueStatuses);
   for (const previewMethod of PreviewIpc.methods) {
     yield* ipc.handle(previewMethod);
   }

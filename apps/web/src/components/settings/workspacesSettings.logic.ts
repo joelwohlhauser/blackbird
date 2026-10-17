@@ -4,6 +4,8 @@ import {
 } from "@t3tools/client-runtime/state/shell";
 import type { LinearIssueStatus } from "@t3tools/contracts";
 
+import type { LinearIssueStatusesState } from "../../lib/desktopLinear";
+
 export interface WorkspaceChatLike {
   readonly id: string;
   readonly worktreePath: string | null;
@@ -83,15 +85,16 @@ export function sortWorkspaceRows<T extends WorkspaceSortableRow>(
 export function linearWorkspaceStatusLabel(
   issueId: string | null,
   issue: LinearIssueStatus | undefined,
-  configured: boolean,
-  pending: boolean,
-  failed: boolean,
+  status: LinearIssueStatusesState,
 ): { readonly label: string; readonly detail?: string; readonly tone: string } {
   if (!issueId) return { label: "No issue", tone: "text-muted-foreground" };
-  if (pending) return { label: issueId, detail: "Checking status", tone: "text-muted-foreground" };
-  if (failed) return { label: issueId, detail: "Status unavailable", tone: "text-warning" };
-  if (!configured)
-    return { label: issueId, detail: "API key not configured", tone: "text-muted-foreground" };
+  if (status === "unavailable") return { label: issueId, tone: "text-muted-foreground" };
+  if (status === "signed-out")
+    return { label: issueId, detail: "Sign in to Linear", tone: "text-muted-foreground" };
+  if (status === "pending")
+    return { label: issueId, detail: "Checking status", tone: "text-muted-foreground" };
+  if (status === "failed")
+    return { label: issueId, detail: "Status unavailable", tone: "text-warning" };
   if (!issue) return { label: issueId, detail: "Issue not found", tone: "text-muted-foreground" };
   const closed = issue.stateType === "completed" || issue.stateType === "canceled";
   return {

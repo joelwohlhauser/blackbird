@@ -19,6 +19,7 @@ import {
   resolveBranchToolbarPrBranch,
   resolveBranchToolbarValue,
   resolveLockedWorkspaceLabel,
+  resolveLinearIssueWorkspace,
   resolveLocalCheckoutBranchMismatch,
   resolvePreviousWorktreeLabel,
   resolvePreviousWorktreeSeed,
@@ -1073,5 +1074,55 @@ describe("sanitizeNewRefName", () => {
   it("does not collapse dashes the user typed", () => {
     expect(sanitizeNewRefName("new - branch")).toBe("new---branch");
     expect(sanitizeNewRefName("foo--bar")).toBe("foo--bar");
+  });
+});
+
+describe("resolveLinearIssueWorkspace", () => {
+  const branchName = "example/eng-123-fix-login";
+  const ref = (overrides: Partial<VcsRef> & Pick<VcsRef, "name">): VcsRef => ({
+    current: false,
+    isDefault: false,
+    worktreePath: null,
+    ...overrides,
+  });
+  const resolve = (refs: VcsRef[]) =>
+    resolveLinearIssueWorkspace({ refs, projectCwd: "/repo/app", branchName });
+
+  it("reuses a worktree that already has the branch checked out", () => {
+    expect(resolve([ref({ name: branchName, worktreePath: "/repo/.worktrees/eng-123" })])).toEqual({
+      _tag: "reuse",
+      branch: branchName,
+      worktreePath: "/repo/.worktrees/eng-123",
+    });
+  });
+
+  it("uses the current checkout when the main checkout has the branch", () => {
+    expect(resolve([ref({ name: branchName, worktreePath: "/repo/app/" })])).toEqual({
+      _tag: "local",
+      branch: branchName,
+    });
+  });
+
+  it("creates a worktree for a local branch that is not checked out", () => {
+    expect(resolve([ref({ name: `${branchName}-old` }), ref({ name: branchName })])).toEqual({
+      _tag: "existing",
+      branch: branchName,
+    });
+  });
+
+  it("prefers origin among remote-only branches", () => {
+    expect(
+      resolve([
+        ref({ name: `fork/${branchName}`, isRemote: true, remoteName: "fork" }),
+        ref({ name: `origin/${branchName}`, isRemote: true, remoteName: "origin" }),
+      ]),
+    ).toEqual({ _tag: "existing", branch: `origin/${branchName}` });
+  });
+
+  it("creates a new branch when nothing matches", () => {
+    expect(resolve([ref({ name: `${branchName}-2` })])).toEqual({
+      _tag: "new",
+      newBranchName: branchName,
+    });
   });
 });

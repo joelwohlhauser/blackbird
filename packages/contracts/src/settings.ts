@@ -1329,10 +1329,6 @@ export const ServerSettings = Schema.Struct({
   newWorktreesStartFromOrigin: Schema.Boolean.pipe(
     Schema.withDecodingDefault(Effect.succeed(true)),
   ),
-  linearApiKey: Schema.Struct({
-    value: Schema.String,
-    valueRedacted: Schema.optional(Schema.Boolean),
-  }).pipe(Schema.withDecodingDefault(Effect.succeed({ value: "" }))),
   worktreeEnvFileMode: WorktreeEnvFileMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("link" as const satisfies WorktreeEnvFileMode)),
   ),
@@ -1681,12 +1677,6 @@ export const ServerSettingsPatch = Schema.Struct({
   environmentIcon: Schema.optionalKey(Schema.NullOr(EnvironmentMachineKind)),
   defaultThreadEnvMode: Schema.optionalKey(Schema.NullOr(ThreadEnvMode)),
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
-  linearApiKey: Schema.optionalKey(
-    Schema.Struct({
-      value: Schema.String,
-      valueRedacted: Schema.optional(Schema.Boolean),
-    }),
-  ),
   worktreeEnvFileMode: Schema.optionalKey(WorktreeEnvFileMode),
   worktreeSubmodules: Schema.optionalKey(Schema.NullOr(WorktreeSubmodules)),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),

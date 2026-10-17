@@ -20,6 +20,7 @@ import { useMemo, useState } from "react";
 
 import { isDesktopLocalConnectionTarget } from "../../connection/desktopLocal";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
+import { useLinearIssueStatuses } from "../../lib/desktopLinear";
 import { linearIssueIdForWorkspace } from "../../linearIntegration";
 import { cn } from "../../lib/utils";
 import {
@@ -262,27 +263,17 @@ export function WorkspacesSettingsPanel() {
     () => [...new Set(rows.flatMap((row) => (row.issueId ? [row.issueId] : [])))],
     [rows],
   );
-  const linearEnvironmentId = primaryEnvironmentId ?? effectiveEnvironmentId;
-  const linearQuery = useEnvironmentQuery(
-    linearEnvironmentId === null
-      ? null
-      : serverEnvironment.linearIssueStatuses({
-          environmentId: linearEnvironmentId,
-          input: { issueIds },
-        }),
-  );
+  const linearStatuses = useLinearIssueStatuses(issueIds);
   const issuesById = useMemo(
-    () => new Map((linearQuery.data?.issues ?? []).map((issue) => [issue.issueId, issue])),
-    [linearQuery.data?.issues],
+    () => new Map(linearStatuses.issues.map((issue) => [issue.issueId, issue])),
+    [linearStatuses.issues],
   );
   const sortedRows = useMemo(() => {
     const sortableRows = rows.map((row) => {
       const linear = linearWorkspaceStatusLabel(
         row.issueId,
         row.issueId ? issuesById.get(row.issueId) : undefined,
-        linearQuery.data?.configured ?? false,
-        linearQuery.isPending,
-        linearQuery.error !== null,
+        linearStatuses.status,
       );
       return {
         ...row,
@@ -293,14 +284,7 @@ export function WorkspacesSettingsPanel() {
       };
     });
     return sortWorkspaceRows(sortableRows, sort.key, sort.direction);
-  }, [
-    issuesById,
-    linearQuery.data?.configured,
-    linearQuery.error,
-    linearQuery.isPending,
-    rows,
-    sort,
-  ]);
+  }, [issuesById, linearStatuses.status, rows, sort]);
 
   const toggleSort = (key: WorkspaceSortKey) => {
     setSort((current) => ({
@@ -415,7 +399,7 @@ export function WorkspacesSettingsPanel() {
               onClick={() => {
                 workspaceQuery.refresh();
                 workspaceDetailsQuery.refresh();
-                linearQuery.refresh();
+                linearStatuses.refresh();
               }}
             >
               <RefreshCwIcon />

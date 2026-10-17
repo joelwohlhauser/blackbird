@@ -239,8 +239,6 @@ import {
   ProjectWriteFileResult,
 } from "./project.ts";
 import {
-  LinearIssueStatusesInput,
-  LinearIssueStatusesResult,
   WorkspaceCleanupError,
   WorkspaceCleanupListInput,
   WorkspaceCleanupListResult,
@@ -518,7 +516,6 @@ export const WS_METHODS = {
   serverGetBackgroundPolicy: "server.getBackgroundPolicy",
   serverGetUsageSummary: "server.getUsageSummary",
   workspaceCleanupList: "workspaceCleanup.list",
-  linearIssueStatuses: "linear.issueStatuses",
   serverRefreshUsageRates: "server.refreshUsageRates",
 
   // Scheduled tasks
@@ -918,12 +915,6 @@ const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSummary, {
 export const WsWorkspaceCleanupListRpc = Rpc.make(WS_METHODS.workspaceCleanupList, {
   payload: WorkspaceCleanupListInput,
   success: WorkspaceCleanupListResult,
-  error: Schema.Union([EnvironmentAuthorizationError, WorkspaceCleanupError]),
-});
-
-export const WsLinearIssueStatusesRpc = Rpc.make(WS_METHODS.linearIssueStatuses, {
-  payload: LinearIssueStatusesInput,
-  success: LinearIssueStatusesResult,
   error: Schema.Union([EnvironmentAuthorizationError, WorkspaceCleanupError]),
 });
 
@@ -1948,7 +1939,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerCheckOtlpEndpointRpc,
   WsServerGetUsageSummaryRpc,
   WsWorkspaceCleanupListRpc,
-  WsLinearIssueStatusesRpc,
   WsServerRefreshUsageRatesRpc,
   WsServerSignalProcessRpc,
   WsScheduledTasksListRpc,

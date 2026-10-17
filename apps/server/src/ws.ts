@@ -2378,7 +2378,6 @@ const layerWsRpc = (
             ),
           ),
         [WS_METHODS.workspaceCleanupList]: (input) => workspaceCleanup.list(input),
-        [WS_METHODS.linearIssueStatuses]: (input) => workspaceCleanup.linearIssueStatuses(input),
         [WS_METHODS.serverReportHostPowerState]: (input) =>
           backgroundPolicy.reportHostPowerState(input),
         [WS_METHODS.serverGetBackgroundPolicy]: (_input) => backgroundPolicy.snapshot,

@@ -3,7 +3,8 @@ import { readLocalApi } from "../localApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { ComposerContextLabel } from "./ComposerContextLabel";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, LinearIssue, ThreadId, VcsListRefsResult } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
 import {
   ChevronDownIcon,
   FolderGit2Icon,
@@ -25,6 +26,11 @@ import {
 } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
+import { getDesktopLinearBridge } from "../lib/desktopLinear";
+import { linearIssueIdFromBranch } from "../linearIntegration";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { vcsEnvironment } from "../state/vcs";
+import { LinearIssuePicker } from "./linear/LinearIssuePicker";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { useProject, useThreadShell, useThreadShellsForProjectRefs } from "../state/entities";
 import {
@@ -37,6 +43,7 @@ import {
   resolvePreviousWorktreeLabel,
   resolvePreviousWorktreeSeed,
   type ExistingWorktreeOption,
+  resolveLinearIssueWorkspace,
   shouldShowEnvironmentIndicator,
 } from "./BranchToolbar.logic";
 import {
@@ -787,6 +794,101 @@ export const BranchToolbar = memo(function BranchToolbar({
     />
   ) : null;
 
+  const [resolvingLinearIssue, setResolvingLinearIssue] = useState(false);
+  const onLinearIssueSelect = useCallback(
+    async (issue: LinearIssue) => {
+      if (!activeProject || !activeProjectRef) return;
+      const projectCwd = activeProject.workspaceRoot;
+      const refsAtom = vcsEnvironment.listRefs({
+        environmentId,
+        input: { cwd: projectCwd, query: issue.branchName, refKind: "all", limit: 20 },
+      });
+      setResolvingLinearIssue(true);
+      const refs = await Effect.runPromise(
+        Effect.callback<VcsListRefsResult>((resume) => {
+          let refreshed = false;
+          const unsubscribe = appAtomRegistry.subscribe(refsAtom, (result) => {
+            if (refreshed && result._tag === "Success") resume(Effect.succeed(result.value));
+          });
+          appAtomRegistry.refresh(refsAtom);
+          refreshed = true;
+          return Effect.sync(unsubscribe);
+        }).pipe(
+          Effect.timeout("10 seconds"),
+          Effect.map((result) => result.refs),
+          Effect.orElseSucceed(() => null),
+        ),
+      );
+      setResolvingLinearIssue(false);
+      if (refs === null) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: `Couldn't check branches for ${issue.identifier}`,
+          }),
+        );
+        return;
+      }
+      const target = draftId ?? threadRef;
+      const workspace = resolveLinearIssueWorkspace({
+        refs,
+        projectCwd,
+        branchName: issue.branchName,
+      });
+      switch (workspace._tag) {
+        case "reuse":
+          setDraftThreadContext(target, {
+            branch: workspace.branch,
+            worktreePath: workspace.worktreePath,
+            envMode: "worktree-reuse",
+            startFromOrigin: false,
+            projectRef: activeProjectRef,
+          });
+          onComposerFocusRequest?.();
+          return;
+        case "local":
+          onEnvModeChange("local");
+          setDraftThreadContext(target, { branch: workspace.branch });
+          return;
+        case "existing":
+          onEnvModeChange("worktree-existing");
+          setDraftThreadContext(target, { branch: workspace.branch, worktreePath: null });
+          return;
+        case "new":
+          onEnvModeChange("worktree");
+          setDraftThreadContext(target, {
+            worktreePath: null,
+            ...(effectiveEnvMode === "worktree" ? {} : { branch: null }),
+          });
+          onNewBranchNameChange(workspace.newBranchName);
+      }
+    },
+    [
+      activeProject,
+      activeProjectRef,
+      draftId,
+      effectiveEnvMode,
+      environmentId,
+      onComposerFocusRequest,
+      onEnvModeChange,
+      onNewBranchNameChange,
+      setDraftThreadContext,
+      threadRef,
+    ],
+  );
+  const linearIssuePicker =
+    showGitControls && canReuseExistingWorktree && !forceNewWorktree && getDesktopLinearBridge() ? (
+      <LinearIssuePicker
+        label={
+          linearIssueIdFromBranch(
+            effectiveEnvMode === "worktree" ? newBranchName : draftThread?.branch,
+          ) ?? "Issue"
+        }
+        disabled={resolvingLinearIssue}
+        onSelect={(issue) => void onLinearIssueSelect(issue)}
+      />
+    ) : null;
+
   if (!hasActiveThread || !activeProject) return null;
 
   if (layout === "panel") {
@@ -869,6 +971,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             onUsePreviousWorktree={onUsePreviousWorktree}
             canReuseExistingWorktree={canReuseExistingWorktree}
           />
+          {linearIssuePicker}
           {activeWorktreePath !== null && onDeleteWorktreeRequest ? (
             <Button
               type="button"
@@ -936,6 +1039,7 @@ export const BranchToolbar = memo(function BranchToolbar({
               onUsePreviousWorktree={onUsePreviousWorktree}
             />
           ) : null}
+          {linearIssuePicker}
           {activeWorktreePath !== null && onDeleteWorktreeRequest ? (
             <Button
               type="button"

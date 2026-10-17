@@ -144,6 +144,36 @@ export function resolveExistingWorktreeOptions(
   return [...byPath.values()].toSorted((left, right) => left.branch.localeCompare(right.branch));
 }
 
+export type LinearIssueWorkspace =
+  | { readonly _tag: "reuse"; readonly branch: string; readonly worktreePath: string }
+  | { readonly _tag: "local"; readonly branch: string }
+  | { readonly _tag: "existing"; readonly branch: string }
+  | { readonly _tag: "new"; readonly newBranchName: string };
+
+export function resolveLinearIssueWorkspace(input: {
+  readonly refs: ReadonlyArray<VcsRef>;
+  readonly projectCwd: string;
+  readonly branchName: string;
+}): LinearIssueWorkspace {
+  const normalizedProjectCwd = input.projectCwd.replace(/[\\/]+$/u, "");
+  const local = input.refs.find((ref) => !ref.isRemote && ref.name === input.branchName);
+  if (local?.worktreePath) {
+    return local.worktreePath.replace(/[\\/]+$/u, "") === normalizedProjectCwd
+      ? { _tag: "local", branch: local.name }
+      : { _tag: "reuse", branch: local.name, worktreePath: local.worktreePath };
+  }
+  if (local) return { _tag: "existing", branch: local.name };
+  const remotes = input.refs.filter(
+    (ref) =>
+      ref.isRemote &&
+      ref.remoteName !== undefined &&
+      ref.name === `${ref.remoteName}/${input.branchName}`,
+  );
+  const remote = remotes.find((ref) => ref.remoteName === "origin") ?? remotes[0];
+  if (remote) return { _tag: "existing", branch: remote.name };
+  return { _tag: "new", newBranchName: input.branchName };
+}
+
 export function filterExistingWorktreeOptions(
   worktrees: ReadonlyArray<ExistingWorktreeOption>,
   query: string,

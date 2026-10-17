@@ -609,9 +609,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
-    id: "linear-api-key",
-    title: "Linear API key",
+    id: "linear-account",
+    title: "Linear account",
     to: "/settings/general",
+    searchTerms: ["sign in oauth login"],
+    desktopOnly: true,
   },
   {
     id: "gemini-api-key",

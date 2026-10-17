@@ -4,10 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import {
-  type LinearIssueStatusesInput,
-  type LinearIssueStatusesResult,
   type VcsRef,
   WorkspaceCleanupError,
   type WorkspaceCleanupListInput,
@@ -15,95 +12,9 @@ import {
   type WorkspaceCleanupListResult,
   type WorkspaceCleanupWorktree,
 } from "@t3tools/contracts";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProcessRunner from "../processRunner.ts";
-import * as ServerSettings from "../serverSettings.ts";
-
-const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
-const LinearGraphQlIssue = Schema.Struct({
-  identifier: Schema.String,
-  state: Schema.NullOr(
-    Schema.Struct({
-      name: Schema.String,
-      type: Schema.String,
-    }),
-  ),
-});
-
-const LinearGraphQlResponse = Schema.Struct({
-  data: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        issues: Schema.Struct({
-          nodes: Schema.Array(LinearGraphQlIssue),
-        }),
-      }),
-    ),
-  ),
-  errors: Schema.optional(
-    Schema.Array(
-      Schema.Struct({
-        message: Schema.String,
-      }),
-    ),
-  ),
-});
-
-export const fetchLinearIssueStatuses = Effect.fn(
-  "WorkspaceCleanupService.fetchLinearIssueStatuses",
-)(function* (input: { readonly apiKey: string; readonly issueIds: ReadonlyArray<string> }) {
-  const httpClient = yield* HttpClient.HttpClient;
-  const filter = {
-    or: input.issueIds.map((issueId) => {
-      const separatorIndex = issueId.lastIndexOf("-");
-      return {
-        and: [
-          { team: { key: { eq: issueId.slice(0, separatorIndex) } } },
-          { number: { eq: Number(issueId.slice(separatorIndex + 1)) } },
-        ],
-      };
-    }),
-  };
-  const query = `
-    query WorkspaceIssues($filter: IssueFilter!) {
-      issues(filter: $filter, first: 200, includeArchived: true) {
-        nodes {
-          identifier
-          state { name type }
-        }
-      }
-    }
-  `;
-  const response = yield* HttpClientRequest.post(LINEAR_GRAPHQL_URL).pipe(
-    HttpClientRequest.setHeader("authorization", input.apiKey),
-    HttpClientRequest.acceptJson,
-    HttpClientRequest.bodyJsonUnsafe({
-      query,
-      variables: { filter },
-    }),
-    httpClient.execute,
-    Effect.flatMap(HttpClientResponse.filterStatusOk),
-    Effect.flatMap(HttpClientResponse.schemaBodyJson(LinearGraphQlResponse)),
-    Effect.timeout("15 seconds"),
-  );
-  const graphqlError = response.errors?.[0]?.message.trim();
-  if (graphqlError && !response.data) {
-    return yield* new WorkspaceCleanupError({
-      operation: "linear-status",
-      detail: graphqlError,
-    });
-  }
-
-  return (response.data?.issues.nodes ?? []).flatMap((issue) => {
-    const issueId = issue.identifier.trim().toUpperCase();
-    const stateName = issue.state?.name.trim();
-    const stateType = issue.state?.type.trim();
-    if (!issueId || !stateName || !stateType) return [];
-    return [{ issueId, stateName, stateType }];
-  });
-});
 
 export function parseDiskUsageKilobytes(output: string): number | null {
   const kilobytes = Number.parseInt(output.trim().split(/\s+/, 1)[0] ?? "", 10);
@@ -153,9 +64,6 @@ export class WorkspaceCleanupService extends Context.Service<
     readonly list: (
       input: WorkspaceCleanupListInput,
     ) => Effect.Effect<WorkspaceCleanupListResult, WorkspaceCleanupError>;
-    readonly linearIssueStatuses: (
-      input: LinearIssueStatusesInput,
-    ) => Effect.Effect<LinearIssueStatusesResult, WorkspaceCleanupError>;
   }
 >()("t3/workspace/WorkspaceCleanupService") {}
 
@@ -164,8 +72,6 @@ export const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const processRunner = yield* ProcessRunner.ProcessRunner;
-  const settingsService = yield* ServerSettings.ServerSettingsService;
-  const httpClient = yield* HttpClient.HttpClient;
 
   const directorySize = (root: string) =>
     workspaceDirectorySize(root).pipe(
@@ -256,36 +162,7 @@ export const make = Effect.gen(function* () {
     ),
   );
 
-  const linearIssueStatuses = Effect.fn("WorkspaceCleanupService.linearIssueStatuses")(
-    function* (input: LinearIssueStatusesInput) {
-      const settings = yield* settingsService.getSettings;
-      const apiKey = settings.linearApiKey.value.trim();
-      if (apiKey.length === 0) {
-        return { configured: false, issues: [] } satisfies LinearIssueStatusesResult;
-      }
-
-      const issueIds = [...new Set(input.issueIds.map((issueId) => issueId.toUpperCase()))];
-      if (issueIds.length === 0) {
-        return { configured: true, issues: [] } satisfies LinearIssueStatusesResult;
-      }
-
-      const issues = yield* fetchLinearIssueStatuses({ apiKey, issueIds }).pipe(
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      );
-      return { configured: true, issues } satisfies LinearIssueStatusesResult;
-    },
-    Effect.mapError((cause) =>
-      Schema.is(WorkspaceCleanupError)(cause)
-        ? cause
-        : new WorkspaceCleanupError({
-            operation: "linear-status",
-            detail: "Could not load Linear issue statuses.",
-            cause,
-          }),
-    ),
-  );
-
-  return WorkspaceCleanupService.of({ list, linearIssueStatuses });
+  return WorkspaceCleanupService.of({ list });
 });
 
 export const layer = Layer.effect(WorkspaceCleanupService, make).pipe(

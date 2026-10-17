@@ -55,6 +55,7 @@ import * as Schema from "effect/Schema";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
 import { IS_NIGHTLY_BUILD, NightlyMobileBetaRow } from "../NightlyMobileBeta";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
+import { LinearAccountSettingsRow } from "./LinearAccountSettingsRow";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
@@ -3629,39 +3630,7 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-        <SettingsRow
-          {...searchableSetting("linear-api-key")}
-          description="Personal API key used to read issue status on the Workspaces page. The key is stored by this server and never sent back to the client."
-          resetAction={
-            settings.linearApiKey.valueRedacted ? (
-              <SettingResetButton
-                label="Linear API key"
-                onClick={() => updateSettings({ linearApiKey: { value: "" } })}
-              />
-            ) : null
-          }
-          control={
-            <DraftInput
-              className="w-full sm:w-72"
-              value={settings.linearApiKey.valueRedacted ? "" : settings.linearApiKey.value}
-              onCommit={(value) => {
-                const apiKey = value.trim();
-                if (apiKey.length > 0) {
-                  updateSettings({ linearApiKey: { value: apiKey } });
-                }
-              }}
-              type="password"
-              autoComplete="off"
-              placeholder={
-                settings.linearApiKey.valueRedacted
-                  ? "Stored secret - enter a new value to replace"
-                  : "Linear API key"
-              }
-              spellCheck={false}
-              aria-label="Linear API key"
-            />
-          }
-        />
+        <LinearAccountSettingsRow />
       </SettingsSection>
 
       <TextToSpeechSettings />

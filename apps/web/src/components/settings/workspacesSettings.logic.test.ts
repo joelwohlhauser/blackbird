@@ -79,23 +79,24 @@ describe("workspace settings", () => {
       linearWorkspaceStatusLabel(
         "AI-42",
         { issueId: "AI-42", stateName: "In Progress", stateType: "started" },
-        true,
-        false,
-        false,
+        "ready",
       ).detail,
     ).toBe("Open · In Progress");
     expect(
       linearWorkspaceStatusLabel(
         "AI-42",
         { issueId: "AI-42", stateName: "Done", stateType: "completed" },
-        true,
-        false,
-        false,
+        "ready",
       ).detail,
     ).toBe("Closed · Done");
-    expect(linearWorkspaceStatusLabel("AI-42", undefined, false, false, true).detail).toBe(
+    expect(linearWorkspaceStatusLabel("AI-42", undefined, "failed").detail).toBe(
       "Status unavailable",
     );
+    expect(linearWorkspaceStatusLabel("AI-42", undefined, "signed-out").detail).toBe(
+      "Sign in to Linear",
+    );
+    expect(linearWorkspaceStatusLabel("AI-42", undefined, "unavailable").detail).toBeUndefined();
+    expect(linearWorkspaceStatusLabel("AI-42", undefined, "ready").detail).toBe("Issue not found");
   });
 
   it("sorts unused and oldest worktrees first by default", () => {

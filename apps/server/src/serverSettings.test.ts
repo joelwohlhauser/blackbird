@@ -1715,37 +1715,6 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(layerServerSettings())),
   );
 
-  it.effect("stores the Linear API key outside settings.json and redacts it for clients", () =>
-    Effect.gen(function* () {
-      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
-      const serverConfig = yield* ServerConfig.ServerConfig;
-      const fileSystem = yield* FileSystem.FileSystem;
-
-      const next = yield* serverSettings.updateSettings({
-        linearApiKey: { value: "  lin_api_secret  " },
-      });
-      assert.deepEqual(next.linearApiKey, {
-        value: "lin_api_secret",
-        valueRedacted: true,
-      });
-      assert.deepEqual(ServerSettingsModule.redactServerSettingsForClient(next).linearApiKey, {
-        value: "",
-        valueRedacted: true,
-      });
-
-      const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
-      assert.notInclude(raw, "lin_api_secret");
-
-      const roundTripped = yield* serverSettings.updateSettings({
-        worktreesDirectory: "/tmp/linear-secret-round-trip",
-      });
-      assert.equal(roundTripped.linearApiKey.value, "lin_api_secret");
-
-      const removed = yield* serverSettings.updateSettings({ linearApiKey: { value: "" } });
-      assert.deepEqual(removed.linearApiKey, { value: "" });
-    }).pipe(Effect.provide(layerServerSettings())),
-  );
-
   it.effect(
     "keeps source control host secrets in the secret store and tells clients only that one is set",
     () =>

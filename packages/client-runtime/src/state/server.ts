@@ -1164,11 +1164,6 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.workspaceCleanupList,
       staleTimeMs: 30_000,
     }),
-    linearIssueStatuses: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:server:linear-issue-statuses",
-      tag: WS_METHODS.linearIssueStatuses,
-      staleTimeMs: 0,
-    }),
     configProjection,
     welcome,
     legacyThreadMigration: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
