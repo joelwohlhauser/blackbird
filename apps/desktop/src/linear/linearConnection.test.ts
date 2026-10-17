@@ -19,7 +19,7 @@ const issue = {
 
 type Respond = (url: string, body: string) => Response | Promise<Response>;
 
-function fixture(options: { expiresAt?: number; respond?: Respond; clientId?: string } = {}) {
+function fixture(options: { expiresAt?: number; respond?: Respond } = {}) {
   let saved: string | null = JSON.stringify({
     account,
     accessToken: "access-1",
@@ -31,7 +31,7 @@ function fixture(options: { expiresAt?: number; respond?: Respond; clientId?: st
   let authorizeSignal: AbortSignal | undefined;
   const browser = Promise.withResolvers<string>();
   const dependencies: LinearConnectionDependencies = {
-    clientId: options.clientId ?? "test-client",
+    clientId: "test-client",
     redirectUri: "http://127.0.0.1:47289/linear/callback",
     now: () => 0,
     read: async () => saved,
@@ -145,13 +145,5 @@ describe("Linear connection", () => {
     expect(f.authorizeSignal()?.aborted).toBe(false);
     f.client.cancelSignIn();
     await expect(signIn).rejects.toThrow();
-  });
-
-  it("fails immediately without a client ID", async () => {
-    const f = fixture({ clientId: "" });
-    await expect(f.client.signIn()).rejects.toThrow(
-      "Linear sign-in isn't set up in this build yet.",
-    );
-    expect(f.authorizeSignal()).toBeUndefined();
   });
 });

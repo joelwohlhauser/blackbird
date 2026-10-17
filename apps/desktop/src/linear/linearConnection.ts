@@ -202,9 +202,6 @@ export function createLinearConnection(dependencies: LinearConnectionDependencie
     });
 
   const signIn = async (): Promise<LinearAccount> => {
-    if (dependencies.clientId.length === 0) {
-      throw new Error("Linear sign-in isn't set up in this build yet.");
-    }
     pendingSignIn?.abort();
     const controller = new AbortController();
     pendingSignIn = controller;

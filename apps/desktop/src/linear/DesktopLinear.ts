@@ -21,7 +21,7 @@ import { LINEAR_STATE_CHANNEL } from "../ipc/channels.ts";
 import { receiveLinearCallback } from "./linearCallback.ts";
 import { createLinearConnection } from "./linearConnection.ts";
 
-const LINEAR_CLIENT_ID = "";
+const LINEAR_CLIENT_ID = "1dcfbf2770585f1547a05917768390f2";
 const LINEAR_REDIRECT_URI = "http://127.0.0.1:47289/linear/callback";
 
 export class LinearConnectionError extends Schema.TaggedError<LinearConnectionError>()(
