@@ -40,8 +40,6 @@ interface PreviewPanelShellProps {
    * the other's remembered width.
    */
   widthStorageKey?: string;
-  /** Overrides the initial width (px) before the user has resized the panel. */
-  defaultWidth?: number;
   children: ReactNode;
 }
 
@@ -58,7 +56,6 @@ function ResizablePreviewPanelShell(props: PreviewPanelShellProps) {
   const inlineSize = usePreviewPanelInlineSize(hostRef, {
     enabled: props.mode === "inline" && !props.maximized,
     widthStorageKey: props.widthStorageKey,
-    defaultWidth: props.defaultWidth,
   });
   return <PreviewPanelShellFrame {...props} inlineSize={inlineSize} hostRef={hostRef} />;
 }

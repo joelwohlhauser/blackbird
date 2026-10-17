@@ -66,13 +66,12 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
 
   // No cross-tab subscription: panel width is per-window state.
   const readWidth = () => {
-    if (typeof window === "undefined") return defaultWidth;
+    if (typeof window === "undefined") return null;
     try {
-      const stored = getLocalStorageItem(storageKey, WidthSchema);
-      return clamp(stored ?? defaultWidth);
+      return getLocalStorageItem(storageKey, WidthSchema);
     } catch (error) {
       console.error("Could not read persisted panel width.", error);
-      return defaultWidth;
+      return null;
     }
   };
   const [widthState, setWidthState] = useState(() => ({ storageKey, width: readWidth() }));
@@ -81,7 +80,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     setWidthState({ storageKey, width: readWidth() });
   }
 
-  const clampedWidth = clamp(widthState.width);
+  const clampedWidth = clamp(widthState.width ?? defaultWidth);
   const latestOptions = useRef({ clamp, storageKey, width: clampedWidth });
   useLayoutEffect(() => {
     latestOptions.current = { clamp, storageKey, width: clampedWidth };
@@ -100,7 +99,11 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
         host?.style.setProperty(RESIZABLE_WIDTH_PROPERTY, `${nextWidth}px`);
         return nextWidth;
       },
-      finish(finalWidth) {
+      finish(finalWidth, moved) {
+        if (!moved) {
+          host?.style.setProperty(RESIZABLE_WIDTH_PROPERTY, `${latestOptions.current.width}px`);
+          return;
+        }
         setWidthState({ storageKey, width: finalWidth });
         // Commit once at drag-end to avoid 60Hz localStorage writes.
         try {

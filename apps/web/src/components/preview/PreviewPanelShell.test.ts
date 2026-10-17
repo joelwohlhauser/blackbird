@@ -5,6 +5,7 @@ import {
   getPreviewPanelMaxWidth,
   PreviewPanelShell,
 } from "./PreviewPanelShell";
+import { getPreviewPanelDefaultWidth } from "~/hooks/usePreviewPanelInlineSize";
 
 interface TestNode {
   parentElement: TestNode | null;
@@ -51,6 +52,13 @@ describe("getPreviewPanelMaxWidth", () => {
 
   it("stays at the panel minimum even when the row is narrower than the reservation", () => {
     expect(getPreviewPanelMaxWidth(1_512, 300)).toBe(360);
+  });
+});
+
+describe("getPreviewPanelDefaultWidth", () => {
+  it("splits the measured row evenly and falls back to the viewport", () => {
+    expect(getPreviewPanelDefaultWidth(1_512, 1_257)).toBe(628);
+    expect(getPreviewPanelDefaultWidth(1_280)).toBe(640);
   });
 });
 

@@ -21,7 +21,6 @@ const PREVIEW_PANEL_MAX_WIDTH_FRACTION = 0.7;
  * composer overflows, so the panel yields instead.
  */
 const SIBLING_COLUMN_MIN_WIDTH = 360;
-const PREVIEW_PANEL_DEFAULT_WIDTH = 540;
 const RESIZE_CONTAINER_ATTRIBUTE = "data-preview-panel-resize-container";
 
 interface ResizeContainerNode {
@@ -50,15 +49,18 @@ export function usePreviewPanelInlineSize(
   options: {
     readonly enabled?: boolean | undefined;
     readonly widthStorageKey?: string | undefined;
-    readonly defaultWidth?: number | undefined;
     /** Measure this row instead of the panel's parent. */
     readonly container?: HTMLElement | null | undefined;
   } = {},
 ): PreviewPanelInlineSize {
-  const maxWidth = useViewportClampedMaxWidth(hostRef, options.enabled ?? true, options.container);
+  const { maxWidth, defaultWidth } = usePreviewPanelWidthBounds(
+    hostRef,
+    options.enabled ?? true,
+    options.container,
+  );
   return useResizableWidth({
     storageKey: options.widthStorageKey ?? PREVIEW_PANEL_WIDTH_STORAGE_KEY,
-    defaultWidth: options.defaultWidth ?? PREVIEW_PANEL_DEFAULT_WIDTH,
+    defaultWidth,
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
     maxWidth,
     edge: "left",
@@ -66,17 +68,19 @@ export function usePreviewPanelInlineSize(
 }
 
 /**
- * Keep the resizable panel's upper bound in sync with the window AND the row
+ * Keep the resizable panel's bounds in sync with the window AND the row
  * it sits in. Resize-aware so dragging the OS window narrower (or expanding
  * the app sidebar) re-clamps the stored width on the next render.
  */
-function useViewportClampedMaxWidth(
+function usePreviewPanelWidthBounds(
   hostRef: RefObject<HTMLElement | null> | undefined,
   enabled: boolean,
   container: HTMLElement | null | undefined,
-): number {
-  const [maxWidth, setMaxWidth] = useState(() =>
-    getPreviewPanelMaxWidth(typeof window === "undefined" ? 1280 : window.innerWidth),
+) {
+  const initialViewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const [maxWidth, setMaxWidth] = useState(() => getPreviewPanelMaxWidth(initialViewportWidth));
+  const [defaultWidth, setDefaultWidth] = useState(() =>
+    getPreviewPanelDefaultWidth(initialViewportWidth),
   );
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
@@ -85,11 +89,14 @@ function useViewportClampedMaxWidth(
       (enabled && hostRef?.current ? findPreviewPanelResizeContainer(hostRef.current) : null);
     // Measure before first paint: the persisted width must be clamped against
     // the row on the initial render, not one observer tick later (the panel
-    // would flash over-wide on every mount). Only the derived cap is stored: the
-    // row resizes every frame of a sidebar drag, but the cap rarely moves, and an
-    // unchanged cap skips re-rendering the panel's owner.
+    // would flash over-wide on every mount). Only derived bounds are stored, so
+    // an unchanged value skips re-rendering the panel's owner.
     const measure = () => {
-      setMaxWidth(getPreviewPanelMaxWidth(window.innerWidth, row?.clientWidth));
+      const navigatorWidth =
+        row?.querySelector<HTMLElement>("[data-workspace-navigator]")?.offsetWidth ?? 0;
+      const sharedWidth = row ? row.clientWidth - navigatorWidth : undefined;
+      setMaxWidth(getPreviewPanelMaxWidth(window.innerWidth, sharedWidth));
+      setDefaultWidth(getPreviewPanelDefaultWidth(window.innerWidth, sharedWidth));
     };
     measure();
     let frame = 0;
@@ -101,15 +108,20 @@ function useViewportClampedMaxWidth(
       });
     };
     window.addEventListener("resize", onResize);
-    const stopObserving = row ? observeResize(row, measure) : undefined;
+    const stopObserving = row ? observeResize([row, ...row.children], measure) : undefined;
     return () => {
       window.removeEventListener("resize", onResize);
       if (frame !== 0) window.cancelAnimationFrame(frame);
       stopObserving?.();
     };
   }, [container, hostRef, enabled]);
-  return maxWidth;
+  return { maxWidth, defaultWidth };
 }
+
+export function getPreviewPanelDefaultWidth(viewportWidth: number, containerWidth?: number) {
+  return Math.floor((containerWidth ?? viewportWidth) / 2);
+}
+
 export function getPreviewPanelMaxWidth(viewportWidth: number, containerWidth?: number): number {
   const fractionCap = Math.floor(viewportWidth * PREVIEW_PANEL_MAX_WIDTH_FRACTION);
   const containerCap =
