@@ -52,7 +52,8 @@ vi.mock("./ServerBrowserContexts.ts", () => ({
     async connectDesktopPage(endpoint: string) {
       const context = makeContext();
       desktopConnections.push({ endpoint, context });
-      return { browser: { close: async () => {} }, page: context.page as unknown as Page };
+      const browser = { close: async () => void context.page.emit("close") };
+      return { browser, page: context.page as unknown as Page };
     }
     async close() {
       for (const context of contexts) await context.close();
@@ -1710,6 +1711,81 @@ it.live("a desktop page that comes back reconnects without waiting for a viewer"
       // Without a viewer or agent, the server drives the page again, so its URL keeps reaching clients.
       while (desktopConnections.length < 2) yield* Effect.yieldNow;
       expect(desktopConnections).toHaveLength(2);
+    }),
+  ).pipe(Effect.provide(layer)),
+);
+
+it.live("an agent's desktop page leaves and returns with the desktop's", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const browser = yield* ServerBrowser.ServerBrowser;
+      const manager = yield* Manager.PreviewManager;
+      yield* Effect.yieldNow;
+      desktopRendersNext = true;
+      const opened = yield* manager.open({ threadId: scope.thread.threadId, runtime: "server" });
+      const agentCloses: Array<boolean | undefined> = [];
+      yield* browser.openAgentPage({
+        threadId: scope.thread.threadId,
+        tabId: opened.tabId,
+        agentSessionId: Broker.hostAssignmentKey(scope),
+        listener: { onEvent: () => {}, onClose: (replaced) => agentCloses.push(replaced) },
+      });
+      const connected = yield* browser.connectedTabs.pipe(Stream.runHead, Effect.forkScoped);
+      while (desktopDetaches.listenerCount("detach") === 0) yield* Effect.yieldNow;
+      desktopDetaches.emit("detach", { threadId: scope.thread.threadId, tabId: opened.tabId });
+      while (agentCloses.length === 0) yield* Effect.yieldNow;
+      expect(agentCloses).toEqual([false]);
+      desktopDetaches.emit("attach", { threadId: scope.thread.threadId, tabId: opened.tabId });
+      expect(yield* Fiber.join(connected)).toEqual(
+        Option.some({ threadId: scope.thread.threadId, tabId: opened.tabId }),
+      );
+      expect(desktopConnections).toHaveLength(2);
+    }),
+  ).pipe(Effect.provide(layer)),
+);
+
+it.live("a desktop that attaches a headless tab late takes it over", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { browser, broker, tabId } = yield* ready;
+      expect(desktopConnections).toEqual([]);
+      const headless = contexts[0]!;
+      const viewer = yield* browser.attachViewer(viewerInput(tabId, false));
+      const agentCloses: Array<boolean | undefined> = [];
+      yield* browser.openAgentPage({
+        threadId: scope.thread.threadId,
+        tabId,
+        agentSessionId: Broker.hostAssignmentKey(scope),
+        listener: { onEvent: () => {}, onClose: (replaced) => agentCloses.push(replaced) },
+      });
+      const connected = yield* browser.connectedTabs.pipe(Stream.runHead, Effect.forkScoped);
+      while (desktopDetaches.listenerCount("attach") === 0) yield* Effect.yieldNow;
+      desktopTabs.add(tabId);
+      desktopDetaches.emit("attach", { threadId: scope.thread.threadId, tabId });
+      while (desktopConnections.length === 0) yield* Effect.yieldNow;
+      expect(headless.page.close).toHaveBeenCalled();
+      let end = yield* Queue.take(viewer.output);
+      while (end._tag !== "reconnect" && end._tag !== "gone")
+        end = yield* Queue.take(viewer.output);
+      expect(end._tag).toBe("reconnect");
+      expect(agentCloses).toHaveLength(1);
+      expect(yield* Fiber.join(connected)).toEqual(
+        Option.some({ threadId: scope.thread.threadId, tabId }),
+      );
+      yield* broker.invoke({
+        scope,
+        tabId,
+        operation: "navigate",
+        input: { url: "http://localhost:5173/next", readiness: "none" },
+      });
+      expect(desktopConnections[0]!.context.page.goto).toHaveBeenCalledWith(
+        "http://localhost:5173/next",
+        expect.anything(),
+      );
+      expect(headless.page.goto).not.toHaveBeenCalledWith(
+        "http://localhost:5173/next",
+        expect.anything(),
+      );
     }),
   ).pipe(Effect.provide(layer)),
 );

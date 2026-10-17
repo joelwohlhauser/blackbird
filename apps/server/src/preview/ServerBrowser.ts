@@ -54,6 +54,7 @@ import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -265,6 +266,7 @@ export class ServerBrowser extends Context.Service<
      * clients report again on connect and whenever the list changes.
      */
     readonly reportProfiles: (input: PreviewReportProfilesInput) => Effect.Effect<void>;
+    readonly connectedTabs: Stream.Stream<{ readonly threadId: ThreadId; readonly tabId: string }>;
   }
 >()("t3/preview/ServerBrowser") {}
 
@@ -518,6 +520,7 @@ const make = Effect.gen(function* () {
 
   const tabs = new Map<string, ServerTab>();
   const pendingTabs = new Map<string, Promise<ServerTab>>();
+  const connectedTabs = yield* PubSub.unbounded<{ threadId: ThreadId; tabId: string }>();
   /** Sessions closed while their tab was still opening; the open discards its page. */
   const closedPendingTabs = new Set<string>();
   /** Popup pages waiting for the tab their `opened` event creates. */
@@ -718,8 +721,8 @@ const make = Effect.gen(function* () {
     tabs.delete(key);
     tab.closing = true;
     clearAbortedNavigation(tab);
-    // A desktop page outlives the connection unless its session closed with it.
-    const end = tab.desktop && !closeSession && sessionOpen(tab) ? "reconnect" : "gone";
+    // A tab outlives the connection unless its session closed with it.
+    const end = !closeSession && sessionOpen(tab) ? "reconnect" : "gone";
     for (const viewer of tab.viewers) viewer.push({ _tag: end });
     void tab.control.close().catch(constVoid);
     // The desktop owns its page; letting go only ends this connection.
@@ -942,6 +945,7 @@ const make = Effect.gen(function* () {
     page.on("crash", () => dropTab(tab, true));
     tabs.set(key, tab);
     reportLiveTabs();
+    PubSub.publishUnsafe(connectedTabs, { threadId: tab.threadId, tabId: tab.tabId });
     // A popup is already loading its own URL, and the desktop loads its tab's.
     if (!adopted && !desktop && snapshot.navStatus._tag === "Loading") {
       tab.initialNavigation = page
@@ -1931,7 +1935,7 @@ const make = Effect.gen(function* () {
         throw new BrowserControlInterrupted("A human controls this tab.", "humanControl");
       void tab.control.close().catch(constVoid);
       await Effect.runPromise(manager.close({ threadId: tab.threadId, tabId: tab.tabId }));
-      dropTab(tab, false);
+      dropTab(tab, true);
       return {};
     }
     // A click can be waiting for its dialog. Resolve it outside the serial queue,
@@ -2513,18 +2517,26 @@ const make = Effect.gen(function* () {
     ),
     Effect.forkScoped,
   );
-  // The page came back, for example after its DevTools closed. Reconnect now
-  // rather than on the next viewer or agent, or the tab's URL and title stop
-  // reaching every client in the meantime.
+  // The page came back, for example after its DevTools closed, or arrived after
+  // its tab fell back to headless. Reconnect now rather than on the next viewer
+  // or agent, or the tab's URL and title stop reaching every client in the meantime.
   yield* desktopChannel.attached.pipe(
     Stream.runForEach((key) =>
       Effect.gen(function* () {
-        if (tabs.has(tabKey(key.threadId, key.tabId))) return;
         const { sessions } = yield* manager.list({ threadId: ThreadId.make(key.threadId) });
         const snapshot = sessions.find(
           (session) => session.tabId === key.tabId && session.runtime === "server",
         );
-        if (snapshot) yield* Effect.promise(() => ensureTab(snapshot).catch(constVoid));
+        if (!snapshot) return;
+        yield* Effect.promise(() =>
+          ensureTab(snapshot)
+            .then((tab) => {
+              if (tab.desktop || tab.openerTabId !== undefined) return;
+              dropTab(tab, false);
+              return ensureTab(snapshot);
+            })
+            .catch(constVoid),
+        );
       }).pipe(Effect.ignore),
     ),
     Effect.forkScoped,
@@ -2602,7 +2614,16 @@ const make = Effect.gen(function* () {
             };
           const session = await openSession(tab.page);
           session.on("event", ({ method, params }) => input.listener.onEvent(method, params));
-          session.on("close", input.listener.onClose);
+          const key = tabKey(input.threadId, input.tabId);
+          let gone = false;
+          const pageGone = () => {
+            if (gone) return;
+            gone = true;
+            const current = tabs.get(key);
+            input.listener.onClose(current !== undefined && current !== tab);
+          };
+          session.on("close", pageGone);
+          tab.page.once("close", pageGone);
           const info = await session.send("Target.getTargetInfo", {});
           const frameSessions = new Map<Frame, RawCdpSession | null>();
           let detached = false;
@@ -2659,6 +2680,7 @@ const make = Effect.gen(function* () {
             detach: async () => {
               if (detached) return;
               detached = true;
+              tab.page.off("close", pageGone);
               if (watchFrame !== null) {
                 tab.page.off("frameattached", watchFrame);
                 tab.page.off("framenavigated", watchFrame);
@@ -2682,6 +2704,7 @@ const make = Effect.gen(function* () {
     reportProfiles,
     openDownload,
     answerFileChooser,
+    connectedTabs: Stream.fromPubSub(connectedTabs),
   });
 });
 

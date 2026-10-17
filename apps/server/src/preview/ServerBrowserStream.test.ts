@@ -18,6 +18,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { HttpRouter, HttpServer } from "effect/http";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
@@ -90,6 +91,7 @@ it.effect.each([
       openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
+      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
       attachViewer: (input) =>
@@ -168,6 +170,7 @@ it.effect.each([
       openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
+      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
       attachViewer: () => {
@@ -210,6 +213,7 @@ it.effect("serves a tab's download only to an authorized session", () =>
       openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
+      connectedTabs: Stream.empty,
       openDownload: (input) =>
         Effect.sync(() => {
           requests.push(input);
@@ -259,6 +263,7 @@ it.effect("passes uploaded files to the page's open picker and needs operate sco
       openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
+      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: (input) =>
         Effect.sync(() => {
@@ -329,6 +334,7 @@ it.effect.each([
       openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
+      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
       attachViewer: () => Effect.fail(new ServerBrowser.ServerBrowserLaunchError({ cause: error })),

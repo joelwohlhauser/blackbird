@@ -123,6 +123,11 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
       }
     }),
   );
+  const followConnectedTabs = Stream.runForEach(browser.connectedTabs, (tab) =>
+    Effect.sync(() => {
+      if (tab.threadId === threadId) connection.tabOpened(tab.tabId);
+    }),
+  );
   const tokenLiveness = Effect.gen(function* () {
     while (true) {
       yield* Effect.sleep(TOKEN_LIVENESS_INTERVAL);
@@ -132,6 +137,7 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
 
   yield* drainOutbox.pipe(Effect.forkScoped);
   yield* followTabs.pipe(Effect.forkScoped);
+  yield* followConnectedTabs.pipe(Effect.forkScoped);
   const reason = yield* Effect.raceAll([readAgent, tokenLiveness, Deferred.await(ended)]);
   yield* Effect.logDebug("agent browser connection closed", { reason });
   yield* writer.write(new Socket.CloseEvent(1000, closeReason(reason))).pipe(Effect.ignore);

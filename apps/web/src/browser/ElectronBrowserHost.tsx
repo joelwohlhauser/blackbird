@@ -1,10 +1,11 @@
 "use client";
 
-import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import { parseScopedThreadKey, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   AuthPreviewOperateScope,
   type DesktopPreviewOpenLinkEvent,
   FILL_PREVIEW_VIEWPORT,
+  type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { type ComponentProps, useEffect, useEffectEvent, useMemo, useState } from "react";
@@ -24,8 +25,13 @@ import { readPreviewAnnotationTheme } from "./annotationTheme";
 import { useBrowserDefaults } from "./browserDefaults";
 import { useBrowserPointerStore } from "./browserPointerStore";
 import { useActiveBrowserRecordingTabIds } from "./browserRecording";
-import { threadAgentActiveAtom, useRecentBrowserThreadsStore } from "./browserTabRetention";
+import {
+  primaryAgentActiveThreadRefsAtom,
+  threadAgentActiveAtom,
+  useRecentBrowserThreadsStore,
+} from "./browserTabRetention";
 import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
+import { usePreviewSession } from "~/components/preview/usePreviewSession";
 import { addBrowserSurface } from "~/components/preview/addBrowserSurface";
 import { HostedBrowserWebview } from "./HostedBrowserWebview";
 import { openUrlInPreview } from "./openFileInPreview";
@@ -38,6 +44,7 @@ export function ElectronBrowserHost() {
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: true });
   const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
   const recentThreadKeys = useRecentBrowserThreadsStore((state) => state.threadKeys);
+  const agentActiveThreadRefs = useAtomValue(primaryAgentActiveThreadRefsAtom);
   const recordingTabIds = useActiveBrowserRecordingTabIds();
   const sessions = useMemo(
     () =>
@@ -183,6 +190,9 @@ export function ElectronBrowserHost() {
   if (!isElectron) return null;
   return (
     <div className="contents" data-electron-browser-host>
+      {agentActiveThreadRefs.map((threadRef) => (
+        <PreviewSessionSync key={scopedThreadKey(threadRef)} threadRef={threadRef} />
+      ))}
       {sessions.map(
         ({ threadRef, threadKey, snapshot, runtimeTabId, pictureInPicture, zoomFactor }) => {
           const url = snapshot.navStatus._tag === "Idle" ? null : snapshot.navStatus.url;
@@ -219,6 +229,11 @@ export function ElectronBrowserHost() {
       )}
     </div>
   );
+}
+
+function PreviewSessionSync(props: { readonly threadRef: ScopedThreadRef }) {
+  usePreviewSession(props.threadRef);
+  return null;
 }
 
 function RetainedBrowserWebview({

@@ -1,6 +1,6 @@
 export interface AgentCdpPageListener {
   readonly onEvent: (method: string, params: unknown) => void;
-  readonly onClose: () => void;
+  readonly onClose: (replaced?: boolean) => void;
 }
 
 export interface AgentCdpChild {
@@ -353,11 +353,12 @@ export function createAgentCdpConnection(
   };
 
   const detach = (attached: AttachedPage) => {
-    if (!forget(attached)) return;
+    if (!forget(attached)) return false;
     send({
       method: "Target.detachedFromTarget",
       params: { sessionId: attached.sessionId, targetId: attached.targetInfo["targetId"] },
     });
+    return true;
   };
 
   const attachChildren = (parent: AttachedPage) => {
@@ -408,8 +409,10 @@ export function createAgentCdpConnection(
         onEvent: (method, params) => {
           if (attached && pages.get(tabId) === attached) send({ method, params, sessionId });
         },
-        onClose: () => {
-          if (attached) detach(attached);
+        onClose: (replaced) => {
+          if (attached && detach(attached) && replaced && autoAttach && !closed) {
+            void attachQuietly(tabId);
+          }
         },
       })
       .then((page) => {

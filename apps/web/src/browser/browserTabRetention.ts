@@ -1,8 +1,10 @@
 import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import { threadRefsEqual } from "@t3tools/client-runtime/state/entities";
 import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
 import { Atom } from "effect/reactivity";
 import { create } from "zustand";
 
+import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 import { environmentThreadShells } from "~/state/threads";
 
 const RECENT_THREAD_LIMIT = 4;
@@ -37,4 +39,16 @@ export const threadAgentActiveAtom = Atom.family((threadKey: string) =>
       threadRuntimeIsActive(get(environmentThreadShells.threadShellAtom(threadRef))?.runtime)
     );
   }).pipe(Atom.withLabel(`browser:thread-agent-active:${threadKey}`)),
+);
+
+export const primaryAgentActiveThreadRefsAtom = Atom.make((get) => {
+  const primaryEnvironmentId = get(primaryEnvironmentIdAtom);
+  return get(environmentThreadShells.threadShellsAtom).flatMap((thread) =>
+    thread.environmentId === primaryEnvironmentId && threadRuntimeIsActive(thread.runtime)
+      ? [{ environmentId: thread.environmentId, threadId: thread.id }]
+      : [],
+  );
+}).pipe(
+  Atom.withEquality(threadRefsEqual),
+  Atom.withLabel("browser:primary-agent-active-thread-refs"),
 );

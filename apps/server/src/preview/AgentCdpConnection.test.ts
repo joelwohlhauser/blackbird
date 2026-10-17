@@ -167,6 +167,27 @@ describe("agent CDP connection", () => {
     expect(cdp.reply(2)).toMatchObject({ id: 2, error: { code: -32000 }, sessionId });
   });
 
+  it("re-attaches a page the browser replaced, and only that one", async () => {
+    const cdp = connect(["tab-1", "tab-2"]);
+    cdp.command(1, "Target.setAutoAttach", {});
+    await settle();
+    const [first, second] = cdp.attachedSessions();
+    cdp.listeners.get("tab-1")!.onClose(true);
+    cdp.listeners.get("tab-2")!.onClose(false);
+    await settle();
+
+    expect(cdp.written).toContainEqual({
+      method: "Target.detachedFromTarget",
+      params: { sessionId: first!.sessionId, targetId: "TARGET-tab-1" },
+    });
+    expect(cdp.written).toContainEqual({
+      method: "Target.detachedFromTarget",
+      params: { sessionId: second!.sessionId, targetId: "TARGET-tab-2" },
+    });
+    expect(cdp.host.attach.mock.calls.map(([tabId]) => tabId)).toEqual(["tab-1", "tab-2", "tab-1"]);
+    expect(cdp.attachedSessions()).toHaveLength(3);
+  });
+
   it("refuses extra browser contexts and ends on Browser.close", async () => {
     const cdp = connect(["tab-1"]);
     cdp.command(1, "Target.createBrowserContext", {});

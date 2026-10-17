@@ -38,6 +38,7 @@ const serve = (state: { live: boolean }) =>
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
       reportProfiles: () => Effect.void,
+      connectedTabs: Stream.empty,
       openAgentPage: (input) =>
         Effect.succeed({
           targetInfo: { targetId: "PAGE-TARGET", url: "https://example.com/" },
