@@ -16,7 +16,7 @@ import {
   XIcon,
 } from "lucide-react";
 import * as DateTime from "effect/DateTime";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { isDesktopLocalConnectionTarget } from "../../connection/desktopLocal";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
@@ -151,10 +151,7 @@ function environmentDetail(environment: EnvironmentPresentation): string {
 export function WorkspacesSettingsPanel() {
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const options = useMemo(
-    () => buildProviderEnvironmentOptions(environments, primaryEnvironmentId),
-    [environments, primaryEnvironmentId],
-  );
+  const options = buildProviderEnvironmentOptions(environments, primaryEnvironmentId);
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(
     primaryEnvironmentId,
   );
@@ -176,25 +173,25 @@ export function WorkspacesSettingsPanel() {
   const { snapshots: archivedSnapshots } = useArchivedThreadSnapshots(
     effectiveEnvironmentId === null ? [] : [effectiveEnvironmentId],
   );
-  const selectedProjects = useMemo(() => {
-    const projectInputs = [
-      ...projects
-        .filter((project) => project.environmentId === effectiveEnvironmentId)
-        .map((project) => ({
-          projectId: project.id,
-          title: project.title,
-          cwd: project.workspaceRoot,
-        })),
-      ...archivedSnapshots.flatMap(({ snapshot }) =>
-        snapshot.projects.map((project) => ({
-          projectId: project.id,
-          title: project.title,
-          cwd: project.workspaceRoot,
-        })),
-      ),
-    ];
-    return [...new Map(projectInputs.map((project) => [project.cwd, project])).values()];
-  }, [archivedSnapshots, effectiveEnvironmentId, projects]);
+  const projectInputs = [
+    ...projects
+      .filter((project) => project.environmentId === effectiveEnvironmentId)
+      .map((project) => ({
+        projectId: project.id,
+        title: project.title,
+        cwd: project.workspaceRoot,
+      })),
+    ...archivedSnapshots.flatMap(({ snapshot }) =>
+      snapshot.projects.map((project) => ({
+        projectId: project.id,
+        title: project.title,
+        cwd: project.workspaceRoot,
+      })),
+    ),
+  ];
+  const selectedProjects = [
+    ...new Map(projectInputs.map((project) => [project.cwd, project])).values(),
+  ];
   const workspaceQuery = useEnvironmentQuery(
     effectiveEnvironmentId === null || selectedEnvironment?.connection.phase !== "connected"
       ? null
@@ -231,60 +228,43 @@ export function WorkspacesSettingsPanel() {
     threadId: null,
   });
 
-  const rows = useMemo(
-    () =>
-      (workspaceDetailsQuery.data?.worktrees ?? workspaceQuery.data?.worktrees ?? []).map(
-        (worktree) => {
-          const chatSummary = summarizeWorkspaceChats(worktree.path, chats);
-          return {
-            ...worktree,
-            chatSummary,
-            hasLiveTerminal:
-              terminalSessions === null ||
-              terminalSessions.some(
-                (terminal) =>
-                  terminal.state.status !== "closed" &&
-                  terminal.state.status !== "exited" &&
-                  terminal.state.status !== "error" &&
-                  workspacePathsMatch(terminal.state.summary?.worktreePath ?? null, worktree.path),
-              ),
-            issueId: linearIssueIdForWorkspace({ branch: worktree.branch, path: worktree.path }),
-          };
-        },
-      ),
-    [
-      chats,
-      terminalSessions,
-      workspaceDetailsQuery.data?.worktrees,
-      workspaceQuery.data?.worktrees,
-    ],
-  );
-  const issueIds = useMemo(
-    () => [...new Set(rows.flatMap((row) => (row.issueId ? [row.issueId] : [])))],
-    [rows],
-  );
-  const linearStatuses = useLinearIssueStatuses(issueIds);
-  const issuesById = useMemo(
-    () => new Map(linearStatuses.issues.map((issue) => [issue.issueId, issue])),
-    [linearStatuses.issues],
-  );
-  const sortedRows = useMemo(() => {
-    const sortableRows = rows.map((row) => {
-      const linear = linearWorkspaceStatusLabel(
-        row.issueId,
-        row.issueId ? issuesById.get(row.issueId) : undefined,
-        linearStatuses.status,
-      );
+  const rows = (workspaceDetailsQuery.data?.worktrees ?? workspaceQuery.data?.worktrees ?? []).map(
+    (worktree) => {
+      const chatSummary = summarizeWorkspaceChats(worktree.path, chats);
       return {
-        ...row,
-        linear,
-        linearSortValue: `${linear.label} ${linear.detail ?? ""}`,
-        chatCount: row.chatSummary.count,
-        latestUpdatedAt: row.chatSummary.latestUpdatedAt,
+        ...worktree,
+        chatSummary,
+        hasLiveTerminal:
+          terminalSessions === null ||
+          terminalSessions.some(
+            (terminal) =>
+              terminal.state.status !== "closed" &&
+              terminal.state.status !== "exited" &&
+              terminal.state.status !== "error" &&
+              workspacePathsMatch(terminal.state.summary?.worktreePath ?? null, worktree.path),
+          ),
+        issueId: linearIssueIdForWorkspace({ branch: worktree.branch, path: worktree.path }),
       };
-    });
-    return sortWorkspaceRows(sortableRows, sort.key, sort.direction);
-  }, [issuesById, linearStatuses.status, rows, sort]);
+    },
+  );
+  const issueIds = [...new Set(rows.flatMap((row) => (row.issueId ? [row.issueId] : [])))];
+  const linearStatuses = useLinearIssueStatuses(issueIds);
+  const issuesById = new Map(linearStatuses.issues.map((issue) => [issue.issueId, issue]));
+  const sortableRows = rows.map((row) => {
+    const linear = linearWorkspaceStatusLabel(
+      row.issueId,
+      row.issueId ? issuesById.get(row.issueId) : undefined,
+      linearStatuses.status,
+    );
+    return {
+      ...row,
+      linear,
+      linearSortValue: `${linear.label} ${linear.detail ?? ""}`,
+      chatCount: row.chatSummary.count,
+      latestUpdatedAt: row.chatSummary.latestUpdatedAt,
+    };
+  });
+  const sortedRows = sortWorkspaceRows(sortableRows, sort.key, sort.direction);
 
   const toggleSort = (key: WorkspaceSortKey) => {
     setSort((current) => ({

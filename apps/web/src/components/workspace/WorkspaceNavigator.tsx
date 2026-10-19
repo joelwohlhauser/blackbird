@@ -12,7 +12,7 @@ import {
   PullRequestPreviewPills,
   usePullRequestPreviews,
 } from "~/components/pullRequest/PullRequestPreviews";
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "~/hooks/useResizableWidth";
 import { useClientSettings } from "~/hooks/useSettings";
@@ -195,49 +195,32 @@ export default function WorkspaceNavigator(props: WorkspaceNavigatorProps) {
     if (pullRequestRefreshRequest === 0) return;
     pullRequestDiffQuery.refresh();
   }, [pullRequestDiffQuery.refresh, pullRequestRefreshRequest]);
-  const workingTreeFiles = useMemo(
-    () => workingTreeFilesToChanges(props.gitStatus?.workingTree.files ?? []),
-    [props.gitStatus?.workingTree.files],
-  );
-  const pullRequestFiles = useMemo(
-    () => pullRequestDiffSlicesToFileChanges(currentPullRequestDiffWalk.slices),
-    [currentPullRequestDiffWalk.slices],
-  );
-  const filteredPullRequestFiles = useMemo(
-    () =>
-      pullRequestFileFilter.id === "all"
-        ? pullRequestFiles
-        : pullRequestFiles.filter(
-            (file) =>
-              (diffFileTier(file.path) === "test") === (pullRequestFileFilter.id === "tests"),
-          ),
-    [pullRequestFileFilter, pullRequestFiles],
-  );
-  const pullRequestStat = useMemo(
-    () =>
-      pullRequestFiles.reduce(
-        (total, file) => ({
-          additions: total.additions + file.additions,
-          deletions: total.deletions + file.deletions,
-        }),
-        { additions: 0, deletions: 0 },
-      ),
-    [pullRequestFiles],
+  const workingTreeFiles = workingTreeFilesToChanges(props.gitStatus?.workingTree.files ?? []);
+  const pullRequestFiles = pullRequestDiffSlicesToFileChanges(currentPullRequestDiffWalk.slices);
+  const filteredPullRequestFiles =
+    pullRequestFileFilter.id === "all"
+      ? pullRequestFiles
+      : pullRequestFiles.filter(
+          (file) => (diffFileTier(file.path) === "test") === (pullRequestFileFilter.id === "tests"),
+        );
+  const pullRequestStat = pullRequestFiles.reduce(
+    (total, file) => ({
+      additions: total.additions + file.additions,
+      deletions: total.deletions + file.deletions,
+    }),
+    { additions: 0, deletions: 0 },
   );
   const refreshPullRequest = async () => {
     if (pullRequestRefreshing) return;
     setPullRequestRefreshing(true);
-    try {
-      await invalidatePullRequest({
-        environmentId: props.environmentId,
-        input: props.pullRequestReference ? { reference: props.pullRequestReference } : {},
-      });
-      setPullRequestDiffWalk(EMPTY_PULL_REQUEST_DIFF_WALK);
-      setPullRequestRefreshRequest((request) => request + 1);
-      await props.onRefreshPullRequest();
-    } finally {
-      setPullRequestRefreshing(false);
-    }
+    await invalidatePullRequest({
+      environmentId: props.environmentId,
+      input: props.pullRequestReference ? { reference: props.pullRequestReference } : {},
+    });
+    setPullRequestDiffWalk(EMPTY_PULL_REQUEST_DIFF_WALK);
+    setPullRequestRefreshRequest((request) => request + 1);
+    await props.onRefreshPullRequest();
+    setPullRequestRefreshing(false);
   };
 
   return (

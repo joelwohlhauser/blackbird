@@ -79,6 +79,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
                 aria-pressed={rightPanelOpen}
                 onClick={onToggleRightPanel}
                 aria-label="Toggle right panel"
+                data-right-panel-toggle
                 variant="ghost"
                 size="icon-sm"
                 disabled={!rightPanelAvailable}

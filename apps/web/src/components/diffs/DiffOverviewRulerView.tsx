@@ -1,5 +1,3 @@
-import { useMemo } from "react";
-
 import { cn } from "~/lib/utils";
 
 import { buildDiffOverviewMarkers, type DiffOverviewFile } from "./diffOverviewRuler";
@@ -9,7 +7,7 @@ interface DiffOverviewRulerProps {
 }
 
 export function DiffOverviewRuler({ files }: DiffOverviewRulerProps) {
-  const markers = useMemo(() => buildDiffOverviewMarkers(files), [files]);
+  const markers = buildDiffOverviewMarkers(files);
 
   return (
     <div aria-hidden="true" className="diff-overview-ruler">

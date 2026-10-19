@@ -1,10 +1,4 @@
 // @effect-diagnostics nodeBuiltinImport:off - worktrees have no dependencies installed, so only Node built-ins exist.
-/**
- * Worktree setup, run by the t3.json "Setup Worktree" action as
- * `node scripts/setup-worktree.ts`. Plain Node keeps one command working in
- * every shell T3 Code spawns (zsh, bash, fish, PowerShell): it links the main
- * checkout's gitignored env files into this worktree.
- */
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 

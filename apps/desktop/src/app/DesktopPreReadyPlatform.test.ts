@@ -94,21 +94,26 @@ describe("DesktopPreReadyPlatform", () => {
       switches: { "ozone-platform": "wayland", "disable-features": "Vulkan" },
       hyprlandVersion: "0.48.1",
       hyprlandCommit: "29e2e59fdbab8ed2cc23a20e3c6043d5decb5cdc",
-      expected: [["disable-features", "Vulkan,WaylandWpColorManagerV1"]],
+      expected: [
+        [
+          "disable-features",
+          "Vulkan,HardwareMediaKeyHandling,MediaSessionService,WaylandWpColorManagerV1",
+        ],
+      ],
     },
     {
       label: "preserves color management on Hyprland 0.51.0",
       switches: { "ozone-platform": "wayland", "disable-features": "Vulkan" },
       hyprlandVersion: "0.51.0",
       hyprlandCommit: "0123456789abcdef0123456789abcdef01234567",
-      expected: [],
+      expected: [["disable-features", "Vulkan,HardwareMediaKeyHandling,MediaSessionService"]],
     },
     {
       label: "preserves color management when Electron resolved X11",
       switches: { "ozone-platform": "x11", "disable-features": "Vulkan" },
       hyprlandVersion: "0.48.1",
       hyprlandCommit: "29e2e59fdbab8ed2cc23a20e3c6043d5decb5cdc",
-      expected: [],
+      expected: [["disable-features", "Vulkan,HardwareMediaKeyHandling,MediaSessionService"]],
     },
   ])("$label", ({ switches, hyprlandVersion, hyprlandCommit, expected }) => {
     vi.stubEnv("XDG_CURRENT_DESKTOP", "Hyprland");

@@ -1,7 +1,5 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { AuthPreviewOperateScope, type ScopedThreadRef } from "@t3tools/contracts";
-import { useCallback } from "react";
-
 import {
   isPreviewSupportedInRuntime,
   setActivePreviewTab,
@@ -44,19 +42,16 @@ export function useGitHubPullRequestSurface(threadRef: ScopedThreadRef | null) {
     reportFailure: false,
   });
 
-  return useCallback(
-    (url: string): boolean => {
-      if (!threadRef || !canOperatePreview || !browserAvailable) return false;
+  return (url: string): boolean => {
+    if (!threadRef || !canOperatePreview || !browserAvailable) return false;
 
-      if (activateExistingGitHubPullRequestSurface(threadRef, previewState.sessions)) return true;
+    if (activateExistingGitHubPullRequestSurface(threadRef, previewState.sessions)) return true;
 
-      void addGitHubPullRequestSurface({
-        threadRef,
-        openPreview,
-        url,
-      });
-      return true;
-    },
-    [browserAvailable, canOperatePreview, openPreview, previewState.sessions, threadRef],
-  );
+    void addGitHubPullRequestSurface({
+      threadRef,
+      openPreview,
+      url,
+    });
+    return true;
+  };
 }

@@ -6,7 +6,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useCallback, useRef } from "react";
+import { useRef } from "react";
 
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
@@ -24,12 +24,6 @@ function reportScratchFailure(title: string, error: unknown) {
   );
 }
 
-/**
- * Quick chats are upstream's threads without a project: the server owns one
- * Quick chats project per environment, rooted at the home folder, and creates
- * it on first use. They always start on the primary environment so the
- * sidebar's single Quick chats section shows every one of them.
- */
 export function useScratchProject() {
   const { environments } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -37,57 +31,40 @@ export function useScratchProject() {
   const handleNewThread = useNewThreadHandler();
   const pendingRef = useRef(false);
 
-  /** The Quick chats folder of a connected environment, or null when it offers none. */
-  const scratchWorkspaceRootFor = useCallback(
-    (environmentId: EnvironmentId | null): string | null => {
-      const environment = environments.find((entry) => entry.environmentId === environmentId);
-      return availableScratchWorkspaceRoot(
-        environment?.connection.phase,
-        environment?.serverConfig,
-      );
-    },
-    [environments],
-  );
+  const scratchWorkspaceRootFor = (environmentId: EnvironmentId | null): string | null => {
+    const environment = environments.find((entry) => entry.environmentId === environmentId);
+    return availableScratchWorkspaceRoot(environment?.connection.phase, environment?.serverConfig);
+  };
 
   const scratchEnvironmentId =
     scratchWorkspaceRootFor(primaryEnvironmentId) === null ? null : primaryEnvironmentId;
 
-  /** Resolves to the Quick chats project once it is in this client's store. */
-  const openScratchProject = useCallback(
-    async (
-      environmentId: EnvironmentId,
-      failureTitle = "Failed to start a quick chat",
-    ): Promise<EnvironmentProject | null> => {
-      const result = await openScratch({ environmentId, input: {} });
-      if (result._tag === "Success") return result.value;
-      if (!isAtomCommandInterrupted(result)) {
-        reportScratchFailure(failureTitle, squashAtomCommandFailure(result));
-      }
-      return null;
-    },
-    [openScratch],
-  );
+  const openScratchProject = async (
+    environmentId: EnvironmentId,
+    failureTitle = "Failed to start a quick chat",
+  ): Promise<EnvironmentProject | null> => {
+    const result = await openScratch({ environmentId, input: {} });
+    if (result._tag === "Success") return result.value;
+    if (!isAtomCommandInterrupted(result)) {
+      reportScratchFailure(failureTitle, squashAtomCommandFailure(result));
+    }
+    return null;
+  };
 
-  const startScratchThread = useCallback(
-    async (environmentId: EnvironmentId) => {
-      if (pendingRef.current) return;
-      pendingRef.current = true;
-      try {
-        const project = await openScratchProject(environmentId);
-        if (project) {
-          await handleNewThread(scopeProjectRef(project.environmentId, project.id), {
-            branch: null,
-            worktreePath: null,
-            envMode: "local",
-            startFromOrigin: false,
-          }).catch((error: unknown) => reportScratchFailure("Failed to start a quick chat", error));
-        }
-      } finally {
-        pendingRef.current = false;
-      }
-    },
-    [handleNewThread, openScratchProject],
-  );
+  const startScratchThread = async (environmentId: EnvironmentId) => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    const project = await openScratchProject(environmentId);
+    if (project) {
+      await handleNewThread(scopeProjectRef(project.environmentId, project.id), {
+        branch: null,
+        worktreePath: null,
+        envMode: "local",
+        startFromOrigin: false,
+      }).catch((error: unknown) => reportScratchFailure("Failed to start a quick chat", error));
+    }
+    pendingRef.current = false;
+  };
 
   return { scratchWorkspaceRootFor, scratchEnvironmentId, openScratchProject, startScratchThread };
 }

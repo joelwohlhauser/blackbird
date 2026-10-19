@@ -30,6 +30,12 @@ const MODIFIERS = [
   { flag: 8, name: "shift", native: "shift" },
 ] as const;
 
+const FOCUS_ROUTED_INPUT: ReadonlySet<string> = new Set([
+  "Input.insertText",
+  "Input.dispatchKeyEvent",
+  "Input.imeSetComposition",
+]);
+
 const EDITING_COMMANDS: ReadonlySet<string> = new Set([
   "deleteToBeginningOfLine",
   "moveToBeginningOfDocument",
@@ -388,6 +394,9 @@ export function makeGuestInput(
     send: (method, params, sessionId) => {
       if (isPointerDown(method, params)) return pointerDown(method, params, sessionId);
       if (sessionId !== undefined) return command(method, params, sessionId);
+      if (FOCUS_ROUTED_INPUT.has(method) && guest.focusedFrame) {
+        return command(method, params, undefined);
+      }
       switch (method) {
         case "Input.dispatchKeyEvent":
           return dispatchKey(params);

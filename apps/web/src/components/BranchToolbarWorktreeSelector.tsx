@@ -1,6 +1,6 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import { ChevronDownIcon, FolderGitIcon, SearchIcon } from "lucide-react";
-import { memo, useMemo, useState } from "react";
+import { memo, useState } from "react";
 
 import { useEnvironmentQuery } from "../state/query";
 import { vcsEnvironment } from "../state/vcs";
@@ -38,37 +38,25 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
 }: BranchToolbarWorktreeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const worktreesQueryTarget = useMemo(
-    () =>
-      vcsEnvironment.listRefs({
-        environmentId,
-        input: {
-          cwd: projectCwd,
-          refKind: "local",
-          worktreeOnly: true,
-          limit: 200,
-        },
-      }),
-    [environmentId, projectCwd],
+  const worktreesQuery = useEnvironmentQuery(
+    vcsEnvironment.listRefs({
+      environmentId,
+      input: {
+        cwd: projectCwd,
+        refKind: "local",
+        worktreeOnly: true,
+        limit: 200,
+      },
+    }),
   );
-  const worktreesQuery = useEnvironmentQuery(worktreesQueryTarget);
-  const worktrees = useMemo(
-    () => resolveExistingWorktreeOptions(worktreesQuery.data?.refs ?? [], projectCwd),
-    [projectCwd, worktreesQuery.data?.refs],
-  );
+  const worktrees = resolveExistingWorktreeOptions(worktreesQuery.data?.refs ?? [], projectCwd);
   const selectedPath = worktrees.some((worktree) => worktree.path === activeWorktreePath)
     ? activeWorktreePath
     : null;
   const selectedWorktree = worktrees.find((worktree) => worktree.path === selectedPath) ?? null;
-  const worktreePaths = useMemo(() => worktrees.map((worktree) => worktree.path), [worktrees]);
-  const filteredWorktrees = useMemo(
-    () => filterExistingWorktreeOptions(worktrees, query),
-    [query, worktrees],
-  );
-  const filteredWorktreePaths = useMemo(
-    () => filteredWorktrees.map((worktree) => worktree.path),
-    [filteredWorktrees],
-  );
+  const worktreePaths = worktrees.map((worktree) => worktree.path);
+  const filteredWorktrees = filterExistingWorktreeOptions(worktrees, query);
+  const filteredWorktreePaths = filteredWorktrees.map((worktree) => worktree.path);
   const selectorState = resolveExistingWorktreeSelectorState({
     hasData: worktreesQuery.data !== null,
     isPending: worktreesQuery.isPending,

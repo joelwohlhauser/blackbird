@@ -1,5 +1,7 @@
 {
   "id": "/",
+  "name": "Blackbird",
+  "short_name": "Blackbird",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -1,7 +1,8 @@
 import type { GitStatus, GitStatusEntry } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { memo, useEffect, useId, useMemo, useRef } from "react";
+import { memo, useEffect, useId } from "react";
 
+import { useStableCallback } from "~/hooks/useStableCallback";
 import { useTheme } from "~/hooks/useTheme";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
 import type { TurnDiffFileChange } from "~/types";
@@ -78,24 +79,15 @@ export const WorkspaceChangeTree = memo(function WorkspaceChangeTree(props: {
 }) {
   const { resolvedTheme } = useTheme();
   const treeHostId = useId();
-  const filesByPath = useMemo(
-    () => new Map(props.files.map((file) => [file.path, file] as const)),
-    [props.files],
-  );
-  const paths = useMemo(() => [...filesByPath.keys()], [filesByPath]);
-  const gitStatus = useMemo<GitStatusEntry[]>(
-    () =>
-      props.files.map((file) => ({
-        path: file.path,
-        status: workspaceChangeGitStatus(file.kind),
-      })),
-    [props.files],
-  );
-  const decorationCss = useMemo(() => workspaceChangeDecorationCss(props.files), [props.files]);
-  const filesByPathRef = useRef(filesByPath);
-  const onOpenFileRef = useRef(props.onOpenFile);
-  filesByPathRef.current = filesByPath;
-  onOpenFileRef.current = props.onOpenFile;
+  const filesByPath = new Map(props.files.map((file) => [file.path, file] as const));
+  const paths = [...filesByPath.keys()];
+  const gitStatus: GitStatusEntry[] = props.files.map((file) => ({
+    path: file.path,
+    status: workspaceChangeGitStatus(file.kind),
+  }));
+  const decorationCss = workspaceChangeDecorationCss(props.files);
+  const changedFile = useStableCallback((path: string) => filesByPath.get(path));
+  const openFile = useStableCallback(props.onOpenFile);
 
   const { model } = useFileTree({
     density: "compact",
@@ -105,14 +97,14 @@ export const WorkspaceChangeTree = memo(function WorkspaceChangeTree(props: {
     icons: T3_PIERRE_ICONS,
     onSelectionChange: (selectedPaths) => {
       const selectedPath = selectedPaths.at(-1)?.replace(/\/$/, "");
-      if (selectedPath && filesByPathRef.current.has(selectedPath)) {
-        onOpenFileRef.current(selectedPath);
+      if (selectedPath && changedFile(selectedPath)) {
+        openFile(selectedPath);
       }
     },
     paths: [],
     renderRowDecoration: ({ item }) => {
       if (item.kind !== "file") return null;
-      const file = filesByPathRef.current.get(item.path);
+      const file = changedFile(item.path);
       if (!file) return null;
       const text = workspaceChangeDecoration(file);
       return text

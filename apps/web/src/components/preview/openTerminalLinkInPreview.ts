@@ -45,16 +45,11 @@ interface OpenTerminalLinkInPreviewInput<E> {
   readonly openPreview: OpenPreviewMutation<E>;
   readonly fallbackToBrowser: () => void;
   readonly mode?: ExternalLinkOpenMode;
-  /** Cmd/Ctrl-click bypasses the preference and opens in the system browser. */
   readonly forceBrowser?: boolean;
   readonly position: { readonly x: number; readonly y: number };
   readonly localApi: LocalApi;
 }
 
-/**
- * Opens a terminal hyperlink where the "Open links in" setting says, unless a
- * Cmd/Ctrl-click explicitly requests the system browser.
- */
 export async function openTerminalLinkInPreview<E>(
   input: OpenTerminalLinkInPreviewInput<E>,
 ): Promise<void> {

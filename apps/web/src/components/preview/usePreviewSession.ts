@@ -40,12 +40,11 @@ const previewSessionSyncAtom = Atom.family((threadKey: string) => {
   return Atom.make((get) => {
     let disposed = false;
     let eventsVersion = 0;
-    let listRefreshStarted = false;
 
     const reconcileSessions = (result: Atom.Type<typeof sessionsAtom>) => {
-      if (!listRefreshStarted || !AsyncResult.isSuccess(result) || result.waiting) return;
+      if (result.waiting || !AsyncResult.isSuccess(result)) return;
       reconcilePreviewServerSessions(threadRef, result.value);
-      if (!result.waiting && !readThreadPreviewState(threadRef).listLoaded) {
+      if (!readThreadPreviewState(threadRef).listLoaded) {
         // An event overtook the first list. Retry the authoritative baseline;
         // do not declare a partial event-only index ready for surface cleanup.
         queueMicrotask(() => {
@@ -68,18 +67,12 @@ const previewSessionSyncAtom = Atom.family((threadKey: string) => {
       disposed = true;
     });
     const initialEvent = get.once(eventsAtom);
-    // `immediate` computes the query atom on mount. A lazy subscription never
-    // evaluates it, so the list RPC would never fire, the thread's serverEpoch
-    // would stay null, and session restore after an app restart would never
-    // run — restored browser tabs then show the empty state instead of their
-    // last URL.
-    get.subscribe(
-      sessionsAtom,
-      (result) => {
-        reconcileSessions(result);
-      },
-      { immediate: true },
-    );
+    // Subscribing alone does not evaluate a lazy list. Start it now, but
+    // reconcile only subsequent responses: a completed cache may be stale.
+    get.once(sessionsAtom);
+    get.subscribe(sessionsAtom, (result) => {
+      reconcileSessions(result);
+    });
     get.subscribe(eventsAtom, (result) => {
       eventsVersion += 1;
       applyLatestEvent(result);
@@ -88,11 +81,11 @@ const previewSessionSyncAtom = Atom.family((threadKey: string) => {
     get.mount(eventsAtom);
     queueMicrotask(() => {
       if (disposed) return;
-      // Cached and stale-while-refreshing lists can omit live tabs created since
-      // the last read. Applying them unmounts the guest before the fresh list
-      // restores it, reloading the page when the user returns to the chat.
-      listRefreshStarted = true;
-      get.refresh(sessionsAtom);
+      // The cached list can predate an automation-created tab. Keep the local
+      // snapshot visible until an authoritative refresh arrives instead of
+      // reconciling against a stale empty result when the panel first mounts.
+      const current = get.once(sessionsAtom);
+      if (!AsyncResult.isInitial(current) && !current.waiting) get.refresh(sessionsAtom);
       if (eventsVersion === 0) applyLatestEvent(initialEvent);
     });
   }).pipe(Atom.setIdleTTL(1_000), Atom.withLabel(`preview:session-sync:${threadKey}`));

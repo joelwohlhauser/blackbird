@@ -1,14 +1,3 @@
-/**
- * ManagedProjectFolders - the project folders T3 Code manages for the user,
- * rather than ones the user picks:
- *
- * - the home directory: the reserved Quick chats project, shared by every
- *   Quick chat;
- * - `<baseDir>/projects/<slug>`: projects started from just a name, each a new
- *   Git repository with a README, an icon, and a first commit.
- *
- * @module ManagedProjectFolders
- */
 import { CommandId, ProjectId, QUICK_CHATS_PROJECT_ID } from "@t3tools/contracts";
 import { newProjectFolderName } from "@t3tools/shared/path";
 import * as Context from "effect/Context";
@@ -71,19 +60,12 @@ export type NamedProjectError = NamedProjectFolderError | NamedProjectCreateErro
 export class ManagedProjectFolders extends Context.Service<
   ManagedProjectFolders,
   {
-    /** The Quick chats folder: the home directory of this environment. */
     readonly scratchRoot: Effect.Effect<Option.Option<string>>;
-    /** Finds or creates the Quick chats project. */
     readonly ensureScratchProject: Effect.Effect<{ readonly projectId: ProjectId }, ScratchError>;
-    /** The folder that holds projects started from just a name. */
     readonly namedProjectsRoot: string;
     /**
-     * Starts a project from just a name: claims `<namedProjectsRoot>/<slug>`
-     * (adding `-2`, `-3`, ... when taken), makes it a Git repository with a
-     * README, an icon, and a first commit, then creates the project. A failed
-     * commit (no Git identity, a signing prompt) keeps the project and returns
-     * why in `commitError`. The folder is removed when the create fails or is
-     * cancelled before the project exists, never once another project owns it.
+     * The folder is removed when the create fails or is cancelled before the
+     * project exists, never once another project owns it.
      */
     readonly createNamedProject: (input: { readonly name: string }) => Effect.Effect<
       {
@@ -96,7 +78,6 @@ export class ManagedProjectFolders extends Context.Service<
   }
 >()("t3/project/ManagedProjectFolders") {}
 
-// Tailwind 600 shades: dark enough for white initials on every hue.
 const ICON_BACKGROUNDS = [
   "#dc2626",
   "#ea580c",
@@ -126,7 +107,6 @@ function escapeXml(value: string): string {
 }
 
 /**
- * A rounded square with the name's initials, colored by a hash of the name.
  * It lives at `assets/icon.svg`, a path ProjectFaviconResolver already checks,
  * so every machine that clones the project shows the same icon.
  */
@@ -163,8 +143,6 @@ function namedProjectReadme(name: string): string {
   ].join("\n");
 }
 
-// Git's own identity message runs several lines; say what to do instead.
-// Otherwise its last line ("error: gpg failed to sign the data") says enough.
 function describeCommitFailure(stderr: string): string {
   if (/identity unknown|tell me who you are|no (name|email) was given/i.test(stderr)) {
     return "Git has no name or email on this machine. Set user.name and user.email, then commit.";
@@ -185,11 +163,8 @@ const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
 
   /**
-   * Claims the first free folder among `folderFor(1)`, `folderFor(2)`, ...,
-   * stopping with None when `folderFor` runs out of names. Each folder is
-   * created without `recursive`, so creating it is the claim: of two racers
-   * for one name, one gets AlreadyExists and moves on to the next, so no two
-   * named projects ever share a folder.
+   * Each folder is created without `recursive`, so creating it is the claim: of
+   * two racers for one name, one gets AlreadyExists and moves on to the next.
    */
   const claimFreeFolder = Effect.fnUntraced(function* <E>(
     folderFor: (attempt: number) => Effect.Effect<Option.Option<string>, E>,
@@ -244,8 +219,6 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  // Projects started from just a name live beside worktrees, away from folders
-  // the user organizes by hand. Each project gets its own `git init`.
   const namedProjectsRoot = path.resolve(config.baseDir, "projects");
 
   const claimNamedFolder = Effect.fn("ManagedProjectFolders.claimNamedFolder")(function* (
@@ -280,8 +253,6 @@ const make = Effect.gen(function* () {
     });
   });
 
-  // git init, the starter files, and the first commit. Only the commit may
-  // fail softly; everything before it fails the create.
   const scaffoldRepository = Effect.fn("ManagedProjectFolders.scaffoldRepository")(function* (
     cwd: string,
     name: string,
@@ -330,8 +301,6 @@ const make = Effect.gen(function* () {
   )(function* (input) {
     const workspaceRoot = yield* claimNamedFolder(input.name);
     const removeFolder = fileSystem.remove(workspaceRoot, { recursive: true }).pipe(Effect.ignore);
-    // Until the create is dispatched nothing else can use the folder, so any
-    // exit but success removes it, an interrupt included.
     const prepared = yield* Effect.all([
       scaffoldRepository(workspaceRoot, input.name).pipe(
         Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),

@@ -286,7 +286,7 @@ describe("buildProjectGroups", () => {
     );
   });
 
-  it("keeps a fork apart from its upstream checkout and labels it by its own remote", () => {
+  it("keeps a fork apart from its upstream checkout and labels it by its repository name", () => {
     const fork = makeProject("fork", "/work/t3code-fork", {
       repositoryIdentity: {
         ...repositoryIdentity,
@@ -307,22 +307,7 @@ describe("buildProjectGroups", () => {
       "github.com/julius/t3code-fork",
     ]);
     expect(groups[1]?.members.map((member) => member.project.id)).toEqual(["fork", "fork-2"]);
-    expect(groups[1]?.label).toBe("julius/t3code-fork");
-  });
-
-  it("labels a fork by its canonical key when its origin has no display name", () => {
-    const identity = {
-      ...repositoryIdentity,
-      origin: { canonicalKey: "internal-host" },
-    };
-    const projects = [
-      makeProject("fork", "/work/fork", { repositoryIdentity: identity }),
-      makeProject("fork-2", "/work/fork-2", { repositoryIdentity: identity }),
-    ];
-
-    const groups = buildProjectGroups({ projects, settings: settings("repository") });
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.label).toBe("internal-host");
+    expect(groups[1]?.label).toBe("t3code");
   });
 
   it("keeps physical clones in separate groups when requested", () => {

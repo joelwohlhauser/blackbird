@@ -1,9 +1,4 @@
-import type {
-  EnvironmentId,
-  OrchestrationV2ThreadProjection,
-  ServerProvider,
-  ThreadId,
-} from "@t3tools/contracts";
+import type { EnvironmentId, OrchestrationV2ThreadProjection, ThreadId } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -15,9 +10,8 @@ import { formatSubagentDisplayTitle } from "@t3tools/client-runtime/state/subage
 import { type LegendListRef } from "@legendapp/list/react";
 import { useNavigate } from "@tanstack/react-router";
 import { ExternalLinkIcon } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
-import { useTurnDiffSummaries } from "../../hooks/useTurnDiffSummaries";
 import { useRightPanelStore } from "../../rightPanelStore";
 import {
   deriveActiveWorkStartedAt,
@@ -27,6 +21,7 @@ import {
 } from "../../session-logic";
 import {
   resolveThreadDetailRef,
+  useThreadCheckpointSummaries,
   useThreadProjection,
   useThreadShell,
   useThreadVisibleTurnItems,
@@ -54,20 +49,12 @@ export function ThreadTranscriptPanel(props: {
   workspaceRoot: string | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
-  providerStatuses: ReadonlyArray<ServerProvider>;
   onImageExpand: (preview: ExpandedImagePreview) => void;
 }) {
   const navigate = useNavigate();
   const listRef = useRef<LegendListRef | null>(null);
   const [isAtEnd, setIsAtEnd] = useState(true);
-  const parentRef = useMemo(
-    () => scopeThreadRef(props.environmentId, props.parentThreadId),
-    [props.environmentId, props.parentThreadId],
-  );
-  const threadRef = useMemo(
-    () => scopeThreadRef(props.environmentId, props.threadId),
-    [props.environmentId, props.threadId],
-  );
+  const threadRef = scopeThreadRef(props.environmentId, props.threadId);
   const shell = useThreadShell(threadRef);
   const detailRef = resolveThreadDetailRef(threadRef, {
     shellExists: shell !== null,
@@ -75,60 +62,43 @@ export function ThreadTranscriptPanel(props: {
   });
   const projection = useThreadProjection(detailRef)?.projection ?? null;
   const visibleTurnItems = useThreadVisibleTurnItems(detailRef);
-  const { turnDiffSummaries } = useTurnDiffSummaries(projection);
+  const turnDiffSummaries = useThreadCheckpointSummaries(detailRef);
 
-  const timelineEntries = useMemo(
-    () =>
-      deriveTimelineEntriesFromVisibleTurnItemsWithState(
-        {
-          visibleTurnItems,
-          optimisticMessages: [],
-          ...(projection === null
-            ? {}
-            : {
-                attempts: projection.attempts,
-                nodes: projection.nodes,
-                plans: projection.plans,
-              }),
-        },
-        null,
-      ).entries,
-    [visibleTurnItems, projection],
-  );
-  const activityRun = useMemo(
-    () => (projection === null ? null : deriveThreadActivityRun(projection)),
-    [projection],
-  );
-  const runtime = useMemo(
-    () => (projection === null ? null : deriveThreadRuntime(projection)),
-    [projection],
-  );
-  const runlessWorkStartedAt = useMemo(
-    () => (projection === null ? null : deriveRunlessWorkStartedAt(projection)),
-    [projection],
-  );
+  const timelineEntries = deriveTimelineEntriesFromVisibleTurnItemsWithState(
+    {
+      visibleTurnItems,
+      optimisticMessages: [],
+      ...(projection === null
+        ? {}
+        : {
+            attempts: projection.attempts,
+            nodes: projection.nodes,
+            plans: projection.plans,
+          }),
+    },
+    null,
+  ).entries;
+  const activityRun = projection === null ? null : deriveThreadActivityRun(projection);
+  const runtime = projection === null ? null : deriveThreadRuntime(projection);
+  const runlessWorkStartedAt = projection === null ? null : deriveRunlessWorkStartedAt(projection);
   const isWorking = derivePhase(runtime) === "running" || runlessWorkStartedAt !== null;
 
-  const openChat = useCallback(
-    (threadId: ThreadId) => {
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(scopeThreadRef(props.environmentId, threadId)),
-      });
-    },
-    [navigate, props.environmentId],
-  );
-  const onOpenThread = useCallback(
-    (threadId: ThreadId) => {
-      const title = subagentTabTitle(projection, threadId);
-      if (title === null) {
-        openChat(threadId);
-        return;
-      }
-      useRightPanelStore.getState().openThread(parentRef, threadId, title);
-    },
-    [openChat, parentRef, projection],
-  );
+  const parentRef = scopeThreadRef(props.environmentId, props.parentThreadId);
+
+  const openChat = (threadId: ThreadId) => {
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(scopeThreadRef(props.environmentId, threadId)),
+    });
+  };
+  const onOpenThread = (threadId: ThreadId) => {
+    const title = subagentTabTitle(projection, threadId);
+    if (title === null) {
+      openChat(threadId);
+      return;
+    }
+    useRightPanelStore.getState().openThread(parentRef, threadId, title);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -151,7 +121,6 @@ export function ThreadTranscriptPanel(props: {
           }
           listRef={listRef}
           timelineEntries={timelineEntries}
-          providerStatuses={props.providerStatuses}
           runs={projection?.runs ?? []}
           latestRun={activityRun}
           runningRunId={runtime?.activeRunId ?? null}

@@ -25,7 +25,6 @@ import { Volume2, VolumeOff } from "lucide";
 import {
   type MouseEvent as ReactMouseEvent,
   type WheelEvent as ReactWheelEvent,
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -308,11 +307,11 @@ function MainChatTab(props: MainChatTabProps) {
   const [renamePending, setRenamePending] = useState(false);
   const renamePendingRef = useRef(false);
   const { onRename } = props;
-  const renameInputRef = useCallback((input: HTMLInputElement | null) => {
+  const renameInputRef = (input: HTMLInputElement | null) => {
     if (!input) return;
     input.focus();
     input.select();
-  }, []);
+  };
 
   useEffect(() => {
     setIsRenaming(false);
@@ -320,27 +319,24 @@ function MainChatTab(props: MainChatTabProps) {
     renamePendingRef.current = false;
   }, [props.renameKey]);
 
-  const beginRename = useCallback(() => {
+  const beginRename = () => {
     if (!onRename) return;
     setRenameTitle(props.label);
     setIsRenaming(true);
-  }, [onRename, props.label]);
-  const cancelRename = useCallback(() => {
+  };
+  const cancelRename = () => {
     if (renamePendingRef.current) return;
     setIsRenaming(false);
-  }, []);
-  const commitRename = useCallback(async () => {
+  };
+  const commitRename = async () => {
     if (!onRename || renamePendingRef.current) return;
     renamePendingRef.current = true;
     setRenamePending(true);
-    try {
-      await onRename(renameTitle);
-      setIsRenaming(false);
-    } finally {
-      renamePendingRef.current = false;
-      setRenamePending(false);
-    }
-  }, [onRename, renameTitle]);
+    await onRename(renameTitle);
+    setIsRenaming(false);
+    renamePendingRef.current = false;
+    setRenamePending(false);
+  };
 
   if (isRenaming) {
     return (
@@ -561,108 +557,100 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     data: { container: props.container },
   });
 
-  const handleTabContextMenu = useCallback(
-    async (event: ReactMouseEvent, surface: RightPanelSurface) => {
-      event.preventDefault();
-      event.stopPropagation();
+  const handleTabContextMenu = async (event: ReactMouseEvent, surface: RightPanelSurface) => {
+    event.preventDefault();
+    event.stopPropagation();
 
-      const api = readLocalApi();
-      if (!api) return;
+    const api = readLocalApi();
+    if (!api) return;
 
-      const surfaceIndex = props.surfaces.findIndex((entry) => entry.id === surface.id);
-      if (surfaceIndex < 0) return;
-      if (props.pinnedSurfaceIds?.has(surface.id)) return;
+    const surfaceIndex = props.surfaces.findIndex((entry) => entry.id === surface.id);
+    if (surfaceIndex < 0) return;
+    if (props.pinnedSurfaceIds?.has(surface.id)) return;
 
-      const items: ContextMenuItem<TabContextMenuAction>[] = [];
-      if (surface.kind === "file" || surface.kind === "file-diff") {
-        items.push({ id: "copy-path", label: "Copy path" });
-      }
-      const menuPreviewTabId = previewTabIdOf(surface, props.previewSessions);
-      const menuOverlay = menuPreviewTabId
-        ? (props.desktopByTabId[menuPreviewTabId] ?? null)
-        : null;
-      const menuMuted = menuOverlay?.audioMuted ?? false;
-      if (surface.kind === "preview") {
-        items.push({
-          id: "toggle-mute",
-          ...tabMuteMenuItem({
-            overlay: menuOverlay,
-            canResolveRuntimeTabId: props.previewRuntimeTabId !== undefined,
-          }),
-        });
-      }
-      items.push(
-        { id: "close", label: "Close" },
-        {
-          id: "close-others",
-          label: "Close others",
-          disabled: props.surfaces.length <= 1,
-        },
-        {
-          id: "close-to-right",
-          label: "Close to the right",
-          disabled: surfaceIndex >= props.surfaces.length - 1,
-        },
-        {
-          id: "close-all",
-          label: "Close all",
-          disabled: props.surfaces.length === 0,
-        },
-      );
-
-      const action = await api.contextMenu.show(items, {
-        x: event.clientX,
-        y: event.clientY,
+    const items: ContextMenuItem<TabContextMenuAction>[] = [];
+    if (surface.kind === "file" || surface.kind === "file-diff") {
+      items.push({ id: "copy-path", label: "Copy path" });
+    }
+    const menuPreviewTabId = previewTabIdOf(surface, props.previewSessions);
+    const menuOverlay = menuPreviewTabId ? (props.desktopByTabId[menuPreviewTabId] ?? null) : null;
+    const menuMuted = menuOverlay?.audioMuted ?? false;
+    if (surface.kind === "preview") {
+      items.push({
+        id: "toggle-mute",
+        ...tabMuteMenuItem({
+          overlay: menuOverlay,
+          canResolveRuntimeTabId: props.previewRuntimeTabId !== undefined,
+        }),
       });
-      switch (action) {
-        case "copy-path":
-          if (surface.kind === "file" || surface.kind === "file-diff") {
-            props.onCopyFilePath(surface.relativePath);
-          }
-          break;
-        case "toggle-mute": {
-          const runtimeTabId =
-            menuPreviewTabId && menuOverlay
-              ? (props.previewRuntimeTabId?.(menuPreviewTabId) ?? null)
-              : null;
-          if (runtimeTabId) {
-            void previewBridge?.setAudioMuted(runtimeTabId, !menuMuted).catch(() => undefined);
-          }
-          break;
+    }
+    items.push(
+      { id: "close", label: "Close" },
+      {
+        id: "close-others",
+        label: "Close others",
+        disabled: props.surfaces.length <= 1,
+      },
+      {
+        id: "close-to-right",
+        label: "Close to the right",
+        disabled: surfaceIndex >= props.surfaces.length - 1,
+      },
+      {
+        id: "close-all",
+        label: "Close all",
+        disabled: props.surfaces.length === 0,
+      },
+    );
+
+    const action = await api.contextMenu.show(items, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+    switch (action) {
+      case "copy-path":
+        if (surface.kind === "file" || surface.kind === "file-diff") {
+          props.onCopyFilePath(surface.relativePath);
         }
-        case "close":
-          props.onCloseSurface(surface);
-          break;
-        case "close-others":
-          props.onCloseOtherSurfaces(surface);
-          break;
-        case "close-to-right":
-          props.onCloseSurfacesToRight(surface);
-          break;
-        case "close-all":
-          props.onCloseAllSurfaces();
-          break;
-        case null:
-          break;
+        break;
+      case "toggle-mute": {
+        const runtimeTabId =
+          menuPreviewTabId && menuOverlay
+            ? (props.previewRuntimeTabId?.(menuPreviewTabId) ?? null)
+            : null;
+        if (runtimeTabId) {
+          void previewBridge?.setAudioMuted(runtimeTabId, !menuMuted).catch(() => undefined);
+        }
+        break;
       }
-    },
-    [props],
-  );
-  const handleTabMouseDown = useCallback((event: ReactMouseEvent) => {
+      case "close":
+        props.onCloseSurface(surface);
+        break;
+      case "close-others":
+        props.onCloseOtherSurfaces(surface);
+        break;
+      case "close-to-right":
+        props.onCloseSurfacesToRight(surface);
+        break;
+      case "close-all":
+        props.onCloseAllSurfaces();
+        break;
+      case null:
+        break;
+    }
+  };
+  const handleTabMouseDown = (event: ReactMouseEvent) => {
     if (event.button !== 1) return;
     event.preventDefault();
-  }, []);
-  const handleTabAuxClick = useCallback(
-    (event: ReactMouseEvent, surface: RightPanelSurface) => {
-      if (event.button !== 1) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (props.pinnedSurfaceIds?.has(surface.id)) return;
-      props.onCloseSurface(surface);
-    },
-    [props],
-  );
-  const handleTabListWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+  };
+  const handleTabAuxClick = (event: ReactMouseEvent, surface: RightPanelSurface) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (props.pinnedSurfaceIds?.has(surface.id)) return;
+    props.onCloseSurface(surface);
+  };
+  const handleTabListWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     const viewport = event.currentTarget.querySelector<HTMLElement>(
       "[data-slot='scroll-area-viewport']",
     );
@@ -680,18 +668,18 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     event.preventDefault();
     event.stopPropagation();
     viewport.scrollLeft = nextScrollLeft;
-  }, []);
+  };
   // A completed drag must not fire the click that follows pointerup (it would
   // activate or close whatever tab landed under the pointer).
-  const handleClickCapture = useCallback((event: ReactMouseEvent) => {
+  const handleClickCapture = (event: ReactMouseEvent) => {
     if (!workspaceTabDragState.suppressClickAfterDrag) return;
     workspaceTabDragState.suppressClickAfterDrag = false;
     event.preventDefault();
     event.stopPropagation();
-  }, []);
-  const handlePointerDownCapture = useCallback(() => {
+  };
+  const handlePointerDownCapture = () => {
     workspaceTabDragState.suppressClickAfterDrag = false;
-  }, []);
+  };
 
   useEffect(() => {
     const activeTab = tabListRef.current?.querySelector<HTMLElement>("[data-active-tab='true']");

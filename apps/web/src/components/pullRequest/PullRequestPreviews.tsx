@@ -8,7 +8,6 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { ExternalLinkIcon } from "lucide-react";
-import { useMemo } from "react";
 
 import { canOpenLinksInApp } from "~/browser/browserLinkTarget";
 import { openUrlInPreview } from "~/browser/openFileInPreview";
@@ -27,7 +26,7 @@ export function usePullRequestPreviews(
   comments: ReadonlyArray<Pick<PullRequestComment, "body">>,
 ): PullRequestPreview[] {
   const hostPatterns = useClientSettings((settings) => settings.pullRequestPreviewHosts);
-  return useMemo(() => pullRequestPreviews(comments, hostPatterns), [comments, hostPatterns]);
+  return pullRequestPreviews(comments, hostPatterns);
 }
 
 export function PullRequestPreviewPills({
@@ -40,6 +39,14 @@ export function PullRequestPreviewPills({
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const openLink = useOpenLink(null);
 
+  const reportOpenFailure = (cause: unknown) => {
+    toastManager.add({
+      type: "error",
+      title: "Unable to open preview",
+      description: cause instanceof Error ? cause.message : String(cause),
+    });
+  };
+
   const open = async (url: string) => {
     try {
       if (
@@ -49,17 +56,13 @@ export function PullRequestPreviewPills({
       ) {
         const result = await openUrlInPreview({ threadRef, url, openPreview });
         if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-          throw squashAtomCommandFailure(result);
+          reportOpenFailure(squashAtomCommandFailure(result));
         }
         return;
       }
       await openLink(url);
     } catch (cause) {
-      toastManager.add({
-        type: "error",
-        title: "Unable to open preview",
-        description: cause instanceof Error ? cause.message : String(cause),
-      });
+      reportOpenFailure(cause);
     }
   };
 

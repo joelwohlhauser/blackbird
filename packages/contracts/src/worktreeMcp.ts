@@ -3,12 +3,11 @@ import * as Schema from "effect/Schema";
 import { ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 /**
- * Input for the `t3_worktree_handoff` MCP tool.
- *
  * Moves the calling agent thread to another workspace: a git worktree of its
  * repository, or another repository or folder on this environment, and
- * re-points the thread at it. Changing the thread's workspace detaches the
- * live provider session, so the current turn ends shortly after the handoff is
+ * re-points the thread at it. The server picks new worktree locations in its
+ * managed worktrees folder. Changing the thread's workspace detaches the live
+ * provider session, so the current turn ends shortly after the handoff is
  * recorded; the conversation continues in the new workspace on the thread's
  * next run.
  */
@@ -35,15 +34,6 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
     Schema.Boolean.annotate({
       description:
         "Fetch origin and start the worktree branch from the remote-tracking commit of baseRef instead of the local ref. Defaults to the server's 'new worktrees start from origin' setting.",
-    }),
-  ),
-  path: Schema.optional(
-    TrimmedNonEmptyString.check(
-      // Absolute POSIX (/...), Windows drive (C:\ or C:/), or UNC (\\host).
-      Schema.isPattern(/^(?:[A-Za-z]:[\\/]|[\\/])/),
-    ).annotate({
-      description:
-        "Absolute filesystem path for the new worktree. Relative paths are rejected. Defaults to the server-managed worktrees directory.",
     }),
   ),
   runSetupScript: Schema.optional(

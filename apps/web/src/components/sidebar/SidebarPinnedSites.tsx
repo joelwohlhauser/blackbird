@@ -2,7 +2,7 @@ import type { PinnedSite, ScopedThreadRef } from "@t3tools/contracts";
 import { normalizePreviewUrl } from "@t3tools/shared/preview";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon, Globe2Icon, PlusIcon, XIcon } from "lucide-react";
-import { memo, useCallback, useState } from "react";
+import { memo, useState } from "react";
 
 import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
 import { previewBridge } from "~/components/preview/previewBridge";
@@ -26,7 +26,7 @@ import {
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
+import { updateClientSettings, useClientSettings } from "~/hooks/useSettings";
 import { faviconUrlForOrigin } from "~/lib/favicon";
 import { cn, randomUUID } from "~/lib/utils";
 import { isPinnedSiteHomeUrl, pinnedSiteLabel, pinnedSiteThreadRef } from "~/pinnedSites";
@@ -98,7 +98,7 @@ function PinnedSiteRow({
   const currentUrl = snapshot && snapshot.navStatus._tag !== "Idle" ? snapshot.navStatus.url : null;
   const navigatedAway = currentUrl !== null && !isPinnedSiteHomeUrl(site.url, currentUrl);
 
-  const handleClick = useCallback(() => {
+  const handleClick = () => {
     // Second click while the site is already open and the user browsed away
     // from the pinned page: bring the tab back to the pinned URL.
     if (isActive && navigatedAway && threadRef && tabId && previewBridge) {
@@ -110,16 +110,7 @@ function PinnedSiteRow({
       return;
     }
     void navigate({ to: "/site/$siteId", params: { siteId: site.id } });
-  }, [
-    isActive,
-    navigate,
-    navigatedAway,
-    previewState.serverEpoch,
-    site.id,
-    site.url,
-    tabId,
-    threadRef,
-  ]);
+  };
 
   return (
     <SidebarMenuItem>
@@ -165,7 +156,6 @@ export const SidebarPinnedSites = memo(function SidebarPinnedSites({
 }) {
   const pinnedSitesEnabled = useClientSettings((settings) => settings.pinnedSitesEnabled);
   const pinnedSites = useClientSettings((settings) => settings.pinnedSites);
-  const updateClientSettings = useUpdateClientSettings();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const closePreview = useAtomCommand(previewEnvironment.close, { reportFailure: false });
   const navigate = useNavigate();
@@ -178,14 +168,14 @@ export const SidebarPinnedSites = memo(function SidebarPinnedSites({
   const [titleInput, setTitleInput] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
 
-  const closeAddDialog = useCallback(() => {
+  const closeAddDialog = () => {
     setAddDialogOpen(false);
     setUrlInput("");
     setTitleInput("");
     setUrlError(null);
-  }, []);
+  };
 
-  const submitAdd = useCallback(() => {
+  const submitAdd = () => {
     let normalizedUrl: string;
     try {
       normalizedUrl = normalizePreviewUrl(urlInput);
@@ -202,27 +192,24 @@ export const SidebarPinnedSites = memo(function SidebarPinnedSites({
     updateClientSettings({ pinnedSites: [...pinnedSites, site] });
     closeAddDialog();
     void navigate({ to: "/site/$siteId", params: { siteId: site.id } });
-  }, [closeAddDialog, navigate, pinnedSites, titleInput, updateClientSettings, urlInput]);
+  };
 
-  const removeSite = useCallback(
-    (site: PinnedSite) => {
-      updateClientSettings({
-        pinnedSites: pinnedSites.filter((pinned) => pinned.id !== site.id),
+  const removeSite = (site: PinnedSite) => {
+    updateClientSettings({
+      pinnedSites: pinnedSites.filter((pinned) => pinned.id !== site.id),
+    });
+    if (primaryEnvironmentId) {
+      const threadRef = pinnedSiteThreadRef(primaryEnvironmentId, site.id);
+      void closePreview({
+        environmentId: primaryEnvironmentId,
+        input: { threadId: threadRef.threadId },
       });
-      if (primaryEnvironmentId) {
-        const threadRef = pinnedSiteThreadRef(primaryEnvironmentId, site.id);
-        void closePreview({
-          environmentId: primaryEnvironmentId,
-          input: { threadId: threadRef.threadId },
-        });
-        removePreviewThread(threadRef);
-      }
-      if (activeSiteId === site.id) {
-        void navigate({ to: "/" });
-      }
-    },
-    [activeSiteId, closePreview, navigate, pinnedSites, primaryEnvironmentId, updateClientSettings],
-  );
+      removePreviewThread(threadRef);
+    }
+    if (activeSiteId === site.id) {
+      void navigate({ to: "/" });
+    }
+  };
 
   if (!pinnedSitesEnabled || !isPreviewSupportedInRuntime()) {
     return null;

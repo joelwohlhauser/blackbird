@@ -1,7 +1,7 @@
 import type { DesktopAwakeState } from "@t3tools/contracts";
 import { useState } from "react";
 
-import { useClientSettings, useUpdateClientSettings } from "../../hooks/useSettings";
+import { updateClientSettings, useClientSettings } from "../../hooks/useSettings";
 import { getDesktopAwakeBridge, useDesktopAwakeState } from "../../lib/desktopAwake";
 import { Button } from "../ui/button";
 import { NumberField, NumberFieldGroup, NumberFieldInput } from "../ui/number-field";
@@ -56,7 +56,6 @@ function PercentSetting({
 
 export function AwakeSettings() {
   const settings = useClientSettings();
-  const updateSettings = useUpdateClientSettings();
   const bridge = getDesktopAwakeBridge();
   const [state, setState] = useDesktopAwakeState();
   const [pending, setPending] = useState(false);
@@ -69,7 +68,7 @@ export function AwakeSettings() {
     void bridge[action]()
       .then((next) => {
         setState(next);
-        if (action === "remove") void updateSettings({ awakeEnabled: false });
+        if (action === "remove") void updateClientSettings({ awakeEnabled: false });
       })
       .catch((error: unknown) => {
         toastManager.add(
@@ -112,7 +111,9 @@ export function AwakeSettings() {
                   checked={installed && settings.awakeEnabled}
                   disabled={!available || !installed}
                   aria-label="Keep the Mac awake while agents work"
-                  onCheckedChange={(checked) => void updateSettings({ awakeEnabled: checked })}
+                  onCheckedChange={(checked) =>
+                    void updateClientSettings({ awakeEnabled: checked })
+                  }
                 />
               </>
             }
@@ -125,7 +126,7 @@ export function AwakeSettings() {
                 checked={settings.awakeAlways}
                 disabled={!available || !installed || !settings.awakeEnabled}
                 aria-label="Keep the Mac awake all the time"
-                onCheckedChange={(checked) => void updateSettings({ awakeAlways: checked })}
+                onCheckedChange={(checked) => void updateClientSettings({ awakeAlways: checked })}
               />
             }
           />
@@ -142,7 +143,9 @@ export function AwakeSettings() {
                 <PercentSetting
                   value={settings.awakeLowPowerBelowPercent}
                   label="Low Power Mode below percent"
-                  onCommit={(value) => void updateSettings({ awakeLowPowerBelowPercent: value })}
+                  onCommit={(value) =>
+                    void updateClientSettings({ awakeLowPowerBelowPercent: value })
+                  }
                 />
               }
             />
@@ -153,7 +156,7 @@ export function AwakeSettings() {
                 <PercentSetting
                   value={settings.awakeSleepBelowPercent}
                   label="Sleep below percent"
-                  onCommit={(value) => void updateSettings({ awakeSleepBelowPercent: value })}
+                  onCommit={(value) => void updateClientSettings({ awakeSleepBelowPercent: value })}
                 />
               }
             />
@@ -164,7 +167,9 @@ export function AwakeSettings() {
                 <Switch
                   checked={settings.awakeHeatRules}
                   aria-label="Heat rules"
-                  onCheckedChange={(checked) => void updateSettings({ awakeHeatRules: checked })}
+                  onCheckedChange={(checked) =>
+                    void updateClientSettings({ awakeHeatRules: checked })
+                  }
                 />
               }
             />
@@ -179,7 +184,7 @@ export function AwakeSettings() {
                   checked={settings.awakeHotspotFailover}
                   aria-label="Hotspot failover"
                   onCheckedChange={(checked) =>
-                    void updateSettings({ awakeHotspotFailover: checked })
+                    void updateClientSettings({ awakeHotspotFailover: checked })
                   }
                 />
               }

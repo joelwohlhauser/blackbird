@@ -1,5 +1,5 @@
 import type { DesktopBridge, LinearAccount, LinearIssueStatus } from "@t3tools/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export const getDesktopLinearBridge = (): DesktopBridge["linear"] =>
   typeof window === "undefined" ? undefined : window.desktopBridge?.linear;
@@ -46,7 +46,7 @@ export function useLinearSignIn() {
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
-  const signIn = useCallback(() => {
+  const signIn = () => {
     const bridge = getDesktopLinearBridge();
     if (!bridge) return;
     cancelledRef.current = false;
@@ -58,11 +58,11 @@ export function useLinearSignIn() {
         if (!cancelledRef.current) setError(linearErrorMessage(cause));
       })
       .finally(() => setWaiting(false));
-  }, []);
-  const cancel = useCallback(() => {
+  };
+  const cancel = () => {
     cancelledRef.current = true;
     void getDesktopLinearBridge()?.cancelSignIn();
-  }, []);
+  };
   return { waiting, error, setError, signIn, cancel } as const;
 }
 
@@ -108,7 +108,7 @@ export function useLinearIssueStatuses(issueIds: ReadonlyArray<string>) {
     };
   }, [account, bridge, issueIdsKey, requestKey]);
 
-  const refresh = useCallback(() => setGeneration((current) => current + 1), []);
+  const refresh = () => setGeneration((current) => current + 1);
   const status: LinearIssueStatusesState = !bridge
     ? "unavailable"
     : account === null

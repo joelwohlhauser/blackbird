@@ -7,7 +7,7 @@ import { makeGuestInput } from "./GuestInput.ts";
 
 type Command = { method: string; params: Record<string, unknown>; sessionId?: string };
 
-const makeTab = (options: { focusedFrameSession?: string } = {}) => {
+const makeTab = (options: { focusedFrameSession?: string; focused?: boolean } = {}) => {
   const commands: Array<Command> = [];
   const nativeEvents: Array<Electron.KeyboardInputEvent> = [];
   const insertedText: Array<string> = [];
@@ -31,6 +31,7 @@ const makeTab = (options: { focusedFrameSession?: string } = {}) => {
     },
   };
   const webContents = {
+    focusedFrame: options.focused ? {} : null,
     sendInputEvent: (event: Electron.KeyboardInputEvent) => void nativeEvents.push(event),
     insertText: async (text: string) => void insertedText.push(text),
     hostWebContents: {
@@ -85,6 +86,19 @@ describe("GuestInput", () => {
 
     expect(tab.insertedText).toEqual(["hello"]);
     expect(sentToDebugger(tab.commands, "Input.insertText")).toEqual([]);
+  });
+
+  it("uses CDP input while the guest holds focus, where it already reaches the page", async () => {
+    const tab = makeTab({ focused: true });
+    await tab.input.send("Input.insertText", { text: "x" }, undefined);
+    await tab.input.send("Input.dispatchKeyEvent", { type: "keyUp", key: "a" }, undefined);
+
+    expect(tab.commands.map(({ method }) => method)).toEqual([
+      "Input.insertText",
+      "Input.dispatchKeyEvent",
+    ]);
+    expect(tab.insertedText).toEqual([]);
+    expect(tab.nativeEvents).toEqual([]);
   });
 
   it("runs macOS editing commands inside the page and swallows their key up", async () => {

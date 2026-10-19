@@ -8,14 +8,13 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import { type ComponentProps, useEffect, useEffectEvent, useMemo, useState } from "react";
+import { type ComponentProps, useEffect, useEffectEvent, useState } from "react";
 
 import { isPinnedSiteThreadId } from "~/pinnedSites";
 import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 
 import { isElectron } from "~/env";
 import { useClientSettingsHydrated } from "~/hooks/useSettings";
-import { useTheme } from "~/hooks/useTheme";
 import { useActivePreviewSessions } from "~/previewStateStore";
 import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentScope } from "~/state/session";
@@ -39,41 +38,36 @@ import { rendersServerTabNatively } from "./previewRuntime";
 import { previewRuntimeTabId } from "./previewRuntimeTabId";
 
 export function ElectronBrowserHost() {
-  const { resolvedTheme } = useTheme();
   const previewByThreadKey = useActivePreviewSessions();
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: true });
   const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
   const recentThreadKeys = useRecentBrowserThreadsStore((state) => state.threadKeys);
   const agentActiveThreadRefs = useAtomValue(primaryAgentActiveThreadRefsAtom);
   const recordingTabIds = useActiveBrowserRecordingTabIds();
-  const sessions = useMemo(
-    () =>
-      Object.entries(previewByThreadKey).flatMap(([threadKey, previewState]) => {
-        const threadRef = parseScopedThreadKey(threadKey);
-        // Server tabs of other environments stream; this desktop's own server tabs render here.
-        return threadRef
-          ? Object.values(previewState.sessions)
-              .filter(
-                (snapshot) =>
-                  snapshot.runtime !== "server" ||
-                  rendersServerTabNatively(threadRef.environmentId, primaryEnvironmentId, snapshot),
-              )
-              .map((snapshot) => ({
-                threadRef,
-                threadKey,
-                snapshot,
-                runtimeTabId: previewRuntimeTabId(
-                  threadRef,
-                  previewState.serverEpoch,
-                  snapshot.tabId,
-                ),
-                pictureInPicture:
-                  previewState.desktopByTabId[snapshot.tabId]?.pictureInPicture ?? false,
-                zoomFactor: previewState.desktopByTabId[snapshot.tabId]?.zoomFactor ?? 1,
-              }))
-          : [];
-      }),
-    [previewByThreadKey, primaryEnvironmentId],
+  const activeSessions = Object.entries(previewByThreadKey).flatMap(([threadKey, previewState]) => {
+    const threadRef = parseScopedThreadKey(threadKey);
+    return threadRef
+      ? Object.values(previewState.sessions)
+          .filter(
+            (snapshot) =>
+              snapshot.runtime !== "server" ||
+              rendersServerTabNatively(threadRef.environmentId, primaryEnvironmentId, snapshot),
+          )
+          .map((snapshot) => ({
+            threadRef,
+            threadKey,
+            snapshot,
+            runtimeTabId: previewRuntimeTabId(threadRef, previewState.serverEpoch, snapshot.tabId),
+            pictureInPicture:
+              previewState.desktopByTabId[snapshot.tabId]?.pictureInPicture ?? false,
+            zoomFactor: previewState.desktopByTabId[snapshot.tabId]?.zoomFactor ?? 1,
+          }))
+      : [];
+  });
+  // Electron destroys a moved webview's guest, so the render order must not follow the server's
+  // updatedAt order. Any fixed order works; this one is not a display order.
+  const sessions = activeSessions.toSorted((left, right) =>
+    left.runtimeTabId < right.runtimeTabId ? -1 : left.runtimeTabId > right.runtimeTabId ? 1 : 0,
   );
 
   useEffect(() => {
@@ -107,7 +101,7 @@ export function ElectronBrowserHost() {
       observer.disconnect();
       headObserver.disconnect();
     };
-  }, [resolvedTheme]);
+  }, []);
 
   useEffect(() => {
     const preview = window.desktopBridge?.preview;
@@ -117,12 +111,9 @@ export function ElectronBrowserHost() {
     });
   }, []);
 
-  // A `target="_blank"` link inside a hosted page opens as another tab of the
-  // same thread, so the page that held the link stays where it is.
-  const openLink = useEffectEvent(({ tabId, url, background }: DesktopPreviewOpenLinkEvent) => {
+  const onOpenLink = useEffectEvent(({ tabId, url, background }: DesktopPreviewOpenLinkEvent) => {
     const source = sessions.find((session) => session.runtimeTabId === tabId);
     if (!source) return;
-    // The new tab keeps the source tab's profile so its cookies carry over.
     const profileId = source.snapshot.profileId;
     if (background) {
       void openUrlInPreview({
@@ -145,7 +136,7 @@ export function ElectronBrowserHost() {
   useEffect(() => {
     const preview = window.desktopBridge?.preview;
     if (!preview) return;
-    return preview.onOpenLink(openLink);
+    return preview.onOpenLink(onOpenLink);
   }, []);
   useEffect(() => {
     const preview = window.desktopBridge?.preview;
@@ -256,10 +247,7 @@ function RetainedBrowserWebview({
 }
 
 /**
- * Agent `preview_open` normally carries the profile clients reported (see
- * BrowserProfileReporter). An agent tab opened before any client reported has
- * none, so it falls back to the configured default here. It is latched once
- * settings load: Electron fixes the partition when the guest attaches, so a
+ * It is latched once settings load: Electron fixes the partition when the guest attaches, so a
  * later settings change must not move a live tab.
  */
 function useTabProfileId(profileId: string | undefined): string | undefined {

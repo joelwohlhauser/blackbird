@@ -1,6 +1,6 @@
 import type { EnvironmentId, PinnedSite } from "@t3tools/contracts";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { openPreviewSession } from "../components/preview/openPreviewSession";
 import { PreviewPanel } from "../components/preview/PreviewPanel";
@@ -19,10 +19,7 @@ function PinnedSiteBrowser({
   readonly site: PinnedSite;
   readonly environmentId: EnvironmentId;
 }) {
-  const threadRef = useMemo(
-    () => pinnedSiteThreadRef(environmentId, site.id),
-    [environmentId, site.id],
-  );
+  const threadRef = pinnedSiteThreadRef(environmentId, site.id);
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const previewState = useThreadPreviewState(threadRef);
   const openRequestedRef = useRef(false);

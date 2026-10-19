@@ -1,5 +1,5 @@
 import type { LinearIssue } from "@t3tools/contracts";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import {
   getDesktopLinearBridge,
@@ -108,7 +108,7 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
     );
   }, [account, debouncedQuery, isOpen, requestKey]);
 
-  const identifiers = useMemo(() => issues.map((issue) => issue.identifier), [issues]);
+  const identifiers = issues.map((issue) => issue.identifier);
 
   return (
     <Combobox

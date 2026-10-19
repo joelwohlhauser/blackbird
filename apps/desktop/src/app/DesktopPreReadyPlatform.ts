@@ -54,10 +54,12 @@ export const make = Effect.gen(function* () {
   const platform = yield* HostProcess.Platform;
   const homeDirectory = yield* HostProcess.HomeDirectory;
   return yield* Effect.sync((): DesktopPreReadyElectronOptions["Service"] => {
-    Electron.app.commandLine.appendSwitch(
-      "disable-features",
+    let disableFeatures = [
+      readCommandLineSwitchValue(Electron.app.commandLine, "disable-features"),
       "HardwareMediaKeyHandling,MediaSessionService",
-    );
+    ]
+      .filter((features) => features !== null)
+      .join(",");
     const linuxPasswordStoreCommandLine =
       platform === "linux"
         ? readCommandLineSwitchValue(Electron.app.commandLine, "password-store")
@@ -93,9 +95,7 @@ export const make = Effect.gen(function* () {
               ),
               iconPath,
             );
-          } catch {
-            // Icon installation is optional; registration retries after readiness.
-          }
+          } catch {}
         }
         NodeFS.writeFileSync(
           NodePath.posix.join(applicationsDir, linux.linuxDesktopEntryName),
@@ -110,9 +110,7 @@ export const make = Effect.gen(function* () {
           }),
           "utf8",
         );
-      } catch {
-        // The URL handler retries with the full environment and logs failures.
-      }
+      } catch {}
       // Chromium caches its portal registration during startup. Set the identity
       // before any asynchronous work can initialize it with Electron's default.
       Electron.app.setDesktopName(linux.linuxDesktopEntryName);
@@ -120,25 +118,23 @@ export const make = Effect.gen(function* () {
       if (linux.passwordStore !== null && linuxPasswordStoreCommandLine === null) {
         Electron.app.commandLine.appendSwitch("password-store", linux.passwordStore);
       }
-      // Chromium keeps only the last --disable-features value, so pass the merged list.
-      const disableFeatures = DesktopEarlyElectronStartup.resolveLinuxDisableFeaturesSwitch({
-        env: process.env,
-        ozonePlatform: readCommandLineSwitchValue(Electron.app.commandLine, "ozone-platform"),
-        enableFeatures: readCommandLineSwitchValue(Electron.app.commandLine, "enable-features"),
-        disableFeatures: readCommandLineSwitchValue(Electron.app.commandLine, "disable-features"),
-        // Runs only on Hyprland Wayland sessions without an explicit feature override.
-        readHyprctlVersionJson: () =>
-          NodeChildProcess.execFileSync("hyprctl", ["version", "-j"], {
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "ignore"],
-            timeout: 1000,
-            maxBuffer: 64 * 1024,
-          }),
-      });
-      if (disableFeatures !== null) {
-        Electron.app.commandLine.appendSwitch("disable-features", disableFeatures);
-      }
+      disableFeatures =
+        DesktopEarlyElectronStartup.resolveLinuxDisableFeaturesSwitch({
+          env: process.env,
+          ozonePlatform: readCommandLineSwitchValue(Electron.app.commandLine, "ozone-platform"),
+          enableFeatures: readCommandLineSwitchValue(Electron.app.commandLine, "enable-features"),
+          disableFeatures,
+          readHyprctlVersionJson: () =>
+            NodeChildProcess.execFileSync("hyprctl", ["version", "-j"], {
+              encoding: "utf8",
+              stdio: ["ignore", "pipe", "ignore"],
+              timeout: 1000,
+              maxBuffer: 64 * 1024,
+            }),
+        }) ?? disableFeatures;
     }
+    // Chromium keeps only the last --disable-features value, so pass the merged list.
+    Electron.app.commandLine.appendSwitch("disable-features", disableFeatures);
 
     return { linux, linuxPasswordStoreCommandLine };
   });

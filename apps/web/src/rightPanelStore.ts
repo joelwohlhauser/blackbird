@@ -1,12 +1,3 @@
-/**
- * Thread-scoped right-panel surface state.
- *
- * This is intentionally a shallow workspace model: it owns an ordered set of
- * surface descriptors and the active surface, while each feature continues to
- * own its durable resource state. Browser surfaces point at preview tab ids,
- * terminal surfaces point at terminal session ids, file surfaces point at
- * workspace paths, and diff/files remain singleton surfaces.
- */
 import {
   parseScopedThreadKey,
   scopedThreadKey,
@@ -65,7 +56,7 @@ export type RightPanelSurface =
       splitDirection?: "horizontal" | "vertical";
     }
   | { id: "diff"; kind: "diff" }
-  | { id: "files"; kind: "files" }
+  | { id: "files"; kind: "files"; folderTrail?: string }
   | {
       id: `file-diff:${string}`;
       kind: "file-diff";
@@ -77,25 +68,18 @@ export type RightPanelSurface =
   | {
       id: `file:${string}` | `attachment:${string}`;
       kind: "file";
-      /** Workspace-relative, or absolute for a host file outside the workspace. */
       relativePath: string;
       revealLine: number | null;
       revealRequestId: number;
-      /** Present when the file lives in the thread's attachment store rather
-          than at a workspace or host path. */
       attachment?: ChatFileAttachment;
+      folderTrail?: string;
     }
   | {
-      /**
-       * A change request opened beside a thread or in the pull-request list's shared panel.
-       * The reference lives in the id so several pull requests can remain open as peer tabs.
-       */
       id: `pull-request:${string}`;
       kind: "pull-request";
       /**
-       * Which server the change request was read from. The list spans every connected one, so
-       * two of them can hold the same project id; a panel beside a thread leaves this out and
-       * takes the environment from its own ref.
+       * The list spans every connected one, so two of them can hold the same project id; a
+       * panel beside a thread leaves this out and takes the environment from its own ref.
        */
       environmentId?: string;
       projectId: string;
@@ -104,7 +88,6 @@ export type RightPanelSurface =
       number: number;
       url?: string;
     }
-  /** The thread's linked pull requests, one singleton tab beside any number of `pull-request` tabs. */
   | { id: "pull-requests"; kind: "pull-requests" }
   | { id: `thread:${string}`; kind: "thread"; threadId: ThreadId; title?: string };
 
@@ -129,16 +112,11 @@ export const workspaceLayoutProbe = {
     typeof window === "undefined" || window.innerWidth >= WIDE_WORKSPACE_MIN_WIDTH,
 };
 
-/** A fixed workspace-level ref: each PR surface carries its own real environment. */
 export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
   EnvironmentId.make("pull-requests-panel"),
   ThreadId.make("pull-requests-panel"),
 );
 
-/**
- * The pull-request list's shared panel is session
- * state: reopening the app should show the list, not last session's tabs and detail fetches.
- */
 const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
 
 export interface ThreadRightPanelState {
@@ -179,13 +157,12 @@ interface RightPanelStoreState {
   byThreadKey: Record<string, ThreadRightPanelState>;
   workspaceNavigatorOpenByThreadKey: Record<string, true>;
   workspaceNavigatorTabByThreadKey: Record<string, WorkspaceNavigatorTab>;
-  /** Session-only count of user panel choices per thread. Automatic updates do not advance it. */
   userActionRevisionByThreadKey: Record<string, number>;
   closeRevisionByThreadKey: Record<string, number>;
   getUserActionRevision: (ref: ScopedThreadRef) => number;
   /**
-   * Open a surface on behalf of the app, not the user. Refused when the user
-   * made a panel choice after `expectedUserActionRevision` was read.
+   * Refused when the user made a panel choice after
+   * `expectedUserActionRevision` was read.
    */
   openProactive: (
     ref: ScopedThreadRef,
@@ -217,6 +194,13 @@ interface RightPanelStoreState {
   openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
   renameDevice: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
+  navigateFolder: (
+    ref: ScopedThreadRef,
+    surfaceId: string,
+    relativePath: string,
+    folderTrail: string,
+    keepSource?: boolean,
+  ) => void;
   openDiffFile: (
     ref: ScopedThreadRef,
     scope: "unstaged" | "branch",
@@ -415,8 +399,6 @@ export function pullRequestSurfaceId(target: {
   repository: string;
   number: number;
 }): PullRequestSurface["id"] {
-  // The environment leads the id where there is one, so the same change request read from two
-  // servers is two tabs rather than one tab that changes its mind about which server it is on.
   const scope =
     target.environmentId === undefined ? "" : `${encodeURIComponent(target.environmentId)}:`;
   const host = target.host === undefined ? "" : `${encodeURIComponent(target.host.toLowerCase())}:`;
@@ -661,9 +643,16 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
   if (!Array.isArray(persistedSurfaces)) return [];
   return (persistedSurfaces as RightPanelSurface[]).flatMap<RightPanelSurface>((surface) => {
     if (!surface || typeof surface !== "object") return [];
-    // Removed surfaces: plans render inline, agents in thread lineage.
     const kind = (surface as { kind?: string }).kind;
     if (kind === "plan" || kind === "agents") return [];
+    if (
+      (surface.kind === "file" || surface.kind === "files") &&
+      "folderTrail" in surface &&
+      typeof surface.folderTrail !== "string"
+    ) {
+      const { folderTrail: _invalid, ...rest } = surface;
+      surface = rest;
+    }
     if (surface.kind === "file") {
       const revealLine =
         typeof surface.revealLine === "number" && Number.isFinite(surface.revealLine)
@@ -696,7 +685,13 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
       ) {
         return [];
       }
-      return [pullRequestSurface(surface)];
+      const { environmentId, ...rest } = surface;
+      return [
+        pullRequestSurface({
+          ...rest,
+          ...(typeof environmentId === "string" ? { environmentId } : {}),
+        }),
+      ];
     }
     if (surface.kind !== "terminal") return [surface];
     if (
@@ -760,16 +755,11 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                 : rawActiveSurfaceId === "pull-request"
                   ? (surfaces.find((surface) => surface.kind === "pull-request")?.id ?? null)
                   : null;
-              // A migration that dropped every surface (e.g. plan-only panels
-              // in v9) must not reopen an empty panel.
               const isOpen =
                 surfaces.length > 0 &&
                 (typeof validThreadState?.isOpen === "boolean"
                   ? validThreadState.isOpen
                   : persistedActiveSurfaceId !== null);
-              // An open panel needs an active surface: if migration dropped
-              // the persisted one (e.g. plan was active), fall back to the
-              // first survivor instead of rendering an open empty panel.
               const activeSurfaceId =
                 persistedActiveSurfaceId ??
                 (isOpen || rawActiveSurfaceId === "agents" ? (surfaces[0]?.id ?? null) : null);
@@ -885,8 +875,6 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           ) {
             return state;
           }
-          // A linked PR takes priority over a completed-turn diff. Manual actions
-          // always apply, and later user choices reject both proactive requests.
           if (
             surface.kind === "diff" &&
             (selectActiveRightPanel(state.byThreadKey, ref) === "pull-request" ||
@@ -1120,6 +1108,56 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               };
             }
             return upsertSurface(base, surface);
+          }),
+        })),
+      navigateFolder: (ref, surfaceId, relativePath, folderTrail, keepSource = false) =>
+        set((state) => ({
+          ...userAction(state, scopedThreadKey(ref), (current) => {
+            const sourceContainer = surfaceContainer(current, surfaceId);
+            if (!sourceContainer) return current;
+            const trail = folderTrail === relativePath ? {} : { folderTrail };
+            const target: RightPanelSurface =
+              relativePath === ""
+                ? { ...singletonSurface("files"), ...trail }
+                : { ...fileSurface(relativePath, null, 1), ...trail };
+            const existingContainer =
+              target.id === surfaceId ? null : surfaceContainer(current, target.id);
+            const navigate = (list: RightPanelSurface[]) =>
+              list.flatMap((surface) => {
+                if (surface.id === surfaceId) {
+                  const kept = keepSource ? [surface] : [];
+                  return existingContainer ? kept : [...kept, target];
+                }
+                return !existingContainer && target.kind === "file" && surface.kind === "files"
+                  ? []
+                  : [surface];
+              });
+            const surfaces = navigate(current.surfaces);
+            const mainSurfaces = navigate(current.mainSurfaces);
+            if ((existingContainer ?? sourceContainer) === "main") {
+              return {
+                ...current,
+                isOpen: surfaces.length > 0 && current.isOpen,
+                surfaces,
+                activeSurfaceId: surfaces.some((surface) => surface.id === current.activeSurfaceId)
+                  ? current.activeSurfaceId
+                  : (surfaces[0]?.id ?? null),
+                mainSurfaces,
+                activeMainSurfaceId: target.id,
+              };
+            }
+            return {
+              ...current,
+              isOpen: true,
+              surfaces,
+              activeSurfaceId: target.id,
+              mainSurfaces,
+              activeMainSurfaceId: mainSurfaces.some(
+                (surface) => surface.id === current.activeMainSurfaceId,
+              )
+                ? current.activeMainSurfaceId
+                : null,
+            };
           }),
         })),
       openDiffFile: (ref, scope, relativePath, baseRef, headRef) =>
@@ -1485,7 +1523,6 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                 surface.kind === "preview" ? [surface.id] : [],
               ),
             );
-            // Filtered in place so browser tabs keep the order the user dragged them into.
             const kept = current.surfaces.filter((surface) => {
               if (surface.kind === "preview") {
                 return (
@@ -1837,7 +1874,6 @@ export function selectActiveRightPanelSurface(
   return selectSelectedRightPanelSurface(byThreadKey, ref);
 }
 
-/** The selected surface even while the panel is hidden, so a layout control can restore it. */
 export function selectSelectedRightPanelSurface(
   byThreadKey: Record<string, ThreadRightPanelState>,
   ref: ScopedThreadRef | null | undefined,
