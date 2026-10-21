@@ -406,6 +406,10 @@ export function makeGuestInput(
           return Promise.reject(new Error(`Not supported for a desktop preview tab: ${method}`));
         case "Page.bringToFront":
           return Promise.resolve({});
+        case "Page.reload":
+          if (params["ignoreCache"] === true) guest.reloadIgnoringCache();
+          else guest.reload();
+          return Promise.resolve({});
         default:
           return command(method, params, undefined);
       }

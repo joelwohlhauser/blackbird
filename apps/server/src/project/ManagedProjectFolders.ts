@@ -62,6 +62,7 @@ export class ManagedProjectFolders extends Context.Service<
   {
     readonly scratchRoot: Effect.Effect<Option.Option<string>>;
     readonly ensureScratchProject: Effect.Effect<{ readonly projectId: ProjectId }, ScratchError>;
+    readonly isScratchProject: (projectId: ProjectId) => Effect.Effect<boolean>;
     readonly namedProjectsRoot: string;
     /**
      * The folder is removed when the create fails or is cancelled before the
@@ -219,6 +220,16 @@ const make = Effect.gen(function* () {
       }),
     );
 
+  const isScratchProject: ManagedProjectFolders["Service"]["isScratchProject"] = (projectId) =>
+    projects.getById(projectId).pipe(
+      Effect.map(
+        Option.exists(
+          (project) => path.resolve(project.workspaceRoot) === path.resolve(quickChatsRoot),
+        ),
+      ),
+      Effect.orElseSucceed(() => false),
+    );
+
   const namedProjectsRoot = path.resolve(config.baseDir, "projects");
 
   const claimNamedFolder = Effect.fn("ManagedProjectFolders.claimNamedFolder")(function* (
@@ -343,6 +354,7 @@ const make = Effect.gen(function* () {
   return ManagedProjectFolders.of({
     scratchRoot,
     ensureScratchProject,
+    isScratchProject,
     namedProjectsRoot,
     createNamedProject,
   });

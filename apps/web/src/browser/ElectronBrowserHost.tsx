@@ -1,5 +1,3 @@
-"use client";
-
 import { parseScopedThreadKey, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   AuthPreviewOperateScope,
@@ -15,6 +13,10 @@ import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 
 import { isElectron } from "~/env";
 import { useClientSettingsHydrated } from "~/hooks/useSettings";
+import {
+  useDesktopHostedPreviewSessions,
+  usePreviewSession,
+} from "~/components/preview/usePreviewSession";
 import { useActivePreviewSessions } from "~/previewStateStore";
 import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentScope } from "~/state/session";
@@ -30,7 +32,6 @@ import {
   useRecentBrowserThreadsStore,
 } from "./browserTabRetention";
 import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
-import { usePreviewSession } from "~/components/preview/usePreviewSession";
 import { addBrowserSurface } from "~/components/preview/addBrowserSurface";
 import { HostedBrowserWebview } from "./HostedBrowserWebview";
 import { openUrlInPreview } from "./openFileInPreview";
@@ -41,6 +42,7 @@ export function ElectronBrowserHost() {
   const previewByThreadKey = useActivePreviewSessions();
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: true });
   const primaryEnvironmentId = useAtomValue(primaryEnvironmentIdAtom);
+  useDesktopHostedPreviewSessions(primaryEnvironmentId);
   const recentThreadKeys = useRecentBrowserThreadsStore((state) => state.threadKeys);
   const agentActiveThreadRefs = useAtomValue(primaryAgentActiveThreadRefsAtom);
   const recordingTabIds = useActiveBrowserRecordingTabIds();

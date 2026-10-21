@@ -170,8 +170,10 @@ import {
   archiveSelectedThreadEntries,
   buildMultiSelectThreadContextMenuItems,
   deleteSelectedThreadEntries,
+  filterSidebarV2VisibleThreads,
   getSidebarThreadIdsToPrewarm,
   resolveAdjacentThreadId,
+  resolveSidebarRowThreadId,
   isContextMenuPointerDown,
   isTrailingDoubleClick,
   resolveProjectStatusIndicator,
@@ -1115,7 +1117,7 @@ function useProjectThreads(project: SidebarProjectSnapshot) {
       resolveThreadLastVisitedAt(thread.lastVisitedAt, threadLastVisitedAts[index] ?? undefined),
     ]),
   );
-  const activeThreads = sidebarThreads.filter((thread) => thread.archivedAt === null);
+  const activeThreads = filterSidebarV2VisibleThreads(sidebarThreads, null);
   const visibleProjectThreads =
     threadSortOrder === "manual"
       ? orderItemsByPreferredIds({
@@ -3165,18 +3167,16 @@ function useSortedLegacySidebarProjects(input: {
     ...project,
     id: project.projectKey,
   }));
-  const sortableThreads = sidebarThreads
-    .filter((thread) => thread.archivedAt === null)
-    .map((thread) => {
-      const physicalKey =
-        projectPhysicalKeyByScopedRef.get(
-          scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-        ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
-      return {
-        ...thread,
-        projectId: (physicalToLogicalKey.get(physicalKey) ?? physicalKey) as ProjectId,
-      };
-    });
+  const sortableThreads = filterSidebarV2VisibleThreads(sidebarThreads, null).map((thread) => {
+    const physicalKey =
+      projectPhysicalKeyByScopedRef.get(
+        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+      ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
+    return {
+      ...thread,
+      projectId: (physicalToLogicalKey.get(physicalKey) ?? physicalKey) as ProjectId,
+    };
+  });
   const sortedProjects = sortProjectsForSidebar(
     sortableProjects,
     sortableThreads,
@@ -3196,7 +3196,7 @@ function useLegacySidebarThreads(input: {
   sortedProjects: readonly SidebarProjectSnapshot[];
   physicalToLogicalKey: ReadonlyMap<string, string>;
   projectPhysicalKeyByScopedRef: ReadonlyMap<string, string>;
-  routeThreadKey: string | null;
+  routeThreadRef: ScopedThreadRef | null;
   sidebarThreadSortOrder: SidebarThreadSortOrder;
   sidebarThreadPreviewCount: number;
   expandedThreadListsByProject: ReadonlySet<string>;
@@ -3205,12 +3205,25 @@ function useLegacySidebarThreads(input: {
     sortedProjects,
     physicalToLogicalKey,
     projectPhysicalKeyByScopedRef,
-    routeThreadKey,
+    routeThreadRef,
     sidebarThreadSortOrder,
     sidebarThreadPreviewCount,
     expandedThreadListsByProject,
   } = input;
   const sidebarThreads = useThreadShells();
+  const routeRowThreadKey =
+    routeThreadRef === null
+      ? null
+      : scopedThreadKey(
+          scopeThreadRef(
+            routeThreadRef.environmentId,
+            resolveSidebarRowThreadId(
+              routeThreadRef.threadId,
+              routeThreadRef.environmentId,
+              sidebarThreads,
+            ),
+          ),
+        );
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
   const sidebarThreadByKey = new Map(
     sidebarThreads.map(
@@ -3225,7 +3238,9 @@ function useLegacySidebarThreads(input: {
       ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
     return physicalToLogicalKey.get(physicalKey) ?? physicalKey;
   };
-  const activeRouteThread = routeThreadKey ? sidebarThreadByKey.get(routeThreadKey) : undefined;
+  const activeRouteThread = routeRowThreadKey
+    ? sidebarThreadByKey.get(routeRowThreadKey)
+    : undefined;
   const activeRouteProjectKey = activeRouteThread
     ? logicalProjectKeyForThread(activeRouteThread)
     : null;
@@ -3241,16 +3256,14 @@ function useLegacySidebarThreads(input: {
   }
   const visibleSidebarThreadKeys = sortedProjects.flatMap((project) => {
     const projectThreads = sortThreads(
-      (threadsByProjectKey.get(project.projectKey) ?? []).filter(
-        (thread) => thread.archivedAt === null,
-      ),
+      filterSidebarV2VisibleThreads(threadsByProjectKey.get(project.projectKey) ?? [], null),
       sidebarThreadSortOrder,
     );
     const projectExpanded = resolveProjectExpanded(
       projectExpandedById,
       projectExpansionPreferenceKeys(project),
     );
-    const activeThreadKey = routeThreadKey ?? undefined;
+    const activeThreadKey = routeRowThreadKey ?? undefined;
     const pinnedCollapsedThread =
       !projectExpanded && activeThreadKey
         ? (projectThreads.find(
@@ -3292,6 +3305,7 @@ function useLegacySidebarThreads(input: {
   );
   return {
     sidebarThreadByKey,
+    routeRowThreadKey,
     activeRouteProjectKey,
     visibleSidebarThreadKeys,
     threadJumpCommandByKey,
@@ -3316,7 +3330,6 @@ export default function LegacySidebar() {
     routeTarget?.kind === "draft" ? store.getDraftSession(routeTarget.draftId) : null,
   );
   const routeThreadRef = resolveActiveThreadRouteRef(routeTarget, routeDraftThread);
-  const routeThreadKey = routeThreadRef ? scopedThreadKey(routeThreadRef) : null;
   const routeTerminalOpen = useTerminalUiStateStore((state) =>
     routeThreadRef
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
@@ -3350,6 +3363,7 @@ export default function LegacySidebar() {
   });
   const {
     sidebarThreadByKey,
+    routeRowThreadKey,
     activeRouteProjectKey,
     visibleSidebarThreadKeys,
     threadJumpCommandByKey,
@@ -3359,7 +3373,7 @@ export default function LegacySidebar() {
     sortedProjects: displayedProjects,
     physicalToLogicalKey,
     projectPhysicalKeyByScopedRef,
-    routeThreadKey,
+    routeThreadRef,
     sidebarThreadSortOrder,
     sidebarThreadPreviewCount,
     expandedThreadListsByProject,
@@ -3477,7 +3491,7 @@ export default function LegacySidebar() {
       event.stopPropagation();
       const targetThreadKey = resolveAdjacentThreadId({
         threadIds: orderedSidebarThreadKeys,
-        currentThreadId: routeThreadKey,
+        currentThreadId: routeRowThreadKey,
         direction: traversalDirection,
       });
       if (!targetThreadKey) {
@@ -3695,7 +3709,7 @@ export default function LegacySidebar() {
             sortedProjectKeys={sortedProjectKeys}
             expandedThreadListsByProject={expandedThreadListsByProject}
             activeRouteProjectKey={activeRouteProjectKey}
-            routeThreadKey={routeThreadKey}
+            routeThreadKey={routeRowThreadKey}
             newThreadShortcutLabel={newThreadShortcutLabel}
             commandPaletteShortcutLabel={commandPaletteShortcutLabel}
             attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}

@@ -226,7 +226,7 @@ function previewTabIdOf(
   return sessions[surface.resourceId]?.tabId ?? null;
 }
 
-export function tabMuteMenuItem(input: {
+function tabMuteMenuItem(input: {
   overlay: DesktopPreviewOverlay | null;
   canResolveRuntimeTabId: boolean;
 }): { label: string; disabled: boolean } {
@@ -392,6 +392,11 @@ function MainChatTab(props: MainChatTabProps) {
   );
 }
 
+function preventTabMiddleButtonDefault(event: ReactMouseEvent) {
+  if (event.button !== 1) return;
+  event.preventDefault();
+}
+
 function WorkspaceSurfaceTab(props: {
   container: WorkspaceTabContainer;
   surface: RightPanelSurface;
@@ -405,7 +410,6 @@ function WorkspaceSurfaceTab(props: {
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
   onActivate: (surface: RightPanelSurface) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
-  onMouseDown: (event: ReactMouseEvent) => void;
   onAuxClick: (event: ReactMouseEvent, surface: RightPanelSurface) => void;
   onContextMenu: (event: ReactMouseEvent, surface: RightPanelSurface) => void;
   previewRuntimeTabId?: ((tabId: string) => string) | undefined;
@@ -426,7 +430,8 @@ function WorkspaceSurfaceTab(props: {
       style={{ transform: CSS.Translate.toString(transform), transition }}
       {...listeners}
       data-active-tab={props.active}
-      onMouseDown={props.onMouseDown}
+      onMouseDown={preventTabMiddleButtonDefault}
+      onMouseUp={preventTabMiddleButtonDefault}
       onAuxClick={(event) => props.onAuxClick(event, props.surface)}
       onContextMenu={(event) => props.onContextMenu(event, props.surface)}
       className={cn(
@@ -639,10 +644,6 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
         break;
     }
   };
-  const handleTabMouseDown = (event: ReactMouseEvent) => {
-    if (event.button !== 1) return;
-    event.preventDefault();
-  };
   const handleTabAuxClick = (event: ReactMouseEvent, surface: RightPanelSurface) => {
     if (event.button !== 1) return;
     event.preventDefault();
@@ -716,7 +717,6 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
         : {})}
       onActivate={props.onActivate}
       onCloseSurface={props.onCloseSurface}
-      onMouseDown={handleTabMouseDown}
       onAuxClick={handleTabAuxClick}
       onContextMenu={(event, contextSurface) => void handleTabContextMenu(event, contextSurface)}
     />

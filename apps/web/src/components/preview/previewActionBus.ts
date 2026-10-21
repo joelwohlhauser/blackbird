@@ -1,5 +1,3 @@
-"use client";
-
 import type { DesktopPreviewShortcut } from "@t3tools/contracts";
 
 export type PreviewAction =

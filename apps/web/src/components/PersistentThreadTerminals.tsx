@@ -23,6 +23,7 @@ import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
+import { resolveTerminalWorktreePath } from "./ChatView.logic";
 
 /** Same terminal ids (order ignored) — avoids reconcile when only server session ordering differs. */
 function terminalIdListsEqual(left: readonly string[], right: readonly string[]): boolean {
@@ -73,6 +74,7 @@ interface PersistentThreadTerminalDrawerProps {
   threadRef: { environmentId: EnvironmentId; threadId: ThreadId };
   threadId: ThreadId;
   visible: boolean;
+  composerHeight: number;
   focusRequestId: number;
   splitShortcutLabel: string | undefined;
   splitVerticalShortcutLabel: string | undefined;
@@ -86,6 +88,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   threadRef,
   threadId,
   visible,
+  composerHeight,
   focusRequestId,
   splitShortcutLabel,
   splitVerticalShortcutLabel,
@@ -229,6 +232,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
         runtimeEnv={runtimeEnv}
         visible={visible}
         height={terminalUiState.terminalHeight}
+        composerHeight={composerHeight}
         // Known-session order is MRU and changes on focus; persisted store order keeps sidebar labels stable.
         terminalIds={canOperateTerminal ? terminalUiState.terminalIds : serverOrderedTerminalIds}
         activeTerminalId={terminalUiState.activeTerminalId}
@@ -301,10 +305,18 @@ export const PersistentThreadTerminalPanel = memo(function PersistentThreadTermi
     environmentId: threadRef.environmentId,
     threadId: threadRef.threadId,
   });
-  const worktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
-  const cwd = project
-    ? projectScriptCwd({ project: { cwd: project.workspaceRoot }, worktreePath })
-    : null;
+  const threadWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
+  const activeSummary =
+    knownTerminalSessions?.find((session) => session.target.terminalId === surface.activeTerminalId)
+      ?.state.summary ?? null;
+  const worktreePath = resolveTerminalWorktreePath({
+    launchContext: null,
+    summary: activeSummary,
+    threadWorktreePath,
+  });
+  const cwd =
+    activeSummary?.cwd ??
+    (project ? projectScriptCwd({ project: { cwd: project.workspaceRoot }, worktreePath }) : null);
   const runtimeEnv = project
     ? projectScriptRuntimeEnv({ project: { cwd: project.workspaceRoot }, worktreePath })
     : {};
@@ -315,8 +327,25 @@ export const PersistentThreadTerminalPanel = memo(function PersistentThreadTermi
       knownTerminalSessions?.find((session) => session.target.terminalId === terminalId)?.state
         .summary ?? null;
     terminalLabelsById.set(terminalId, resolveTerminalSessionLabel(terminalId, summary));
-    if (!cwd) continue;
-    terminalLaunchLocationsById.set(terminalId, { cwd, worktreePath, runtimeEnv });
+    if (!project) continue;
+    const terminalWorktreePath = resolveTerminalWorktreePath({
+      launchContext: null,
+      summary,
+      threadWorktreePath,
+    });
+    terminalLaunchLocationsById.set(terminalId, {
+      cwd:
+        summary?.cwd ??
+        projectScriptCwd({
+          project: { cwd: project.workspaceRoot },
+          worktreePath: terminalWorktreePath,
+        }),
+      worktreePath: terminalWorktreePath,
+      runtimeEnv: projectScriptRuntimeEnv({
+        project: { cwd: project.workspaceRoot },
+        worktreePath: terminalWorktreePath,
+      }),
+    });
   }
 
   if (!project || !cwd) return null;

@@ -1,28 +1,13 @@
-import { act, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { useState } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
 
+import { render } from "../../../test/render";
 import { usePullRequestStateChange } from "./usePullRequestStateChange";
 
 type Status = NonNullable<Parameters<typeof usePullRequestStateChange>[0]>;
 const open: Status = { repository: "acme/library", number: 7, state: "open" };
 
 describe("pull request tab status notifications", () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  beforeEach(() => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-  });
-  afterEach(async () => {
-    await act(async () => root.unmount());
-    container.remove();
-    vi.unstubAllGlobals();
-  });
-
   function Panel({
     detail,
     onChange,
@@ -52,32 +37,32 @@ describe("pull request tab status notifications", () => {
       );
     }
 
-    await act(async () => root.render(<Chat />));
-    expect(container.querySelector("span")!.textContent).toBe("open");
+    await using screen = await render(<Chat />);
+    expect(screen.container.querySelector("span")!.textContent).toBe("open");
     expect(changes).toHaveBeenCalledExactlyOnceWith(open);
   });
 
   it("reports actual state and PR changes using the latest callback", async () => {
     const first = vi.fn();
     const latest = vi.fn();
-    const render = (detail: Status | null, onChange = latest) =>
-      act(async () => root.render(<Panel detail={detail} onChange={onChange} />));
+    await using screen = await render(<Panel detail={null} onChange={first} />);
+    const show = (detail: Status | null, onChange = latest) =>
+      screen.rerender(<Panel detail={detail} onChange={onChange} />);
 
-    await render(null, first);
     expect(first).not.toHaveBeenCalled();
-    await render(open, first);
+    await show(open, first);
     expect(first).toHaveBeenCalledExactlyOnceWith(open);
-    await render({ ...open });
+    await show({ ...open });
     expect(latest).not.toHaveBeenCalled();
     const closed: Status = { ...open, state: "closed" };
-    await render(closed);
-    await render(open);
+    await show(closed);
+    await show(open);
     const other: Status = { ...open, number: 8 };
-    await render(other);
+    await show(other);
     const otherRepository: Status = { ...other, repository: "acme/other" };
-    await render(otherRepository);
-    await render(null);
-    await render(otherRepository);
+    await show(otherRepository);
+    await show(null);
+    await show(otherRepository);
     expect(latest.mock.calls.map(([status]) => status)).toEqual([
       closed,
       open,

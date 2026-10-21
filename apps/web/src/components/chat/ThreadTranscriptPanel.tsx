@@ -144,6 +144,7 @@ export function ThreadTranscriptPanel(props: {
           onAnchorReady={noop}
           onAnchorSizeChanged={noop}
           contentInsetEndAdjustment={0}
+          emptyPlaceholderInset={0}
           liveFollowEnabled={isAtEnd}
           onIsAtEndChange={setIsAtEnd}
           onManualNavigation={noop}

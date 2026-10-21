@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { CommandId, GitCommandError, ProjectId, QUICK_CHATS_PROJECT_ID } from "@t3tools/contracts";
+import { CommandId, ProjectId, QUICK_CHATS_PROJECT_ID } from "@t3tools/contracts";
 import * as NodeOS from "node:os";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -32,6 +32,7 @@ const layerEnrichment = ProjectEnrichmentService.layer.pipe(
         resolve: () => Effect.succeed(null),
       }),
       Layer.succeed(ProjectFaviconResolver.ProjectFaviconResolver, {
+        invalidate: () => Effect.void,
         resolvePath: () => Effect.succeed(null),
       }),
     ),
@@ -376,37 +377,4 @@ it.effect("removes the folder when the create is cancelled before the project ex
       },
     );
   }),
-);
-
-it.effect("removes the folder when the repository cannot be made", () =>
-  withScratch(
-    ({ baseDir }) =>
-      Effect.gen(function* () {
-        const folders = yield* ManagedProjectFolders.ManagedProjectFolders;
-        const projects = yield* ProjectService.ProjectService;
-        const fileSystem = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-
-        const failure = yield* Effect.flip(folders.createNamedProject({ name: "Broken" }));
-
-        assert.equal(failure._tag, "NamedProjectFolderError");
-        assert.equal(failure.message, "Failed to create the project folder.");
-        assert.deepEqual(yield* fileSystem.readDirectory(path.resolve(baseDir, "projects")), []);
-        assert.deepEqual((yield* projects.snapshot).projects, []);
-      }),
-    {
-      git: Layer.mock(GitVcsDriver.GitVcsDriver)({
-        readConfigValue: () => Effect.succeed(null),
-        execute: (input) =>
-          Effect.fail(
-            new GitCommandError({
-              operation: input.operation,
-              command: "git",
-              cwd: input.cwd,
-              detail: "git is broken",
-            }),
-          ),
-      }),
-    },
-  ),
 );

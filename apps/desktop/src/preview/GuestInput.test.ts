@@ -12,6 +12,7 @@ const makeTab = (options: { focusedFrameSession?: string; focused?: boolean } = 
   const nativeEvents: Array<Electron.KeyboardInputEvent> = [];
   const insertedText: Array<string> = [];
   const hostMessages: Array<[string, unknown]> = [];
+  const reloads: Array<string> = [];
   let frameChecks = 0;
   const debuggee = {
     sendCommand: async (
@@ -34,6 +35,8 @@ const makeTab = (options: { focusedFrameSession?: string; focused?: boolean } = 
     focusedFrame: options.focused ? {} : null,
     sendInputEvent: (event: Electron.KeyboardInputEvent) => void nativeEvents.push(event),
     insertText: async (text: string) => void insertedText.push(text),
+    reload: () => void reloads.push("reload"),
+    reloadIgnoringCache: () => void reloads.push("reloadIgnoringCache"),
     hostWebContents: {
       isDestroyed: () => false,
       send: (channel: string, value: unknown) => void hostMessages.push([channel, value]),
@@ -52,7 +55,7 @@ const makeTab = (options: { focusedFrameSession?: string; focused?: boolean } = 
       targetInfo: { targetId: "FRAME-1", type: "iframe" },
     });
   }
-  return { input, commands, nativeEvents, insertedText, hostMessages };
+  return { input, commands, nativeEvents, insertedText, hostMessages, reloads };
 };
 
 const sentToDebugger = (commands: ReadonlyArray<Command>, method: string) =>
@@ -138,6 +141,15 @@ describe("GuestInput", () => {
       },
     ]);
     expect(tab.nativeEvents).toEqual([]);
+  });
+
+  it("reloads the guest itself instead of its embedder window", async () => {
+    const tab = makeTab();
+    await tab.input.send("Page.reload", {}, undefined);
+    await tab.input.send("Page.reload", { ignoreCache: true }, undefined);
+
+    expect(tab.reloads).toEqual(["reload", "reloadIgnoringCache"]);
+    expect(tab.commands).toEqual([]);
   });
 
   it("refuses IME composition and keeps bringToFront from stealing focus", async () => {

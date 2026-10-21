@@ -215,14 +215,14 @@ export function RevertConfirmHost(props: {
           <AlertDialogDescription>
             Rewind chat to before this message. Your prompt and attachments return to the composer.
             {props.restoreFilesAvailable
-              ? null
+              ? " “Revert files too” also undoes your own edits."
               : " Files stay as they are because this thread shares the project directory."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
           {props.restoreFilesAvailable ? (
-            <Button variant="destructive" onClick={() => confirm(true)}>
+            <Button variant="destructive-outline" onClick={() => confirm(true)}>
               Revert files too
             </Button>
           ) : null}

@@ -1,9 +1,9 @@
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { act, render, stubGlobal, type Screen } from "../../test/render";
 
 const state = vi.hoisted(() => ({
   enabled: false,
@@ -13,7 +13,10 @@ const state = vi.hoisted(() => ({
   notify: vi.fn(),
 }));
 
-vi.mock("@tanstack/react-router", () => ({ useNavigate: () => state.navigate }));
+vi.mock(import("@tanstack/react-router"), async (original) => ({
+  ...(await original()),
+  useNavigate: (() => state.navigate) as never,
+}));
 vi.mock("../state/entities", () => ({
   useThreadShells: () => state.shells,
   useProjects: () => state.projects,
@@ -45,72 +48,60 @@ function shells(waiting = false): EnvironmentThreadShell[] {
 }
 
 describe("per-chat desktop notifications", () => {
-  let container: HTMLDivElement;
-  let root: Root | undefined;
-
-  beforeEach(() => {
+  function setup() {
     state.enabled = false;
     state.shells = shells();
     state.notify.mockClear();
     localStorage.clear();
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    vi.spyOn(document, "hasFocus").mockReturnValue(false);
-    vi.spyOn(window, "focus").mockImplementation(() => undefined);
-    vi.stubGlobal(
-      "Notification",
-      class {
-        constructor(title: string, options: NotificationOptions) {
-          state.notify(title, options);
-        }
-        addEventListener = vi.fn();
-      },
+    const stack = new AsyncDisposableStack();
+    stack.defer(() => localStorage.clear());
+    stack.use(vi.spyOn(document, "hasFocus").mockReturnValue(false));
+    stack.use(vi.spyOn(window, "focus").mockImplementation(() => undefined));
+    stack.use(
+      stubGlobal(
+        "Notification",
+        class {
+          constructor(title: string, options: NotificationOptions) {
+            state.notify(title, options);
+          }
+          addEventListener = vi.fn();
+        },
+      ),
     );
-    container = document.createElement("div");
-    document.body.append(container);
-  });
-
-  afterEach(async () => {
-    await act(async () => root?.unmount());
-    root = undefined;
-    container.remove();
-    localStorage.clear();
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
-
-  async function render() {
-    await act(async () => {
-      root ??= createRoot(container);
-      root.render(
-        <>
-          <AgentStopNotifications />
-          <ChatNotificationToggle threadRef={threadRef} />
-        </>,
-      );
-    });
-  }
-
-  async function unmount() {
-    await act(async () => root?.unmount());
-    root = undefined;
-  }
-
-  const bell = () => container.querySelector("button")!;
-
-  async function toggle() {
-    await act(async () => bell().click());
+    const ui = () => (
+      <>
+        <AgentStopNotifications />
+        <ChatNotificationToggle threadRef={threadRef} />
+      </>
+    );
+    let screen: Screen | undefined;
+    const bell = () => screen!.container.querySelector("button")!;
+    return {
+      bell,
+      async render() {
+        if (screen) await screen.rerender(ui());
+        else screen = stack.use(await render(ui()));
+      },
+      async unmount() {
+        await screen?.unmount();
+        screen = undefined;
+      },
+      toggle: () => act(() => bell().click()),
+      [Symbol.asyncDispose]: () => stack.disposeAsync(),
+    };
   }
 
   it("enables just this environment's chat and restores its choice after remounting", async () => {
+    await using app = setup();
     state.enabled = true;
-    await render();
-    await toggle();
-    await unmount();
-    await render();
-    expect(bell().getAttribute("aria-pressed")).toBe("true");
+    await app.render();
+    await app.toggle();
+    await app.unmount();
+    await app.render();
+    expect(app.bell().getAttribute("aria-pressed")).toBe("true");
 
     state.shells = shells(true);
-    await render();
+    await app.render();
     expect(state.notify).toHaveBeenCalledExactlyOnceWith("local chat", {
       body: "Needs approval · Quick chat",
       tag: "local:chat",
@@ -118,18 +109,19 @@ describe("per-chat desktop notifications", () => {
   });
 
   it("keeps new chats silent until their bell is turned on and never replays a stop", async () => {
+    await using app = setup();
     state.enabled = true;
-    await render();
+    await app.render();
     state.shells = shells(true);
-    await render();
+    await app.render();
     expect(state.notify).not.toHaveBeenCalled();
 
-    await toggle();
+    await app.toggle();
     expect(state.notify).not.toHaveBeenCalled();
     state.shells = shells();
-    await render();
+    await app.render();
     state.shells = shells(true);
-    await render();
+    await app.render();
     expect(state.notify).toHaveBeenCalledExactlyOnceWith("local chat", {
       body: "Needs approval · Quick chat",
       tag: "local:chat",
@@ -137,31 +129,34 @@ describe("per-chat desktop notifications", () => {
   });
 
   it("ignores the bell while the global setting is off", async () => {
-    await render();
-    await toggle();
+    await using app = setup();
+    await app.render();
+    await app.toggle();
     state.shells = shells(true);
-    await render();
+    await app.render();
     expect(state.notify).not.toHaveBeenCalled();
   });
 
   it("does not notify while Blackbird is focused", async () => {
+    await using app = setup();
     state.enabled = true;
     vi.mocked(document.hasFocus).mockReturnValue(true);
-    await render();
+    await app.render();
     state.shells = shells(true);
-    await render();
+    await app.render();
     expect(state.notify).not.toHaveBeenCalled();
   });
 
   it.each([true, false])(
     "uses native app focus (%s) when the chat document has no focus",
     async (appFocused) => {
+      await using app = setup();
+      using _bridge = stubGlobal("desktopBridge", { isAppFocused: () => appFocused });
       state.enabled = true;
-      vi.stubGlobal("desktopBridge", { isAppFocused: () => appFocused });
-      await render();
-      await toggle();
+      await app.render();
+      await app.toggle();
       state.shells = shells(true);
-      await render();
+      await app.render();
       expect(state.notify).toHaveBeenCalledTimes(appFocused ? 0 : 1);
     },
   );

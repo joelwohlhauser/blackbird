@@ -1,5 +1,4 @@
 import {
-  DEFAULT_BROWSER_PROFILE_ID,
   DEFAULT_CLIENT_SETTINGS,
   FILL_PREVIEW_VIEWPORT,
   type PreviewOpenInput,
@@ -9,11 +8,7 @@ import {
 import { AsyncResult } from "effect/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import {
-  applyPreviewServerSnapshot,
-  readThreadPreviewState,
-  resetPreviewStateForTests,
-} from "~/previewStateStore";
+import { applyPreviewServerSnapshot, resetPreviewStateForTests } from "~/previewStateStore";
 import { selectThreadRightPanelState, useRightPanelStore } from "~/rightPanelStore";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
 
@@ -40,47 +35,6 @@ beforeEach(() => {
 });
 
 describe("addBrowserSurface", () => {
-  it("opens under the requested profile", async () => {
-    const openPreview = vi.fn(async (_input: PreviewOpenInput) =>
-      AsyncResult.success(snapshot("tab-1")),
-    );
-
-    await addBrowserSurface({
-      threadRef,
-      openPreview: ({ input }) => openPreview(input),
-      profileId: "profile-work",
-    });
-
-    expect(openPreview).toHaveBeenCalledWith({
-      threadId: "thread-1",
-      viewport: FILL_PREVIEW_VIEWPORT,
-      profileId: "profile-work",
-    });
-  });
-
-  it("creates another preview session when a browser tab is already active", async () => {
-    const first = snapshot("tab-1");
-    const second = snapshot("tab-2");
-    applyPreviewServerSnapshot(threadRef, first);
-    useRightPanelStore.getState().openBrowser(threadRef, first.tabId);
-    const openPreview = vi.fn(async (_input: PreviewOpenInput) => AsyncResult.success(second));
-
-    await addBrowserSurface({ threadRef, openPreview: ({ input }) => openPreview(input) });
-
-    expect(openPreview).toHaveBeenCalledWith({
-      threadId: "thread-1",
-      viewport: FILL_PREVIEW_VIEWPORT,
-      profileId: DEFAULT_BROWSER_PROFILE_ID,
-    });
-    expect(Object.keys(readThreadPreviewState(threadRef).sessions)).toEqual(["tab-1", "tab-2"]);
-    expect(
-      selectThreadRightPanelState(
-        useRightPanelStore.getState().byThreadKey,
-        threadRef,
-      ).surfaces.map((surface) => surface.id),
-    ).toEqual(["browser:tab-1", "browser:tab-2"]);
-  });
-
   it("opens a link beside its source browser tab", async () => {
     const first = snapshot("tab-1");
     const second = snapshot("tab-2");

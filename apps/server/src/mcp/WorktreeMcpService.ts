@@ -275,8 +275,9 @@ const make = Effect.gen(function* () {
         : null;
 
     let baseRef: string | null = null;
-    let startFromOrigin = false;
     let worktreeBaseRef: string | null = null;
+    let baseRefName: string | null = null;
+    let startedFromOrigin = false;
     if (input.branch !== undefined && !branchExists) {
       const defaultBranch =
         input.baseRef === undefined
@@ -292,20 +293,17 @@ const make = Effect.gen(function* () {
           "Could not determine the repository's default branch or the current branch (detached HEAD?). Pass baseRef explicitly.",
         );
       }
-      startFromOrigin = input.startFromOrigin ?? (yield* readDefaultStartFromOrigin);
       worktreeBaseRef = baseRef;
-      if (startFromOrigin) {
-        yield* gitWorkflow
-          .fetchRemote({ cwd: projectCwd, remoteName: "origin" })
-          .pipe(asOperationFailed("Unable to fetch origin"));
+      baseRefName = baseRef;
+      if (input.startFromOrigin ?? (yield* readDefaultStartFromOrigin)) {
         const resolvedRemoteBase = yield* gitWorkflow
-          .resolveRemoteTrackingCommit({
-            cwd: projectCwd,
-            refName: baseRef,
-            fallbackRemoteName: "origin",
-          })
-          .pipe(asOperationFailed(`Unable to resolve the remote-tracking commit of '${baseRef}'`));
-        worktreeBaseRef = resolvedRemoteBase.commitSha;
+          .fetchWorktreeBaseCommit({ cwd: projectCwd, refName: baseRef })
+          .pipe(asOperationFailed(`Unable to fetch the remote base of '${baseRef}'`));
+        if (resolvedRemoteBase !== null) {
+          worktreeBaseRef = resolvedRemoteBase.commitSha;
+          baseRefName = `refs/remotes/${resolvedRemoteBase.remoteRefName}`;
+          startedFromOrigin = true;
+        }
       }
     }
 
@@ -344,7 +342,7 @@ const make = Effect.gen(function* () {
                           cwd: projectCwd,
                           refName: worktreeBaseRef ?? input.branch,
                           newRefName: input.branch,
-                          ...(baseRef === null ? {} : { baseRefName: baseRef }),
+                          ...(baseRefName === null ? {} : { baseRefName }),
                           path: null,
                         },
                   )
@@ -508,7 +506,7 @@ const make = Effect.gen(function* () {
           worktreePath,
           branch,
           baseRef,
-          startedFromOrigin: startFromOrigin,
+          startedFromOrigin,
           setupScript,
           continuation,
           note:

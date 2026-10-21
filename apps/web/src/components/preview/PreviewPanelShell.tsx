@@ -9,14 +9,10 @@ import {
 
 import { isElectron } from "~/env";
 import {
-  findPreviewPanelResizeContainer,
-  getPreviewPanelMaxWidth,
   type PreviewPanelInlineSize,
   usePreviewPanelInlineSize,
 } from "~/hooks/usePreviewPanelInlineSize";
 import { RESIZABLE_WIDTH_PROPERTY } from "~/hooks/useResizableWidth";
-
-export { findPreviewPanelResizeContainer, getPreviewPanelMaxWidth };
 import { cn } from "~/lib/utils";
 
 import { RightPanelResizeHandle } from "./RightPanelResizeHandle";

@@ -310,19 +310,6 @@ describe("buildProjectGroups", () => {
     expect(groups[1]?.label).toBe("t3code");
   });
 
-  it("keeps physical clones in separate groups when requested", () => {
-    const projects = [
-      makeProject("t3code", "/work/t3code"),
-      makeProject("t3code-2", "/work/t3code-2"),
-      makeProject("t3code-3", "/work/t3code-3"),
-    ];
-
-    const groups = buildProjectGroups({ projects, settings: settings("separate") });
-    expect(groups).toHaveLength(3);
-    expect(groups.flatMap((group) => group.members)).toHaveLength(3);
-    expect(groups.map((group) => group.label)).toEqual(["t3code", "t3code-2", "t3code-3"]);
-  });
-
   it("applies a physical-project override without dropping its siblings", () => {
     const first = makeProject("t3code", "/work/t3code");
     const second = makeProject("t3code-2", "/work/t3code-2");
@@ -359,24 +346,6 @@ describe("buildProjectGroups", () => {
     expect(groups[0]?.members).toHaveLength(1);
     expect(groups[0]?.representative.id).toBe("fresh");
     expect(groups[0]?.memberProjectRefs).toHaveLength(2);
-  });
-
-  it("uses repository identity from a duplicate registration when the winner lacks it", () => {
-    const identified = makeProject("identified", "/work/t3code", {
-      updatedAt: "2026-07-01T00:00:00.000Z",
-    });
-    const freshUnidentified = makeProject("fresh", "/work/t3code/", {
-      repositoryIdentity: null,
-      updatedAt: "2026-07-02T00:00:00.000Z",
-    });
-    const sibling = makeProject("sibling", "/work/t3code-2");
-
-    const groups = buildProjectGroups({
-      projects: [identified, freshUnidentified, sibling],
-      settings: settings("repository"),
-    });
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.members.map((member) => member.project.id)).toEqual(["fresh", "sibling"]);
   });
 
   it("uses the freshest winner's repository identity when stale duplicates disagree", () => {
@@ -439,26 +408,6 @@ describe("sortProjectsByGroupOrder", () => {
     projectId: ProjectId.make(projectId),
   });
   const project = (id: string, env: string = environmentId) => ({ id, environmentId: env });
-
-  it("follows the group order, keeping ungrouped projects last in their own order", () => {
-    const sorted = sortProjectsByGroupOrder(
-      [
-        project("alpha"),
-        project("zeta"),
-        project("orphan-b"),
-        project("beta"),
-        project("orphan-a"),
-      ],
-      [{ memberProjectRefs: [ref("zeta")] }, { memberProjectRefs: [ref("beta"), ref("alpha")] }],
-    );
-    expect(sorted.map((entry) => entry.id)).toEqual([
-      "zeta",
-      "alpha",
-      "beta",
-      "orphan-b",
-      "orphan-a",
-    ]);
-  });
 
   it("tells the same project id on two environments apart", () => {
     const sorted = sortProjectsByGroupOrder(

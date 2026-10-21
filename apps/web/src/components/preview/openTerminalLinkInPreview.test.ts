@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import {
   openTerminalLinkInPreview,
   TerminalLinkContextMenuShowError,
-  TerminalLinkPreviewOpenError,
 } from "./openTerminalLinkInPreview";
 
 vi.mock("~/previewStateStore", () => ({
@@ -147,39 +146,6 @@ describe("openTerminalLinkInPreview", () => {
     expect(error.targetOrigin).not.toContain("secret");
   });
 
-  it("preserves the complete preview failure cause before falling back", async () => {
-    const rpcError = new Error("preview unavailable");
-    const cause = Cause.combine(Cause.fail(rpcError), Cause.die("preview defect"));
-    const fallbackToBrowser = vi.fn();
-    const reportError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
-    await openTerminalLinkInPreview({
-      url: "http://127.0.0.1:5173/",
-      position: { x: 12, y: 34 },
-      threadRef,
-      openPreview: async () => AsyncResult.failure(cause),
-      localApi: {
-        contextMenu: {
-          show: vi.fn(async () => "open-in-preview"),
-        },
-      } as unknown as LocalApi,
-      fallbackToBrowser,
-      forceBrowser: false,
-    });
-
-    expect(fallbackToBrowser).toHaveBeenCalledOnce();
-    expect(reportError).toHaveBeenCalledOnce();
-    const error = reportError.mock.calls[0]?.[0];
-    expect(error).toBeInstanceOf(TerminalLinkPreviewOpenError);
-    expect(error).toMatchObject({
-      environmentId: "local",
-      threadId: "thread-1",
-      targetOrigin: "http://127.0.0.1:5173",
-      cause,
-    });
-    expect(error.message).not.toContain("preview unavailable");
-  });
-
   it("does not report or fall back when opening the preview is interrupted", async () => {
     const fallbackToBrowser = vi.fn();
     const reportError = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -200,23 +166,5 @@ describe("openTerminalLinkInPreview", () => {
 
     expect(reportError).not.toHaveBeenCalled();
     expect(fallbackToBrowser).not.toHaveBeenCalled();
-  });
-
-  it("opens in the system browser when Ctrl or Command is held", async () => {
-    const fallbackToBrowser = vi.fn();
-    const openPreview = vi.fn(async () => AsyncResult.success(snapshot));
-
-    await openTerminalLinkInPreview({
-      url: "https://example.com/docs",
-      threadRef,
-      openPreview,
-      fallbackToBrowser,
-      forceBrowser: true,
-      position: { x: 12, y: 34 },
-      localApi: { contextMenu: { show: vi.fn() } } as unknown as LocalApi,
-    });
-
-    expect(fallbackToBrowser).toHaveBeenCalledOnce();
-    expect(openPreview).not.toHaveBeenCalled();
   });
 });

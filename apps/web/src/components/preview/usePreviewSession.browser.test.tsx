@@ -5,10 +5,10 @@ import {
   type PreviewSessionSnapshot,
 } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { act, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vite-plus/test";
+import { useEffect } from "react";
+import { expect, it, vi } from "vite-plus/test";
 
+import { act, render } from "../../../test/render";
 import { appAtomRegistry, AppAtomRegistryProvider } from "~/rpc/atomRegistry";
 import {
   applyPreviewServerSnapshot,
@@ -22,20 +22,8 @@ vi.mock("~/state/preview", () => ({ previewEnvironment: mocks }));
 
 import { usePreviewSession } from "./usePreviewSession";
 
-let root: Root | undefined;
-let container: HTMLDivElement | undefined;
-
-afterEach(async () => {
-  await act(() => root?.unmount());
-  root = undefined;
-  container?.remove();
-  container = undefined;
-  resetPreviewStateForTests();
-  vi.unstubAllGlobals();
-});
-
 it("keeps a live browser mounted while refreshing a cached list that predates its creation", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  using _previewState = { [Symbol.dispose]: resetPreviewStateForTests };
   const threadRef = {
     environmentId: EnvironmentId.make("session-refresh"),
     threadId: ThreadId.make("thread-refresh"),
@@ -84,14 +72,10 @@ it("keeps a live browser mounted while refreshing a cached list that predates it
       {sync ? <Sync /> : null}
     </AppAtomRegistryProvider>
   );
-  container = document.createElement("div");
-  document.body.append(container);
-  const chatRoot = createRoot(container);
-  root = chatRoot;
-  await act(() => chatRoot.render(renderChat(false)));
+  await using screen = await render(renderChat(false));
   expect(mountGuest).toHaveBeenCalledOnce();
 
-  await act(() => chatRoot.render(renderChat(true)));
+  await screen.rerender(renderChat(true));
   expect(unmountGuest).not.toHaveBeenCalled();
 
   await act(() => appAtomRegistry.set(sessions, AsyncResult.waiting(AsyncResult.success(cached))));
