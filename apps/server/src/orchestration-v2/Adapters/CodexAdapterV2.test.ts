@@ -204,6 +204,24 @@ describe("CodexAdapterV2 runtime policy", () => {
     }),
   );
 
+  it.effect("sends Blackbird's agent instructions without the T3 MCP server", () =>
+    Effect.gen(function* () {
+      const params = yield* CodexAdapterV2.buildCodexTurnStartParams({
+        nativeThreadId: "native-agent-instructions",
+        codexInput: [{ type: "text", text: "fix the bug" }],
+        runtimePolicy: { runtimeMode: "full-access", interactionMode: "default", cwd: null },
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+        agentInstructions: "# Blackbird autopilot\n\nLoad the matching skill.",
+      });
+      assert.deepEqual(params.additionalContext, {
+        t3_code_agent_instructions_01: {
+          kind: "application",
+          value: "# Blackbird autopilot\n\nLoad the matching skill.",
+        },
+      });
+    }),
+  );
+
   it("gives the thread's shell commands the agent browser connection", () => {
     const { config } = CodexAdapterV2.codexThreadRuntimeParams({
       mcpSession: {

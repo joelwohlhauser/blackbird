@@ -66,6 +66,7 @@ import {
   type PiRpcConnection,
   type PiRpcRecord,
 } from "./rpc.ts";
+import { promptWithAgentInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 import {
   buildPiRpcLaunch,
   materializePiT3McpExtension,
@@ -2473,7 +2474,14 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
               : parsePiCompactCommand(turnInput.message.text);
             const payload =
               !continuation && compactCommand === null
-                ? yield* resolvePromptPayload(turnInput.message.text, turnInput.message.attachments)
+                ? yield* resolvePromptPayload(
+                    promptWithAgentInstructions({
+                      prompt: turnInput.message.text,
+                      runOrdinal: turnInput.runOrdinal,
+                      agentInstructions: turnInput.agentInstructions,
+                    }),
+                    turnInput.message.attachments,
+                  )
                 : null;
             const startedAt = yield* DateTime.now;
             const syntheticNativeTurnId = `${state.providerThread.id}:attempt:${turnInput.attemptId}`;

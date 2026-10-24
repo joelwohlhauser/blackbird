@@ -4,9 +4,44 @@ import { describe, it } from "vite-plus/test";
 
 import {
   buildCodexAdditionalContext,
+  buildCodexAgentInstructionsContext,
   buildCodexDeveloperInstructions,
   CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES,
 } from "./CodexDeveloperInstructions.ts";
+
+describe("buildCodexAgentInstructionsContext", () => {
+  it("splits long instructions into ordered entries under the per-entry cap", () => {
+    const paragraphs = Array.from(
+      { length: 12 },
+      (_, index) => `## Section ${index}\n\n${"Keep changes small. ".repeat(40)}`,
+    );
+    const longLine = "Ünïcödé ".repeat(800);
+    const text = [...paragraphs, longLine].join("\n\n");
+
+    const context = buildCodexAgentInstructionsContext(text);
+    const keys = Object.keys(context);
+
+    NodeAssert.ok(keys.length > 3);
+    NodeAssert.deepEqual(keys, keys.toSorted());
+    NodeAssert.equal(keys[0], "t3_code_agent_instructions_01");
+    for (const [key, entry] of Object.entries(context)) {
+      const bytes = Buffer.byteLength(entry.value, "utf8");
+      NodeAssert.ok(bytes <= CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES, `${key}: ${bytes} bytes`);
+    }
+    NodeAssert.equal(
+      Object.values(context)
+        .map((entry) => entry.value)
+        .join("")
+        .replace(/\s/g, ""),
+      text.replace(/\s/g, ""),
+    );
+    NodeAssert.match(context.t3_code_agent_instructions_01!.value, /^## Section 0\n\n/);
+  });
+
+  it("adds nothing for empty instructions", () => {
+    NodeAssert.deepEqual(buildCodexAgentInstructionsContext("  "), {});
+  });
+});
 
 describe("buildCodexAdditionalContext", () => {
   describe.each([

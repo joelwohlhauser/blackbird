@@ -25,3 +25,32 @@ export function buildRuntimeInstructions(runtime: {
 function toSingleLine(value: string): string {
   return value.replaceAll(/\s+/g, " ").trim();
 }
+
+/**
+ * For harnesses without a system prompt slot, Blackbird's agent instructions
+ * ride on the thread's first prompt. A leading slash command must stay first
+ * to expand, so that prompt goes out unchanged.
+ */
+export function promptWithAgentInstructions(input: {
+  readonly prompt: string;
+  readonly runOrdinal: number;
+  readonly agentInstructions: string | undefined;
+}): string {
+  if (
+    input.runOrdinal !== 1 ||
+    !input.agentInstructions ||
+    input.prompt.trimStart().startsWith("/")
+  ) {
+    return input.prompt;
+  }
+  return `${agentInstructionsBlock(input.agentInstructions)}
+
+<user_request>
+${input.prompt}
+</user_request>`;
+}
+
+/** The wrapper keeps the text from reading as the user's own request. */
+export function agentInstructionsBlock(agentInstructions: string): string {
+  return `<agent_instructions>\n${agentInstructions}\n</agent_instructions>`;
+}

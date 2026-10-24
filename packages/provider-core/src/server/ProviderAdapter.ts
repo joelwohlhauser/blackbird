@@ -436,6 +436,12 @@ export interface ProviderAdapterV2TurnInput {
   readonly modelSelection: ModelSelection;
   readonly runtimePolicy: ProviderAdapterV2RuntimePolicy;
   readonly appContext?: ReadonlyArray<{ readonly key: string; readonly text: string }>;
+  /**
+   * Blackbird's shared agent instructions (bundled autopilot rules and
+   * injected team AGENTS.md). Every adapter delivers them, with or without
+   * the T3 MCP server.
+   */
+  readonly agentInstructions?: string;
 }
 
 export interface ProviderAdapterV2SteerInput {

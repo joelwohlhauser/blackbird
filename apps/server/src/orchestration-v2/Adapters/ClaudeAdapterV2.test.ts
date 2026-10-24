@@ -231,6 +231,19 @@ function makeClaudeTestTurnInput(input: {
 }
 
 describe("ClaudeAdapterV2 runtime query policy", () => {
+  it("appends Blackbird's agent instructions even without the T3 MCP server", () => {
+    const options = ClaudeAdapterV2.makeClaudeQueryOptions({
+      modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+      nativeThreadId: "native-agent-instructions",
+      resume: false,
+      cwd: "/workspace",
+      agentInstructions: "# Blackbird autopilot",
+    });
+    const append = (options.systemPrompt as { readonly append?: string }).append ?? "";
+    assert.include(append, "# Blackbird autopilot");
+    assert.notInclude(append, "Use `delegate_task`");
+  });
+
   it.each([
     ["--permission-mode acceptEdits", "acceptEdits"],
     ["--dangerously-skip-permissions", "bypassPermissions"],

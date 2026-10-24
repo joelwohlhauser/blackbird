@@ -1,5 +1,7 @@
 import type { ProviderInteractionMode } from "@t3tools/contracts";
 
+import { agentInstructionsBlock } from "./runtimeInstructions.ts";
+
 /**
  * Authored as self-contained sections so a provider that limits the size of
  * each instruction entry can deliver every one whole. Codex cuts the middle out
@@ -68,6 +70,7 @@ Investigate with read-only actions and do not edit files or otherwise execute th
 export interface T3AcpInstructionState {
   readonly interactionMode: ProviderInteractionMode;
   readonly hasT3Mcp: boolean;
+  readonly agentInstructions: string;
 }
 
 /**
@@ -83,7 +86,8 @@ export function t3AcpPromptWithInstructions(input: {
   if (input.prompt.trimStart().startsWith("/")) return input.prompt;
   if (
     input.previousState?.interactionMode === input.state.interactionMode &&
-    input.previousState.hasT3Mcp === input.state.hasT3Mcp
+    input.previousState.hasT3Mcp === input.state.hasT3Mcp &&
+    input.previousState.agentInstructions === input.state.agentInstructions
   ) {
     return input.prompt;
   }
@@ -91,6 +95,7 @@ export function t3AcpPromptWithInstructions(input: {
     input.state.interactionMode === "plan"
       ? T3_CODE_ACP_PLAN_MODE_INSTRUCTIONS
       : T3_CODE_ACP_DEFAULT_MODE_INSTRUCTIONS,
+    ...(input.state.agentInstructions.length > 0 ? [input.state.agentInstructions] : []),
     ...(input.state.hasT3Mcp
       ? [T3_CODE_BROWSER_TOOL_INSTRUCTIONS.trim(), T3_CODE_ORCHESTRATION_INSTRUCTIONS.trim()]
       : []),
@@ -99,20 +104,26 @@ export function t3AcpPromptWithInstructions(input: {
 }
 
 /**
- * Keep the wrapper explicit so it cannot be mistaken for text authored by the user.
+ * Keep the wrappers explicit so they cannot be mistaken for text authored by the user.
  */
-function prependT3OrchestrationInstructions(prompt: string): string {
-  return `<t3_code_orchestration_instructions>${T3_CODE_ORCHESTRATION_INSTRUCTIONS.trim()}</t3_code_orchestration_instructions>\n\n<user_request>\n${prompt}\n</user_request>`;
-}
-
 export function t3OrchestrationPromptForFirstRun(input: {
   readonly prompt: string;
   readonly runOrdinal: number;
   readonly hasT3Mcp: boolean;
+  readonly agentInstructions?: string | undefined;
 }): string {
-  return input.runOrdinal === 1 && input.hasT3Mcp
-    ? prependT3OrchestrationInstructions(input.prompt)
-    : input.prompt;
+  if (input.runOrdinal !== 1) return input.prompt;
+  const sections = [
+    ...(input.agentInstructions ? [agentInstructionsBlock(input.agentInstructions)] : []),
+    ...(input.hasT3Mcp
+      ? [
+          `<t3_code_orchestration_instructions>${T3_CODE_ORCHESTRATION_INSTRUCTIONS.trim()}</t3_code_orchestration_instructions>`,
+        ]
+      : []),
+  ];
+  return sections.length === 0
+    ? input.prompt
+    : `${sections.join("\n\n")}\n\n<user_request>\n${input.prompt}\n</user_request>`;
 }
 
 export function t3OrchestrationSystemPrompt(hasT3Mcp: boolean): string | undefined {

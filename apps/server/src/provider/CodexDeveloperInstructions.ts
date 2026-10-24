@@ -225,3 +225,52 @@ export function buildCodexAdditionalContext(
     ...(tools ? { t3_code_tools: { kind: "application", value: tools } } : {}),
   };
 }
+
+const utf8Bytes = (text: string) => new TextEncoder().encode(text).length;
+
+/**
+ * Splits text into pieces under the cap, preferring paragraph, then line,
+ * then character boundaries, so each entry reaches the model whole.
+ */
+function splitCodexContextEntries(
+  text: string,
+  maxBytes: number = CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES,
+): ReadonlyArray<string> {
+  const entries: string[] = [];
+  let current = "";
+  const pushPiece = (piece: string, separator: string) => {
+    const joined = current.length === 0 ? piece : `${current}${separator}${piece}`;
+    if (utf8Bytes(joined) <= maxBytes) {
+      current = joined;
+      return true;
+    }
+    if (current.length > 0) entries.push(current);
+    current = "";
+    if (utf8Bytes(piece) <= maxBytes) {
+      current = piece;
+      return true;
+    }
+    return false;
+  };
+  for (const paragraph of text.split(/\n{2,}/)) {
+    if (pushPiece(paragraph, "\n\n")) continue;
+    for (const line of paragraph.split("\n")) {
+      if (pushPiece(line, "\n")) continue;
+      for (const character of line) pushPiece(character, "");
+    }
+  }
+  if (current.trim().length > 0) entries.push(current);
+  return entries.filter((entry) => entry.trim().length > 0);
+}
+
+/** Included on every turn, with or without the T3 MCP server. */
+export function buildCodexAgentInstructionsContext(
+  agentInstructions: string,
+): Record<string, V2TurnStartParams__AdditionalContextEntry> {
+  return Object.fromEntries(
+    splitCodexContextEntries(agentInstructions.trim()).map((entry, index) => [
+      `t3_code_agent_instructions_${String(index + 1).padStart(2, "0")}`,
+      { kind: "application" as const, value: entry },
+    ]),
+  );
+}

@@ -3240,6 +3240,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
                   harness: "OpenCode",
                   model: turnInput.modelSelection.model,
                 }),
+                turnInput.agentInstructions,
               ]
                 .filter(Boolean)
                 .join("\n\n");

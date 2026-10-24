@@ -41,7 +41,10 @@ import * as Stream from "effect/Stream";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
+import {
+  agentInstructionsBlock,
+  buildRuntimeInstructions,
+} from "@t3tools/provider-core/server/runtimeInstructions";
 import { museModelCapabilities, resolveMuseReasoningEffort } from "./modelCatalog.ts";
 import {
   MuseApproval,
@@ -2071,6 +2074,14 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
                       reasoningEffort: effort,
                     }),
                   },
+                  ...(turnInput.runOrdinal === 1 && turnInput.agentInstructions
+                    ? [
+                        {
+                          type: "text" as const,
+                          text: agentInstructionsBlock(turnInput.agentInstructions),
+                        },
+                      ]
+                    : []),
                   ...parts,
                 ],
                 displayText: turnInput.message.text || "Image attachment",
