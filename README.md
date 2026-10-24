@@ -277,6 +277,10 @@ Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to driv
 - Agents only reach the chat's own tabs, can navigate only to http, https, about and data URLs, and get no extra browser contexts. Cross-site iframes work in remote tabs but not in desktop tabs.
 - `playwright-cli` has to be installed on the agent's machine. It is installed on the local Mac and remote, not on remote-example-2.
 
+### Shared skills and instructions
+
+**Settings → Skills** makes Blackbird the source of agent skills on each environment. It links Blackbird's bundled autopilot skills, the skill that ships with Playwright CLI, and the skills of configured folders or git checkouts into `~/.agents/skills`, `~/.claude/skills` and `~/.codex/skills`, keeping git sources pulled or synced both ways every minute. A source's `AGENTS.md` can be added to every agent session or linked as the global instructions. See [Shared skills and instructions](./docs/user/composer.md#shared-skills-and-instructions).
+
 ### Keep awake
 
 **Settings → Keep Awake** keeps the MacBook awake, lid closed included, while any chat on the Mac is Working and for 3 minutes after the last one stops. Chats on remote or remote-example-2 don't count. A coffee cup in the sidebar footer shows while the Mac is kept awake. The ideas come from [Insomnia](https://github.com/krishhgg/Insomnia).

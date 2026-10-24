@@ -27,6 +27,7 @@ export type SettingsPath =
   | "/settings/source-control"
   | "/settings/workspaces"
   | "/settings/storage"
+  | "/settings/skills"
   | "/settings/connections"
   | "/settings/archived";
 
@@ -87,6 +88,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/source-control": "Source Control",
   "/settings/workspaces": "Workspaces",
   "/settings/storage": "Storage",
+  "/settings/skills": "Skills",
   "/settings/connections": "Connections",
   "/settings/archived": "Archive",
 };
@@ -1112,6 +1114,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["pull request trusted environments shared credentials permissions read actions"],
   },
   {
+    id: "skills-sources",
+    title: "Skill sources",
+    to: "/settings/skills",
+    searchTerms: [
+      "agent skills git repository checkout sync pull push agents.md claude.md instructions team personal",
+    ],
+  },
+  {
+    id: "skills-list",
+    title: "Skills",
+    to: "/settings/skills",
+    searchTerms: ["agent skills enable disable switch off autopilot playwright conflicts"],
+  },
+  {
     id: "archive",
     title: "Archived threads",
     to: "/settings/archived",
@@ -1136,6 +1152,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/integrations": null,
   "/settings/source-control": "environment-defaults",
   "/settings/storage": "project-defaults",
+  "/settings/skills": "environment",
   "/settings/connections": "connections",
   "/settings/scheduled-tasks": null,
   "/settings/archived": "project-defaults",
