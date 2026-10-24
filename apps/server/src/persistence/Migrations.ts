@@ -71,6 +71,7 @@ import Migration0067 from "./Migrations/067_CanonicalizeThreadPullRequestLinks.t
 import Migration0068 from "./Migrations/068_CodexUsageNativeTurnIndex.ts";
 import Migration0069 from "./Migrations/069_RepairClientSettlementTimestamps.ts";
 import Migration0070 from "./Migrations/070_WebhookDedupe.ts";
+import Migration0071 from "./Migrations/071_ShellStopRequestIndex.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -144,6 +145,7 @@ const migrationEntries = [
   [68, "CodexUsageNativeTurnIndex", Migration0068],
   [69, "RepairClientSettlementTimestamps", Migration0069],
   [70, "WebhookDedupe", Migration0070],
+  [71, "ShellStopRequestIndex", Migration0071],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

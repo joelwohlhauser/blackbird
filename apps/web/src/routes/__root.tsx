@@ -32,7 +32,6 @@ import { AgentStopNotifications } from "../components/AgentStopNotifications";
 import { AwakeAgentsSignal } from "../components/desktop/AwakeAgentsSignal";
 import { DesktopWebLinkCoordinator } from "../components/desktop/DesktopWebLinkCoordinator";
 import { RunningThreadKeepAlive } from "../components/desktop/RunningThreadKeepAlive";
-import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
 import { DesktopUpdateLaunchNotice } from "../components/sidebar/updateEverythingRun";
 import { LegacyThreadMigrationToast } from "../components/LegacyThreadMigrationToast";
 import { ThreadNotificationCoordinator } from "../components/ThreadNotificationCoordinator";
@@ -261,7 +260,6 @@ function RootRouteView() {
             <EventRouter skipInitialBootstrapNavigation={returningFromWelcome} />
           ) : null}
           {primaryEnvironmentAuthenticated ? <QuickChatGlobalShortcut /> : null}
-          {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
           {primaryEnvironmentAuthenticated && isElectron ? <AgentStopNotifications /> : null}
           {primaryEnvironmentAuthenticated && isElectron ? <AwakeAgentsSignal /> : null}
           {isElectron ? <DesktopUpdateLaunchNotice /> : null}

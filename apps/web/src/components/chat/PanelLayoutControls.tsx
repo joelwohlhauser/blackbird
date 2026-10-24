@@ -1,10 +1,12 @@
 import { PanelBottomIcon, PanelRightDashedIcon, PanelRightIcon } from "lucide-react";
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
+
+import { cn } from "~/lib/utils";
 
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-interface PanelLayoutControlsProps {
+export interface PanelLayoutControlsProps {
   showTerminalControl?: boolean;
   showRightPanelControl?: boolean;
   showWorkspaceNavigatorControl?: boolean;
@@ -122,3 +124,20 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
     </div>
   );
 });
+
+export function WorkspaceTitlebarControls(props: {
+  readonly besideRightSurface: boolean;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "absolute top-[var(--workspace-controls-top)] z-50 mr-px flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
+        props.besideRightSurface ? "right-3" : "right-[var(--workspace-controls-right)]",
+      )}
+      data-workspace-titlebar-controls
+    >
+      {props.children}
+    </div>
+  );
+}

@@ -50,6 +50,7 @@ import { AndroidIcon, AppleIcon, GitHubIcon, LinearIcon } from "./Icons";
 import { PullRequestGlyph } from "./pullRequest/pullRequestIcons";
 import { FaviconImage } from "./preview/PreviewFaviconIcon";
 import { previewBridge } from "./preview/previewBridge";
+import { textDirection } from "~/textDirection";
 
 export interface WorkspacePullRequestTabStatus {
   projectId: string;
@@ -343,6 +344,7 @@ function MainChatTab(props: MainChatTabProps) {
       <input
         ref={renameInputRef}
         type="text"
+        dir="auto"
         aria-label="Rename chat"
         value={renameTitle}
         disabled={renamePending}
@@ -380,7 +382,9 @@ function MainChatTab(props: MainChatTabProps) {
               onDoubleClick={beginRename}
             >
               <MessageSquare className="size-3 shrink-0" />
-              <span className="truncate">{props.label}</span>
+              <span className="truncate" dir={textDirection(props.label)}>
+                {props.label}
+              </span>
             </button>
           }
         />

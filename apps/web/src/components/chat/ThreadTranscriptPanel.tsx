@@ -32,7 +32,7 @@ import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 import { MessagesTimeline } from "./MessagesTimeline";
 
 export function subagentTabTitle(
-  projection: OrchestrationV2ThreadProjection | null | undefined,
+  projection: Pick<OrchestrationV2ThreadProjection, "subagents"> | null | undefined,
   threadId: ThreadId,
 ): string | null {
   const subagent = projection?.subagents.find((agent) => agent.childThreadId === threadId);
@@ -128,6 +128,7 @@ export function ThreadTranscriptPanel(props: {
           activeThreadEnvironmentId={props.environmentId}
           routeThreadKey={scopedThreadKey(parentRef)}
           displayThreadKey={`${scopedThreadKey(threadRef)}:panel`}
+          announceTurnStatus={false}
           onOpenTurnDiff={noop}
           onOpenThread={onOpenThread}
           onForkFromRun={async () => {}}
