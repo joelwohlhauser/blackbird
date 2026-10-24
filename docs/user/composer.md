@@ -248,7 +248,7 @@ Blackbird always provides its own skills (the autopilot skills) and, when `playw
 - Each skill is linked into `~/.agents/skills`, `~/.claude/skills` and `~/.codex/skills`. Switch a skill off to remove its links everywhere. When two sources have a skill with the same name, the first one wins and the page lists the other as a conflict.
 - Blackbird only replaces or removes links it created. A file, folder or link you made yourself is listed as a conflict and left alone.
 
-Sources sync about once a minute and right after you change them; **Sync now** runs a sync immediately. `t3 skills sync` does the same from a terminal on the machine. A running agent sees new skills after **Restart agent session**.
+Sources sync about once a minute and right after you change them; **Sync now** runs a sync immediately. A running agent sees new skills after **Restart agent session**.
 
 Send `/compact` in an existing conversation to reduce context usage when the
 provider supports it. Web and desktop also offer compaction from the context meter.

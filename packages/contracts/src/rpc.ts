@@ -338,7 +338,7 @@ import {
   ProviderConsumeResetCreditResult,
 } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
-import { SkillSyncBusyError, SkillSyncStatus } from "./skillSync.ts";
+import { SkillSyncStatus } from "./skillSync.ts";
 import {
   StorageCleanupReport,
   DatabaseStorageStatus,
@@ -767,7 +767,7 @@ const WsSkillsSubscribeStatusRpc = Rpc.make(WS_METHODS.skillsSubscribeStatus, {
 const WsSkillsSyncNowRpc = Rpc.make(WS_METHODS.skillsSyncNow, {
   payload: Schema.Struct({}),
   success: SkillSyncStatus,
-  error: Schema.Union([ServerSettingsError, SkillSyncBusyError, EnvironmentAuthorizationError]),
+  error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });
 
 const WsServerGetDatabaseStorageRpc = Rpc.make(WS_METHODS.serverGetDatabaseStorage, {

@@ -1,10 +1,9 @@
-import {
-  SkillSyncBusyError,
-  type ServerSettings,
-  type ServerSettingsError,
-  type SkillSourceConfig,
-  type SkillSourceStatus,
-  type SkillSyncStatus,
+import type {
+  ServerSettings,
+  ServerSettingsError,
+  SkillSourceConfig,
+  SkillSourceStatus,
+  SkillSyncStatus,
 } from "@t3tools/contracts";
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
@@ -16,6 +15,7 @@ import * as Deferred from "effect/Deferred";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -29,7 +29,6 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { forkParked } from "../serverActivation.ts";
-import { isProcessAlive } from "../serverRuntimeState.ts";
 import * as Settings from "../serverSettings.ts";
 import {
   entryKind,
@@ -262,39 +261,6 @@ const refreshStableLink = Effect.fnUntraced(function* (linkPath: string, target:
     .pipe(Effect.tapError(() => fileSystem.remove(temporary).pipe(Effect.ignore)));
 });
 
-/**
- * The server and `t3 skills sync` both run passes, so the lock is a file. A
- * lock whose process is gone is left over from a crash and taken over.
- */
-const withPassLock = Effect.fn("SkillSync.withPassLock")(function* <A, E, R>(
-  skillsHome: string,
-  pass: Effect.Effect<A, E, R>,
-) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const lockPath = path.join(skillsHome, "sync.lock");
-  const create = fileSystem.writeFileString(lockPath, String(process.pid), { flag: "wx" }).pipe(
-    Effect.as(true),
-    Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.succeed(false)),
-  );
-  const holder = fileSystem.readFileString(lockPath).pipe(
-    Effect.map((text) => Number(text.trim())),
-    Effect.orElseSucceed(() => Number.NaN),
-  );
-  const acquire = Effect.gen(function* () {
-    if (yield* create) return;
-    const pid = yield* holder;
-    if (isProcessAlive(pid)) return yield* new SkillSyncBusyError({ lockPath, pid });
-    yield* fileSystem.remove(lockPath, { force: true });
-    if (!(yield* create)) return yield* new SkillSyncBusyError({ lockPath, pid: yield* holder });
-  });
-  return yield* Effect.acquireUseRelease(
-    acquire,
-    () => pass,
-    () => fileSystem.remove(lockPath, { force: true }).pipe(Effect.ignore),
-  );
-});
-
 const recordError = (errors: string[], sourceId: string) => (error: { readonly message: string }) =>
   Effect.logWarning("Skill source sync failed", { sourceId, error }).pipe(
     Effect.andThen(Effect.sync(() => errors.push(error.message))),
@@ -312,20 +278,9 @@ export const runSkillSyncPass = Effect.fn("SkillSync.runPass")(function* (input:
 }) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const home = yield* HostProcess.HomeDirectory;
   const skillsHome = skillsHomeDir(path, input.t3Home);
   yield* fileSystem.makeDirectory(skillsHome, { recursive: true });
-  return yield* withPassLock(skillsHome, runLockedPass({ ...input, skillsHome }));
-});
-
-const runLockedPass = Effect.fn("SkillSync.runLockedPass")(function* (input: {
-  readonly settings: SkillSyncSettings;
-  readonly skillsHome: string;
-  readonly previous?: SkillSyncStatus;
-}) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const home = yield* HostProcess.HomeDirectory;
-  const { skillsHome } = input;
   const finishedAt = () => DateTime.now.pipe(Effect.map(DateTime.formatIso));
   const now = yield* finishedAt();
   const conflicts: string[] = [];
@@ -387,68 +342,97 @@ const runLockedPass = Effect.fn("SkillSync.runLockedPass")(function* (input: {
     Option.getOrElse(() => new Map<string, string>()),
   );
 
-  const links = yield* linkSkills({
-    home,
-    sources,
-    disabled: new Set(input.settings.disabledSkills),
-    records,
-  });
-  conflicts.push(...links.conflicts);
+  const saveRecords = Effect.suspend(() =>
+    writeFileStringAtomically({
+      filePath: statePath,
+      contents: encodeStateFile({ links: Object.fromEntries(records) }),
+    }),
+  );
+  const { links, instructions } = yield* Effect.gen(function* () {
+    const links = yield* linkSkills({
+      home,
+      sources,
+      disabled: new Set(input.settings.disabledSkills),
+      records,
+    });
+    conflicts.push(...links.conflicts);
 
-  for (const source of configured) {
-    for (const [name, directory] of source.skills ?? []) {
-      if (links.desired.get(name) !== directory) continue;
-      yield* installSkillDependencies(directory, (cwd) =>
-        runChecked(
-          `npm ci for ${name}`,
-          "npm",
-          ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
-          cwd,
-          NPM_TIMEOUT,
-        ),
-      ).pipe(
-        Effect.catchTags({
-          SkillSourceCommandError: recordError(source.errors, source.config.id),
-          PlatformError: (cause) =>
-            recordError(
-              source.errors,
-              source.config.id,
-            )(new SkillSourceCommandError({ step: `npm ci for ${name}`, exitCode: null, cause })),
-        }),
+    for (const source of configured) {
+      for (const [name, directory] of source.skills ?? []) {
+        if (links.desired.get(name) !== directory) continue;
+        yield* installSkillDependencies(directory, (cwd) =>
+          runChecked(
+            `npm ci for ${name}`,
+            "npm",
+            ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+            cwd,
+            NPM_TIMEOUT,
+          ),
+        ).pipe(
+          Effect.catchTags({
+            SkillSourceCommandError: recordError(source.errors, source.config.id),
+            PlatformError: (cause) =>
+              recordError(
+                source.errors,
+                source.config.id,
+              )(new SkillSourceCommandError({ step: `npm ci for ${name}`, exitCode: null, cause })),
+          }),
+        );
+      }
+    }
+
+    const linkSources = configured.filter(({ config }) => config.instructions === "link");
+    for (const extra of linkSources.slice(1)) {
+      conflicts.push(
+        `Only one source can provide global instructions; ${extra.config.label || extra.config.id} is ignored`,
       );
     }
-  }
-
-  const linkSources = configured.filter(({ config }) => config.instructions === "link");
-  for (const extra of linkSources.slice(1)) {
-    conflicts.push(
-      `Only one source can provide global instructions; ${extra.config.label || extra.config.id} is ignored`,
+    const linkSource = linkSources[0];
+    const instructionTarget = Effect.fnUntraced(function* (file: string) {
+      if (linkSource === undefined) return null;
+      if (!linkSource.present) return undefined;
+      const target = path.join(linkSource.checkout, file);
+      return (yield* entryKind(target)) === "missing" ? null : target;
+    });
+    const agentsTarget = yield* instructionTarget("AGENTS.md");
+    const claudeTarget = yield* instructionTarget("CLAUDE.md");
+    const realHome = yield* fileSystem.realPath(home);
+    const instructions = yield* linkInstructionFiles(
+      [
+        { linkPath: path.join(realHome, ".agents", "AGENTS.md"), target: agentsTarget },
+        { linkPath: path.join(realHome, ".codex", "AGENTS.md"), target: agentsTarget },
+        { linkPath: path.join(realHome, ".claude", "CLAUDE.md"), target: claudeTarget },
+      ],
+      records,
     );
-  }
-  const linkSource = linkSources[0];
-  const instructionTarget = Effect.fnUntraced(function* (file: string) {
-    if (linkSource === undefined) return null;
-    if (!linkSource.present) return undefined;
-    const target = path.join(linkSource.checkout, file);
-    return (yield* entryKind(target)) === "missing" ? null : target;
-  });
-  const agentsTarget = yield* instructionTarget("AGENTS.md");
-  const claudeTarget = yield* instructionTarget("CLAUDE.md");
-  const realHome = yield* fileSystem.realPath(home);
-  const instructions = yield* linkInstructionFiles(
-    [
-      { linkPath: path.join(realHome, ".agents", "AGENTS.md"), target: agentsTarget },
-      { linkPath: path.join(realHome, ".codex", "AGENTS.md"), target: agentsTarget },
-      { linkPath: path.join(realHome, ".claude", "CLAUDE.md"), target: claudeTarget },
-    ],
-    links.records,
+    conflicts.push(...instructions.conflicts);
+    return { links, instructions };
+  }).pipe(
+    // Links made before a failure or interruption must stay recorded, or removing their
+    // source later would leave them behind.
+    Effect.onExit((exit) =>
+      Exit.isSuccess(exit)
+        ? Effect.void
+        : saveRecords.pipe(
+            Effect.catch((cause) =>
+              Effect.logError("Could not record skill links", { statePath, cause }),
+            ),
+          ),
+    ),
   );
-  conflicts.push(...instructions.conflicts);
-
-  yield* writeFileStringAtomically({
-    filePath: statePath,
-    contents: encodeStateFile({ links: Object.fromEntries(instructions.records) }),
-  }).pipe(Effect.catch((cause) => Effect.logWarning("Could not record skill links", { cause })));
+  yield* saveRecords.pipe(
+    Effect.catch((cause) =>
+      Effect.logError("Could not record skill links", { statePath, cause }).pipe(
+        Effect.andThen(
+          Effect.sync(() =>
+            conflicts.push(
+              `Could not save ${statePath}; links made in this sync stay in place if their source is removed`,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   const skillNames = (skills: ReadonlyMap<string, string> | null) => [...(skills?.keys() ?? [])];
   const builtIn = (
@@ -494,7 +478,7 @@ export class SkillSync extends Context.Service<
   SkillSync,
   {
     readonly status: Stream.Stream<SkillSyncStatus>;
-    readonly syncNow: Effect.Effect<SkillSyncStatus, ServerSettingsError | SkillSyncBusyError>;
+    readonly syncNow: Effect.Effect<SkillSyncStatus, ServerSettingsError>;
     readonly drain: Effect.Effect<void>;
   }
 >()("t3/skills/SkillSync") {}
@@ -527,11 +511,10 @@ const make = Effect.gen(function* () {
     return status;
   });
 
-  type PassError = ServerSettingsError | SkillSyncBusyError;
-  // One worker serializes this process's passes; automatic requests coalesce while one waits.
+  // One worker serializes passes; automatic requests coalesce while one waits.
   const automaticPassQueued = yield* Ref.make(false);
   const worker = yield* makeDrainableWorker(
-    (completion: Deferred.Deferred<SkillSyncStatus, PassError> | undefined) =>
+    (completion: Deferred.Deferred<SkillSyncStatus, ServerSettingsError> | undefined) =>
       (completion === undefined ? Ref.set(automaticPassQueued, false) : Effect.void).pipe(
         Effect.andThen(pass),
         Effect.exit,
@@ -539,9 +522,6 @@ const make = Effect.gen(function* () {
           completion === undefined
             ? exit.pipe(
                 Effect.asVoid,
-                Effect.catchTags({
-                  SkillSyncBusyError: (error) => Effect.logInfo("Skipped skill sync", { error }),
-                }),
                 Effect.catchCause((cause) => Effect.logWarning("Skill sync failed", { cause })),
               )
             : Deferred.done(completion, exit).pipe(Effect.asVoid),
@@ -552,7 +532,7 @@ const make = Effect.gen(function* () {
     Effect.flatMap((queued) => (queued ? Effect.void : worker.enqueue(undefined))),
   );
   const syncNow = Effect.gen(function* () {
-    const completion = yield* Deferred.make<SkillSyncStatus, PassError>();
+    const completion = yield* Deferred.make<SkillSyncStatus, ServerSettingsError>();
     yield* worker.enqueue(completion);
     return yield* Deferred.await(completion);
   });

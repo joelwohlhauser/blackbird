@@ -154,21 +154,36 @@ describe.skipIf(!symlinksSupported)("runSkillSyncPass", () => {
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 
-  it.effect("skips a pass while another live process holds the lock", () =>
-    Effect.gen(function* () {
-      const { fileSystem, path, t3Home, write, pass } = yield* fixture;
-      const lockPath = path.join(t3Home, "skills", "sync.lock");
-      yield* write(lockPath, String(process.pid));
-      const busy = yield* pass([]).pipe(Effect.flip);
-      assert.strictEqual(busy._tag, "SkillSyncBusyError");
-      assert.strictEqual(yield* fileSystem.readFileString(lockPath), String(process.pid));
+  it.effect.skipIf(process.getuid?.() === 0)(
+    "keeps the links it made before a failure recorded, so removing the source cleans them up",
+    () =>
+      Effect.gen(function* () {
+        const { fileSystem, path, directory, home, write, pass } = yield* fixture;
+        const team = path.join(directory, "team");
+        yield* write(
+          path.join(team, "skills", "sentry-cli", "SKILL.md"),
+          "---\nname: sentry-cli\n---\n",
+        );
+        // ~/.codex is linked last; a folder it can't write into fails the pass there.
+        const codex = path.join(home, ".codex");
+        yield* fileSystem.makeDirectory(codex);
+        yield* fileSystem.chmod(codex, 0o500);
+        const failed = yield* pass([source({ id: "team", path: team })]).pipe(Effect.flip);
+        assert.strictEqual(failed._tag, "PlatformError");
+        const agentsLink = path.join(home, ".agents", "skills", "sentry-cli");
+        assert.strictEqual(
+          yield* fileSystem.readLink(agentsLink),
+          path.join(team, "skills", "sentry-cli"),
+        );
 
-      // No process has this pid, so the lock was left behind by a crash.
-      yield* write(lockPath, "2147483646");
-      const status = yield* pass([]);
-      assert.isNotNull(status.finishedAt);
-      assert.isFalse(yield* fileSystem.exists(lockPath));
-    }).pipe(Effect.scoped, Effect.provide(TestLayer)),
+        yield* fileSystem.chmod(codex, 0o700);
+        const removed = yield* pass([]);
+        assert.isAtLeast(removed.linksRemoved, 2);
+        assert.isFalse(yield* fileSystem.exists(agentsLink));
+        assert.isFalse(
+          yield* fileSystem.exists(path.join(home, ".claude", "skills", "sentry-cli")),
+        );
+      }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 
   it.live("never runs git for a source folder inside another repository", () =>

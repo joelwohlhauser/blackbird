@@ -37,14 +37,13 @@ const fixture = Effect.gen(function* () {
     return skillPath;
   });
   // Stands in for the state file a sync pass keeps between runs.
-  let records: LinkRecords = new Map();
+  const records: LinkRecords = new Map();
   const linkSources = (
     sources: ReadonlyArray<SkillLinkSource>,
     disabled: ReadonlyArray<string> = [],
   ) =>
     Effect.gen(function* () {
       const result = yield* linkSkills({ home, sources, disabled: new Set(disabled), records });
-      records = result.records;
       return { linked: result.linked, removed: result.removed, conflicts: result.conflicts };
     });
   const bothSources = Effect.gen(function* () {
@@ -269,17 +268,18 @@ describe.skipIf(!symlinksSupported)("linkInstructionFiles", () => {
       yield* fileSystem.symlink(path.join(source, "AGENTS.md"), codex);
       yield* fileSystem.makeDirectory(path.dirname(claude), { recursive: true });
       yield* fileSystem.symlink(path.join(old, "CLAUDE.md"), claude);
+      const records: LinkRecords = new Map();
       const result = yield* linkInstructionFiles(
         [
           { linkPath: agents, target: path.join(source, "AGENTS.md") },
           { linkPath: codex, target: path.join(source, "AGENTS.md") },
           { linkPath: claude, target: path.join(source, "CLAUDE.md") },
         ],
-        new Map(),
+        records,
       );
       assert.deepStrictEqual(result.conflicts, [`${claude} already exists; left untouched`]);
       assert.strictEqual(result.linked, 1);
-      assert.deepStrictEqual([...result.records.keys()].toSorted(), [agents, codex].toSorted());
+      assert.deepStrictEqual([...records.keys()].toSorted(), [agents, codex].toSorted());
       assert.strictEqual(yield* fileSystem.readLink(claude), path.join(old, "CLAUDE.md"));
 
       const cleared = yield* linkInstructionFiles(
@@ -287,11 +287,36 @@ describe.skipIf(!symlinksSupported)("linkInstructionFiles", () => {
           { linkPath: agents, target: null },
           { linkPath: claude, target: null },
         ],
-        result.records,
+        records,
       );
       assert.deepStrictEqual(cleared.removed, 1);
       assert.isFalse(yield* fileSystem.exists(agents));
       assert.strictEqual(yield* fileSystem.readLink(claude), path.join(old, "CLAUDE.md"));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("adopts a link that reaches the target through another spelling of its path", () =>
+    Effect.gen(function* () {
+      const { fileSystem, path, directory, home } = yield* fixture;
+      const source = path.join(directory, "personal");
+      yield* fileSystem.makeDirectory(source, { recursive: true });
+      yield* fileSystem.writeFileString(path.join(source, "AGENTS.md"), "Be brief.");
+      // Like macOS's /var -> /private/var: one folder, two spellings.
+      const alias = path.join(directory, "alias");
+      yield* fileSystem.symlink(source, alias);
+      const agents = path.join(home, ".agents", "AGENTS.md");
+      yield* fileSystem.makeDirectory(path.dirname(agents), { recursive: true });
+      yield* fileSystem.symlink(path.join(alias, "AGENTS.md"), agents);
+
+      const records: LinkRecords = new Map();
+      const link = linkInstructionFiles(
+        [{ linkPath: agents, target: path.join(source, "AGENTS.md") }],
+        records,
+      );
+      assert.deepStrictEqual(yield* link, { linked: 0, removed: 0, conflicts: [] });
+      assert.strictEqual(records.get(agents), path.join(alias, "AGENTS.md"));
+      assert.deepStrictEqual(yield* link, { linked: 0, removed: 0, conflicts: [] });
+      assert.strictEqual(yield* fileSystem.readLink(agents), path.join(alias, "AGENTS.md"));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

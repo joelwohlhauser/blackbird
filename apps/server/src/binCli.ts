@@ -27,7 +27,6 @@ import { claudeHistoryCommand } from "./cli/claudeHistory.ts";
 import { sshHelperCommand } from "./cli/sshHelper.ts";
 import { serviceCommand } from "./cli/service.ts";
 import { servicePreflightCommand } from "./cli/servicePreflight.ts";
-import { skillsCommand } from "./cli/skills.ts";
 import { themeCommand } from "./cli/theme.ts";
 import { traceCommand } from "./cli/trace.ts";
 import { triageCommand } from "./cli/triage.ts";
@@ -88,7 +87,6 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
 
       servicePreflightCommand,
       themeCommand,
-      skillsCommand,
       traceCommand,
       doctorCommand,
       triageCommand,
