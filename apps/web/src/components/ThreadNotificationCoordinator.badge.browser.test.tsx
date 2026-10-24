@@ -84,6 +84,7 @@ const thread = {
   hasPendingUserInput: false,
   session: null as { status: string } | null,
   latestTurn: { turnId: "turn", state: "running", completedAt: null as string | null },
+  pendingBackgroundTasks: [] as Array<{ taskId: string; kind: "command" }>,
 };
 let focused = false;
 let visibility = "visible";
@@ -124,6 +125,7 @@ function toV2ThreadShell(input: typeof thread) {
       : input.hasPendingApprovals
         ? { id: "request-1", kind: "command", createdAt: SHELL_NOW }
         : null,
+    pendingBackgroundTasks: input.pendingBackgroundTasks,
     latestVisibleMessage: null,
     latestUserMessageAt: null,
     hasActionableProposedPlan: false,
@@ -215,3 +217,32 @@ it.each(["hasPendingApprovals", "hasPendingUserInput"] as const)(
     expect(notification.close).toHaveBeenCalled();
   },
 );
+
+it("notifies a run held by background work once its follow-up run finishes", async () => {
+  await using app = setup();
+  await app.render();
+  const held = { turnId: "turn", state: "completed", completedAt: "2026-09-13T07:05:00.000Z" };
+  state.shells.set(
+    "one",
+    shell({ latestTurn: held, pendingBackgroundTasks: [{ taskId: "bash-1", kind: "command" }] }),
+  );
+  await app.render();
+  state.shells.set("one", shell({ latestTurn: held }));
+  await app.render();
+  state.shells.set(
+    "one",
+    shell({ latestTurn: { turnId: "wake", state: "running", completedAt: null } }),
+  );
+  await app.render();
+  expect(TestNotification.sent).toEqual([]);
+  state.shells.set(
+    "one",
+    shell({
+      latestTurn: { turnId: "wake", state: "completed", completedAt: "2026-09-13T07:09:00.000Z" },
+    }),
+  );
+  await app.render();
+  expect(TestNotification.sent.map((notification) => notification.title)).toEqual([
+    "Thread completed",
+  ]);
+});

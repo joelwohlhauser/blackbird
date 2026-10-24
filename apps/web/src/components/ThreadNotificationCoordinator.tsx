@@ -144,7 +144,7 @@ function EnvironmentNotifications({
           : null;
       const completedAt = Date.parse(thread.latestRun?.completedAt ?? "");
       const completion =
-        status === "ready" &&
+        (status === "ready" || status === "waiting") &&
         thread.latestRun?.status === "completed" &&
         Number.isFinite(completedAt)
           ? completedAt
@@ -154,7 +154,8 @@ function EnvironmentNotifications({
       const kind =
         attention && attention !== prior.attention
           ? "input"
-          : !rawThread.latestRunStopRequested &&
+          : status === "ready" &&
+              !rawThread.latestRunStopRequested &&
               completion !== null &&
               (prior.completion === null || completion > prior.completion)
             ? "completion"

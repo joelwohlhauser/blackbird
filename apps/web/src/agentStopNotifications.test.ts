@@ -14,6 +14,7 @@ function shell(overrides: Partial<EnvironmentThreadShell> = {}): EnvironmentThre
     hasActionableProposedPlan: false,
     runtime: null,
     latestRun: null,
+    pendingBackgroundTasks: [],
     ...overrides,
   } as EnvironmentThreadShell;
 }
@@ -36,6 +37,10 @@ const runningRuntime = {
   lastError: null,
   updatedAt: "2026-09-02T10:00:00.000Z",
 } as NonNullable<EnvironmentThreadShell["runtime"]>;
+
+const settledRuntime = { ...runningRuntime, status: "completed", activeRunId: null } as NonNullable<
+  EnvironmentThreadShell["runtime"]
+>;
 
 describe("resolveAgentStop", () => {
   it("returns null while the run is active", () => {
@@ -93,5 +98,29 @@ describe("diffAgentStops", () => {
       }),
     ]);
     expect(stops).toEqual([]);
+  });
+
+  it("announces a run held by background work only once its follow-up run finishes", () => {
+    const heldAt = "2026-09-02T10:05:00.000Z";
+    const doneAt = "2026-09-02T10:09:00.000Z";
+    const [baseline, ...updates] = [
+      shell({ runtime: runningRuntime }),
+      shell({
+        runtime: { ...settledRuntime, status: "idle" },
+        latestRun: completedRun(heldAt),
+        pendingBackgroundTasks: [{ taskId: "bash-1", kind: "command" }],
+      }),
+      shell({ runtime: settledRuntime, latestRun: completedRun(heldAt) }),
+      shell({ runtime: runningRuntime }),
+      shell({ runtime: settledRuntime, latestRun: completedRun(doneAt) }),
+    ];
+    let seen = diffAgentStops(null, [baseline!]).next;
+    const announced: Array<string | null | undefined> = [];
+    for (const update of updates) {
+      const { next, stops } = diffAgentStops(seen, [update]);
+      seen = next;
+      announced.push(...stops.map((stop) => stop.shell.latestRun?.completedAt));
+    }
+    expect(announced).toEqual([doneAt]);
   });
 });
