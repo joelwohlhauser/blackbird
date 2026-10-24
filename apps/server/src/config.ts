@@ -268,14 +268,16 @@ export const resolveStaticDir = Effect.fn(function* () {
  */
 export const resolveBundledSkillsDir = Effect.fn("ServerConfig.resolveBundledSkillsDir")(
   function* () {
-    const { join, resolve } = yield* Path.Path;
+    const { join, resolve, sep } = yield* Path.Path;
     const { exists } = yield* FileSystem.FileSystem;
     for (const candidate of [
       resolve(join(import.meta.dirname, "skills")),
       resolve(join(import.meta.dirname, "../../../skills")),
     ]) {
       if (yield* exists(join(candidate, "AUTOPILOT.md")).pipe(Effect.orElseSucceed(() => false))) {
-        return candidate;
+        // Agents read skills with a plain file system, which can't look inside
+        // app.asar, so the desktop build unpacks them next to the archive.
+        return candidate.replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`);
       }
     }
     return undefined;

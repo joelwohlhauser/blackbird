@@ -1044,6 +1044,8 @@ export const WINDOWS_SERVER_ASAR_RESOURCE = "server.asar";
 // asar redirect convention). Everything else stays packed.
 export const WINDOWS_NATIVE_ASAR_UNPACK_GLOB =
   "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib}";
+// Agents read the bundled skills through links, without asar support.
+export const BUNDLED_SKILLS_ASAR_UNPACK_GLOB = "apps/server/dist/skills/**";
 export const WINDOWS_SERVER_ASAR_UNPACK_GLOBS = [
   "**/*.dll",
   "**/*.exe",
@@ -2922,7 +2924,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     // not inflate the loose-file count and slow NSIS installation.
     ...(platform === "win"
       ? { asar: { smartUnpack: false }, asarUnpack: [WINDOWS_NATIVE_ASAR_UNPACK_GLOB] }
-      : {}),
+      : { asarUnpack: [BUNDLED_SKILLS_ASAR_UNPACK_GLOB] }),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
