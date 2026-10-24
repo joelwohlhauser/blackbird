@@ -505,7 +505,7 @@ describe("rightPanelStore", () => {
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("diff");
   });
 
-  it("keeps a proactive PR ahead of a completed diff in the main container", () => {
+  it("opens a proactive PR in the panel and keeps it ahead of a completed diff", () => {
     const originalIsWide = workspaceLayoutProbe.isWide;
     try {
       workspaceLayoutProbe.isWide = () => false;
@@ -513,10 +513,10 @@ describe("rightPanelStore", () => {
       const revision = store.getUserActionRevision(refA);
       expect(store.openProactive(refA, linkedPullRequest, revision)).toBe(true);
       expect(store.openProactive(refA, completedDiff, revision)).toBe(false);
-      expect(
-        selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)
-          .activeMainSurfaceId,
-      ).toBe(linkedPullRequest.id);
+      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      expect(state.mainSurfaces).toEqual([]);
+      expect(state.isOpen).toBe(true);
+      expect(state.activeSurfaceId).toBe(linkedPullRequest.id);
     } finally {
       workspaceLayoutProbe.isWide = originalIsWide;
     }
@@ -570,47 +570,33 @@ describe("rightPanelStore", () => {
     expect(useRightPanelStore.getState().byThreadKey).toBe(stableState);
   });
 
-  it.each([false, true])(
-    "pins the built-in PR without changing focus with panel open=%s",
-    (panelOpen) => {
-      const store = useRightPanelStore.getState();
-      if (panelOpen) store.open(refA, "diff");
-      const before = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
-      const revision = store.getUserActionRevision(refA);
+  it("opens a PR in the panel even when the panel is closed on a narrow window", () => {
+    const originalIsWide = workspaceLayoutProbe.isWide;
+    try {
+      workspaceLayoutProbe.isWide = () => false;
+      useRightPanelStore.getState().openPullRequest(refA, linkedPullRequest);
+      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      expect(state.mainSurfaces).toEqual([]);
+      expect(state.surfaces).toEqual([linkedPullRequest]);
+      expect(state.isOpen).toBe(true);
+      expect(state.activeSurfaceId).toBe(linkedPullRequest.id);
+    } finally {
+      workspaceLayoutProbe.isWide = originalIsWide;
+    }
+  });
 
-      store.openPullRequest(refA, linkedPullRequest, { pinned: true });
-      store.openLinear(refA, "linear-tab", null, { pinned: true });
-
-      const pinned = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
-      expect(pinned.mainSurfaces.map((surface) => surface.id)).toEqual([
-        "linear",
-        linkedPullRequest.id,
-      ]);
-      expect(pinned.mainSurfaces[1]).toEqual(linkedPullRequest);
-      expect(pinned.isOpen).toBe(before.isOpen);
-      expect(pinned.activeSurfaceId).toBe(before.activeSurfaceId);
-      expect(pinned.activeMainSurfaceId).toBe(before.activeMainSurfaceId);
-      expect(store.getUserActionRevision(refA)).toBe(revision);
-
-      store.activateSurface(refA, linkedPullRequest.id);
-      const stableState = useRightPanelStore.getState().byThreadKey;
-      store.openPullRequest(refA, linkedPullRequest, { pinned: true });
-      expect(useRightPanelStore.getState().byThreadKey).toBe(stableState);
-    },
-  );
-
-  it("reuses a built-in PR already open in the panel when attaching it to the chat", () => {
+  it("moves a PR tab out of the main tab bar into the panel when it is opened", () => {
     const store = useRightPanelStore.getState();
     store.open(refA, "diff");
     store.openPullRequest(refA, linkedPullRequest);
-    const revision = store.getUserActionRevision(refA);
-    store.openPullRequest(refA, linkedPullRequest, { pinned: true });
+    store.moveSurface(refA, linkedPullRequest.id, { container: "main", index: 0 });
+    store.openPullRequest(refA, linkedPullRequest);
 
-    const pinned = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
-    expect(pinned.mainSurfaces).toEqual([linkedPullRequest]);
-    expect(pinned.surfaces).toEqual([{ id: "diff", kind: "diff" }]);
-    expect(pinned.activeSurfaceId).toBe("diff");
-    expect(store.getUserActionRevision(refA)).toBe(revision);
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(state.mainSurfaces).toEqual([]);
+    expect(state.activeMainSurfaceId).toBeNull();
+    expect(state.surfaces.map((surface) => surface.id)).toEqual(["diff", linkedPullRequest.id]);
+    expect(state.activeSurfaceId).toBe(linkedPullRequest.id);
   });
 
   it("cycles surfaces in both directions with wraparound", () => {

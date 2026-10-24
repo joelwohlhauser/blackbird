@@ -107,7 +107,7 @@ renames the chat, replacing the old header title text — the project name is
 gone from the header), never scrolls out of view, and cannot be closed or
 moved to the panel.
 
-When the chat branch identifies a Linear issue or has a detected pull request, a Linear browser tab and the built-in PR tab are created automatically and pinned beside the chat tab. They stay visible, cannot be closed or moved, and disappear from the pinned set when the chat no longer identifies that issue or PR. The Linear browser session preloads when the chat opens. GitHub browser tabs remain available from New Tab.
+When the chat branch identifies a Linear issue, a Linear browser tab is created automatically and pinned beside the chat tab. It stays visible, cannot be closed or moved, and disappears when the chat no longer identifies that issue. Its page loads the first time the tab is shown. Pull request views, including the chat's own PR, always open in the right panel, as in T3 Code. GitHub browser tabs remain available from New Tab.
 
 Tabs are draggable: reorder them within a container or drag them between the
 chat area and the right panel. Dragging toward the chat column's right edge
@@ -138,7 +138,7 @@ Choosing Browser focuses the address bar immediately. Command+L focuses and sele
 
 While a browser tab's page or toolbar has focus on macOS, Command+[ and Command+] go back and forward in that tab, Command+F opens Find in page (Enter and Shift+Enter move between matches, Escape closes it), and Command+Shift+C copies the page URL. Find and Copy URL are also in the browser's More menu. Find isn't available for pages streamed from a remote environment. With focus anywhere else, these shortcuts keep their app meaning.
 
-To save memory, the desktop app keeps browser pages loaded only in the four chats opened most recently, chats whose agent is working, pinned sites, and tabs in picture-in-picture or being recorded. Other tabs keep their URL and title and load the page again when their chat is opened, so scroll position and unsaved form input are lost while logins stay.
+To save memory, the desktop app keeps browser pages loaded only in the four chats opened most recently, chats whose agent is working, pinned sites, and tabs in picture-in-picture or being recorded. Linear issue tabs are the exception: they load only once shown and unload after five minutes hidden. Other tabs keep their URL and title and load the page again when their chat is opened, so scroll position and unsaved form input are lost while logins stay.
 
 The second surface is the narrow, independently resizable **workspace
 navigator**, also referred to as the new right sidebar or sidepanel. It has

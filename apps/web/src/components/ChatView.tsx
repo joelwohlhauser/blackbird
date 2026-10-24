@@ -153,7 +153,6 @@ import { FileMetadataThreadProvider } from "../hooks/FileMetadataThreadProvider"
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import {
   selectActiveMainSurface,
-  pullRequestSurface,
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectSelectedRightPanelSurface,
@@ -2314,36 +2313,7 @@ export default function ChatView(props: ChatViewProps) {
         (linkedThreadPullRequest === null && gitStatusQuery.data?.refName === activeThread?.branch
           ? (gitStatusQuery.data?.pr ?? null)
           : null));
-  const activeThreadPullRequestReference =
-    supportsPullRequests &&
-    activeThreadPr !== null &&
-    threadRepository !== null &&
-    activeProject !== null
-      ? {
-          projectId: linkedThreadPullRequest?.projectId ?? activeProject.id,
-          repository: threadRepository,
-          number: activeThreadPr.number,
-        }
-      : null;
-  const attachedWorkspaceSurfaceIds = new Set<string>([
-    ...(attachedLinearIssueId ? ["linear"] : []),
-    ...(activeThreadPullRequestReference
-      ? [pullRequestSurface(activeThreadPullRequestReference).id]
-      : []),
-  ]);
-  useEffect(() => {
-    if (!activeThreadRef || !activeThreadPullRequestReference) return;
-    useRightPanelStore
-      .getState()
-      .openPullRequest(activeThreadRef, activeThreadPullRequestReference, {
-        pinned: true,
-      });
-  }, [
-    activeThreadRef,
-    activeThreadPullRequestReference,
-    rightPanelState.mainSurfaces,
-    rightPanelState.surfaces,
-  ]);
+  const attachedWorkspaceSurfaceIds = new Set<string>(attachedLinearIssueId ? ["linear"] : []);
   const proactivePullRequestsKey = pullRequestsSurfaceAvailable
     ? JSON.stringify(
         visiblePullRequests.map((link) => [link.host, link.repository, link.number]).sort(),

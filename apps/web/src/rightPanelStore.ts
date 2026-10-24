@@ -228,7 +228,6 @@ interface RightPanelStoreState {
       url?: string;
       detailTab?: PullRequestDetailTab;
     },
-    options?: { pinned?: boolean },
   ) => void;
   setPullRequestDetailTab: (
     ref: ScopedThreadRef,
@@ -471,7 +470,12 @@ const upsertSurface = (
       activeSurfaceId: activate ? surface.id : current.activeSurfaceId,
     };
   }
-  if (!current.isOpen && !workspaceLayoutProbe.isWide()) {
+  if (
+    !current.isOpen &&
+    !workspaceLayoutProbe.isWide() &&
+    surface.kind !== "pull-request" &&
+    surface.kind !== "pull-requests"
+  ) {
     return {
       ...current,
       mainSurfaces: [...current.mainSurfaces, surface],
@@ -546,27 +550,19 @@ const openDedicatedBrowserSurface = (
 };
 
 const dedicatedSurfaceRank = (surface: RightPanelSurface): number =>
-  surface.kind === "linear"
-    ? 0
-    : surface.kind === "github-pr" || surface.kind === "pull-request"
-      ? 1
-      : 2;
+  surface.kind === "linear" ? 0 : surface.kind === "github-pr" ? 1 : 2;
 
 /**
- * Keeps an attached Linear/PR surface beside the chat tab without stealing
+ * Keeps an attached Linear surface beside the chat tab without stealing
  * focus. Attached surfaces are ordered before ordinary tabs and removed from
  * the secondary panel if an older persisted workspace placed them there.
  */
 const pinDedicatedSurface = (
   current: ThreadRightPanelState,
-  surfaceId: "linear" | "github-pr" | PullRequestSurface["id"],
+  surfaceId: "linear" | "github-pr",
 ): ThreadRightPanelState => {
   const surface = findSurface(current, (entry) => entry.id === surfaceId);
-  if (
-    !surface ||
-    (surface.kind !== "linear" && surface.kind !== "github-pr" && surface.kind !== "pull-request")
-  )
-    return current;
+  if (!surface || (surface.kind !== "linear" && surface.kind !== "github-pr")) return current;
 
   const surfaces = current.surfaces.filter((entry) => entry.id !== surfaceId);
   const mainSurfaces = [
@@ -593,7 +589,7 @@ const pinDedicatedSurface = (
 const pinDedicatedSurfaceWithoutActivation = (
   current: ThreadRightPanelState,
   opened: ThreadRightPanelState,
-  surfaceId: "linear" | "github-pr" | PullRequestSurface["id"],
+  surfaceId: "linear" | "github-pr",
 ): ThreadRightPanelState => {
   const pinned = pinDedicatedSurface(opened, surfaceId);
   const isOpen = current.isOpen && pinned.surfaces.length > 0;
@@ -1063,33 +1059,32 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             pinDedicatedSurface(current, surfaceId),
           ),
         })),
-      openPullRequest: (ref, target, options) =>
+      openPullRequest: (ref, target) =>
         set((state) => ({
-          ...(options?.pinned ? automaticUpdate : userAction)(
-            state,
-            scopedThreadKey(ref),
-            (current) => {
-              const surface = pullRequestSurface(target);
-              if (options?.pinned && findSurface(current, (entry) => entry.id === surface.id)) {
-                return pinDedicatedSurface(current, surface.id);
-              }
-              const next = upsertSurface(current, surface);
-              const refresh = (entry: RightPanelSurface): RightPanelSurface =>
-                entry.id === surface.id && entry.kind === "pull-request"
-                  ? { ...entry, ...surface }
-                  : entry;
-              const opened = target.url
-                ? {
-                    ...next,
-                    surfaces: next.surfaces.map(refresh),
-                    mainSurfaces: next.mainSurfaces.map(refresh),
-                  }
-                : next;
-              return options?.pinned
-                ? pinDedicatedSurfaceWithoutActivation(current, opened, surface.id)
-                : opened;
-            },
-          ),
+          ...userAction(state, scopedThreadKey(ref), (current) => {
+            const surface = pullRequestSurface(target);
+            const existing = findSurface(current, (entry) => entry.id === surface.id);
+            const entry: PullRequestSurface =
+              existing?.kind !== "pull-request"
+                ? surface
+                : target.url
+                  ? { ...existing, ...surface }
+                  : existing;
+            const inPanel = current.surfaces.some((candidate) => candidate.id === surface.id);
+            const base = inPanel
+              ? current
+              : withoutSurfaces(current, (candidate) => candidate.id === surface.id);
+            return {
+              ...base,
+              isOpen: true,
+              surfaces: inPanel
+                ? base.surfaces.map((candidate) =>
+                    candidate.id === surface.id ? entry : candidate,
+                  )
+                : [...base.surfaces, entry],
+              activeSurfaceId: surface.id,
+            };
+          }),
         })),
       setPullRequestDetailTab: (ref, surfaceId, detailTab) =>
         set((state) => {
