@@ -57,7 +57,14 @@ import {
 } from "~/hooks/useSettings";
 import { reconcilePreviewServerSessions, resetPreviewStateForTests } from "~/previewStateStore";
 import { AppAtomRegistryProvider } from "~/rpc/atomRegistry";
-import { markBrowserThreadViewed, useRecentBrowserThreadsStore } from "./browserTabRetention";
+import { useRightPanelStore } from "~/rightPanelStore";
+import { acquireBrowserSurface } from "./browserSurfaceStore";
+import {
+  IDLE_LINEAR_TAB_UNLOAD_MS,
+  markBrowserThreadViewed,
+  useRecentBrowserThreadsStore,
+} from "./browserTabRetention";
+import { previewRuntimeTabId } from "./previewRuntimeTabId";
 import { ElectronBrowserHost } from "./ElectronBrowserHost";
 
 const threadRef = scopeThreadRef(
@@ -90,6 +97,7 @@ function setup(): Disposable {
     [Symbol.dispose]() {
       resetPreviewStateForTests();
       useRecentBrowserThreadsStore.setState({ threadKeys: [] });
+      useRightPanelStore.setState({ byThreadKey: {} });
       __resetClientSettingsPersistenceForTests();
     },
   };
@@ -162,5 +170,46 @@ describe("ElectronBrowserHost", () => {
     const after = webviews();
     expect(after).toHaveLength(2);
     expect(after.every((node, index) => node.isSameNode(before[index]!))).toBe(true);
+  });
+
+  it("loads a Linear tab only once shown and unloads it after it stays hidden", async () => {
+    using _state = setup();
+    reconcilePreviewServerSessions(threadRef, {
+      sessions: [
+        snapshot("tab_7", "2026-01-01T00:00:01.000Z"),
+        snapshot("tab_linear", "2026-01-01T00:00:02.000Z"),
+      ],
+      serverEpoch: "server-a",
+      revision: 1,
+    });
+    useRightPanelStore
+      .getState()
+      .openLinear(threadRef, "tab_linear", "https://linear.app/acme/issue/ENG-1", {
+        pinned: true,
+      });
+    markBrowserThreadViewed(scopedThreadKey(threadRef));
+    await using screen = await renderHost();
+    const loadedTabs = () =>
+      [...screen.container.querySelectorAll("webview")]
+        .map((node) => node.getAttribute("data-preview-server-tab"))
+        .toSorted();
+    expect(loadedTabs()).toEqual(["tab_7"]);
+
+    const surface = acquireBrowserSurface(previewRuntimeTabId(threadRef, "server-a", "tab_linear"));
+    using _timers = fakeTimers();
+    await act(async () => {
+      surface.present({ x: 0, y: 0, width: 400, height: 300 }, true);
+    });
+    expect(loadedTabs()).toEqual(["tab_7", "tab_linear"]);
+
+    await act(async () => {
+      surface.present({ x: 0, y: 0, width: 400, height: 300 }, false);
+      await vi.advanceTimersByTimeAsync(IDLE_LINEAR_TAB_UNLOAD_MS - 1000);
+    });
+    expect(loadedTabs()).toEqual(["tab_7", "tab_linear"]);
+
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(loadedTabs()).toEqual(["tab_7"]);
+    surface.release();
   });
 });

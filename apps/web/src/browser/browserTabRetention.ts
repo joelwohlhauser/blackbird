@@ -4,10 +4,27 @@ import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
 import { Atom } from "effect/reactivity";
 import { create } from "zustand";
 
+import { useRightPanelStore } from "~/rightPanelStore";
 import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 import { environmentThreadShells } from "~/state/threads";
 
 const RECENT_THREAD_LIMIT = 4;
+export const IDLE_LINEAR_TAB_UNLOAD_MS = 5 * 60 * 1000;
+
+export function useLinearTabKeys(): ReadonlySet<string> {
+  const joined = useRightPanelStore((state) =>
+    Object.entries(state.byThreadKey)
+      .flatMap(([threadKey, thread]) =>
+        [...thread.mainSurfaces, ...thread.surfaces].flatMap((surface) =>
+          surface.kind === "linear" ? [linearTabKey(threadKey, surface.resourceId)] : [],
+        ),
+      )
+      .join("\n"),
+  );
+  return new Set(joined === "" ? [] : joined.split("\n"));
+}
+
+export const linearTabKey = (threadKey: string, tabId: string) => `${threadKey} ${tabId}`;
 
 export function withViewedThread(
   threadKeys: ReadonlyArray<string>,

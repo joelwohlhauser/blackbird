@@ -26,9 +26,13 @@ import { readPreviewAnnotationTheme } from "./annotationTheme";
 import { useBrowserDefaults } from "./browserDefaults";
 import { useBrowserPointerStore } from "./browserPointerStore";
 import { useActiveBrowserRecordingTabIds } from "./browserRecording";
+import { useBrowserSurfaceStore } from "./browserSurfaceStore";
 import {
+  IDLE_LINEAR_TAB_UNLOAD_MS,
+  linearTabKey,
   primaryAgentActiveThreadRefsAtom,
   threadAgentActiveAtom,
+  useLinearTabKeys,
   useRecentBrowserThreadsStore,
 } from "./browserTabRetention";
 import { dispatchPreviewAction } from "~/components/preview/previewActionBus";
@@ -46,6 +50,7 @@ export function ElectronBrowserHost() {
   const recentThreadKeys = useRecentBrowserThreadsStore((state) => state.threadKeys);
   const agentActiveThreadRefs = useAtomValue(primaryAgentActiveThreadRefsAtom);
   const recordingTabIds = useActiveBrowserRecordingTabIds();
+  const linearTabKeys = useLinearTabKeys();
   const activeSessions = Object.entries(previewByThreadKey).flatMap(([threadKey, previewState]) => {
     const threadRef = parseScopedThreadKey(threadKey);
     return threadRef
@@ -193,11 +198,10 @@ export function ElectronBrowserHost() {
             <RetainedBrowserWebview
               key={runtimeTabId}
               threadKey={threadKey}
+              pinned={pictureInPicture || recordingTabIds.has(runtimeTabId)}
+              loadWhenShown={linearTabKeys.has(linearTabKey(threadKey, snapshot.tabId))}
               retained={
-                pictureInPicture ||
-                recordingTabIds.has(runtimeTabId) ||
-                recentThreadKeys.includes(threadKey) ||
-                isPinnedSiteThreadId(threadRef.threadId)
+                recentThreadKeys.includes(threadKey) || isPinnedSiteThreadId(threadRef.threadId)
               }
               threadRef={threadRef}
               tabId={snapshot.tabId}
@@ -231,10 +235,14 @@ function PreviewSessionSync(props: { readonly threadRef: ScopedThreadRef }) {
 
 function RetainedBrowserWebview({
   threadKey,
+  pinned,
+  loadWhenShown,
   retained,
   ...props
 }: ComponentProps<typeof HostedBrowserWebview> & {
   readonly threadKey: string;
+  readonly pinned: boolean;
+  readonly loadWhenShown: boolean;
   readonly retained: boolean;
 }) {
   const agentActive = useAtomValue(threadAgentActiveAtom(threadKey));
@@ -243,9 +251,27 @@ function RetainedBrowserWebview({
     AuthPreviewOperateScope,
   );
   const profileId = useTabProfileId(props.profileId);
-  return canOperatePreview && (retained || agentActive) ? (
+  const recentlyShown = useRecentlyShown(props.runtimeTabId, loadWhenShown);
+  const alive = pinned || (loadWhenShown ? recentlyShown : retained || agentActive);
+  return canOperatePreview && alive ? (
     <HostedBrowserWebview {...props} profileId={profileId} />
   ) : null;
+}
+
+function useRecentlyShown(runtimeTabId: string, enabled: boolean): boolean {
+  const shown = useBrowserSurfaceStore(
+    (state) =>
+      state.byTabId[runtimeTabId]?.visible === true ||
+      (state.activityByTabId[runtimeTabId] ?? 0) > 0,
+  );
+  const [recentlyShown, setRecentlyShown] = useState(false);
+  if (enabled && shown && !recentlyShown) setRecentlyShown(true);
+  useEffect(() => {
+    if (!enabled || shown || !recentlyShown) return;
+    const timer = window.setTimeout(() => setRecentlyShown(false), IDLE_LINEAR_TAB_UNLOAD_MS);
+    return () => window.clearTimeout(timer);
+  }, [enabled, recentlyShown, shown]);
+  return shown || recentlyShown;
 }
 
 /**
