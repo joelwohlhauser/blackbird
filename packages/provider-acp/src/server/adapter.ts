@@ -5875,8 +5875,8 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               Effect.fail(
                 EffectAcpErrors.AcpRequestError.internalError(
                   disposition === "ask"
-                    ? `The active T3 runtime policy requires approval for ${operation}. Request permission with session/request_permission before retrying.`
-                    : `The active T3 runtime policy does not allow ${operation}.`,
+                    ? `The active Blackbird runtime policy requires approval for ${operation}. Request permission with session/request_permission before retrying.`
+                    : `The active Blackbird runtime policy does not allow ${operation}.`,
                 ),
               ),
             ),
