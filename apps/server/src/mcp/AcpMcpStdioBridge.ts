@@ -9,6 +9,7 @@ import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { discardResponseBody, responsePayloads } from "@t3tools/shared/mcpResponsePayloads";
+import { agentToolName } from "@t3tools/shared/blackbirdMcp";
 
 /**
  * ACP agents must support stdio MCP servers, while optional http/sse support is
@@ -152,7 +153,7 @@ export const mcpToolSession = (
     yield* send({ jsonrpc: "2.0", method: "notifications/initialized" });
     return {
       call: (tool, args) =>
-        request("tools/call", { name: tool, arguments: args }).pipe(
+        request("tools/call", { name: agentToolName(tool), arguments: args }).pipe(
           Effect.map((envelope) => envelope.result),
         ),
     } satisfies McpToolSession;

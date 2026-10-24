@@ -93,6 +93,7 @@ import {
   subagentThreadTitle,
 } from "@t3tools/provider-core/server/subagentProjection";
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
+import { BLACKBIRD_MCP_SERVER } from "@t3tools/shared/blackbirdMcp";
 import { museItemStatus, museToolPresentation } from "./itemPresentation.ts";
 
 const MUSE_PROVIDER = ProviderDriverKind.make("muse");
@@ -1832,7 +1833,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
                 mcpServers: {
                   // Muse defaults to "required", which fails the whole run when T3's
                   // tools cannot be reached. The agent should still work without them.
-                  "t3-code": {
+                  [BLACKBIRD_MCP_SERVER]: {
                     transport: "streamableHttp",
                     mode: "optional",
                     url: mcpSession.endpoint,

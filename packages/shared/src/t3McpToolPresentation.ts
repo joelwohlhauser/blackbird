@@ -1,3 +1,5 @@
+import { agentToolName, BLACKBIRD_MCP_SERVER, rebrand, upstreamToolName } from "./blackbirdMcp.ts";
+
 export type T3McpToolLogo = "t3-code";
 
 export interface T3McpToolPresentation {
@@ -81,10 +83,15 @@ function tool(
   icon: T3McpToolDefinition["icon"] = "t3-code",
   displayName = `${labels[0]} ${labels[3]}`,
 ): T3McpToolDefinition {
-  return { displayName, labels, icon, summaryAction };
+  return {
+    displayName: rebrand(displayName),
+    labels: [labels[0], labels[1], labels[2], rebrand(labels[3])],
+    icon,
+    summaryAction,
+  };
 }
 
-const T3_MCP_SERVER_ALIASES = new Set(["t3-code", "t3_code", "t3code"]);
+const T3_MCP_SERVER_ALIASES = new Set(["t3-code", "t3_code", "t3code", BLACKBIRD_MCP_SERVER]);
 
 const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   link_pull_request: tool(
@@ -340,7 +347,13 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   html_render: tool(["Render", "Rendering", "Rendered", "an HTML page"], "html-render"),
 };
 
-export const T3_MCP_TOOL_NAMES: ReadonlySet<string> = new Set(Object.keys(T3_MCP_TOOLS));
+const T3_MCP_TOOL_IDS: ReadonlySet<string> = new Set(Object.keys(T3_MCP_TOOLS));
+
+/** Every name a provider may report for these tools: upstream ids and the names agents see. */
+export const T3_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
+  ...T3_MCP_TOOL_IDS,
+  ...[...T3_MCP_TOOL_IDS].map(agentToolName),
+]);
 
 function normalizeT3McpToolLabel(value: string): string {
   return value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
@@ -361,29 +374,35 @@ function resolveT3McpToolName(value: string): string | null {
     return server !== undefined &&
       tool !== undefined &&
       T3_MCP_SERVER_ALIASES.has(server.toLowerCase())
-      ? tool
+      ? upstreamToolName(tool, T3_MCP_TOOL_IDS)
       : null;
   }
 
-  const namespaceMatch = /^(?<server>t3-code|t3_code|t3code)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(
-    label,
-  );
+  const namespaceMatch =
+    /^(?<server>t3-code|t3_code|t3code|blackbird)(?:[.:/]|\s*·\s*)(?<tool>.+)$/i.exec(label);
   if (namespaceMatch?.groups) {
-    return namespaceMatch.groups.tool ?? null;
+    const tool = namespaceMatch.groups.tool;
+    return tool === undefined ? null : upstreamToolName(tool, T3_MCP_TOOL_IDS);
   }
 
-  const prefixed = /^(?:mcp[-_]{1,2})?t3[-_ ]?code(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);
-  const candidate = prefixed?.groups?.tool ?? label;
-  if (Object.hasOwn(T3_MCP_TOOLS, candidate)) return candidate;
-  // OpenCode 2 registers one server per thread, `t3-code-<thread>`, and joins
+  const prefixed = /^(?:mcp[-_]{1,2})?(?:t3[-_ ]?code|blackbird)(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(
+    label,
+  );
+  const candidate = upstreamToolName(prefixed?.groups?.tool ?? label, T3_MCP_TOOL_IDS);
+  if (candidate !== null) return candidate;
+  // OpenCode 2 registers one server per thread, `blackbird-<thread>`, and joins
   // it to the tool with `_`. Thread ids can hold `_` too, so take the longest
   // known tool name that ends the label.
-  if (!/^t3-code-/i.test(label)) return null;
-  let longest: string | null = null;
-  for (const tool of Object.keys(T3_MCP_TOOLS)) {
-    if (label.endsWith(`_${tool}`) && tool.length > (longest?.length ?? 0)) longest = tool;
+  if (!/^(?:t3-code|blackbird)-/i.test(label)) return null;
+  let longest: { readonly tool: string; readonly length: number } | null = null;
+  for (const tool of T3_MCP_TOOL_IDS) {
+    for (const name of [tool, agentToolName(tool)]) {
+      if (label.endsWith(`_${name}`) && name.length > (longest?.length ?? 0)) {
+        longest = { tool, length: name.length };
+      }
+    }
   }
-  return longest;
+  return longest?.tool ?? null;
 }
 
 export function resolveT3McpToolId(toolName: string | null | undefined): string | null {

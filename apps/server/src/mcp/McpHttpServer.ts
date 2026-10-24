@@ -14,6 +14,7 @@ import type * as Types from "effect/Types";
 import { AiError, McpProtocol, McpSchema, McpServer, Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { OrchestratorMcpFailure, PreviewAutomationError } from "@t3tools/contracts";
+import { agentToolName, rebrand } from "@t3tools/shared/blackbirdMcp";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
@@ -386,6 +387,20 @@ const saveScreenshot = Effect.fn("McpHttpServer.saveScreenshot")(function* (
   return screenshotPath;
 });
 
+// Agents see Blackbird's names and wording. Handlers are found by the tool's
+// id, which the clone keeps, so renaming the tool doesn't break dispatch.
+const asAdvertised = <T extends Tool.Any>(tool: T): T => {
+  const description = Tool.getDescription(tool);
+  const title = Context.getOption(tool.annotations, Tool.Title);
+  return Object.assign(Object.create(Object.getPrototypeOf(tool)), tool, {
+    name: agentToolName(tool.name),
+    description: description === undefined ? undefined : rebrand(description),
+    annotations: Option.isSome(title)
+      ? Context.add(tool.annotations, Tool.Title, rebrand(title.value))
+      : tool.annotations,
+  });
+};
+
 /**
  * Tool input schemas are advertised through each schema's JSON codec, which
  * offers `null` for every `Schema.optional` field, but Toolkit decodes with the
@@ -395,10 +410,10 @@ const saveScreenshot = Effect.fn("McpHttpServer.saveScreenshot")(function* (
 const decodeAsAdvertised = <Tools extends Record<string, Tool.Any>>(
   toolkit: Toolkit.Toolkit<Tools>,
 ): Toolkit.Toolkit<Tools> =>
-  // The clones keep each tool's id, name and decoded parameter type, so handlers still match.
+  // The clones keep each tool's id and decoded parameter type, so handlers still match.
   Toolkit.make(
     ...Object.values(toolkit.tools).map((tool) =>
-      tool.setParameters(Schema.toCodecJson(tool.parametersSchema)),
+      asAdvertised(tool.setParameters(Schema.toCodecJson(tool.parametersSchema))),
     ),
   ) as unknown as Toolkit.Toolkit<Tools>;
 
@@ -448,7 +463,7 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
     ServerConfig.ServerConfig | FileSystem.FileSystem | Path.Path | Crypto.Crypto
   >();
   const built = yield* decodeAsAdvertised(PreviewSnapshotToolkit);
-  const tool = PreviewSnapshotTool;
+  const tool = asAdvertised(PreviewSnapshotTool);
   yield* server.addTool({
     tool: new McpSchema.Tool({
       name: tool.name,
@@ -638,13 +653,14 @@ const registerImageTool = Effect.fn("McpHttpServer.registerImageTool")(function*
   failureText: string | ((error: E) => string),
 ) {
   const server = yield* McpServer.McpServer;
+  const advertised = asAdvertised(tool);
   yield* server.addTool({
     tool: new McpSchema.Tool({
-      name: tool.name,
-      description: Tool.getDescription(tool),
+      name: advertised.name,
+      description: Tool.getDescription(advertised),
       inputSchema: Tool.getJsonSchema(tool),
       annotations: {
-        ...Context.getOption(tool.annotations, Tool.Title).pipe(
+        ...Context.getOption(advertised.annotations, Tool.Title).pipe(
           Option.map((title) => ({ title })),
           Option.getOrUndefined,
         ),

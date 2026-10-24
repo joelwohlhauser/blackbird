@@ -393,7 +393,7 @@ function assertReinjectedInstructions(
   const text = blocks[0]?.text ?? "";
   assert.include(text, "T3 Code interaction mode: Default");
   assert.include(text, "Blackbird browser");
-  assert.include(text, "T3 Code orchestration");
+  assert.include(text, "Blackbird orchestration");
   assert.include(text, `<user_request>\n${request}\n</user_request>`);
 }
 
@@ -835,7 +835,7 @@ describe("AcpAdapterV2", () => {
       assert.equal(firstDefault.textBlockCount, 2);
       assert.include(firstDefault.prompt, "T3 Code interaction mode: Default");
       assert.include(firstDefault.prompt, "Blackbird browser");
-      assert.include(firstDefault.prompt, "T3 Code orchestration");
+      assert.include(firstDefault.prompt, "Blackbird orchestration");
       assert.notInclude(
         firstDefault.methods,
         "session/set_config_option",
@@ -2472,7 +2472,7 @@ describe("AcpAdapterV2", () => {
         mcpServers: [
           {
             type: "stdio",
-            name: "t3-code",
+            name: "blackbird",
             command: process.execPath,
             args: [
               process.argv[1] === undefined ? "t3" : NodePath.resolve(process.argv[1]),

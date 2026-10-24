@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./blackbirdMcp": {
+      "types": "./src/blackbirdMcp.ts",
+      "import": "./src/blackbirdMcp.ts"
+    },
     "./changedFileKind": {
       "types": "./src/changedFileKind.ts",
       "import": "./src/changedFileKind.ts"

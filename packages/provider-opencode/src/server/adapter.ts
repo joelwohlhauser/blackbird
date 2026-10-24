@@ -80,6 +80,7 @@ import {
   makeSubagentChildThread,
   subagentThreadTitle,
 } from "@t3tools/provider-core/server/subagentProjection";
+import { BLACKBIRD_MCP_SERVER } from "@t3tools/shared/blackbirdMcp";
 import { openCodeToolTurnItem } from "./toolItems.ts";
 
 export const OPENCODE_PROVIDER = ProviderDriverKind.make("opencode");
@@ -961,7 +962,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
         if (hasT3Mcp) {
           yield* OpenCodeRuntime.runOpenCodeSdk("mcp.add", () =>
             client.mcp.add({
-              name: "t3-code",
+              name: BLACKBIRD_MCP_SERVER,
               config: {
                 type: "remote",
                 url: mcpSession.endpoint,

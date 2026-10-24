@@ -7,6 +7,8 @@ describe("resolveT3McpToolPresentation", () => {
     for (const tool of T3_MCP_TOOL_NAMES) {
       const presentation = resolveT3McpToolPresentation(tool);
       for (const prefix of [
+        "mcp__blackbird__",
+        "blackbird.",
         "mcp__t3-code__",
         "mcp__t3_code__",
         "mcp__t3code__",
@@ -30,5 +32,8 @@ describe("resolveT3McpToolPresentation", () => {
       resolveT3McpToolPresentation("t3-code-thread_opencode2-adapter_delegate_task")?.displayName,
     ).toBe("Delegate a child task");
     expect(resolveT3McpToolPresentation("t3-code-thread_opencode2-adapter_not_a_tool")).toBeNull();
+    expect(
+      resolveT3McpToolPresentation("blackbird-thread_opencode2-adapter_thread_read")?.displayName,
+    ).toBe("Read a Blackbird thread");
   });
 });

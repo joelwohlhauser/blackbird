@@ -1080,7 +1080,7 @@ function acpMcpFallbackInput(value: string | undefined): Record<string, unknown>
  * tool inventory, so the separator match can stay loose.
  */
 const T3_MCP_TITLE_CALL =
-  /^(?:mcp[-_]{1,2})?t3[-_ ]?code[-_.:/ ]{1,3}(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*)(?::.*)?$/i;
+  /^(?:mcp[-_]{1,2})?(?:t3[-_ ]?code|blackbird)[-_.:/ ]{1,3}(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*)(?::.*)?$/i;
 
 /**
  * Gemini CLI titles injected MCP calls "<tool> (<server> MCP Server)" and
@@ -1088,7 +1088,7 @@ const T3_MCP_TITLE_CALL =
  * tool-first as "<tool>_t3-code".
  */
 const T3_MCP_TITLE_SUFFIX_CALL =
-  /^(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*?)(?: \(t3[-_ ]?code MCP Server\)(?::|$)|[-_.]t3[-_ ]?code$)/i;
+  /^(?<tool>[A-Za-z0-9][A-Za-z0-9_.-]*?)(?: \((?:t3[-_ ]?code|blackbird) MCP Server\)(?::|$)|[-_.](?:t3[-_ ]?code|blackbird)$)/i;
 
 /**
  * glm and Kimi use bare names; Antigravity uses "Running <tool>". Kimi appends
@@ -1124,7 +1124,7 @@ export function extractMcpToolCallIdentity(
     : undefined;
   const metaServerId = typeof meta?.serverId === "string" ? meta.serverId.trim() : "";
   const metaToolName = typeof meta?.toolName === "string" ? meta.toolName.trim() : "";
-  if (/^t3[-_ ]?code$/i.test(metaServerId) && metaToolName.length > 0) {
+  if (/^(?:t3[-_ ]?code|blackbird)$/i.test(metaServerId) && metaToolName.length > 0) {
     for (const knownTool of T3_MCP_TOOL_NAMES) {
       const boundary = metaToolName.length - knownTool.length - 1;
       if (
@@ -1140,8 +1140,8 @@ export function extractMcpToolCallIdentity(
   const gooseExtension =
     typeof gooseToolCall?.extensionName === "string" ? gooseToolCall.extensionName.trim() : "";
   const assertsForeignOrigin =
-    (metaServerId.length > 0 && !/^t3[-_ ]?code$/i.test(metaServerId)) ||
-    (gooseExtension.length > 0 && !/^t3[-_ ]?code$/i.test(gooseExtension));
+    (metaServerId.length > 0 && !/^(?:t3[-_ ]?code|blackbird)$/i.test(metaServerId)) ||
+    (gooseExtension.length > 0 && !/^(?:t3[-_ ]?code|blackbird)$/i.test(gooseExtension));
   // qwen's serverId marks a real MCP server, but goose reports its built-in
   // extensions (developer__shell, edits) the same way as user MCP servers, so
   // goose stays unclassified and keeps its command and file-change projections.
@@ -1162,7 +1162,7 @@ export function extractMcpToolCallIdentity(
   for (const candidate of candidates) {
     const trimmed = candidate.trim();
     const qualified = /^mcp__(.+?)__(.+)$/i.exec(trimmed);
-    if (qualified?.[1] && qualified[2] && !/^t3[-_ ]?code$/i.test(qualified[1]))
+    if (qualified?.[1] && qualified[2] && !/^(?:t3[-_ ]?code|blackbird)$/i.test(qualified[1]))
       return { server: qualified[1], tool: qualified[2] };
     const match =
       T3_MCP_TITLE_CALL.exec(trimmed) ??

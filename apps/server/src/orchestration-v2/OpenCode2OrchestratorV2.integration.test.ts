@@ -65,8 +65,8 @@ const labelled = (entry: ProviderReplayEntry, label: string): ProviderReplayEntr
  * then this thread's own is allowed again (last match wins).
  */
 const mcpRules = (name: string) => [
-  { action: "t3-code-*", resource: "*", effect: "deny" },
-  { action: `t3-code-thread_${name}_*`, resource: "*", effect: "allow" },
+  { action: "blackbird-*", resource: "*", effect: "deny" },
+  { action: `blackbird-thread_${name}_*`, resource: "*", effect: "allow" },
 ];
 const FULL_ACCESS = [{ action: "*", resource: "*", effect: "allow" }];
 

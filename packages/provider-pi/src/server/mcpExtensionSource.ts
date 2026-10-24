@@ -364,7 +364,7 @@ export default async function t3McpExtension(pi: ExtensionAPI) {
   const registerTools = () => {
     // Preserve public names for saved loadouts and tool selectors. Hidden
     // canonical names reserve ownership against Pi's configured MCP servers.
-    const prefixes = supportsExposure ? ["mcp__t3-code__", "mcp__t3_code__"] : ["mcp__t3-code__"];
+    const prefixes = supportsExposure ? ["mcp__blackbird__", "mcp__t3_code__"] : ["mcp__blackbird__"];
     readOnlyMcpTools.clear();
     for (const tool of catalog) {
       const name = tool.name;
@@ -387,12 +387,12 @@ export default async function t3McpExtension(pi: ExtensionAPI) {
             );
             const content = mcpModelContent(result);
             if (isMcpToolError(result) && !content.some((part) => part.type === "text" && part.text.length > 0)) {
-              content.push({ type: "text", text: "MCP tool t3-code/" + name + " returned an error" });
+              content.push({ type: "text", text: "MCP tool blackbird/" + name + " returned an error" });
             }
             return {
               content,
               structuredContent: mcpScriptResult(result),
-              details: { server: "t3-code", tool: name },
+              details: { server: "blackbird", tool: name },
               ...(isMcpToolError(result) ? { isError: true } : {}),
             };
           },
@@ -435,7 +435,7 @@ export default async function t3McpExtension(pi: ExtensionAPI) {
     // Pi still applies --tools/--exclude-tools to this active loadout.
     const required = [
       ...(hasToolSearch ? ["tool_search"] : []),
-      ...(ctx.model?.api === "openai-completions" ? catalog.map((tool) => "mcp__t3-code__" + tool.name) : []),
+      ...(ctx.model?.api === "openai-completions" ? catalog.map((tool) => "mcp__blackbird__" + tool.name) : []),
     ];
     const missing = required.filter((name) => !active.includes(name));
     if (missing.length > 0) pi.setActiveTools([...active, ...missing]);

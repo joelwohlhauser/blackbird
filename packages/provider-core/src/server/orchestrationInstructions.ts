@@ -1,5 +1,7 @@
 import type { ProviderInteractionMode } from "@t3tools/contracts";
 
+import { rebrand } from "@t3tools/shared/blackbirdMcp";
+
 import { agentInstructionsBlock } from "./runtimeInstructions.ts";
 
 /**
@@ -42,7 +44,7 @@ ACP fallback: some ACP agents accept the injected MCP server but fail to expose 
 
 When a chart, table, diagram, image collage, or mockup would say more than prose, build a self-contained HTML page, check it with \`html_preview\`, then publish it with \`html_render\` before your final reply. The reader sees the page above that reply, so don't announce or restate it; add only what it doesn't say.`,
   `- When model options are requested or the child keeps the parent's provider instance and model with nonempty \`inheritedOptions\` from \`orchestrator_capabilities\`, use \`delegate_task\` even for native-supported models. Native subagents cannot reliably apply T3 model options. Read the selected model's descriptors from \`orchestrator_capabilities\` and put settings in \`target.options\`, not only in the prompt. Claude commonly uses {"effort":"max","fastMode":true}; Codex uses {"reasoningEffort":"max","serviceTier":"priority"}. Do not translate max to high or ignore unsupported settings: report a capability mismatch. Options inherit only for the same provider instance and model; explicit entries override individual values, and [] or {} clears them. Check the returned providerInstanceId, model, and options against the requested selection.`,
-];
+].map(rebrand);
 
 export const T3_CODE_ORCHESTRATION_INSTRUCTIONS = `
 
@@ -62,13 +64,13 @@ The browser shares one profile with the user, so extra browser contexts, downloa
 Do not switch to Chrome, standalone Playwright, agent-browser, or other browser tools unless the user asks for them.
 `;
 
-const T3_CODE_ACP_DEFAULT_MODE_INSTRUCTIONS = `## T3 Code interaction mode: Default
+const T3_CODE_ACP_DEFAULT_MODE_INSTRUCTIONS = rebrand(`## T3 Code interaction mode: Default
 
-Prefer making reasonable assumptions and carrying out the user's request. Ask a concise question only when a missing user decision would materially change the result. Treat this mode as active until T3 Code supplies a different interaction-mode instruction.`;
+Prefer making reasonable assumptions and carrying out the user's request. Ask a concise question only when a missing user decision would materially change the result. Treat this mode as active until T3 Code supplies a different interaction-mode instruction.`);
 
-const T3_CODE_ACP_PLAN_MODE_INSTRUCTIONS = `## T3 Code interaction mode: Plan
+const T3_CODE_ACP_PLAN_MODE_INSTRUCTIONS = rebrand(`## T3 Code interaction mode: Plan
 
-Investigate with read-only actions and do not edit files or otherwise execute the implementation. Resolve discoverable facts before asking questions. When the requirements are decision complete, return a concrete implementation plan and do not start implementing it. Treat this mode as active until T3 Code supplies a different interaction-mode instruction.`;
+Investigate with read-only actions and do not edit files or otherwise execute the implementation. Resolve discoverable facts before asking questions. When the requirements are decision complete, return a concrete implementation plan and do not start implementing it. Treat this mode as active until T3 Code supplies a different interaction-mode instruction.`);
 
 export interface T3AcpInstructionState {
   readonly interactionMode: ProviderInteractionMode;

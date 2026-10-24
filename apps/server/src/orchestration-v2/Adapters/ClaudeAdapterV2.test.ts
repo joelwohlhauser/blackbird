@@ -102,6 +102,7 @@ import {
   materializeFixtureInput,
   projectionFor,
 } from "../testkit/fixtures/shared.ts";
+import { rebrand } from "@t3tools/shared/blackbirdMcp";
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => ({
   ...(await importOriginal<typeof ClaudeSdk>()),
@@ -437,7 +438,7 @@ describe("ClaudeAdapterV2 runtime query policy", () => {
 
 describe("ClaudeAdapterV2 MCP query overrides", () => {
   const T3_MCP_SERVERS = {
-    "t3-code": {
+    blackbird: {
       type: "http",
       url: "http://127.0.0.1:43123/mcp",
       headers: {
@@ -472,11 +473,11 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     assert.deepEqual(overrides, {
       allowedTools: [
         ...ClaudeAdapterV2.CLAUDE_READ_ONLY_ALLOWED_TOOLS,
-        ...ClaudeAdapterV2.CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS,
+        ...ClaudeAdapterV2.CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS.map(rebrand),
       ],
       mcpServers: T3_MCP_SERVERS,
     });
-    assert.isFalse(overrides.allowedTools?.includes(ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD));
+    assert.isFalse(overrides.allowedTools?.includes(rebrand(ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD)));
   });
 
   it("invalidates live-query reuse when MCP credentials rotate", () => {
@@ -544,9 +545,9 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
       allowedTools: ["Read"],
     });
     assert.deepEqual(overrides, {
-      allowedTools: ["Read", "mcp__t3-code__*"],
+      allowedTools: ["Read", "mcp__blackbird__*"],
       mcpServers: {
-        "t3-code": {
+        blackbird: {
           type: "http",
           url: "http://127.0.0.1:43123/mcp",
           headers: {

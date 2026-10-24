@@ -34,7 +34,7 @@ The orchestration tools share the existing authenticated HTTP MCP endpoint:
 http://127.0.0.1:<server-port>/mcp
 ```
 
-The provider-visible server key is `t3-code`. The endpoint registers both the
+The code names the server `t3-code` and its tools `t3_*`, as upstream does. Blackbird shows providers the server key `blackbird` and the tool names without `t3_` (`packages/shared/src/blackbirdMcp.ts`), so the names below appear to agents as `mcp__blackbird__thread_send` and so on. The endpoint registers both the
 preview toolkit and the orchestration toolkit.
 
 Before `ProviderSessionManager` opens a new V2 provider session, it asks

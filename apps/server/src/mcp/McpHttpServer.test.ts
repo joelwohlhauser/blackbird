@@ -361,12 +361,12 @@ it.effect("decodes null optional arguments the way it decodes omitted ones", () 
   const calls: Array<unknown> = [];
   return Effect.gen(function* () {
     const thread = { threadId: "thread-null-arguments" };
-    yield* callTool("t3_thread_read", thread);
-    yield* callTool("t3_thread_read", { ...thread, afterPosition: null, view: null });
+    yield* callTool("thread_read", thread);
+    yield* callTool("thread_read", { ...thread, afterPosition: null, view: null });
     yield* callTool("delegate_task", { task: "Inspect", target: {} });
     yield* callTool("delegate_task", { task: "Inspect", title: null, target: { model: null } });
     // A null the schema declares keeps its meaning: here it clears the project icon.
-    yield* callTool("t3_project_update", { projectId: "project-1", projectIcon: null });
+    yield* callTool("project_update", { projectId: "project-1", projectIcon: null });
 
     expect(calls).toHaveLength(5);
     expect(calls[1]).toEqual(calls[0]);
@@ -382,19 +382,19 @@ it.effect(
     return Effect.gen(function* () {
       const thread = { threadId: "thread-clamped-arguments" };
       // Codex never shows the model these bounds, so an over-large page must still read.
-      yield* callTool("t3_thread_read", {
+      yield* callTool("thread_read", {
         ...thread,
         limit: 150,
         runLimit: 80,
         maxCharsPerItem: 60_000,
       });
-      yield* callTool("t3_thread_read", {
+      yield* callTool("thread_read", {
         ...thread,
         limit: 100,
         runLimit: 50,
         maxCharsPerItem: 50_000,
       });
-      yield* callTool("t3_thread_read", { ...thread, limit: 7, runLimit: 1, maxCharsPerItem: 1 });
+      yield* callTool("thread_read", { ...thread, limit: 7, runLimit: 1, maxCharsPerItem: 1 });
 
       expect(calls).toEqual([
         { ...thread, limit: 100, runLimit: 50, maxCharsPerItem: 50_000 },
@@ -411,7 +411,7 @@ it.effect.each(["limit", "runLimit", "maxCharsPerItem"])(
     const calls: Array<unknown> = [];
     return Effect.gen(function* () {
       // Zero is a different request than one item, so it fails rather than answering another question.
-      const rejected = yield* callTool("t3_thread_read", {
+      const rejected = yield* callTool("thread_read", {
         threadId: "thread-below-minimum",
         [field]: 0,
       }).pipe(Effect.flip);

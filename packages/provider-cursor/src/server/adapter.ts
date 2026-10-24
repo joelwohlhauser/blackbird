@@ -74,6 +74,7 @@ import {
   makeSubagentConversationArtifacts,
   subagentThreadTitle,
 } from "@t3tools/provider-core/server/subagentProjection";
+import { BLACKBIRD_MCP_SERVER } from "@t3tools/shared/blackbirdMcp";
 import * as CursorAgentSdk from "./CursorAgentSdk.ts";
 import { ConfigurationError } from "./sdk.ts";
 export { cursorSdkModelSelection } from "./sdkModel.ts";
@@ -214,7 +215,7 @@ export function cursorMcpServers(
     return undefined;
   }
   return {
-    "t3-code": {
+    [BLACKBIRD_MCP_SERVER]: {
       type: "http",
       url: session.endpoint,
       headers: {

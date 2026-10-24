@@ -54,6 +54,7 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeUtil from "node:util";
 import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import { fromLenientJson } from "@t3tools/shared/schemaJson";
+import { BLACKBIRD_MCP_SERVER, rebrand } from "@t3tools/shared/blackbirdMcp";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { applyClaudePromptEffortPrefix } from "@t3tools/shared/model";
@@ -1512,13 +1513,13 @@ export function claudeMcpQueryOverrides(input: {
   if (session === undefined) {
     return input.allowedTools === undefined ? {} : { allowedTools: input.allowedTools };
   }
-  const mcpAllowedTools = input.readOnlySandbox
-    ? CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS
-    : [CLAUDE_T3_MCP_TOOL_WILDCARD];
+  const mcpAllowedTools = (
+    input.readOnlySandbox ? CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS : [CLAUDE_T3_MCP_TOOL_WILDCARD]
+  ).map(rebrand);
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
     mcpServers: {
-      "t3-code": {
+      [BLACKBIRD_MCP_SERVER]: {
         type: "http",
         url: session.endpoint,
         headers: {
