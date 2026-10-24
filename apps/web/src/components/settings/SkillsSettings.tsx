@@ -47,20 +47,16 @@ export function SkillsSettingsPanel() {
   const { environment, scope } = useSettingsScope();
   if (scope.kind !== "environment" || !environment) {
     return (
-      <SettingsPageContainer>
-        <SettingsScopeNotice target="environment">
-          Choose one environment to manage its skills.
-        </SettingsScopeNotice>
-      </SettingsPageContainer>
+      <SettingsScopeNotice target="environment">
+        Choose one environment to manage its skills.
+      </SettingsScopeNotice>
     );
   }
   if (environment.serverConfig?.environment.capabilities.skillSync !== true) {
     return (
-      <SettingsPageContainer>
-        <SettingsScopeNotice target="environment">
-          Update this environment to manage its skills.
-        </SettingsScopeNotice>
-      </SettingsPageContainer>
+      <SettingsScopeNotice target="environment">
+        Update this environment to manage its skills.
+      </SettingsScopeNotice>
     );
   }
   return (
