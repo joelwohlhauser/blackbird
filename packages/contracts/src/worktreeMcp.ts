@@ -161,7 +161,7 @@ export const WorktreeMcpStatusResult = Schema.Struct({
   }),
   defaultStartFromOrigin: Schema.Boolean.annotate({
     description:
-      "Server default used by create_worktree and t3_worktree_handoff when startFromOrigin is omitted.",
+      "Server default used by create_worktree and worktree_handoff when startFromOrigin is omitted.",
   }),
 });
 export type WorktreeMcpStatusResult = typeof WorktreeMcpStatusResult.Type;

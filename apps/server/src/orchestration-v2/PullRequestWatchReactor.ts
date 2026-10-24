@@ -294,7 +294,7 @@ export const make = Effect.gen(function* () {
 
   const giveUp = (target: WatchTarget) =>
     record(target, null, {
-      text: `T3 Code stopped watching pull request #${target.link.number} (${target.link.url}) because it failed to read it from the host ${READ_FAILURE_LIMIT} times in a row. Check it yourself, and call watch_pull_request to watch it again.`,
+      text: `Blackbird stopped watching pull request #${target.link.number} (${target.link.url}) because it failed to read it from the host ${READ_FAILURE_LIMIT} times in a row. Check it yourself, and call watch_pull_request to watch it again.`,
       notification: {
         source: { kind: "monitor" },
         outcome: "failed",
@@ -397,7 +397,7 @@ export const make = Effect.gen(function* () {
 
   const closed = (target: WatchTarget) =>
     record(target, null, {
-      text: `Pull request #${target.link.number} (${target.link.url}) was closed, so T3 Code stopped watching it. Call watch_pull_request if it reopens.`,
+      text: `Pull request #${target.link.number} (${target.link.url}) was closed, so Blackbird stopped watching it. Call watch_pull_request if it reopens.`,
       notification: {
         source: { kind: "monitor" },
         outcome: "updated",
@@ -411,7 +411,7 @@ export const make = Effect.gen(function* () {
   // A failed wake still ends the watch: the thread may have settled or been archived meanwhile.
   const merged = (target: WatchTarget, baseBranch: string) =>
     record(target, null, {
-      text: `Pull request #${target.link.number} (${target.link.url}) was merged into ${baseBranch}, so T3 Code stopped watching it. Continue with your next step, such as following the rollout.`,
+      text: `Pull request #${target.link.number} (${target.link.url}) was merged into ${baseBranch}, so Blackbird stopped watching it. Continue with your next step, such as following the rollout.`,
       notification: {
         source: { kind: "monitor" },
         outcome: "completed",

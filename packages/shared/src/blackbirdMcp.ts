@@ -7,7 +7,6 @@ export const BLACKBIRD_MCP_SERVER = "blackbird";
 
 const UPSTREAM_TOOL_PREFIX = "t3_";
 
-/** `t3_thread_send` -> `thread_send`. */
 export const agentToolName = (name: string): string =>
   name.startsWith(UPSTREAM_TOOL_PREFIX) ? name.slice(UPSTREAM_TOOL_PREFIX.length) : name;
 

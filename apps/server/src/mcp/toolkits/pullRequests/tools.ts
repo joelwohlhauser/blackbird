@@ -98,7 +98,7 @@ export class PullRequestThreadRequiredError extends Schema.TaggedError<PullReque
   {},
 ) {
   override get message(): string {
-    return "Pass threadId: this MCP client is not running inside a T3 thread.";
+    return "Pass threadId: this MCP client is not running inside a Blackbird thread.";
   }
 }
 
@@ -170,7 +170,7 @@ export class PullRequestProjectNotFoundError extends Schema.TaggedError<PullRequ
   { repository: Schema.String },
 ) {
   override get message(): string {
-    return `No project in this environment is a checkout of ${this.repository}, so its pull requests cannot be read here. Add one with t3_project_create.`;
+    return `No project in this environment is a checkout of ${this.repository}, so its pull requests cannot be read here. Add one with project_create.`;
   }
 }
 
@@ -230,7 +230,7 @@ export type UnlinkPullRequestResult = typeof UnlinkPullRequestResult.Type;
 export const WatchPullRequestResult = Schema.Struct({
   ...PullRequestIdentity,
   watching: Schema.Boolean.annotate({
-    description: "Whether T3 Code now watches the pull request for this thread.",
+    description: "Whether Blackbird now watches the pull request for this thread.",
   }),
   wasWatching: Schema.Boolean.annotate({
     description: "Whether it was already watched before the call.",
