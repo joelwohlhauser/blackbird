@@ -1,0 +1,72 @@
+---
+name: autopilot-build
+description: Build an approved change or a bug fix end to end and finish with a pull request that could be merged to production. Moves the thread into a worktree, builds directly or with parallel subagents, gets a read-only review from another model, opens the pull request, tests it on its preview deployment, and handles review-bot comments until every check is green. Use when the user approves a brief, says go, asks to implement or fix something, or hands over a bug report.
+---
+
+# Build
+
+The user approved a brief, or handed over a bug report. Run on your own until there is a pull request you could merge to production right now. Stop and ask only for:
+
+- a finding that needs a product or design decision,
+- a failure you can't fix,
+- a risky step the brief didn't cover, such as changing production data.
+
+Everything else, including commits, pushes, and opening the pull request, is part of the job. Read the team instructions (they name the issue tracker, error tracker, and review bots) and the repository's own agent instructions before you start.
+
+## 1. Bug intake
+
+For a bug report without a brief, follow `references/bug-intake.md` first. It investigates on the main checkout and writes the brief for you. When the fix needs a product decision, changes how data is stored, or the cause can't be shown with evidence, stop and use `autopilot-shape` instead.
+
+## 2. Branch
+
+Follow `references/branch.md`: find or create the issue, then move this conversation into a worktree on the issue's branch. The brief travels along as the continuation prompt.
+
+## 3. Plan
+
+You are the orchestrator. Split the brief into steps and decide who does each one.
+
+- A small change: do it yourself. No subagents for a 30-line fix.
+- A bigger change: split it into independent parts and run them as parallel subagents with `delegate_task`. Give parts that touch the same files their own worktree (`isolation: "worktree"`).
+- Decide the review panel now (see `references/review.md`), including whether a security review is needed.
+
+Post the plan in one short message and keep going.
+
+## 4. Build
+
+- For a bug: reproduce it first, with a failing test or the repository's verify skill, then fix it.
+- Stay inside the brief and follow the codebase's patterns.
+- When the change touches stored data, follow `references/migrations.md`.
+- Run the repository's type checks, lint, and the focused tests for what changed.
+- Reread the diff. Delete comments that restate the code or narrate the change, and undo formatting churn in files you didn't mean to touch.
+- Update the feature doc from the brief, not from the code. See `references/feature-docs.md`.
+- When subagents built parts, put them together and check that they fit.
+
+## 5. Review
+
+Get a read-only review from the model that didn't write the code, before the pull request exists. Follow `references/review.md`. Fix what needs fixing, then review again. Continue when both models say the change is ready for production. After three rounds without agreement, stop and ask the user.
+
+## 6. Pull request
+
+1. Commit with a short subject. Later fixes are small commits on the same pull request.
+2. Push and open a real pull request, not a draft. The title says why the change matters. The description starts with the problem from the brief, then the change. End it with an **Only you can do this** section when the user has to do something the agent can't, such as adding a secret or changing a dashboard setting. Leave the section out when it would be empty.
+3. Link the pull request to the thread (`link_pull_request`) and to the issue.
+4. Turn any question that is still open into its own issue.
+5. Call `watch_pull_request` and end the turn. Blackbird wakes the thread when a check finishes, a bot comments, or the branch conflicts.
+
+## 7. Preview and review bots
+
+Both run once the pull request exists:
+
+- Test on the preview deployment to the level the brief set. See `references/preview.md`.
+- Handle review-bot comments as they arrive. See `references/bot-loop.md`.
+
+## 8. Ready
+
+Check `references/ready.md`. When everything holds:
+
+- If the brief says the agent merges, load `autopilot-ship` and continue.
+- Otherwise post the report (problem, change, proof, anything only the user can do), write a pull request guide with `write_pull_request_guides`, call `unwatch_pull_request` so the thread lands in the user's inbox, and wait for their OK. Their "ship it" starts `autopilot-ship`.
+
+## Without Blackbird
+
+Some steps need Blackbird's tools. `references/environments.md` says what to do without them, for example on a headless agent host.

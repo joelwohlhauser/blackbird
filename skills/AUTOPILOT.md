@@ -1,0 +1,20 @@
+# Blackbird autopilot
+
+Work moves through three skills. Load the matching one yourself; the user never names it.
+
+- `autopilot-shape`: the user wants to explore, brainstorm, plan, or decide how to build something. Runs in the main checkout and changes nothing.
+- `autopilot-build`: the user approves a brief ("go", "build it", "implement it"), asks for a fix, or hands over a bug report (an issue, an error-tracker link). Runs in a worktree and always ends with a pull request that could be merged to production.
+- `autopilot-ship`: a pull request built this way is ready, the user approves the merge ("ship it", "merge it", "merged"), or a pull request watch wakes the thread after the merge.
+
+Plain questions, investigations, and reviews are read-only. They don't start a skill, and they don't move the thread into a worktree.
+
+A bug report the user hands over is a go for a fix pull request, unless the fix needs a product decision, changes how data is stored, or its cause can't be shown with evidence. Then use `autopilot-shape` first. Merging always follows the brief: the agent merges only when the brief says so, otherwise it waits for the user's OK.
+
+These rules hold in every stage:
+
+- The main checkout is for reading. Edits only happen in a worktree.
+- Reviewers report and never edit. Every finding, from a subagent or a review bot, is a claim to check before acting on it.
+- The model that didn't write the code reviews it for correctness. Two models must agree it's ready for production.
+- Feature docs record why something exists and what was decided, never how the code works.
+- A test that didn't run never counts as passed.
+- Never delete branches.
