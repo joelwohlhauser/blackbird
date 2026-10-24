@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   injectHtmlRenderBootstrap,
+  readHtmlRenderComposerFill,
   readHtmlRenderImageRequest,
   readHtmlRenderLinkRequest,
 } from "./htmlRender.ts";
@@ -115,6 +116,29 @@ describe("readHtmlRenderImageRequest", () => {
     expect(readHtmlRenderImageRequest(image({ src: "javascript:alert(1)" }))).toBeUndefined();
     expect(readHtmlRenderImageRequest(image({ src: "data:text/html,<p>" }))).toBeUndefined();
     expect(readHtmlRenderImageRequest(image({ src: "blob:null/1" }))).toBeUndefined();
+  });
+});
+
+describe("readHtmlRenderComposerFill", () => {
+  it("reads trimmed, non-empty text of a bounded length from a fill-composer notification", () => {
+    const fill = (params: unknown) => ({
+      jsonrpc: "2.0",
+      method: "t3/notifications/fill-composer",
+      params,
+    });
+    expect(readHtmlRenderComposerFill(fill({ text: "  1. Scope: small\n" }))).toBe(
+      "1. Scope: small",
+    );
+    expect(readHtmlRenderComposerFill(fill({ text: " \n " }))).toBeUndefined();
+    expect(readHtmlRenderComposerFill(fill({ text: 42 }))).toBeUndefined();
+    expect(readHtmlRenderComposerFill(fill({ text: "a".repeat(20_000) }))).toHaveLength(20_000);
+    expect(readHtmlRenderComposerFill(fill({ text: "a".repeat(20_001) }))).toBeUndefined();
+    expect(
+      readHtmlRenderComposerFill({
+        method: "t3/notifications/fill-composer",
+        params: { text: "x" },
+      }),
+    ).toBeUndefined();
   });
 });
 

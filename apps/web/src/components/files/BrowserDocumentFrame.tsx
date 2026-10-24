@@ -12,6 +12,7 @@ import {
   htmlRenderThemeFragment,
   htmlRenderThemeMessage,
   htmlRenderResult,
+  readHtmlRenderComposerFill,
   readHtmlRenderContentHeight,
   readHtmlRenderImageRequest,
   readHtmlRenderKeyDown,
@@ -27,6 +28,7 @@ import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "re
 import { useOpenLink } from "~/browser/useOpenLink";
 import { ExpandedImageDialog } from "~/components/chat/ExpandedImageDialog";
 import type { ExpandedImagePreview } from "~/components/chat/ExpandedImagePreview";
+import { placeComposerPrompt } from "~/components/promptLinks/linkedPrompt";
 import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { shortcutConflictKey } from "~/keybindings";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
@@ -272,6 +274,34 @@ export function HtmlRenderDocument(props: {
     };
     window.addEventListener("message", openImage);
     return () => window.removeEventListener("message", openImage);
+  }, []);
+  const fillComposer = useEffectEvent((text: string) => {
+    if (props.threadRef === undefined) return;
+    placeComposerPrompt(props.threadRef, text, {
+      replace: {
+        title: "Text from the page is ready",
+        description: "This thread already has a draft. Replace it with the text from the page?",
+      },
+    });
+  });
+  // Gated like a link, so a page fills the composer only right after the reader used it.
+  useEffect(() => {
+    const fill = (event: MessageEvent) => {
+      const frame = frameRef.current;
+      const text = readHtmlRenderComposerFill(event.data);
+      if (
+        text === undefined ||
+        frame === null ||
+        event.source !== frame.contentWindow ||
+        document.activeElement !== frame ||
+        navigator.userActivation?.isActive === false
+      ) {
+        return;
+      }
+      fillComposer(text);
+    };
+    window.addEventListener("message", fill);
+    return () => window.removeEventListener("message", fill);
   }, []);
   const { onFullscreenChange } = props;
   useEffect(() => {

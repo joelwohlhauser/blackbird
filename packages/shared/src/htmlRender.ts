@@ -258,6 +258,12 @@ const SHORTCUTS_METHOD = "t3/notifications/shortcuts";
 const KEY_DOWN_METHOD = "t3/notifications/keydown";
 // Not part of MCP Apps: a click on a page image opens it in the app's image viewer.
 const OPEN_IMAGE_METHOD = "t3/notifications/open-image";
+// Not part of MCP Apps: a page, such as an interview form, hands text to the
+// composer of the thread that shows it. The client never sends it.
+const FILL_COMPOSER_METHOD = "t3/notifications/fill-composer";
+const MAX_COMPOSER_TEXT_LENGTH = 20_000;
+
+export const HTML_RENDER_COMPOSER_GUIDE = `On web and desktop, a page can put text into the reader's message composer without sending it, from a click handler: window.parent.postMessage({ jsonrpc: "2.0", method: "${FILL_COMPOSER_METHOD}", params: { text } }, "*").`;
 
 export function readHtmlRenderContentHeight(data: unknown): number | undefined {
   if (typeof data !== "object" || data === null) return undefined;
@@ -305,6 +311,17 @@ export function readHtmlRenderImageRequest(
   if (typeof src !== "string" || !/^(?:https?:\/\/|data:image\/)/i.test(src)) return undefined;
   const label = typeof name === "string" ? name.trim().slice(0, HTML_RENDER_MAX_TITLE_LENGTH) : "";
   return { src, name: label || "Image" };
+}
+
+export function readHtmlRenderComposerFill(data: unknown): string | undefined {
+  if (typeof data !== "object" || data === null) return undefined;
+  const { jsonrpc, method, params } = data as Record<string, unknown>;
+  if (jsonrpc !== "2.0" || method !== FILL_COMPOSER_METHOD) return undefined;
+  if (typeof params !== "object" || params === null) return undefined;
+  const { text } = params as Record<string, unknown>;
+  if (typeof text !== "string") return undefined;
+  const trimmed = text.trim();
+  return trimmed.length > 0 && trimmed.length <= MAX_COMPOSER_TEXT_LENGTH ? trimmed : undefined;
 }
 
 /** The key a framed render passed on in a `t3/notifications/keydown` notification. */
