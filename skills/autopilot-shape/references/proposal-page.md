@@ -19,5 +19,6 @@ The proposal is an `html_render` page the user can understand in a minute. Write
 ## How to keep it simple
 
 - Start from the smallest design that meets the answers. Add something only when the page can say what breaks without it.
+- A plan that adds new state, infrastructure, or an endpoint names the existing place it could go instead, and why that doesn't work.
 - Name the actual mechanism, not adjectives. "Retries the webhook three times" beats "robust delivery".
 - When the user pushes back, show a revised page. Don't grow the old one with a second version underneath.

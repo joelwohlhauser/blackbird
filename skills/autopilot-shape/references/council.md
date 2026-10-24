@@ -33,7 +33,7 @@ If the plan is sound, say so and name its single weakest point. Do not invent ob
 
 - Weigh each point on its merits. Adopt what's right, reject what's wrong, and keep your position when you have a reason.
 - A point that two members raise independently counts most.
-- Push back on additions that solve problems nobody has. The council is there to make the plan simpler and sounder, not bigger.
+- Push back on additions that solve problems nobody has. New state, infrastructure, or an endpoint must name the existing place it could go instead. The council is there to make the plan simpler and sounder, not bigger.
 - Run a second round only when a member said RETHINK. Never more than two rounds. Describe changes by content, never by member.
 
 The proposal page gets a short council box: each member's verdict, what you took, and what you rejected with the reason. Include the strongest objection even when you rejected it.
