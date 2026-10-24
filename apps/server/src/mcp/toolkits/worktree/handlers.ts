@@ -36,6 +36,20 @@ const handlers = {
         .pipe(Effect.mapError(unavailable));
     }),
   ),
+  create_worktree: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      const service = yield* WorktreeMcpService.WorktreeMcpService;
+      return yield* service.createWorktree(scope, input);
+    }),
+  ),
+  switch_directory: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const scope = yield* McpInvocationContext.McpInvocationContext;
+      const service = yield* WorktreeMcpService.WorktreeMcpService;
+      return yield* service.switchDirectory(scope, input);
+    }),
+  ),
   t3_worktree_handoff: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;

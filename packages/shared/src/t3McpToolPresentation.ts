@@ -40,6 +40,8 @@ export type T3McpToolSummaryAction =
   | "question-read"
   | "question-respond"
   | "secret-request"
+  | "worktree-create"
+  | "directory-switch"
   | "worktree-handoff"
   | "worktree-list"
   | "worktree-status"
@@ -157,6 +159,11 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_thread_interrupt: tool(
     ["Interrupt", "Interrupting", "Requested an interrupt of", "a T3 thread"],
     "thread-interrupt",
+  ),
+  create_worktree: tool(["Create", "Creating", "Created", "a git worktree"], "worktree-create"),
+  switch_directory: tool(
+    ["Switch", "Switching", "Switched", "thread to another folder"],
+    "directory-switch",
   ),
   t3_worktree_handoff: tool(
     ["Hand off", "Handing off", "Handed off", "thread to a git worktree"],

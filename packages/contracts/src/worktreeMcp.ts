@@ -21,13 +21,13 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
   branch: Schema.optional(
     TrimmedNonEmptyString.annotate({
       description:
-        "Branch for the worktree (e.g. 'feature/my-change'). An existing local branch is reused: the thread switches to its current worktree, or a new worktree checks it out. Any other name creates a new branch from baseRef.",
+        "Branch for the worktree (e.g. 'feature/my-change'). An existing local branch is reused: the thread switches to its current worktree, or a new worktree checks it out. A branch that exists only on a remote is checked out tracking it. Any other name creates a new branch from baseRef.",
     }),
   ),
   baseRef: Schema.optional(
     TrimmedNonEmptyString.annotate({
       description:
-        "Branch or ref a new branch starts from. Ignored when branch already exists. Defaults to the repository's default branch.",
+        "Branch or ref a new branch starts from. Ignored when branch already exists locally or on a remote. Defaults to the repository's default branch.",
     }),
   ),
   startFromOrigin: Schema.optional(
@@ -50,6 +50,51 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
   ),
 });
 export type WorktreeMcpHandoffInput = typeof WorktreeMcpHandoffInput.Type;
+
+export const WorktreeMcpCreateInput = Schema.Struct({
+  branch: TrimmedNonEmptyString.annotate({
+    description:
+      "Branch for the worktree (e.g. 'feature/my-change'). An existing local branch is reused, returning its existing worktree if it has one. A branch that exists only on a remote is checked out tracking it. Any other name creates a new branch from baseRef.",
+  }),
+  baseRef: WorktreeMcpHandoffInput.fields.baseRef,
+  repositoryPath: Schema.optional(
+    TrimmedNonEmptyString.annotate({
+      description:
+        "Repository on this environment (absolute or ~/ path). Defaults to this thread's repository; required in a Quick chat.",
+    }),
+  ),
+  startFromOrigin: WorktreeMcpHandoffInput.fields.startFromOrigin,
+  runSetupScript: Schema.optional(
+    Schema.Boolean.annotate({
+      description:
+        "Run the project's configured setup script in a newly created worktree. Defaults to true.",
+    }),
+  ),
+});
+export type WorktreeMcpCreateInput = typeof WorktreeMcpCreateInput.Type;
+
+export const WorktreeMcpCreateResult = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  branch: TrimmedNonEmptyString,
+  created: Schema.Boolean.annotate({
+    description: "False when the branch already had a checkout and its path was returned.",
+  }),
+});
+export type WorktreeMcpCreateResult = typeof WorktreeMcpCreateResult.Type;
+
+export const WorktreeMcpSwitchDirectoryInput = Schema.Struct({
+  path: TrimmedNonEmptyString.annotate({
+    description:
+      "Existing folder on this environment (absolute or ~/ path): a worktree, a repository, or any other folder. A folder inside a git repository resolves to that checkout's root.",
+  }),
+  continuationPrompt: Schema.optional(
+    TrimmedNonEmptyString.check(Schema.isMaxLength(120_000)).annotate({
+      description:
+        "Message queued as the thread's next turn in the new folder. Switching detaches the current provider session, so pass the remaining work here; omitted, a generic prompt to continue the task is queued instead.",
+    }),
+  ),
+});
+export type WorktreeMcpSwitchDirectoryInput = typeof WorktreeMcpSwitchDirectoryInput.Type;
 
 export const WorktreeMcpSetupScriptStatus = Schema.Union([
   Schema.Struct({
@@ -97,6 +142,14 @@ export const WorktreeMcpHandoffResult = Schema.Struct({
 });
 export type WorktreeMcpHandoffResult = typeof WorktreeMcpHandoffResult.Type;
 
+export const WorktreeMcpSwitchDirectoryResult = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  continuation: WorktreeMcpContinuationStatus,
+  note: Schema.String,
+});
+export type WorktreeMcpSwitchDirectoryResult = typeof WorktreeMcpSwitchDirectoryResult.Type;
+
 export const WorktreeMcpStatusResult = Schema.Struct({
   attached: Schema.Boolean.annotate({
     description: "True when this thread is already attached to a git worktree.",
@@ -107,7 +160,8 @@ export const WorktreeMcpStatusResult = Schema.Struct({
     description: "Root of the project's main workspace checkout.",
   }),
   defaultStartFromOrigin: Schema.Boolean.annotate({
-    description: "Server default used by t3_worktree_handoff when startFromOrigin is omitted.",
+    description:
+      "Server default used by create_worktree and t3_worktree_handoff when startFromOrigin is omitted.",
   }),
 });
 export type WorktreeMcpStatusResult = typeof WorktreeMcpStatusResult.Type;

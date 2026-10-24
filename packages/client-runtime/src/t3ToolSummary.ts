@@ -292,6 +292,16 @@ export function summarizeT3ToolCalls(
     case "secret-request":
       label = phrase("Asked for", "ask for", quantity(selected.length, "secret"));
       break;
+    case "worktree-create":
+      label = phrase("Created", "create", quantity(countEntities(entityIds("path")), "worktree"));
+      break;
+    case "directory-switch":
+      label = phrase(
+        "Switched to",
+        "switch to",
+        quantity(countEntities(entityIds("path")), "folder"),
+      );
+      break;
     case "worktree-handoff":
       label = phrase(
         "Handed off to",
