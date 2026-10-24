@@ -1,6 +1,6 @@
 ---
 name: autopilot-build
-description: Build an approved change or a bug fix end to end and finish with a pull request that could be merged to production. Moves the thread into a worktree, builds directly or with parallel subagents, gets a read-only review from another model, opens the pull request, tests it on its preview deployment, and handles review-bot comments until every check is green. Use when the user approves a brief, says go, asks to implement or fix something, or hands over a bug report.
+description: Build an approved change or a bug fix end to end and finish with a pull request that could be merged to production. Moves the thread into a worktree, builds directly or with parallel subagents, gets a read-only review from another model, opens the pull request, tests it on its preview deployment, and handles review-bot comments until every check is green. Use when the user approves a brief, says go, asks to implement or fix something, hands over a bug report, or asks to check, address, or babysit the review comments on a pull request.
 ---
 
 # Build
@@ -14,6 +14,8 @@ The user approved a brief, or handed over a bug report. Run on your own until th
 Everything else, including commits, pushes, and opening the pull request, is part of the job. Read the team instructions (they name the issue tracker, error tracker, and review bots) and the repository's own agent instructions before you start.
 
 Two things run in the background the whole time: keep the issue current (`references/issues.md`), and note anything unrelated you find instead of fixing it on the side (`references/sidequests.md`).
+
+For a pull request that already exists and only needs its review comments handled, skip to step 7 and follow `references/bot-loop.md`.
 
 ## 1. Bug intake
 
