@@ -544,7 +544,6 @@ export const make = Effect.gen(function* () {
       );
     const refreshThreads =
       Option.isNone(plannedActivity) && wouldBeReady(last?.reviewThreads ?? null);
-    if (refreshThreads && fingerprint === null) yield* pullRequests.invalidate({ reference });
     const activity = refreshThreads
       ? yield* pullRequests.activity(reference).pipe(Effect.option)
       : plannedActivity;
