@@ -59,6 +59,18 @@ export function AssistantCitationCommentEditor({
         }}
         onKeyDown={(event) => {
           if (
+            event.key === "c" &&
+            (event.metaKey || event.ctrlKey) &&
+            !event.shiftKey &&
+            !event.altKey &&
+            comment === ""
+          ) {
+            event.preventDefault();
+            void navigator.clipboard.writeText(citation.text);
+            onCancel();
+            return;
+          }
+          if (
             event.key === "Enter" &&
             !event.shiftKey &&
             !event.nativeEvent.isComposing &&

@@ -5,7 +5,7 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { QuoteIcon } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   captureAssistantTextSelection,
@@ -35,6 +35,7 @@ export function AssistantSelectionToolbar({
   } | null>(null);
   const toolbarRef = useRef<HTMLButtonElement>(null);
   const actionsRef = useRef<ReturnType<typeof observeSelectionActions> | null>(null);
+  const citeSelection = useEffectEvent(onCite);
 
   useLayoutEffect(() => {
     const toolbar = toolbarRef.current;
@@ -117,14 +118,26 @@ export function AssistantSelectionToolbar({
             pointer.y >= line.top - 8 &&
             pointer.y <= line.bottom + 8,
         );
+      const sourceAnchor = { source: captured.source, range: captured.range, viewport };
+      const citation: AssistantCitation = {
+        version: 1,
+        ...threadRef,
+        messageId: MessageId.make(messageId),
+        ...captured.selector,
+      };
+      if (
+        pointer !== null &&
+        citation.text.length <= ASSISTANT_CITATION_MAX_TEXT_LENGTH &&
+        citeSelection(citation, sourceAnchor)
+      ) {
+        actions.cancel();
+        window.getSelection()?.removeAllRanges();
+        clear();
+        return;
+      }
       setSelection({
-        sourceAnchor: { source: captured.source, range: captured.range, viewport },
-        citation: {
-          version: 1,
-          ...threadRef,
-          messageId: MessageId.make(messageId),
-          ...captured.selector,
-        },
+        sourceAnchor,
+        citation,
         position: resolveSelectionActionPosition({
           bounds: viewportRect,
           selectionRect: rects.item(rects.length - 1) ?? rect,

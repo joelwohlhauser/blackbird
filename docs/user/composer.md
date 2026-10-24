@@ -115,9 +115,11 @@ Leaving reasoning level or service tier unset uses the provider's own configurat
 
 ## Quote an assistant response
 
-On web and desktop, select text within one assistant response and choose
-**Cite in composer**. You can add a comment about the quote and write instructions
-around it.
+On web and desktop, select text within one assistant response with the mouse and the citation
+opens right away with its comment field focused. Selections made with the keyboard show a **Cite**
+button instead. You can add a comment about the quote and write instructions around it. Press
+Escape to drop the citation, or Command/Ctrl+C while the comment is empty to copy the selected text
+instead.
 
 Select the quote in a draft or sent message to return to its source. If the source
 is unavailable or has changed, the saved quote remains readable.

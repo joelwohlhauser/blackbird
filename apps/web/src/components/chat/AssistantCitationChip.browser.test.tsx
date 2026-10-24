@@ -128,6 +128,33 @@ describe("citation comment source disappearance", () => {
   });
 });
 
+describe("citation comment copy shortcut", () => {
+  it("copies the quote and closes when the comment is empty", async () => {
+    using source = setup();
+    using writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    await using _screen = await mount(source.sourceAnchor, () => true);
+    await vi.waitFor(() => expect(document.activeElement).toBe(textarea()));
+
+    await userEvent.keyboard("{ControlOrMeta>}c{/ControlOrMeta}");
+
+    expect(writeText).toHaveBeenCalledWith("hello");
+    await vi.waitFor(() => expect(textarea()).toBeNull());
+  });
+
+  it("keeps a typed comment", async () => {
+    using source = setup();
+    using writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    await using _screen = await mount(source.sourceAnchor, () => true);
+    await typeComment("keep this");
+    textarea()!.focus();
+
+    await userEvent.keyboard("{ControlOrMeta>}c{/ControlOrMeta}");
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(textarea()?.value).toBe("keep this");
+  });
+});
+
 describe("citation comment popup position", () => {
   it("stays on screen when the cited text ends in a code block's hidden overflow", async () => {
     using _source = setup();
