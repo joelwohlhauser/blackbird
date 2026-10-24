@@ -3429,7 +3429,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                     passed: false,
                     passedChecks: [],
                     conflicting: false,
-                    // Watching again must not repeat check or conflict news the last watch told.
+                    // Watching again must not repeat check, conflict, or ready news the last watch told.
                     ...(existing.endedWatch && {
                       headSha: existing.endedWatch.headSha,
                       failedChecks: existing.endedWatch.failedChecks,
@@ -3442,6 +3442,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                     }),
                     ...(existing.endedWatch?.checksAwaitedSince !== undefined && {
                       checksAwaitedSince: existing.endedWatch.checksAwaitedSince,
+                    }),
+                    ...(existing.endedWatch?.readyHeadSha !== undefined && {
+                      readyHeadSha: existing.endedWatch.readyHeadSha,
                     }),
                     remarksThrough: startedAt,
                     remarkIds: [],

@@ -5,6 +5,7 @@ import {
   type PullRequestActivity,
   type PullRequestComment,
   type PullRequestRef,
+  type PullRequestReviewThread,
   type PullRequestThreadCommentsResult,
   type ThreadPullRequestLink,
   type ThreadPullRequestWatch,
@@ -92,6 +93,8 @@ interface LastRead {
   readonly watches: ReadonlySet<string>;
   readonly status: string | null;
   readonly remarks: string | null;
+  /** Null until a read listed every review thread. */
+  readonly reviewThreads: ReadonlyArray<PullRequestReviewThread> | null;
 }
 
 interface ReadPlan {
@@ -176,7 +179,8 @@ function watchesEqual(left: ThreadPullRequestWatch, right: ThreadPullRequestWatc
     left.remarkIds.join("\n") === right.remarkIds.join("\n") &&
     left.conflicting === right.conflicting &&
     left.wakes === right.wakes &&
-    left.checksAwaitedSince === right.checksAwaitedSince
+    left.checksAwaitedSince === right.checksAwaitedSince &&
+    (left.readyHeadSha ?? null) === (right.readyHeadSha ?? null)
   );
 }
 
@@ -404,13 +408,29 @@ export const make = Effect.gen(function* () {
       Effect.tap(() => ended(target, "closed")),
     );
 
+  // A failed wake still ends the watch: the thread may have settled or been archived meanwhile.
+  const merged = (target: WatchTarget, baseBranch: string) =>
+    record(target, null, {
+      text: `Pull request #${target.link.number} (${target.link.url}) was merged into ${baseBranch}, so T3 Code stopped watching it. Continue with your next step, such as following the rollout.`,
+      notification: {
+        source: { kind: "monitor" },
+        outcome: "completed",
+        summary: `#${target.link.number}: merged, stopped watching`,
+      },
+    }).pipe(
+      Effect.tap(() => woke(target)),
+      Effect.catch(() => record(target, null)),
+      Effect.tap(() => ended(target, "merged")),
+    );
+
+  // A settled thread cannot be woken, so it ends quietly even when its pull request merged.
   const endsWithoutRead = ({ thread, link }: WatchTarget): WatchEndReason | undefined =>
-    link.snapshot?.state === "merged"
-      ? "merged"
-      : thread.settledOverride === "settled" || thread.settledAt !== null
-        ? "settled"
-        : thread.lineage.relationshipToParent === "subagent"
-          ? "subagent"
+    thread.settledOverride === "settled" || thread.settledAt !== null
+      ? "settled"
+      : thread.lineage.relationshipToParent === "subagent"
+        ? "subagent"
+        : link.snapshot?.state === "merged"
+          ? "merged"
           : undefined;
 
   const eachTarget = <E>(
@@ -510,9 +530,7 @@ export const make = Effect.gen(function* () {
     if (detail.state !== "open") {
       lastReads.delete(group.key);
       return yield* eachTarget(group, (target) =>
-        detail.state === "closed"
-          ? closed(target)
-          : record(target, null).pipe(Effect.tap(() => ended(target, "merged"))),
+        detail.state === "closed" ? closed(target) : merged(target, detail.baseBranch),
       );
     }
 
@@ -526,6 +544,11 @@ export const make = Effect.gen(function* () {
           fingerprint === null ? QUIET_REREAD_MS : FINGERPRINT_REREAD_MS,
         )
       : null;
+    const reviewThreads = Option.match(activity, {
+      onNone: () => last?.reviewThreads ?? null,
+      onSome: ({ reviewThreads, reviewThreadsTruncated }) =>
+        reviewThreadsTruncated === true ? null : reviewThreads,
+    });
     lastReads.set(group.key, {
       at:
         plan.activity || last === undefined
@@ -539,9 +562,10 @@ export const make = Effect.gen(function* () {
       watches: new Set(group.targets.map(watchKey)),
       status: fingerprint?.status ?? null,
       remarks: fingerprint?.remarks ?? null,
+      reviewThreads,
     });
     yield* eachTarget(group, (target) => {
-      const report = evaluatePullRequestWatch(target.watch, detail, remarks, now);
+      const report = evaluatePullRequestWatch(target.watch, detail, remarks, reviewThreads, now);
       if (report.changes.length > 0) {
         const wake = pullRequestWatchMessage({
           number: target.link.number,
@@ -602,8 +626,10 @@ export const make = Effect.gen(function* () {
     yield* Effect.forEach(
       ending,
       ([target, reason]) =>
-        record(target, null).pipe(
-          Effect.tap(() => ended(target, reason)),
+        (reason === "merged" && target.link.snapshot !== null
+          ? merged(target, target.link.snapshot.baseBranch)
+          : record(target, null).pipe(Effect.tap(() => ended(target, reason)))
+        ).pipe(
           Effect.catchCause(
             logFailure("pull request watch stop failed", {
               threadId: target.thread.id,

@@ -10,8 +10,11 @@ import { evaluatePullRequestWatch as evaluate } from "./pullRequestWatch.ts";
 
 // These cases read the head once or at one moment, so the no-checks notice never comes due.
 const evaluatePullRequestWatch = (
-  ...args: Parameters<typeof evaluate> extends [...infer Head, number] ? Head : never
-) => evaluate(...args, 0);
+  watch: Parameters<typeof evaluate>[0],
+  detail: Parameters<typeof evaluate>[1],
+  remarks: Parameters<typeof evaluate>[2],
+  reviewThreads: Parameters<typeof evaluate>[3] = null,
+) => evaluate(watch, detail, remarks, reviewThreads, 0);
 
 const decodeForgejoComment = Schema.decodeSync(ForgejoComment);
 
@@ -34,6 +37,7 @@ describe("Forgejo comment watch boundary", () => {
     headSha: seen.headSha,
     checks: [],
     mergeability: "mergeable",
+    isDraft: false,
     viewer: "agent-user",
     author: { login: "agent-user", name: null, avatarUrl: null },
   } satisfies Parameters<typeof evaluatePullRequestWatch>[1];

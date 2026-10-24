@@ -2,6 +2,7 @@ import {
   SourceControlProviderKind,
   type PullRequestCheck,
   PullRequestComment,
+  type PullRequestReviewThread,
   ThreadPullRequestWatch,
 } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
@@ -13,8 +14,11 @@ import {
 
 // These cases read the head once or at one moment, so the no-checks notice never comes due.
 const evaluatePullRequestWatch = (
-  ...args: Parameters<typeof evaluate> extends [...infer Head, number] ? Head : never
-) => evaluate(...args, 0);
+  watch: Parameters<typeof evaluate>[0],
+  detail: Parameters<typeof evaluate>[1],
+  remarks: Parameters<typeof evaluate>[2],
+  reviewThreads: Parameters<typeof evaluate>[3] = null,
+) => evaluate(watch, detail, remarks, reviewThreads, 0);
 
 const STARTED = "2026-10-02T12:00:00.000Z";
 
@@ -45,6 +49,7 @@ const detail = (overrides: Partial<Detail> = {}): Detail => ({
   headSha: "aaaaaaaaaa",
   checks: [check("lint", "success"), check("test", "pending")],
   mergeability: "mergeable",
+  isDraft: false,
   viewer: "agent-user",
   author: { login: "agent-user", name: null, avatarUrl: null },
   ...overrides,
@@ -349,7 +354,7 @@ describe("evaluatePullRequestWatch", () => {
     const kinds: Array<ReadonlyArray<string>> = [];
     let current = first;
     for (let minute = 0; minute <= 60; minute += 10) {
-      const { changes, next } = evaluate(current, read, noRemarks, minute * 60_000);
+      const { changes, next } = evaluate(current, read, noRemarks, null, minute * 60_000);
       kinds.push(changes.map((change) => change.kind));
       current = next;
     }
@@ -370,5 +375,66 @@ describe("evaluatePullRequestWatch", () => {
       checks: [],
     });
     assert.isTrue(anHourLater(watch(), azure).every((kinds) => kinds.length === 0));
+  });
+
+  const reviewThread = (
+    overrides: Partial<PullRequestReviewThread> = {},
+  ): PullRequestReviewThread => ({
+    id: "thread-1",
+    path: "src/index.ts",
+    line: 3,
+    side: "RIGHT",
+    isResolved: false,
+    isOutdated: false,
+    comments: [],
+    ...overrides,
+  });
+  const green = (overrides: Partial<Detail> = {}) =>
+    detail({
+      checks: [{ ...check("test", "success"), required: true }, check("bot", "pending")],
+      ...overrides,
+    });
+  const readyKinds = (report: ReturnType<typeof evaluatePullRequestWatch>) =>
+    report.changes.filter((change) => change.kind === "ready");
+
+  it("reports ready once per head when the gate is green, mergeable, and every thread is settled", () => {
+    const settled = [reviewThread({ isResolved: true }), reviewThread({ isOutdated: true })];
+    const first = evaluatePullRequestWatch(watch(), green(), noRemarks, settled);
+    assert.deepEqual(first.changes, [
+      { kind: "checks-passed", count: 1, required: true },
+      { kind: "ready" },
+    ]);
+    assert.equal(first.next.readyHeadSha, "aaaaaaaaaa");
+    assert.deepEqual(evaluatePullRequestWatch(first.next, green(), noRemarks, settled).changes, []);
+
+    const pushed = green({ headSha: "bbbbbbbbbb" });
+    const pending = evaluatePullRequestWatch(
+      first.next,
+      { ...pushed, checks: [{ ...check("test", "pending"), required: true }] },
+      noRemarks,
+      settled,
+    );
+    assert.deepEqual(pending.changes, []);
+    assert.deepEqual(readyKinds(evaluatePullRequestWatch(pending.next, pushed, noRemarks, [])), [
+      { kind: "ready" },
+    ]);
+  });
+
+  it("is not ready with an open review thread, a conflict, a draft, a failing required check, or unread threads", () => {
+    const failing = green({
+      checks: [{ ...check("test", "failure"), required: true }, check("lint", "success")],
+    });
+    for (const [read, threads] of [
+      [green(), [reviewThread()]],
+      [green({ mergeability: "conflicting" }), []],
+      [green({ mergeability: "unknown" }), []],
+      [green({ isDraft: true }), []],
+      [failing, []],
+      [green(), null],
+    ] as const) {
+      const report = evaluatePullRequestWatch(watch(), read, noRemarks, threads);
+      assert.deepEqual(readyKinds(report), []);
+      assert.equal(report.next.readyHeadSha, null);
+    }
   });
 });

@@ -2523,6 +2523,112 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
     }),
   );
 
+  it.effect("wakes the agent once when a watched pull request merges, and ends the watch", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const threadId = ThreadId.make("runtime-pull-request-watch-merged");
+      const projectId = ProjectId.make("pr-watch-merged-project");
+      yield* seedProject({
+        projectId,
+        title: "Watch merged",
+        workspaceRoot: "/workspace/watch-merged",
+        defaultModelSelection: null,
+        createdAt: "2026-10-01T00:00:00.000Z",
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("pr-watch-merged-create"),
+        threadId,
+        projectId,
+        title: "Watch merged",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+      });
+      const key = { host: "github.com", repository: "pingdotgg/t3code" };
+      for (const number of [14, 15]) {
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make(`pr-watch-merged-start-${number}`),
+          threadId,
+          ...key,
+          number,
+          watching: true,
+          link: { url: `https://github.com/pingdotgg/t3code/pull/${number}`, source: "agent" },
+        });
+      }
+      // #15's sync snapshot already says merged, so it ends without a host read.
+      yield* orchestrator.dispatch({
+        type: "thread.pull-request-link.sync",
+        commandId: CommandId.make("pr-watch-merged-snapshot"),
+        threadId,
+        ...key,
+        number: 15,
+        snapshot: {
+          state: "merged",
+          title: "Watched pull request",
+          headBranch: "feature",
+          baseBranch: "release",
+          isDraft: false,
+          updatedAt: null,
+          syncedAt: "2026-10-02T12:00:00.000Z",
+          mergedAt: "2026-10-02T12:00:00.000Z",
+        },
+        stack: null,
+      });
+      const read = (number: number) =>
+        number === 14
+          ? Effect.succeed({
+              ...watchedPullRequestDetail({ projectId, number, at: "2026-10-02T12:00:00.000Z" }),
+              state: "merged" as const,
+              mergedAt: "2026-10-02T12:00:00.000Z",
+            })
+          : Effect.die("a merged snapshot needs no read");
+      const host = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.mock(PullRequestService.PullRequestService)({
+          detail: (input) => read(input.number),
+          activity: () =>
+            Effect.succeed({
+              comments: [],
+              commentCount: 0,
+              commentsTruncated: false,
+              reviewThreads: [],
+              commits: [],
+            }),
+        }),
+      );
+      const reactor = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
+      yield* reactor.sweep;
+      yield* TestClock.adjust("10 minutes");
+      yield* reactor.sweep;
+
+      const thread = yield* orchestrator.getThreadShell(threadId);
+      assert.deepEqual(
+        thread?.pullRequests?.map((link) => link.watch),
+        [undefined, undefined],
+      );
+      const { messages } = yield* orchestrator.getThreadRecords(threadId, ["messages"]);
+      assert.deepEqual(
+        messages.flatMap((message) => message.notification?.summary ?? []).toSorted(),
+        ["#14: merged, stopped watching", "#15: merged, stopped watching"],
+      );
+      const texts = messages.map((message) => message.text).join("\n");
+      assert.include(
+        texts,
+        "#14 (https://github.com/pingdotgg/t3code/pull/14) was merged into main",
+      );
+      assert.include(
+        texts,
+        "#15 (https://github.com/pingdotgg/t3code/pull/15) was merged into release",
+      );
+    }),
+  );
+
   it.effect("wakes once for a state it reported, across a restart and a new watch", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -2601,23 +2707,26 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       yield* reactor.sweep;
       yield* TestClock.adjust("10 minutes");
       yield* reactor.sweep;
-      assert.deepEqual(yield* summaries, ["#12: checks passed"]);
+      assert.deepEqual(yield* summaries, ["#12: checks passed, ready"]);
 
       // A restart keeps nothing in memory; the watch state is all it has.
       const restarted = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
       yield* restarted.sweep;
-      assert.deepEqual(yield* summaries, ["#12: checks passed"]);
+      assert.deepEqual(yield* summaries, ["#12: checks passed, ready"]);
 
       // A new watch on the same pull request knows what the last one told.
       yield* watch(false, "stop");
       yield* watch(true, "again");
       yield* restarted.sweep;
-      assert.deepEqual(yield* summaries, ["#12: checks passed"]);
+      assert.deepEqual(yield* summaries, ["#12: checks passed, ready"]);
 
       headSha = "bbbbbbbbbb";
       yield* TestClock.adjust("10 minutes");
       yield* restarted.sweep;
-      assert.deepEqual(yield* summaries, ["#12: checks passed", "#12: checks passed"]);
+      assert.deepEqual(yield* summaries, [
+        "#12: checks passed, ready",
+        "#12: checks passed, ready",
+      ]);
       yield* watch(false, "end");
     }),
   );
@@ -2703,7 +2812,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       yield* TestClock.adjust("10 minutes");
       yield* reactor.sweep;
       yield* worker.drain();
-      assert.deepEqual(yield* summaries, ["#12: checks passed"]);
+      assert.deepEqual(yield* summaries, ["#12: checks passed, ready"]);
 
       assert.deepEqual(
         (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch?.owedChecks,
@@ -2713,14 +2822,14 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       const restarted = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
       yield* restarted.sweep;
       yield* worker.drain();
-      assert.deepEqual(yield* summaries, ["#12: checks passed"]);
+      assert.deepEqual(yield* summaries, ["#12: checks passed, ready"]);
 
       // A new watch on the same pull request knows what the last one told.
       yield* watch(false, "stop");
       yield* watch(true, "again");
       yield* restarted.sweep;
       yield* worker.drain();
-      assert.deepEqual(yield* summaries, ["#12: checks passed"]);
+      assert.deepEqual(yield* summaries, ["#12: checks passed, ready"]);
 
       assert.deepEqual(
         (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch?.owedChecks,
@@ -2730,11 +2839,11 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       yield* TestClock.adjust("10 minutes");
       yield* restarted.sweep;
       yield* worker.drain();
-      assert.deepEqual(yield* summaries, ["#12: checks passed", "#12: checks passed"]);
+      assert.deepEqual(yield* summaries, ["#12: checks passed, ready", "#12: checks passed"]);
       yield* TestClock.adjust("10 minutes");
       yield* restarted.sweep;
       yield* worker.drain();
-      assert.deepEqual(yield* summaries, ["#12: checks passed", "#12: checks passed"]);
+      assert.deepEqual(yield* summaries, ["#12: checks passed, ready", "#12: checks passed"]);
       assert.deepEqual(
         (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch?.owedChecks,
         [],
@@ -2855,7 +2964,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       yield* reactor.sweep;
       assert.deepEqual(yield* summaries, [
         "#13: new comments, stopped watching",
-        "#13: checks passed",
+        "#13: checks passed, ready",
       ]);
       yield* orchestrator.dispatch({
         type: "thread.pull-request.watch",
@@ -3062,8 +3171,12 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       yield* sweep;
       const completed = yield* wakes;
       assert.lengthOf(completed, 2);
-      assert.equal(completed[1]!.notification?.summary, "#14: checks passed");
+      assert.equal(completed[1]!.notification?.summary, "#14: checks passed, ready");
       assert.include(completed[1]!.text, "All 1 required check passed on 6074dd4.");
+      assert.include(
+        completed[1]!.text,
+        "The pull request is ready on 6074dd4: checks passed, no open review threads, no conflicts.",
+      );
       assert.equal(completed[1]!.notification?.outcome, "completed");
 
       yield* TestClock.adjust("1 hour");

@@ -3,6 +3,7 @@ import type {
   PullRequestCheck,
   PullRequestComment,
   PullRequestDetail,
+  PullRequestReviewThread,
   ThreadPullRequestWatch,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -22,7 +23,8 @@ export type PullRequestWatchChange =
   | { readonly kind: "checks-passed"; readonly count: number; readonly required: boolean }
   | { readonly kind: "remarks"; readonly remarks: ReadonlyArray<PullRequestComment> }
   | { readonly kind: "no-checks"; readonly minutes: number }
-  | { readonly kind: "conflicting" };
+  | { readonly kind: "conflicting" }
+  | { readonly kind: "ready" };
 
 export interface PullRequestWatchReport {
   readonly changes: ReadonlyArray<PullRequestWatchChange>;
@@ -38,9 +40,10 @@ export function evaluatePullRequestWatch(
   watch: ThreadPullRequestWatch,
   detail: Pick<
     PullRequestDetail,
-    "provider" | "headSha" | "checks" | "mergeability" | "viewer" | "author"
+    "provider" | "headSha" | "checks" | "mergeability" | "isDraft" | "viewer" | "author"
   >,
   remarks: ReadonlyArray<PullRequestComment> | null,
+  reviewThreads: ReadonlyArray<PullRequestReviewThread> | null,
   now: number,
 ): PullRequestWatchReport {
   const changes: Array<PullRequestWatchChange> = [];
@@ -137,6 +140,17 @@ export function evaluatePullRequestWatch(
   const conflicting =
     detail.mergeability === "unknown" ? watch.conflicting : detail.mergeability === "conflicting";
 
+  // Told once per head: a later read of the same head never repeats it, a push can.
+  const ready =
+    headSha !== null &&
+    passed &&
+    detail.mergeability === "mergeable" &&
+    !detail.isDraft &&
+    reviewThreads !== null &&
+    reviewThreads.every((thread) => thread.isResolved || thread.isOutdated);
+  const readyHeadSha = watch.readyHeadSha ?? null;
+  if (ready && readyHeadSha !== headSha) changes.push({ kind: "ready" });
+
   const commentsOnly = changes.length > 0 && changes.every((change) => change.kind === "remarks");
   const progress = headMoved || (changes.length > 0 && !commentsOnly);
   const wakes = (progress ? 0 : watch.wakes) + (commentsOnly ? 1 : 0);
@@ -154,6 +168,7 @@ export function evaluatePullRequestWatch(
       conflicting,
       wakes,
       checksAwaitedSince,
+      readyHeadSha: ready ? headSha : readyHeadSha,
     },
     exhausted: commentsOnly && wakes >= PULL_REQUEST_WATCH_WAKE_LIMIT,
   };
@@ -207,6 +222,10 @@ function changeLines(
       ];
     case "conflicting":
       return [`- The branch now conflicts with ${context.baseBranch}.`];
+    case "ready":
+      return [
+        `- The pull request is ready${context.commit}: checks passed, no open review threads, no conflicts.`,
+      ];
   }
 }
 
@@ -216,6 +235,7 @@ const SUMMARY: Record<PullRequestWatchChange["kind"], string> = {
   remarks: "new comments",
   "no-checks": "no checks reported",
   conflicting: "merge conflict",
+  ready: "ready",
 };
 
 export function pullRequestWatchMessage(input: {
@@ -249,7 +269,7 @@ export function pullRequestWatchMessage(input: {
       source: { kind: "monitor" },
       outcome: failed
         ? "failed"
-        : changes.every((change) => change.kind === "checks-passed")
+        : changes.every((change) => change.kind === "checks-passed" || change.kind === "ready")
           ? "completed"
           : "updated",
       summary: `#${input.number}: ${summary.join(", ")}`,

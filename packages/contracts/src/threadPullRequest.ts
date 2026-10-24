@@ -102,6 +102,8 @@ export const ThreadPullRequestWatch = Schema.Struct({
    * none did. Null once either happened; absent on watches saved before it existed.
    */
   checksAwaitedSince: Schema.optional(Schema.NullOr(IsoDateTime)),
+  /** The head the agent was told is ready to merge, so it hears that once per push. */
+  readyHeadSha: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
 });
 export type ThreadPullRequestWatch = typeof ThreadPullRequestWatch.Type;
 
