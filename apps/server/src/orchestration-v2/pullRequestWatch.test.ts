@@ -383,7 +383,7 @@ describe("evaluatePullRequestWatch", () => {
     id: "thread-1",
     path: "src/index.ts",
     line: 3,
-    side: "RIGHT",
+    side: "right",
     isResolved: false,
     isOutdated: false,
     comments: [],
