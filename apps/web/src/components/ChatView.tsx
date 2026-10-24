@@ -4058,7 +4058,11 @@ export default function ChatView(props: ChatViewProps) {
   );
   // Shared between the two tab containers so a surface renders identically
   // wherever its tab currently lives.
-  const renderSurfaceContent = (surface: RightPanelSurface, visible = true) => {
+  const renderSurfaceContent = (
+    surface: RightPanelSurface,
+    container: WorkspaceTabContainer,
+    visible = true,
+  ) => {
     if (!activeThreadRef) return null;
     switch (surface.kind) {
       case "new-tab": {
@@ -4134,6 +4138,15 @@ export default function ChatView(props: ChatViewProps) {
             environmentId={activeThreadRef.environmentId}
             parentThreadId={activeThreadRef.threadId}
             threadId={surface.threadId}
+            {...(container === "panel"
+              ? {
+                  onOpenInMainTabBar: () =>
+                    useRightPanelStore.getState().moveSurface(activeThreadRef, surface.id, {
+                      container: "main",
+                      index: Number.MAX_SAFE_INTEGER,
+                    }),
+                }
+              : {})}
             markdownCwd={gitCwd ?? undefined}
             workspaceRoot={activeWorkspaceRoot}
             resolvedTheme={resolvedTheme}
@@ -4349,7 +4362,7 @@ export default function ChatView(props: ChatViewProps) {
     }
   };
   const rightPanelContent = selectedRightPanelSurface
-    ? renderSurfaceContent(selectedRightPanelSurface, rightPanelOpen)
+    ? renderSurfaceContent(selectedRightPanelSurface, "panel", rightPanelOpen)
     : null;
   // The main-area strip lives in the chat header: the chat tab carries the
   // thread title (replacing the old project/title header text) and stays the
@@ -5027,7 +5040,7 @@ export default function ChatView(props: ChatViewProps) {
           </div>
           {activeMainSurface ? (
             <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-main-surface-content>
-              {renderSurfaceContent(activeMainSurface)}
+              {renderSurfaceContent(activeMainSurface, "main")}
             </div>
           ) : null}
 

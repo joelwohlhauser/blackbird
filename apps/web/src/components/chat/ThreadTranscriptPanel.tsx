@@ -45,6 +45,7 @@ export function ThreadTranscriptPanel(props: {
   environmentId: EnvironmentId;
   parentThreadId: ThreadId;
   threadId: ThreadId;
+  onOpenInMainTabBar?: () => void;
   markdownCwd: string | undefined;
   workspaceRoot: string | undefined;
   resolvedTheme: "light" | "dark";
@@ -106,10 +107,12 @@ export function ThreadTranscriptPanel(props: {
         <span className="min-w-0 truncate text-xs text-muted-foreground">
           {shell?.title ?? "Subagent"}
         </span>
-        <Button size="xs" variant="ghost" onClick={() => openChat(props.threadId)}>
-          <ExternalLinkIcon />
-          Open chat
-        </Button>
+        {props.onOpenInMainTabBar ? (
+          <Button size="xs" variant="ghost" onClick={props.onOpenInMainTabBar}>
+            <ExternalLinkIcon />
+            Open chat
+          </Button>
+        ) : null}
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col">
         <MessagesTimeline
