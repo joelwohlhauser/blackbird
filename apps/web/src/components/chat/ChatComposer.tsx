@@ -325,6 +325,7 @@ export interface ChatComposerHandle {
   citeAssistantText: (
     citation: AssistantCitation,
     sourceAnchor: AssistantCitationSourceAnchor,
+    replacing?: AssistantCitation,
   ) => boolean;
   openModelPicker: () => void;
   stepReasoningEffort: (direction: 1 | -1) => void;
@@ -3147,12 +3148,27 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         focusComposer();
         return true;
       },
-      citeAssistantText: (citation, sourceAnchor) =>
-        insertComposerTextStable(
-          formatAssistantCitationForComposer(citation, citation.comment),
-          "cursor",
-          { ensureLeadingBoundary: true, citationCommentAnchor: sourceAnchor },
-        ),
+      citeAssistantText: (citation, sourceAnchor, replacing) => {
+        const text = formatAssistantCitationForComposer(citation, citation.comment);
+        const previous =
+          replacing && formatAssistantCitationForComposer(replacing, replacing.comment);
+        const start = previous ? promptRef.current.lastIndexOf(previous) : -1;
+        if (previous && start !== -1) {
+          return applyPromptReplacementStable(start, start + previous.length, text, {
+            expectedText: previous,
+            citationComment: {
+              start,
+              sourceAnchor,
+              insertedSpaces: { before: false, after: false },
+            },
+            focusEditorAfterReplace: false,
+          });
+        }
+        return insertComposerTextStable(text, "cursor", {
+          ensureLeadingBoundary: true,
+          citationCommentAnchor: sourceAnchor,
+        });
+      },
       openModelPicker: openModelPickerStable,
       stepReasoningEffort: (direction) => {
         if (

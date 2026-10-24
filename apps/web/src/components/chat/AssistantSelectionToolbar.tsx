@@ -26,7 +26,11 @@ export function AssistantSelectionToolbar({
 }: {
   viewport: HTMLElement | null;
   threadRef: ScopedThreadRef;
-  onCite: (citation: AssistantCitation, sourceAnchor: AssistantCitationSourceAnchor) => boolean;
+  onCite: (
+    citation: AssistantCitation,
+    sourceAnchor: AssistantCitationSourceAnchor,
+    replacing?: AssistantCitation,
+  ) => boolean;
 }) {
   const [selection, setSelection] = useState<{
     citation: AssistantCitation;
@@ -48,7 +52,8 @@ export function AssistantSelectionToolbar({
   useEffect(() => {
     if (!viewport) return;
     const clear = () => setSelection(null);
-    const update = (pointer: SelectionActionPoint | null) => {
+    let multiClickCitation: AssistantCitation | undefined;
+    const update = (pointer: SelectionActionPoint | null, clicks: number) => {
       const nativeSelection = window.getSelection();
       const captured = captureAssistantTextSelection(viewport, nativeSelection);
       const messageId = captured?.source.dataset.assistantCitationSource;
@@ -125,11 +130,14 @@ export function AssistantSelectionToolbar({
         messageId: MessageId.make(messageId),
         ...captured.selector,
       };
+      const replacing = clicks >= 3 ? multiClickCitation : undefined;
+      multiClickCitation = undefined;
       if (
         pointer !== null &&
         citation.text.length <= ASSISTANT_CITATION_MAX_TEXT_LENGTH &&
-        citeSelection(citation, sourceAnchor)
+        citeSelection(citation, sourceAnchor, replacing)
       ) {
+        if (clicks >= 2) multiClickCitation = citation;
         actions.cancel();
         window.getSelection()?.removeAllRanges();
         clear();
@@ -150,6 +158,7 @@ export function AssistantSelectionToolbar({
       element: viewport,
       getActionElement: () => toolbarRef.current,
       restoreAfterScroll: true,
+      waitForMultiClick: false,
       onSelection: update,
       onDismiss: clear,
     });
