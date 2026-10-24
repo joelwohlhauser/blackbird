@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   ArchiveIcon,
-  ArrowLeftIcon,
   BlocksIcon,
   BotIcon,
   CoffeeIcon,
@@ -26,7 +25,7 @@ import {
   SparklesIcon,
   XIcon,
 } from "lucide-react";
-import { useCanGoBack, useLocation, useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
@@ -115,7 +114,6 @@ function SettingsSectionIcon({ to }: { to: SettingsPath }) {
 
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
-  const canGoBack = useCanGoBack();
   const currentHash = useLocation({ select: (location) => location.hash });
   const currentSearch = useLocation({ select: (location) => location.search });
   const scopeSearch = validateSettingsScopeSearch(currentSearch);
@@ -244,30 +242,12 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
       if (result) handleSearchResultClick(result);
     }
   };
-  const handleBackClick = () => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
-    if (canGoBack) {
-      window.history.back();
-      return;
-    }
-    void navigate({ to: "/" });
-  };
 
   return (
     <>
       <SidebarContent className="overflow-x-hidden">
         <SidebarGroup>
           <div className="flex flex-col gap-2">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={handleBackClick}>
-                  <ArrowLeftIcon />
-                  <span>Back</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
             <div className="flex h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
               <SearchIcon className="size-4 shrink-0 text-sidebar-muted-foreground/80" />
               <SidebarInput
