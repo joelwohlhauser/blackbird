@@ -37,10 +37,9 @@ Post the plan in one short message and keep going.
 
 ## 4. Build
 
-- For a bug: reproduce it first, with a failing test or the repository's verify skill, then fix it.
+- For a bug: reproduce it first, then fix it. Never restructure code just so a test can be written.
 - Stay inside the brief and follow the codebase's patterns.
 - When the change touches stored data, follow `references/migrations.md`.
-- Run the repository's type checks, lint, and the focused tests for what changed.
 - Reread the diff. Delete comments that restate the code or narrate the change, and undo formatting churn in files you didn't mean to touch.
 - Update the feature doc from the brief, not from the code. See `references/feature-docs.md`.
 - When subagents built parts, put them together and check that they fit.

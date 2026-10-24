@@ -3,7 +3,7 @@
 Test the change where users will meet it: the preview deployment the pull request creates. The brief sets how much testing is needed.
 
 - **Not needed:** the repository's own checks and CI are enough. The preview still has to deploy without errors.
-- **Unit tests:** write or update focused tests for what changed, show them passing, and wait for CI.
+- **Unit tests:** write or update focused tests for what changed, and let CI run them.
 - **Agent tests it:**
   1. Wait for the preview deployment of the latest commit.
   2. Follow the repository's verify skill if it has one (`verify-<repo>`): it knows how to reach the preview, log in, and test each feature. Otherwise use `playwright-cli`, with any test credentials the repository's environment files provide.

@@ -21,7 +21,7 @@ Write it in chat, in the same shape as Shape's brief:
 - **What:** the fix, in one or two sentences.
 - **Cause:** what goes wrong and why, with the evidence.
 - **Impact:** who and how many, since when.
-- **Validate:** unit tests by default, because the reproducing test is the proof. Add preview testing when users see the bug in the UI.
+- **Validate:** show the bug and then the fix, usually with the repository's verify skill on the preview. Don't restructure code just so a unit test can be written.
 - **Merge:** wait for the user's OK.
 - **Repair:** if records are already broken, a repair script under the migration rules, applied after the merge with the user's OK.
 

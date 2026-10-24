@@ -1,13 +1,13 @@
 ---
 name: test-t3-app
-description: Test T3 Code's web and desktop UI through its built-in Browser panel against isolated development state. Use for browser verification, browser pairing recovery, and test fixtures. Use test-t3-mobile for native mobile verification.
+description: Test T3 Code's web and desktop UI with playwright-cli in the shared Browser panel against isolated development state. Use for browser verification, browser pairing recovery, and test fixtures. Use test-t3-mobile for native mobile verification.
 ---
 
 # Test T3 web and desktop
 
-Use T3's built-in Browser panel for verification. If its tools are absent or
-the panel reports unavailable, explain the blocker and stop verification.
-Do not install or switch to another automation system. For native mobile
+Use `playwright-cli`, which is already connected to T3's Browser panel. If it
+can't connect, explain the blocker and stop verification. Do not install or
+switch to another automation system. For native mobile
 testing, use [test-t3-mobile](../test-t3-mobile/SKILL.md).
 
 ## Start the app
@@ -23,9 +23,8 @@ inspecting or seeding SQLite. Stop the test server before direct fixture writes.
 
 ## Use the Browser panel
 
-Call `preview_status`, then `preview_open` if the Browser panel is
-closed. Navigate to the complete startup pairing URL once with
-`preview_navigate`, then use `preview_snapshot` and T3's interaction tools.
+Open the complete startup pairing URL once with `playwright-cli open <url>`,
+then use `snapshot`, `click`, `fill`, and the other `playwright-cli` commands.
 If the token was consumed or expired, run `node apps/server/src/bin.ts pair`
 for a fresh one. Keep using the same tab.
 

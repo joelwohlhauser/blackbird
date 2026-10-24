@@ -10,5 +10,3 @@ The autopilot uses Blackbird's tools when they exist. On a host without them, su
 | Pull request guide                    | `write_pull_request_guides`                      | Skip it; the description has to carry the tour                                                                                                                         |
 | Later regression checks               | `schedule_task`                                  | The host's own scheduled jobs, if it has them; otherwise list the checks in the report for the user                                                                    |
 | Hand the thread back                  | `unwatch_pull_request`                           | End with the report                                                                                                                                                    |
-
-Authorization rules from the host's instructions always win. A host that only investigates by default keeps doing that until someone explicitly asks it to fix something.
