@@ -261,3 +261,23 @@ export const resolveStaticDir = Effect.fn(function* () {
   }
   return undefined;
 });
+
+/**
+ * Desktop and remote installs ship only `dist`, so the build copies the
+ * repository's `skills/` next to the bundle; dev runs read the repository copy.
+ */
+export const resolveBundledSkillsDir = Effect.fn("ServerConfig.resolveBundledSkillsDir")(
+  function* () {
+    const { join, resolve } = yield* Path.Path;
+    const { exists } = yield* FileSystem.FileSystem;
+    for (const candidate of [
+      resolve(join(import.meta.dirname, "skills")),
+      resolve(join(import.meta.dirname, "../../../skills")),
+    ]) {
+      if (yield* exists(join(candidate, "AUTOPILOT.md")).pipe(Effect.orElseSucceed(() => false))) {
+        return candidate;
+      }
+    }
+    return undefined;
+  },
+);

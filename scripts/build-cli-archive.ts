@@ -485,6 +485,7 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   yield* fs.copyFile(builtExecutable, path.join(contentDir, executableName));
   yield* stageWebClient(webClient, path.join(contentDir, "client"));
   yield* fs.copy(resourceMonitorDir, path.join(contentDir, "resource-monitor"));
+  yield* fs.copy(path.join(serverDir, "dist/skills"), path.join(contentDir, "skills"));
   yield* stageRuntimeExternals({
     repoRoot,
     stageDir: contentDir,

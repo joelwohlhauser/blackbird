@@ -338,6 +338,7 @@ import {
   ProviderConsumeResetCreditResult,
 } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
+import { SkillSyncStatus } from "./skillSync.ts";
 import {
   StorageCleanupReport,
   DatabaseStorageStatus,
@@ -487,6 +488,8 @@ export const WS_METHODS = {
   serverRemoveKeybinding: "server.removeKeybinding",
   serverRunStorageCleanup: "server.runStorageCleanup",
   serverGetStorageCleanupReport: "server.getStorageCleanupReport",
+  skillsSubscribeStatus: "skills.subscribeStatus",
+  skillsSyncNow: "skills.syncNow",
   serverGetDatabaseStorage: "server.getDatabaseStorage",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
@@ -753,6 +756,18 @@ const WsServerGetStorageCleanupReportRpc = Rpc.make(WS_METHODS.serverGetStorageC
   success: Schema.NullOr(StorageCleanupReport),
   stream: true,
   error: EnvironmentAuthorizationError,
+});
+
+const WsSkillsSubscribeStatusRpc = Rpc.make(WS_METHODS.skillsSubscribeStatus, {
+  payload: Schema.Struct({}),
+  success: SkillSyncStatus,
+  stream: true,
+  error: EnvironmentAuthorizationError,
+});
+const WsSkillsSyncNowRpc = Rpc.make(WS_METHODS.skillsSyncNow, {
+  payload: Schema.Struct({}),
+  success: SkillSyncStatus,
+  error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
 });
 
 const WsServerGetDatabaseStorageRpc = Rpc.make(WS_METHODS.serverGetDatabaseStorage, {
@@ -1920,6 +1935,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRemoveKeybindingRpc,
   WsServerRunStorageCleanupRpc,
   WsServerGetStorageCleanupReportRpc,
+  WsSkillsSubscribeStatusRpc,
+  WsSkillsSyncNowRpc,
   WsServerGetDatabaseStorageRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,

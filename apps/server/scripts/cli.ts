@@ -96,6 +96,9 @@ const buildCmd = Command.make(
       } else {
         yield* Effect.logWarning("[cli] Web dist not found. Skipping client bundle.");
       }
+
+      yield* fs.copy(path.join(repoRoot, "skills"), path.join(serverDir, "dist/skills"));
+      yield* Effect.log("[cli] Bundled agent skills into dist/skills");
     }),
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
 

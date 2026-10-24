@@ -1008,6 +1008,16 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.serverGetStorageCleanupReport,
       idleTtlMs: 0,
     }),
+    syncSkills: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:skills:sync-now",
+      tag: WS_METHODS.skillsSyncNow,
+      concurrency: { mode: "singleFlight", key: ({ environmentId }) => environmentId },
+    }),
+    skillSyncStatus: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:skills:status",
+      tag: WS_METHODS.skillsSubscribeStatus,
+      idleTtlMs: 0,
+    }),
     updateStateAtom,
     settingsValueAtom,
     providersValueAtom,
