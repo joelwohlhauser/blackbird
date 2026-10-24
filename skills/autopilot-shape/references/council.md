@@ -24,7 +24,7 @@ The plan (round <n>): <plan>
 Reply once, in under 400 words:
 1. First line: SHIP IT, SHIP WITH CHANGES, or RETHINK.
 2. The 2 to 5 most important problems, strongest first. Be concrete.
-3. What we could remove or simplify without losing anything the user asked for.
+3. What we could remove or simplify without losing anything the user asked for, including weak foundations in the existing code the plan builds on.
 4. Where you would do it differently, and why that wins.
 If the plan is sound, say so and name its single weakest point. Do not invent objections to sound useful.
 ```

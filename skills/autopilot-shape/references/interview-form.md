@@ -12,6 +12,7 @@ The form collects requirements in under a minute of the user's time. It's an `ht
   - **Out of scope:** what you plan to leave out.
   - **Validate:** not needed, unit tests, agent tests it on the preview, or the user tests it.
   - **Merge:** agent merges, or waits for the user's OK.
+  - **Issue:** create one (default), use an existing one, or none, when the team has an issue tracker.
 - End with a free-text field: "Anything I didn't ask about?"
 - Keep it to about eight questions. More means the request needs to be split.
 

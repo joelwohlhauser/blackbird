@@ -51,7 +51,8 @@ When Verify or Watch finds a regression this change caused:
 
 ## 6. Done
 
-- Move the issue to done with the pull request link. If the tracker's GitHub integration already closed it, just check.
+- Move the issue to the done state (see `../autopilot-build/references/issues.md`). If the tracker's GitHub integration already did, just check.
+- File the sidequests the user didn't pick as backlog issues.
 - In the worktree, delete `node_modules` and other installed dependencies to save disk space. Keep the worktree and the branch. Never delete branches.
 - Call `unwatch_pull_request` and post a short summary: what shipped, the production evidence, and anything only the user still has to do.
 

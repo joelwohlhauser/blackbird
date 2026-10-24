@@ -13,6 +13,8 @@ The user approved a brief, or handed over a bug report. Run on your own until th
 
 Everything else, including commits, pushes, and opening the pull request, is part of the job. Read the team instructions (they name the issue tracker, error tracker, and review bots) and the repository's own agent instructions before you start.
 
+Two things run in the background the whole time: keep the issue current (`references/issues.md`), and note anything unrelated you find instead of fixing it on the side (`references/sidequests.md`).
+
 ## 1. Bug intake
 
 For a bug report without a brief, follow `references/bug-intake.md` first. It investigates on the main checkout and writes the brief for you. When the fix needs a product decision, changes how data is stored, or the cause can't be shown with evidence, stop and use `autopilot-shape` instead.

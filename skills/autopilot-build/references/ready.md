@@ -10,4 +10,4 @@ Build always ends with a pull request you could merge to production right now. A
 - The pull request description has the problem, the change, the proof, and an **Only you can do this** section if needed.
 - The feature doc matches the brief.
 
-The report you post when the work is ready, or when you hand it back, covers: what changed, how it was checked (with the proof), what you chose not to fix and why, and anything only the user can do.
+The report you post when the work is ready, or when you hand it back, covers: what changed, how it was checked (with the proof), what you chose not to fix and why, anything only the user can do, and the sidequests you found with your recommendation for each (see `sidequests.md`).
