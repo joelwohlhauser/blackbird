@@ -15,17 +15,19 @@ export interface SkillLinkSource {
   readonly owns: string;
 }
 
+/**
+ * Link path to the target Blackbird linked it to. Blackbird only replaces or
+ * removes a link that is recorded here and still points where it was
+ * recorded; anything else is the user's.
+ */
+export type LinkRecords = ReadonlyMap<string, string>;
+
 export interface SkillLinkInput {
   readonly home: string;
   /** Earlier sources win a name both provide. */
   readonly sources: ReadonlyArray<SkillLinkSource>;
   readonly disabled: ReadonlySet<string>;
-  /**
-   * Directories whose links Blackbird may remove even though no available
-   * source owns them, such as removed sources. A missing source's directory
-   * stays protected inside them.
-   */
-  readonly retiredRoots: ReadonlyArray<string>;
+  readonly records: LinkRecords;
 }
 
 export interface SkillLinkResult {
@@ -34,6 +36,7 @@ export interface SkillLinkResult {
   readonly conflicts: ReadonlyArray<string>;
   /** Winning skill directories by name, including ones whose links conflicted. */
   readonly desired: ReadonlyMap<string, string>;
+  readonly records: LinkRecords;
 }
 
 type EntryKind = "missing" | "symlink" | "directory" | "file";
@@ -49,7 +52,7 @@ export const entryKind = Effect.fnUntraced(function* (path: string) {
   return info.value.type === "Directory" ? "directory" : "file";
 });
 
-export const isWithin = (path: Path.Path, root: string, target: string) => {
+const isWithin = (path: Path.Path, root: string, target: string) => {
   const relative = path.relative(root, target);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
@@ -73,10 +76,72 @@ export const readSkillDirectory = Effect.fnUntraced(function* (directory: string
   return skills;
 });
 
+const linkTarget = Effect.fnUntraced(function* (linkPath: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const raw = yield* fileSystem.readLink(linkPath).pipe(Effect.option);
+  return Option.map(raw, (target) => path.resolve(path.dirname(linkPath), target));
+});
+
+/**
+ * Points `linkPath` at `target`. An existing link that already points there
+ * is adopted; a recorded, unchanged link is replaced; anything else conflicts.
+ */
+const ensureLink = Effect.fnUntraced(function* (
+  linkPath: string,
+  target: string,
+  records: Map<string, string>,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const kind = yield* entryKind(linkPath);
+  if (kind === "directory" || kind === "file") return "conflict" as const;
+  if (kind === "symlink") {
+    const current = Option.getOrUndefined(yield* linkTarget(linkPath));
+    if (current === target) {
+      records.set(linkPath, target);
+      return "unchanged" as const;
+    }
+    if (current === undefined || records.get(linkPath) !== current) return "conflict" as const;
+    yield* fileSystem.remove(linkPath);
+  }
+  const outcome = yield* fileSystem.symlink(target, linkPath).pipe(
+    Effect.as("linked" as const),
+    // Another process may have created the link since the check above.
+    Effect.catchReason("PlatformError", "AlreadyExists", () =>
+      linkTarget(linkPath).pipe(
+        Effect.map((current) =>
+          Option.contains(current, target) ? ("unchanged" as const) : ("conflict" as const),
+        ),
+      ),
+    ),
+  );
+  if (outcome !== "conflict") records.set(linkPath, target);
+  return outcome;
+});
+
+/** Removes a recorded, unchanged link unless `keep` protects its target. */
+const removeRecordedLink = Effect.fnUntraced(function* (
+  linkPath: string,
+  records: Map<string, string>,
+  keep: (target: string) => boolean,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const current = Option.getOrUndefined(yield* linkTarget(linkPath));
+  if (current === undefined || records.get(linkPath) !== current) {
+    records.delete(linkPath);
+    return false;
+  }
+  if (keep(current)) return false;
+  yield* fileSystem.remove(linkPath);
+  records.delete(linkPath);
+  return true;
+});
+
 export const linkSkills = Effect.fn("skillLinks.linkSkills")(function* (input: SkillLinkInput) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const home = yield* fileSystem.realPath(input.home);
+  const records = new Map(input.records);
   const conflicts: string[] = [];
   const desired = new Map<string, string>();
   const winner = new Map<string, string>();
@@ -94,12 +159,9 @@ export const linkSkills = Effect.fn("skillLinks.linkSkills")(function* (input: S
       desired.set(name, directory);
     }
   }
-  const available = input.sources.filter((source) => source.skills !== null);
   const missing = input.sources.filter((source) => source.skills === null);
-  const owned = (target: string) =>
-    available.some((source) => isWithin(path, source.owns, target)) ||
-    (input.retiredRoots.some((root) => isWithin(path, root, target)) &&
-      !missing.some((source) => isWithin(path, source.owns, target)));
+  const inMissingSource = (target: string) =>
+    missing.some((source) => isWithin(path, source.owns, target));
 
   let linked = 0;
   let removed = 0;
@@ -115,34 +177,16 @@ export const linkSkills = Effect.fn("skillLinks.linkSkills")(function* (input: S
     yield* fileSystem.makeDirectory(destination, { recursive: true, mode: 0o700 });
     for (const [name, target] of desired) {
       const linkPath = path.join(destination, name);
-      const kind = yield* entryKind(linkPath);
-      if (kind === "directory" || kind === "file") {
-        conflicts.push(`${linkPath} already exists; left untouched`);
-        continue;
-      }
-      if (kind === "symlink") {
-        const current = path.resolve(destination, yield* fileSystem.readLink(linkPath));
-        if (current === target) continue;
-        if (!owned(current)) {
-          conflicts.push(`${linkPath} already exists; left untouched`);
-          continue;
-        }
-        yield* fileSystem.remove(linkPath);
-      }
-      yield* fileSystem.symlink(target, linkPath);
-      linked++;
+      const outcome = yield* ensureLink(linkPath, target, records);
+      if (outcome === "linked") linked++;
+      if (outcome === "conflict") conflicts.push(`${linkPath} already exists; left untouched`);
     }
-    for (const name of yield* fileSystem.readDirectory(destination)) {
-      if (desired.has(name)) continue;
-      const linkPath = path.join(destination, name);
-      const current = yield* fileSystem.readLink(linkPath).pipe(Effect.option);
-      // Remove only links into owned directories, including deleted skills.
-      if (Option.isNone(current) || !owned(path.resolve(destination, current.value))) continue;
-      yield* fileSystem.remove(linkPath);
-      removed++;
+    for (const linkPath of records.keys()) {
+      if (path.dirname(linkPath) !== destination || desired.has(path.basename(linkPath))) continue;
+      if (yield* removeRecordedLink(linkPath, records, inMissingSource)) removed++;
     }
   }
-  return { linked, removed, conflicts, desired } satisfies SkillLinkResult;
+  return { linked, removed, conflicts, desired, records } satisfies SkillLinkResult;
 });
 
 export type DependencyInstallOutcome = "none" | "current" | "installed";
@@ -172,49 +216,36 @@ export const installSkillDependencies = Effect.fn("skillLinks.installSkillDepend
 
 export interface InstructionLink {
   readonly linkPath: string;
-  /** Null removes a Blackbird-owned link; undefined leaves the file alone. */
+  /** Null removes a recorded link; undefined leaves the file alone. */
   readonly target: string | null | undefined;
 }
 
 /**
- * Global instruction files are personal. Replace only a missing file or a
- * link `owned` accepts; anything else is reported and left as is.
+ * Global instruction files are personal. Create a missing one, replace only a
+ * recorded link, and report anything else.
  */
 export const linkInstructionFiles = Effect.fn("skillLinks.linkInstructionFiles")(function* (
   links: ReadonlyArray<InstructionLink>,
-  owned: (target: string) => boolean,
+  recorded: LinkRecords,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const records = new Map(recorded);
   const conflicts: string[] = [];
   let linked = 0;
   let removed = 0;
   for (const { linkPath, target } of links) {
     if (target === undefined) continue;
-    const kind = yield* entryKind(linkPath);
-    if (kind === "missing") {
-      if (target === null) continue;
-      yield* fileSystem.makeDirectory(path.dirname(linkPath), { recursive: true });
-      yield* fileSystem.symlink(target, linkPath);
-      linked++;
-      continue;
-    }
-    const current =
-      kind === "symlink"
-        ? path.resolve(path.dirname(linkPath), yield* fileSystem.readLink(linkPath))
-        : null;
-    if (current !== null && current === target) continue;
-    if (current === null || !owned(current)) {
-      if (target !== null) conflicts.push(`${linkPath} already exists; left untouched`);
-      continue;
-    }
-    yield* fileSystem.remove(linkPath);
     if (target === null) {
-      removed++;
+      if (records.has(linkPath) && (yield* removeRecordedLink(linkPath, records, () => false))) {
+        removed++;
+      }
       continue;
     }
-    yield* fileSystem.symlink(target, linkPath);
-    linked++;
+    yield* fileSystem.makeDirectory(path.dirname(linkPath), { recursive: true });
+    const outcome = yield* ensureLink(linkPath, target, records);
+    if (outcome === "linked") linked++;
+    if (outcome === "conflict") conflicts.push(`${linkPath} already exists; left untouched`);
   }
-  return { linked, removed, conflicts };
+  return { linked, removed, conflicts, records };
 });

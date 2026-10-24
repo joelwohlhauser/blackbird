@@ -1,10 +1,12 @@
-import type {
-  ServerSettings,
-  ServerSettingsError,
-  SkillSourceConfig,
-  SkillSourceStatus,
-  SkillSyncStatus,
+import {
+  SkillSyncBusyError,
+  type ServerSettings,
+  type ServerSettingsError,
+  type SkillSourceConfig,
+  type SkillSourceStatus,
+  type SkillSyncStatus,
 } from "@t3tools/contracts";
+import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Clock from "effect/Clock";
@@ -27,11 +29,11 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { forkParked } from "../serverActivation.ts";
+import { isProcessAlive } from "../serverRuntimeState.ts";
 import * as Settings from "../serverSettings.ts";
 import {
   entryKind,
   installSkillDependencies,
-  isWithin,
   linkInstructionFiles,
   linkSkills,
   readSkillDirectory,
@@ -43,16 +45,42 @@ import {
   skillsHomeDir,
 } from "./skillSources.ts";
 
-export class SkillSourceSyncError extends Schema.TaggedError<SkillSourceSyncError>()(
-  "SkillSourceSyncError",
+export class SkillSourceCommandError extends Schema.TaggedError<SkillSourceCommandError>()(
+  "SkillSourceCommandError",
   {
     step: Schema.String,
-    /** First line of the tool's error output, shown to the user beside the source. */
-    detail: Schema.String,
+    /** Null when the command could not run at all. */
+    exitCode: Schema.NullOr(Schema.Number),
+    cause: Schema.optional(Schema.Defect()),
   },
 ) {
   override get message(): string {
-    return this.detail.length === 0 ? `${this.step} failed` : `${this.step} failed: ${this.detail}`;
+    return this.exitCode === null
+      ? `${this.step} could not run.`
+      : `${this.step} failed with exit code ${this.exitCode}.`;
+  }
+}
+
+const SKIPPED_SYNC_MESSAGES = {
+  "unfinished-merge": "Git sync skipped: finish or abort the merge or rebase in progress.",
+  "unresolved-conflicts": "Git sync skipped: resolve the merge conflicts first.",
+  "detached-head": "Git sync skipped: check out a branch to push to.",
+  "not-repository-root": "Git sync skipped: the folder is not the root of a git checkout.",
+} as const;
+
+export class SkillSourceSyncSkippedError extends Schema.TaggedError<SkillSourceSyncSkippedError>()(
+  "SkillSourceSyncSkippedError",
+  {
+    reason: Schema.Literals([
+      "unfinished-merge",
+      "unresolved-conflicts",
+      "detached-head",
+      "not-repository-root",
+    ]),
+  },
+) {
+  override get message(): string {
+    return SKIPPED_SYNC_MESSAGES[this.reason];
   }
 }
 
@@ -69,13 +97,9 @@ const EMPTY_SKILL_SYNC_STATUS: SkillSyncStatus = {
 
 const GIT_TIMEOUT = "5 minutes";
 const NPM_TIMEOUT = "10 minutes";
-const DETAIL_LIMIT = 300;
-
-const firstLine = (text: string) =>
-  (text.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "").trim().slice(0, DETAIL_LIMIT);
 
 const StateFile = Schema.fromJsonString(
-  Schema.Struct({ sourcePaths: Schema.Array(Schema.String) }),
+  Schema.Struct({ links: Schema.Record(Schema.String, Schema.String) }),
 );
 const decodeStateFile = Schema.decodeUnknownOption(StateFile);
 const encodeStateFile = Schema.encodeSync(StateFile);
@@ -89,7 +113,7 @@ const run = Effect.fnUntraced(function* (
   timeout: Duration.Input,
 ) {
   const runner = yield* ProcessRunner.ProcessRunner;
-  const result = yield* runner
+  return yield* runner
     .run({
       command,
       args,
@@ -98,8 +122,7 @@ const run = Effect.fnUntraced(function* (
       // A credential prompt would hang the pass until the timeout.
       env: { GIT_TERMINAL_PROMPT: "0" },
     })
-    .pipe(Effect.mapError(() => new SkillSourceSyncError({ step, detail: "" })));
-  return result;
+    .pipe(Effect.mapError((cause) => new SkillSourceCommandError({ step, exitCode: null, cause })));
 });
 
 const runChecked = Effect.fnUntraced(function* (
@@ -111,12 +134,33 @@ const runChecked = Effect.fnUntraced(function* (
 ) {
   const result = yield* run(step, command, args, cwd, timeout);
   if (result.code !== 0) {
-    return yield* new SkillSourceSyncError({
-      step,
-      detail: firstLine(result.stderr) || firstLine(result.stdout),
-    });
+    return yield* new SkillSourceCommandError({ step, exitCode: result.code });
   }
   return result.stdout.trim();
+});
+
+/**
+ * Git finds the nearest enclosing repository, so a source folder inside
+ * another checkout (say ~/dotfiles/agent-config) would pull, commit and push
+ * that whole parent repository.
+ */
+const requireRepositoryRoot = Effect.fn("SkillSync.requireRepositoryRoot")(function* (
+  checkout: string,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const notRoot = new SkillSourceSyncSkippedError({ reason: "not-repository-root" });
+  const topLevel = yield* runChecked(
+    "git rev-parse --show-toplevel",
+    "git",
+    ["rev-parse", "--show-toplevel"],
+    checkout,
+  ).pipe(
+    Effect.catchTags({
+      SkillSourceCommandError: (error) => (error.exitCode === null ? error : notRoot),
+    }),
+  );
+  const real = (path: string) => fileSystem.realPath(path).pipe(Effect.orElseSucceed(() => path));
+  if ((yield* real(topLevel)) !== (yield* real(checkout))) return yield* notRoot;
 });
 
 const twoWaySync = Effect.fn("SkillSync.twoWaySync")(function* (checkout: string) {
@@ -124,16 +168,13 @@ const twoWaySync = Effect.fn("SkillSync.twoWaySync")(function* (checkout: string
   const path = yield* Path.Path;
   const gitDir = path.resolve(
     checkout,
-    yield* runChecked("git rev-parse", "git", ["rev-parse", "--git-dir"], checkout),
+    yield* runChecked("git rev-parse --git-dir", "git", ["rev-parse", "--git-dir"], checkout),
   );
   for (const marker of ["rebase-merge", "rebase-apply", "MERGE_HEAD"]) {
     if (
       yield* fileSystem.exists(path.join(gitDir, marker)).pipe(Effect.orElseSucceed(() => false))
     ) {
-      return yield* new SkillSourceSyncError({
-        step: "git sync",
-        detail: "an unfinished merge or rebase needs resolving first",
-      });
+      return yield* new SkillSourceSyncSkippedError({ reason: "unfinished-merge" });
     }
   }
   const conflicted = yield* runChecked(
@@ -143,14 +184,11 @@ const twoWaySync = Effect.fn("SkillSync.twoWaySync")(function* (checkout: string
     checkout,
   );
   if (conflicted.length > 0) {
-    return yield* new SkillSourceSyncError({
-      step: "git sync",
-      detail: "unresolved conflicts need resolving first",
-    });
+    return yield* new SkillSourceSyncSkippedError({ reason: "unresolved-conflicts" });
   }
   yield* runChecked("git add", "git", ["add", "-A"], checkout);
   const staged = yield* run(
-    "git diff",
+    "git diff --cached",
     "git",
     ["diff", "--cached", "--quiet"],
     checkout,
@@ -168,16 +206,13 @@ const twoWaySync = Effect.fn("SkillSync.twoWaySync")(function* (checkout: string
   }
   yield* runChecked("git pull --rebase", "git", ["pull", "--rebase"], checkout);
   const branch = yield* runChecked(
-    "git rev-parse",
+    "git rev-parse --abbrev-ref",
     "git",
     ["rev-parse", "--abbrev-ref", "HEAD"],
     checkout,
   );
   if (branch === "HEAD") {
-    return yield* new SkillSourceSyncError({
-      step: "git push",
-      detail: "no branch is checked out",
-    });
+    return yield* new SkillSourceSyncSkippedError({ reason: "detached-head" });
   }
   yield* runChecked("git push", "git", ["push", "origin", `HEAD:${branch}`], checkout);
 });
@@ -193,7 +228,11 @@ const syncCheckout = Effect.fn("SkillSync.syncCheckout")(function* (
     if (source.remote === null) return;
     yield* fileSystem
       .makeDirectory(path.dirname(checkout), { recursive: true })
-      .pipe(Effect.mapError(() => new SkillSourceSyncError({ step: "git clone", detail: "" })));
+      .pipe(
+        Effect.mapError(
+          (cause) => new SkillSourceCommandError({ step: "git clone", exitCode: null, cause }),
+        ),
+      );
     yield* runChecked(
       "git clone",
       "git",
@@ -202,9 +241,11 @@ const syncCheckout = Effect.fn("SkillSync.syncCheckout")(function* (
     );
     return;
   }
+  if (source.sync === "none") return;
+  yield* requireRepositoryRoot(checkout);
   if (source.sync === "pull") {
-    yield* runChecked("git pull", "git", ["pull", "--ff-only"], checkout);
-  } else if (source.sync === "two-way") {
+    yield* runChecked("git pull --ff-only", "git", ["pull", "--ff-only"], checkout);
+  } else {
     yield* twoWaySync(checkout);
   }
 });
@@ -222,6 +263,44 @@ const refreshStableLink = Effect.fnUntraced(function* (linkPath: string, target:
 });
 
 /**
+ * The server and `t3 skills sync` both run passes, so the lock is a file. A
+ * lock whose process is gone is left over from a crash and taken over.
+ */
+const withPassLock = Effect.fn("SkillSync.withPassLock")(function* <A, E, R>(
+  skillsHome: string,
+  pass: Effect.Effect<A, E, R>,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const lockPath = path.join(skillsHome, "sync.lock");
+  const create = fileSystem.writeFileString(lockPath, String(process.pid), { flag: "wx" }).pipe(
+    Effect.as(true),
+    Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.succeed(false)),
+  );
+  const holder = fileSystem.readFileString(lockPath).pipe(
+    Effect.map((text) => Number(text.trim())),
+    Effect.orElseSucceed(() => Number.NaN),
+  );
+  const acquire = Effect.gen(function* () {
+    if (yield* create) return;
+    const pid = yield* holder;
+    if (isProcessAlive(pid)) return yield* new SkillSyncBusyError({ lockPath, pid });
+    yield* fileSystem.remove(lockPath, { force: true });
+    if (!(yield* create)) return yield* new SkillSyncBusyError({ lockPath, pid: yield* holder });
+  });
+  return yield* Effect.acquireUseRelease(
+    acquire,
+    () => pass,
+    () => fileSystem.remove(lockPath, { force: true }).pipe(Effect.ignore),
+  );
+});
+
+const recordError = (errors: string[], sourceId: string) => (error: { readonly message: string }) =>
+  Effect.logWarning("Skill source sync failed", { sourceId, error }).pipe(
+    Effect.andThen(Effect.sync(() => errors.push(error.message))),
+  );
+
+/**
  * One full pass: refresh the stable bundled and Playwright links, sync every
  * configured checkout, then link skills and global instructions into the
  * agent clients. Failures are reported per source and never stop the others.
@@ -233,11 +312,22 @@ export const runSkillSyncPass = Effect.fn("SkillSync.runPass")(function* (input:
 }) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const home = yield* HostProcess.HomeDirectory;
-  const finishedAt = () => DateTime.now.pipe(Effect.map(DateTime.formatIso));
-  const now = yield* finishedAt();
   const skillsHome = skillsHomeDir(path, input.t3Home);
   yield* fileSystem.makeDirectory(skillsHome, { recursive: true });
+  return yield* withPassLock(skillsHome, runLockedPass({ ...input, skillsHome }));
+});
+
+const runLockedPass = Effect.fn("SkillSync.runLockedPass")(function* (input: {
+  readonly settings: SkillSyncSettings;
+  readonly skillsHome: string;
+  readonly previous?: SkillSyncStatus;
+}) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const home = yield* HostProcess.HomeDirectory;
+  const { skillsHome } = input;
+  const finishedAt = () => DateTime.now.pipe(Effect.map(DateTime.formatIso));
+  const now = yield* finishedAt();
   const conflicts: string[] = [];
   const previousSyncedAt = new Map(
     (input.previous?.sources ?? []).map((source) => [source.id, source.lastSyncedAt]),
@@ -260,18 +350,16 @@ export const runSkillSyncPass = Effect.fn("SkillSync.runPass")(function* (input:
   const configured = yield* Effect.forEach(input.settings.skillSources, (config) =>
     Effect.gen(function* () {
       const checkout = yield* resolveSkillSourcePath(config, skillsHome);
-      const synced = yield* (
-        config.sync === "none" && config.remote === null
-          ? Effect.void
-          : syncCheckout(config, checkout)
-      ).pipe(
-        Effect.as(null),
-        Effect.catchTags({ SkillSourceSyncError: (error) => Effect.succeed(error.message) }),
+      const errors: string[] = [];
+      yield* syncCheckout(config, checkout).pipe(
+        Effect.catchTags({
+          SkillSourceCommandError: recordError(errors, config.id),
+          SkillSourceSyncSkippedError: recordError(errors, config.id),
+        }),
       );
       const present = (yield* entryKind(checkout)) !== "missing";
       const skills = present ? yield* readSkillDirectory(path.join(checkout, "skills")) : null;
-      const errors = synced === null ? [] : [synced];
-      if (!present && synced === null) errors.push(`${checkout} not found`);
+      if (!present && errors.length === 0) errors.push(`${checkout} not found`);
       return { config, checkout, present, skills, errors };
     }),
   );
@@ -293,19 +381,17 @@ export const runSkillSyncPass = Effect.fn("SkillSync.runPass")(function* (input:
   ];
 
   const statePath = path.join(skillsHome, "state.json");
-  const recordedPaths = (yield* fileSystem.readFileString(statePath).pipe(Effect.option)).pipe(
+  const records = (yield* fileSystem.readFileString(statePath).pipe(Effect.option)).pipe(
     Option.flatMap(decodeStateFile),
-    Option.map((state) => state.sourcePaths),
-    Option.getOrElse((): ReadonlyArray<string> => []),
+    Option.map((state) => new Map(Object.entries(state.links))),
+    Option.getOrElse(() => new Map<string, string>()),
   );
-  const currentPaths = configured.map(({ checkout }) => checkout);
-  const retiredPaths = recordedPaths.filter((recorded) => !currentPaths.includes(recorded));
 
   const links = yield* linkSkills({
     home,
     sources,
     disabled: new Set(input.settings.disabledSkills),
-    retiredRoots: [skillsHome, ...retiredPaths],
+    records,
   });
   conflicts.push(...links.conflicts);
 
@@ -322,9 +408,12 @@ export const runSkillSyncPass = Effect.fn("SkillSync.runPass")(function* (input:
         ),
       ).pipe(
         Effect.catchTags({
-          SkillSourceSyncError: (error) => Effect.sync(() => source.errors.push(error.message)),
-          PlatformError: () =>
-            Effect.sync(() => source.errors.push(`Could not install dependencies for ${name}`)),
+          SkillSourceCommandError: recordError(source.errors, source.config.id),
+          PlatformError: (cause) =>
+            recordError(
+              source.errors,
+              source.config.id,
+            )(new SkillSourceCommandError({ step: `npm ci for ${name}`, exitCode: null, cause })),
         }),
       );
     }
@@ -345,20 +434,21 @@ export const runSkillSyncPass = Effect.fn("SkillSync.runPass")(function* (input:
   });
   const agentsTarget = yield* instructionTarget("AGENTS.md");
   const claudeTarget = yield* instructionTarget("CLAUDE.md");
-  const instructionOwners = [...currentPaths, ...retiredPaths];
+  const realHome = yield* fileSystem.realPath(home);
   const instructions = yield* linkInstructionFiles(
     [
-      { linkPath: path.join(home, ".agents", "AGENTS.md"), target: agentsTarget },
-      { linkPath: path.join(home, ".codex", "AGENTS.md"), target: agentsTarget },
-      { linkPath: path.join(home, ".claude", "CLAUDE.md"), target: claudeTarget },
+      { linkPath: path.join(realHome, ".agents", "AGENTS.md"), target: agentsTarget },
+      { linkPath: path.join(realHome, ".codex", "AGENTS.md"), target: agentsTarget },
+      { linkPath: path.join(realHome, ".claude", "CLAUDE.md"), target: claudeTarget },
     ],
-    (target) => instructionOwners.some((root) => isWithin(path, root, target)),
+    links.records,
   );
   conflicts.push(...instructions.conflicts);
 
-  yield* fileSystem
-    .writeFileString(statePath, encodeStateFile({ sourcePaths: currentPaths }))
-    .pipe(Effect.catch((cause) => Effect.logWarning("Could not record skill sources", { cause })));
+  yield* writeFileStringAtomically({
+    filePath: statePath,
+    contents: encodeStateFile({ links: Object.fromEntries(instructions.records) }),
+  }).pipe(Effect.catch((cause) => Effect.logWarning("Could not record skill links", { cause })));
 
   const skillNames = (skills: ReadonlyMap<string, string> | null) => [...(skills?.keys() ?? [])];
   const builtIn = (
@@ -404,7 +494,7 @@ export class SkillSync extends Context.Service<
   SkillSync,
   {
     readonly status: Stream.Stream<SkillSyncStatus>;
-    readonly syncNow: Effect.Effect<SkillSyncStatus, ServerSettingsError>;
+    readonly syncNow: Effect.Effect<SkillSyncStatus, ServerSettingsError | SkillSyncBusyError>;
     readonly drain: Effect.Effect<void>;
   }
 >()("t3/skills/SkillSync") {}
@@ -437,10 +527,11 @@ const make = Effect.gen(function* () {
     return status;
   });
 
-  // One worker serializes passes; automatic requests coalesce while one waits.
+  type PassError = ServerSettingsError | SkillSyncBusyError;
+  // One worker serializes this process's passes; automatic requests coalesce while one waits.
   const automaticPassQueued = yield* Ref.make(false);
   const worker = yield* makeDrainableWorker(
-    (completion: Deferred.Deferred<SkillSyncStatus, ServerSettingsError> | undefined) =>
+    (completion: Deferred.Deferred<SkillSyncStatus, PassError> | undefined) =>
       (completion === undefined ? Ref.set(automaticPassQueued, false) : Effect.void).pipe(
         Effect.andThen(pass),
         Effect.exit,
@@ -448,6 +539,9 @@ const make = Effect.gen(function* () {
           completion === undefined
             ? exit.pipe(
                 Effect.asVoid,
+                Effect.catchTags({
+                  SkillSyncBusyError: (error) => Effect.logInfo("Skipped skill sync", { error }),
+                }),
                 Effect.catchCause((cause) => Effect.logWarning("Skill sync failed", { cause })),
               )
             : Deferred.done(completion, exit).pipe(Effect.asVoid),
@@ -458,41 +552,37 @@ const make = Effect.gen(function* () {
     Effect.flatMap((queued) => (queued ? Effect.void : worker.enqueue(undefined))),
   );
   const syncNow = Effect.gen(function* () {
-    const completion = yield* Deferred.make<SkillSyncStatus, ServerSettingsError>();
+    const completion = yield* Deferred.make<SkillSyncStatus, PassError>();
     yield* worker.enqueue(completion);
     return yield* Deferred.await(completion);
   });
 
+  const startAutomaticPasses = Effect.gen(function* () {
+    const changes = yield* settingsService.subscribeChanges;
+    let lastSettings: SkillSyncSettings = yield* settingsService.getSettings.pipe(Effect.orDie);
+    yield* forkParked(
+      requestPass.pipe(
+        Effect.andThen(worker.drain),
+        Effect.repeat(Schedule.spaced("60 seconds")),
+        Effect.asVoid,
+      ),
+    );
+    yield* forkParked(
+      Stream.runForEach(changes, (settings) => {
+        if (
+          Equal.equals(settings.skillSources, lastSettings.skillSources) &&
+          Equal.equals(settings.disabledSkills, lastSettings.disabledSkills)
+        ) {
+          return Effect.void;
+        }
+        lastSettings = settings;
+        return requestPass;
+      }),
+    );
+  });
   // Dev servers run beside the installed app and share the real home
   // directory, so they only link skills when asked to.
-  if (config.devUrl !== undefined) {
-    return SkillSync.of({
-      status: SubscriptionRef.changes(statusRef),
-      syncNow,
-      drain: worker.drain,
-    });
-  }
-  const changes = yield* settingsService.subscribeChanges;
-  let lastSettings: SkillSyncSettings = yield* settingsService.getSettings.pipe(Effect.orDie);
-  yield* forkParked(
-    requestPass.pipe(
-      Effect.andThen(worker.drain),
-      Effect.repeat(Schedule.spaced("60 seconds")),
-      Effect.asVoid,
-    ),
-  );
-  yield* forkParked(
-    Stream.runForEach(changes, (settings) => {
-      if (
-        Equal.equals(settings.skillSources, lastSettings.skillSources) &&
-        Equal.equals(settings.disabledSkills, lastSettings.disabledSkills)
-      ) {
-        return Effect.void;
-      }
-      lastSettings = settings;
-      return requestPass;
-    }),
-  );
+  if (config.devUrl === undefined) yield* startAutomaticPasses;
 
   return SkillSync.of({
     status: SubscriptionRef.changes(statusRef),

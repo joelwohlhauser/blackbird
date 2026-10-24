@@ -139,6 +139,65 @@ describe.skipIf(!symlinksSupported)("runSkillSyncPass", () => {
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 
+  it.effect("leaves an existing instructions link into a source that doesn't provide them", () =>
+    Effect.gen(function* () {
+      const { fileSystem, path, directory, home, write, pass } = yield* fixture;
+      const personal = path.join(directory, "personal");
+      yield* write(path.join(personal, "AGENTS.md"), "Be brief.");
+      const codex = path.join(home, ".codex", "AGENTS.md");
+      yield* fileSystem.makeDirectory(path.dirname(codex), { recursive: true });
+      yield* fileSystem.symlink(path.join(personal, "AGENTS.md"), codex);
+
+      const status = yield* pass([source({ id: "personal", path: personal })]);
+      assert.deepStrictEqual(status.conflicts, []);
+      assert.strictEqual(yield* fileSystem.readLink(codex), path.join(personal, "AGENTS.md"));
+    }).pipe(Effect.scoped, Effect.provide(TestLayer)),
+  );
+
+  it.effect("skips a pass while another live process holds the lock", () =>
+    Effect.gen(function* () {
+      const { fileSystem, path, t3Home, write, pass } = yield* fixture;
+      const lockPath = path.join(t3Home, "skills", "sync.lock");
+      yield* write(lockPath, String(process.pid));
+      const busy = yield* pass([]).pipe(Effect.flip);
+      assert.strictEqual(busy._tag, "SkillSyncBusyError");
+      assert.strictEqual(yield* fileSystem.readFileString(lockPath), String(process.pid));
+
+      // No process has this pid, so the lock was left behind by a crash.
+      yield* write(lockPath, "2147483646");
+      const status = yield* pass([]);
+      assert.isNotNull(status.finishedAt);
+      assert.isFalse(yield* fileSystem.exists(lockPath));
+    }).pipe(Effect.scoped, Effect.provide(TestLayer)),
+  );
+
+  it.live("never runs git for a source folder inside another repository", () =>
+    Effect.gen(function* () {
+      const { fileSystem, path, directory, home, write, pass } = yield* fixture;
+      const runner = yield* ProcessRunner.ProcessRunner;
+      const parent = path.join(directory, "dotfiles");
+      const nested = path.join(parent, "agent-config");
+      yield* write(path.join(nested, "skills", "nested", "SKILL.md"), "---\nname: nested\n---\n");
+      yield* runner.run({ command: "git", args: ["init", parent], cwd: directory });
+
+      const status = yield* pass([source({ id: "nested", path: nested, sync: "two-way" })]);
+      assert.match(
+        status.sources.find((entry) => entry.id === "nested")?.lastError ?? "",
+        /not the root of a git checkout/,
+      );
+      const staged = yield* runner.run({
+        command: "git",
+        args: ["diff", "--cached", "--name-only"],
+        cwd: parent,
+      });
+      assert.strictEqual(staged.stdout.trim(), "");
+      assert.strictEqual(
+        yield* fileSystem.readLink(path.join(home, ".agents", "skills", "nested")),
+        path.join(nested, "skills", "nested"),
+      );
+    }).pipe(Effect.scoped, Effect.provide(TestLayer)),
+  );
+
   it.live("clones a missing checkout and syncs local edits both ways", () =>
     Effect.gen(function* () {
       const { fileSystem, path, directory, home, t3Home, write, pass } = yield* fixture;

@@ -54,3 +54,13 @@ export const SkillSyncStatus = Schema.Struct({
   linksRemoved: Schema.Number,
 });
 export type SkillSyncStatus = typeof SkillSyncStatus.Type;
+
+/** The server and `t3 skills sync` share one lock, so only one pass runs at a time. */
+export class SkillSyncBusyError extends Schema.TaggedError<SkillSyncBusyError>()(
+  "SkillSyncBusyError",
+  { lockPath: Schema.String, pid: Schema.Number },
+) {
+  override get message(): string {
+    return `Another skill sync is running (process ${this.pid}). Try again when it finishes.`;
+  }
+}

@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import {
@@ -11,6 +12,7 @@ import {
   linkSkills,
   readSkillDirectory,
   SKILL_CLIENT_DIRECTORIES,
+  type LinkRecords,
   type SkillLinkSource,
 } from "./skillLinks.ts";
 
@@ -34,25 +36,28 @@ const fixture = Effect.gen(function* () {
     );
     return skillPath;
   });
-  const sources = Effect.gen(function* () {
+  // Stands in for the state file a sync pass keeps between runs.
+  let records: LinkRecords = new Map();
+  const linkSources = (
+    sources: ReadonlyArray<SkillLinkSource>,
+    disabled: ReadonlyArray<string> = [],
+  ) =>
+    Effect.gen(function* () {
+      const result = yield* linkSkills({ home, sources, disabled: new Set(disabled), records });
+      records = result.records;
+      return { linked: result.linked, removed: result.removed, conflicts: result.conflicts };
+    });
+  const bothSources = Effect.gen(function* () {
     return [
       { label: "bundled", skills: yield* readSkillDirectory(bundled), owns: bundled },
       { label: "team", skills: yield* readSkillDirectory(team), owns: team },
     ] satisfies ReadonlyArray<SkillLinkSource>;
   });
   const link = (options: { readonly disabled?: ReadonlyArray<string> } = {}) =>
-    Effect.gen(function* () {
-      const { desired: _desired, ...result } = yield* linkSkills({
-        home,
-        sources: yield* sources,
-        disabled: new Set(options.disabled ?? []),
-        retiredRoots: [],
-      });
-      return result;
-    });
+    bothSources.pipe(Effect.flatMap((sources) => linkSources(sources, options.disabled)));
   const readLink = (client: string, name: string) =>
     fileSystem.readLink(path.join(home, client, "skills", name));
-  return { fileSystem, path, directory, bundled, team, home, skill, link, readLink };
+  return { fileSystem, path, directory, bundled, team, home, skill, link, linkSources, readLink };
 });
 
 describe.skipIf(!symlinksSupported)("linkSkills", () => {
@@ -143,6 +148,36 @@ describe.skipIf(!symlinksSupported)("linkSkills", () => {
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("keeps the user's own links into a source, even when the skill goes away", () =>
+    Effect.gen(function* () {
+      const { fileSystem, path, team, home, skill, link, readLink } = yield* fixture;
+      const sentry = yield* skill(team, "sentry-cli");
+      const alias = path.join(home, ".codex", "skills", "sentry");
+      yield* fileSystem.makeDirectory(path.dirname(alias), { recursive: true });
+      yield* fileSystem.symlink(sentry, alias);
+      yield* link();
+      yield* fileSystem.remove(sentry, { recursive: true });
+      assert.deepStrictEqual(yield* link(), { linked: 0, removed: 3, conflicts: [] });
+      assert.strictEqual(yield* fileSystem.readLink(alias), sentry);
+      assert.isTrue(Option.isNone(yield* readLink(".codex", "sentry-cli").pipe(Effect.option)));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("leaves a link it made alone once the user points it elsewhere", () =>
+    Effect.gen(function* () {
+      const { fileSystem, path, directory, home, team, skill, link, readLink } = yield* fixture;
+      yield* skill(team, "pr-review");
+      yield* link();
+      const mine = yield* skill(path.join(directory, "mine"), "pr-review");
+      const linkPath = path.join(home, ".agents", "skills", "pr-review");
+      yield* fileSystem.remove(linkPath);
+      yield* fileSystem.symlink(mine, linkPath);
+      const result = yield* link();
+      assert.deepStrictEqual(result.conflicts, [`${linkPath} already exists; left untouched`]);
+      assert.strictEqual(yield* readLink(".agents", "pr-review"), mine);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("removes a disabled skill's links and leaves its folder in place", () =>
     Effect.gen(function* () {
       const { fileSystem, path, home, team, skill, link } = yield* fixture;
@@ -172,44 +207,26 @@ describe.skipIf(!symlinksSupported)("linkSkills", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("a missing source keeps its existing links, even inside a retired root", () =>
+  it.effect("a missing source keeps its existing links", () =>
     Effect.gen(function* () {
-      const { fileSystem, directory, team, home, skill, readLink } = yield* fixture;
+      const { fileSystem, team, skill, linkSources, readLink } = yield* fixture;
       const keep = yield* skill(team, "keep");
-      const run = Effect.gen(function* () {
-        return yield* linkSkills({
-          home,
-          sources: [{ label: "team", skills: yield* readSkillDirectory(team), owns: team }],
-          disabled: new Set(),
-          retiredRoots: [directory],
-        });
-      });
-      yield* run;
+      yield* linkSources([{ label: "team", skills: yield* readSkillDirectory(team), owns: team }]);
       yield* fileSystem.remove(team, { recursive: true });
-      const result = yield* run;
+      const result = yield* linkSources([{ label: "team", skills: null, owns: team }]);
       assert.strictEqual(result.removed, 0);
       assert.strictEqual(yield* readLink(".codex", "keep"), keep);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("removes links into a retired source", () =>
+  it.effect("removes the links of a source that is no longer configured", () =>
     Effect.gen(function* () {
-      const { team, home, skill, readLink } = yield* fixture;
+      const { team, skill, linkSources, readLink } = yield* fixture;
       yield* skill(team, "gone");
-      yield* linkSkills({
-        home,
-        sources: [{ label: "team", skills: yield* readSkillDirectory(team), owns: team }],
-        disabled: new Set(),
-        retiredRoots: [],
-      });
-      const result = yield* linkSkills({
-        home,
-        sources: [],
-        disabled: new Set(),
-        retiredRoots: [team],
-      });
+      yield* linkSources([{ label: "team", skills: yield* readSkillDirectory(team), owns: team }]);
+      const result = yield* linkSources([]);
       assert.strictEqual(result.removed, 3);
-      assert.isTrue((yield* readLink(".codex", "gone").pipe(Effect.option))._tag === "None");
+      assert.isTrue(Option.isNone(yield* readLink(".codex", "gone").pipe(Effect.option)));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
@@ -239,7 +256,7 @@ describe("installSkillDependencies", () => {
 });
 
 describe.skipIf(!symlinksSupported)("linkInstructionFiles", () => {
-  it.effect("links missing files, replaces owned links and reports personal files", () =>
+  it.effect("links missing files, adopts matching links and reports everything else", () =>
     Effect.gen(function* () {
       const { fileSystem, path, directory, home } = yield* fixture;
       const source = path.join(directory, "personal");
@@ -249,38 +266,32 @@ describe.skipIf(!symlinksSupported)("linkInstructionFiles", () => {
       const codex = path.join(home, ".codex", "AGENTS.md");
       const claude = path.join(home, ".claude", "CLAUDE.md");
       yield* fileSystem.makeDirectory(path.dirname(codex), { recursive: true });
-      yield* fileSystem.symlink(path.join(old, "AGENTS.md"), codex);
+      yield* fileSystem.symlink(path.join(source, "AGENTS.md"), codex);
       yield* fileSystem.makeDirectory(path.dirname(claude), { recursive: true });
-      yield* fileSystem.writeFileString(claude, "mine");
-      const owned = (target: string) =>
-        [source, old].some((root) => target.startsWith(`${root}${path.sep}`));
+      yield* fileSystem.symlink(path.join(old, "CLAUDE.md"), claude);
       const result = yield* linkInstructionFiles(
         [
           { linkPath: agents, target: path.join(source, "AGENTS.md") },
           { linkPath: codex, target: path.join(source, "AGENTS.md") },
           { linkPath: claude, target: path.join(source, "CLAUDE.md") },
         ],
-        owned,
+        new Map(),
       );
-      assert.deepStrictEqual(result, {
-        linked: 2,
-        removed: 0,
-        conflicts: [`${claude} already exists; left untouched`],
-      });
-      assert.strictEqual(yield* fileSystem.readLink(agents), path.join(source, "AGENTS.md"));
-      assert.strictEqual(yield* fileSystem.readLink(codex), path.join(source, "AGENTS.md"));
-      assert.strictEqual(yield* fileSystem.readFileString(claude), "mine");
+      assert.deepStrictEqual(result.conflicts, [`${claude} already exists; left untouched`]);
+      assert.strictEqual(result.linked, 1);
+      assert.deepStrictEqual([...result.records.keys()].toSorted(), [agents, codex].toSorted());
+      assert.strictEqual(yield* fileSystem.readLink(claude), path.join(old, "CLAUDE.md"));
 
       const cleared = yield* linkInstructionFiles(
         [
           { linkPath: agents, target: null },
           { linkPath: claude, target: null },
         ],
-        owned,
+        result.records,
       );
-      assert.deepStrictEqual(cleared, { linked: 0, removed: 1, conflicts: [] });
+      assert.deepStrictEqual(cleared.removed, 1);
       assert.isFalse(yield* fileSystem.exists(agents));
-      assert.strictEqual(yield* fileSystem.readFileString(claude), "mine");
+      assert.strictEqual(yield* fileSystem.readLink(claude), path.join(old, "CLAUDE.md"));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

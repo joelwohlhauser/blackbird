@@ -243,10 +243,10 @@ Provider commands must start the message to run. T3 Code commands such as
 
 Blackbird always provides its own skills (the autopilot skills) and, when `playwright-cli` is installed, the skill that ships with Playwright CLI. Add your own sources below them. A source is a folder or git checkout with `skills/<name>/SKILL.md` and optionally an `AGENTS.md`. Leave the folder empty and enter a git remote to have Blackbird clone it for you.
 
-- **Git sync**: **Pull only** fast-forwards the checkout. **Two-way sync** also commits your local edits as `sync(<host>): <time>` and pushes them. A checkout in the middle of a merge or rebase is skipped until you resolve it.
+- **Git sync**: **Pull only** fast-forwards the checkout. **Two-way sync** also commits your local edits as `sync(<host>): <time>` and pushes them. Git sync only runs on a folder that is the root of its own checkout, and a checkout in the middle of a merge or rebase is skipped until you resolve it.
 - **Instructions**: **Add AGENTS.md to every session** gives every agent that file on top of its own instructions. **Use AGENTS.md as global instructions** links it as `~/.agents/AGENTS.md` and `~/.codex/AGENTS.md`, and its `CLAUDE.md` as `~/.claude/CLAUDE.md`. Only one source can do this.
 - Each skill is linked into `~/.agents/skills`, `~/.claude/skills` and `~/.codex/skills`. Switch a skill off to remove its links everywhere. When two sources have a skill with the same name, the first one wins and the page lists the other as a conflict.
-- Blackbird only replaces links it created. A file or folder you made yourself is listed as a conflict and left alone.
+- Blackbird only replaces or removes links it created. A file, folder or link you made yourself is listed as a conflict and left alone.
 
 Sources sync about once a minute and right after you change them; **Sync now** runs a sync immediately. `t3 skills sync` does the same from a terminal on the machine. A running agent sees new skills after **Restart agent session**.
 
