@@ -2731,6 +2731,102 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
     }),
   );
 
+  it.effect("does not announce ready when a resolved thread reopened while CI finished", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const threadId = ThreadId.make("runtime-pull-request-watch-reopened");
+      const projectId = ProjectId.make("pr-watch-reopened-project");
+      yield* seedProject({
+        projectId,
+        title: "Watch reopened",
+        workspaceRoot: "/workspace/watch-reopened",
+        defaultModelSelection: null,
+        createdAt: "2026-10-01T00:00:00.000Z",
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        createdBy: "user",
+        creationSource: "web",
+        commandId: CommandId.make("pr-watch-reopened-create"),
+        threadId,
+        projectId,
+        title: "Watch reopened",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+      });
+      yield* orchestrator.dispatch({
+        type: "thread.pull-request.watch",
+        commandId: CommandId.make("pr-watch-reopened-start"),
+        threadId,
+        host: "github.com",
+        repository: "pingdotgg/t3code",
+        number: 12,
+        watching: true,
+        link: { url: "https://github.com/pingdotgg/t3code/pull/12", source: "agent" },
+      });
+
+      let checkStatus: "pending" | "success" = "pending";
+      let threadResolved = true;
+      const host = Layer.mergeAll(
+        NodeServices.layer,
+        Layer.mock(PullRequestService.PullRequestService)({
+          // Reopening a thread adds no comment, so only the checks change the fingerprint.
+          watchFingerprint: () => Effect.sync(() => ({ status: checkStatus, remarks: "same" })),
+          invalidate: () => Effect.void,
+          detail: () =>
+            Effect.sync(() => ({
+              ...watchedPullRequestDetail({
+                projectId,
+                number: 12,
+                at: "2026-10-02T12:00:00.000Z",
+              }),
+              checks: [
+                { name: "test", status: checkStatus, description: null, url: null, required: true },
+              ],
+            })),
+          activity: () =>
+            Effect.sync(() => ({
+              comments: [],
+              commentCount: 0,
+              commentsTruncated: false,
+              reviewThreads: [
+                {
+                  id: "thread-1",
+                  path: "src/index.ts",
+                  line: 1,
+                  side: "right" as const,
+                  isResolved: threadResolved,
+                  isOutdated: false,
+                  comments: [],
+                },
+              ],
+              commits: [],
+            })),
+        }),
+      );
+      const summaries = Effect.map(
+        orchestrator.getThreadRecords(threadId, ["messages"]),
+        ({ messages }) => messages.flatMap((message) => message.notification?.summary ?? []),
+      );
+
+      const reactor = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
+      yield* reactor.sweep;
+      checkStatus = "success";
+      threadResolved = false;
+      yield* TestClock.adjust("1 minute");
+      yield* reactor.sweep;
+
+      assert.deepEqual(yield* summaries, ["#12: checks passed"]);
+      assert.isNull(
+        (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch?.readyHeadSha ??
+          null,
+      );
+    }),
+  );
+
   it.effect("finishes owed checks once after pending sweeps, a restart, and a re-watch", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;

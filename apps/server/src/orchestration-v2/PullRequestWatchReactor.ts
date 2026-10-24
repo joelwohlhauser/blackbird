@@ -513,7 +513,7 @@ export const make = Effect.gen(function* () {
       return yield* Effect.failCause(read.cause);
     }
     readFailures.delete(group.key);
-    const [detail, activity] = read.value;
+    const [detail, plannedActivity] = read.value;
     const headSha = detail.headSha ?? null;
     for (const target of group.targets) {
       const life = lifeOf(target);
@@ -534,6 +534,22 @@ export const make = Effect.gen(function* () {
       );
     }
 
+    // A reopened thread changes neither the comment count nor the fingerprint, so cached review
+    // threads cannot rule one out. Read them again before telling anyone the pull request is ready.
+    const wouldBeReady = (reviewThreads: ReadonlyArray<PullRequestReviewThread> | null) =>
+      group.targets.some((target) =>
+        evaluatePullRequestWatch(target.watch, detail, null, reviewThreads, now).changes.some(
+          (change) => change.kind === "ready",
+        ),
+      );
+    const refreshThreads =
+      Option.isNone(plannedActivity) && wouldBeReady(last?.reviewThreads ?? null);
+    if (refreshThreads && fingerprint === null) yield* pullRequests.invalidate({ reference });
+    const activity = refreshThreads
+      ? yield* pullRequests.activity(reference).pipe(Effect.option)
+      : plannedActivity;
+    const readActivity = plan.activity || Option.isSome(activity);
+
     // Never advance the remark watermark past comments an incomplete read could have missed.
     const remarks = Option.isSome(activity)
       ? yield* readRemarks(
@@ -545,20 +561,20 @@ export const make = Effect.gen(function* () {
         )
       : null;
     const reviewThreads = Option.match(activity, {
-      onNone: () => last?.reviewThreads ?? null,
+      onNone: () => (refreshThreads ? null : (last?.reviewThreads ?? null)),
       onSome: ({ reviewThreads, reviewThreadsTruncated }) =>
         reviewThreadsTruncated === true ? null : reviewThreads,
     });
     lastReads.set(group.key, {
       at:
-        plan.activity || last === undefined
+        readActivity || last === undefined
           ? (threadTails.get(group.key)?.fetchedAt ?? now)
           : last.at,
       fingerprint: group.fingerprint,
       inFlight:
         detail.mergeability === "unknown" ||
         detail.checks.some((check) => check.status === "pending"),
-      remarksComplete: plan.activity ? remarks !== null : (last?.remarksComplete ?? false),
+      remarksComplete: readActivity ? remarks !== null : (last?.remarksComplete ?? false),
       watches: new Set(group.targets.map(watchKey)),
       status: fingerprint?.status ?? null,
       remarks: fingerprint?.remarks ?? null,
