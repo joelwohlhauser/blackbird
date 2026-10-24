@@ -1,9 +1,10 @@
 import { ArrowLeftIcon, ChartNoAxesColumnIcon, CoffeeIcon, SettingsIcon } from "lucide-react";
+import type { DesktopAwakeState } from "@t3tools/contracts";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
-import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import { useClientSettings, useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { useDesktopAwakeState } from "../../lib/desktopAwake";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
@@ -142,6 +143,16 @@ function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   );
 }
 
+function awakeLabel(state: DesktopAwakeState, enabled: boolean, always: boolean) {
+  if (state.active) {
+    return state.lowPower ? "Keeping the Mac awake in Low Power Mode" : "Keeping the Mac awake";
+  }
+  if (!state.installed) return "Set up Keep awake";
+  if (state.message) return state.message;
+  if (!enabled) return "Keep awake is off";
+  return always ? "Keep awake is on" : "Keep awake starts when local agents work";
+}
+
 function SidebarUtilityItem({
   icon,
   label,
@@ -176,6 +187,8 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   });
   const pullRequestsSupported = usePullRequestsSupported();
   const [awakeState] = useDesktopAwakeState();
+  const awakeEnabled = useClientSettings((settings) => settings.awakeEnabled);
+  const awakeAlways = useClientSettings((settings) => settings.awakeAlways);
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -238,14 +251,10 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label="Usage"
             onClick={handleUsageClick}
           />
-          {awakeState?.active ? (
+          {awakeState?.supported ? (
             <SidebarUtilityItem
-              icon={<CoffeeIcon />}
-              label={
-                awakeState.lowPower
-                  ? "Keeping the Mac awake in Low Power Mode"
-                  : "Keeping the Mac awake"
-              }
+              icon={<CoffeeIcon className={cn(!awakeState.active && "opacity-50")} />}
+              label={awakeLabel(awakeState, awakeEnabled, awakeAlways)}
               onClick={handleAwakeClick}
             />
           ) : null}
