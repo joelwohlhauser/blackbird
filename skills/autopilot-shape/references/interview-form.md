@@ -24,13 +24,13 @@ The form collects requirements in under a minute of the user's time. It's an `ht
 
 ## Sending the answers
 
-The button builds a short plain-text block with one line per question: the question, the chosen answer, and any comment. Changed answers are marked so you can spot them. Then it hands the text to Blackbird:
+The button builds a short plain-text block with one line per question: the question, the chosen answer, and any comment. Changed answers are marked so you can spot them. Then it sends the text as the user's next message:
 
 ```js
 window.parent.postMessage(
-  { jsonrpc: "2.0", method: "t3/notifications/fill-composer", params: { text } },
+  { jsonrpc: "2.0", method: "t3/notifications/send-message", params: { text } },
   "*",
 );
 ```
 
-Blackbird puts the text into the composer without sending it, so the user can still add something and press Enter. Always also show the same text in a read-only textarea below the button, selected on focus, so the user can copy it when the page runs somewhere without that bridge.
+Blackbird sends it right away, or queues it while you're still working. The free-text field covers anything else the user wants to add. Below the button, put a small "Copy answers" link that reveals the same text in a read-only textarea, selected on focus, for the mobile app, which can't send from a page.

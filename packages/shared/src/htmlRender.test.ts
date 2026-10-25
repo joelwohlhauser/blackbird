@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   injectHtmlRenderBootstrap,
-  readHtmlRenderComposerFill,
+  readHtmlRenderMessage,
   readHtmlRenderImageRequest,
   readHtmlRenderLinkRequest,
 } from "./htmlRender.ts";
@@ -119,26 +119,34 @@ describe("readHtmlRenderImageRequest", () => {
   });
 });
 
-describe("readHtmlRenderComposerFill", () => {
-  it("reads trimmed, non-empty text of a bounded length from a fill-composer notification", () => {
-    const fill = (params: unknown) => ({
-      jsonrpc: "2.0",
-      method: "t3/notifications/fill-composer",
-      params,
+describe("readHtmlRenderMessage", () => {
+  const notify = (method: string, params: unknown) => ({ jsonrpc: "2.0", method, params });
+  const send = (params: unknown) => notify("t3/notifications/send-message", params);
+  const fill = (params: unknown) => notify("t3/notifications/fill-composer", params);
+
+  it("tells a page's send from a fill", () => {
+    expect(readHtmlRenderMessage(send({ text: "1. Scope: small" }))).toEqual({
+      text: "1. Scope: small",
+      send: true,
     });
-    expect(readHtmlRenderComposerFill(fill({ text: "  1. Scope: small\n" }))).toBe(
+    expect(readHtmlRenderMessage(fill({ text: "1. Scope: small" }))).toEqual({
+      text: "1. Scope: small",
+      send: false,
+    });
+  });
+
+  it("reads trimmed, non-empty text of a bounded length", () => {
+    expect(readHtmlRenderMessage(send({ text: "  1. Scope: small\n" }))?.text).toBe(
       "1. Scope: small",
     );
-    expect(readHtmlRenderComposerFill(fill({ text: " \n " }))).toBeUndefined();
-    expect(readHtmlRenderComposerFill(fill({ text: 42 }))).toBeUndefined();
-    expect(readHtmlRenderComposerFill(fill({ text: "a".repeat(20_000) }))).toHaveLength(20_000);
-    expect(readHtmlRenderComposerFill(fill({ text: "a".repeat(20_001) }))).toBeUndefined();
+    expect(readHtmlRenderMessage(send({ text: " \n " }))).toBeUndefined();
+    expect(readHtmlRenderMessage(send({ text: 42 }))).toBeUndefined();
+    expect(readHtmlRenderMessage(send({ text: "a".repeat(20_000) }))?.text).toHaveLength(20_000);
+    expect(readHtmlRenderMessage(send({ text: "a".repeat(20_001) }))).toBeUndefined();
     expect(
-      readHtmlRenderComposerFill({
-        method: "t3/notifications/fill-composer",
-        params: { text: "x" },
-      }),
+      readHtmlRenderMessage({ method: "t3/notifications/send-message", params: { text: "x" } }),
     ).toBeUndefined();
+    expect(readHtmlRenderMessage(notify("ui/message", { text: "x" }))).toBeUndefined();
   });
 });
 

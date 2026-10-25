@@ -12,11 +12,11 @@ import {
   htmlRenderThemeFragment,
   htmlRenderThemeMessage,
   htmlRenderResult,
-  readHtmlRenderComposerFill,
   readHtmlRenderContentHeight,
   readHtmlRenderImageRequest,
   readHtmlRenderKeyDown,
   readHtmlRenderLinkRequest,
+  readHtmlRenderMessage,
 } from "@t3tools/shared/htmlRender";
 import {
   isMacPlatform,
@@ -33,8 +33,11 @@ import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { shortcutConflictKey } from "~/keybindings";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
 import { readLocalApi } from "~/localApi";
-import { cn } from "~/lib/utils";
+import { cn, newMessageId } from "~/lib/utils";
+import { readThreadShell } from "~/state/entities";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "~/state/server";
+import { threadEnvironment } from "~/state/threads";
+import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 
 /**
  * The page reports the keys, and a page script can report any key it likes,
@@ -275,22 +278,49 @@ export function HtmlRenderDocument(props: {
     window.addEventListener("message", openImage);
     return () => window.removeEventListener("message", openImage);
   }, []);
-  const fillComposer = useEffectEvent((text: string) => {
+  const startTurn = useOrchestrationCommand(threadEnvironment.startTurn, { reportFailure: false });
+  const sendingRef = useRef(false);
+  const fillComposer = useEffectEvent((text: string, unsent: boolean) => {
     if (props.threadRef === undefined) return;
     placeComposerPrompt(props.threadRef, text, {
+      ...(unsent
+        ? {
+            placed: {
+              title: "Couldn't send the page's message",
+              description: "It's in your message box. Send it from there.",
+            },
+          }
+        : {}),
       replace: {
-        title: "Text from the page is ready",
+        title: unsent ? "Couldn't send the page's message" : "Text from the page is ready",
         description: "This thread already has a draft. Replace it with the text from the page?",
       },
     });
   });
-  // Gated like a link, so a page fills the composer only right after the reader used it.
+  const sendMessage = useEffectEvent(async (text: string) => {
+    const thread = props.threadRef === undefined ? null : readThreadShell(props.threadRef);
+    if (thread === null || sendingRef.current) return;
+    sendingRef.current = true;
+    const result = await startTurn({
+      environmentId: thread.environmentId,
+      input: {
+        threadId: thread.id,
+        message: { messageId: newMessageId(), role: "user", text, attachments: [] },
+        runtimeMode: thread.runtimeMode,
+        interactionMode: thread.interactionMode,
+        dispatchMode: "queue",
+      },
+    });
+    sendingRef.current = false;
+    if (result._tag === "Failure") fillComposer(text, true);
+  });
+  // Gated like a link, so a page sends or fills only right after the reader used it.
   useEffect(() => {
-    const fill = (event: MessageEvent) => {
+    const receive = (event: MessageEvent) => {
       const frame = frameRef.current;
-      const text = readHtmlRenderComposerFill(event.data);
+      const message = readHtmlRenderMessage(event.data);
       if (
-        text === undefined ||
+        message === undefined ||
         frame === null ||
         event.source !== frame.contentWindow ||
         document.activeElement !== frame ||
@@ -298,10 +328,11 @@ export function HtmlRenderDocument(props: {
       ) {
         return;
       }
-      fillComposer(text);
+      if (message.send) void sendMessage(message.text);
+      else fillComposer(message.text, false);
     };
-    window.addEventListener("message", fill);
-    return () => window.removeEventListener("message", fill);
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
   }, []);
   const { onFullscreenChange } = props;
   useEffect(() => {
