@@ -99,12 +99,13 @@ export function assetResponseHeaders(
     readonly download?: boolean;
     readonly fileName?: string;
     readonly mimeType?: string;
+    readonly noStore?: boolean;
   },
 ): Record<string, string> {
   const lowerPath = filePath.toLowerCase();
   const inlineMimeType = options?.mimeType?.split(";", 1)[0]?.trim();
   return {
-    "Cache-Control": "private, max-age=3600",
+    "Cache-Control": options?.noStore ? "private, no-store" : "private, max-age=3600",
     "X-Content-Type-Options": "nosniff",
     ...(options?.download
       ? {
@@ -169,6 +170,7 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
     readonly mimeType?: string;
     readonly file?: OpenMediaFile;
     readonly renderIntent?: "mcp-app";
+    readonly noStore?: boolean;
   },
   rangeHeader?: string,
   ifRangeHeader?: string,
@@ -442,7 +444,7 @@ export const layerAssetRoute = HttpRouter.add(
     if (asset.kind === "bytes") {
       return HttpServerResponse.uint8Array(asset.bytes, {
         contentType: asset.mimeType,
-        headers: { "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff" },
+        headers: { "cache-control": "private, no-store", "x-content-type-options": "nosniff" },
       });
     }
     if (asset.kind === "github-media") {

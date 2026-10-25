@@ -86,6 +86,7 @@ import {
 } from "./methods/cliCommand.ts";
 import { getAwakeState, removeAwake, setAwakeAgentsWorking, setupAwake } from "./methods/awake.ts";
 import * as LinearIpc from "./methods/linear.ts";
+import { forgetThread } from "./methods/rendererHistory.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
   const ipc = yield* DesktopIpc.DesktopIpc;
@@ -158,6 +159,7 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(checkSystemPermission);
   yield* ipc.handle(pasteAsText);
   yield* ipc.handle(revealWindow);
+  yield* ipc.handle(forgetThread);
   yield* ipc.handle(probeRemoteEditors);
   yield* ipc.handle(getUpdateState);
   yield* ipc.handle(setUpdateChannel);

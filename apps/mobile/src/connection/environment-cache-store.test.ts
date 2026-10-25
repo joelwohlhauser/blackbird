@@ -165,6 +165,14 @@ function makeDatabase() {
           .filter(([key]) => key.split(":")[1] === kind)
           .map(([, payload]) => payload),
       ),
+    listCacheKeys: (environmentId, kind) =>
+      Effect.sync(() =>
+        [...values.keys()].flatMap((key) =>
+          key.startsWith(`${environmentId}:${kind}:`)
+            ? [key.slice(`${environmentId}:${kind}:`.length)]
+            : [],
+        ),
+      ),
     saveCache: (environmentId, kind, cacheKey, schemaVersion, payload) =>
       Effect.sync(() => {
         const id = cacheId(environmentId, kind, cacheKey);
@@ -198,6 +206,20 @@ function makeDatabase() {
 }
 
 describe("mobile SQLite environment cache store", () => {
+  it.effect("lists only this environment's cached thread ids", () =>
+    Effect.gen(function* () {
+      const memory = makeDatabase();
+      const store = yield* make().pipe(
+        Effect.provideService(MobileDatabase.MobileDatabase, memory.database),
+      );
+      yield* store.saveShell(ENVIRONMENT_ID, SHELL_SNAPSHOT);
+      yield* store.saveThread(ENVIRONMENT_ID, THREAD_SNAPSHOT);
+      yield* store.saveThread(EnvironmentId.make("environment-2"), THREAD_SNAPSHOT);
+
+      expect(yield* store.listThreadIds!(ENVIRONMENT_ID)).toEqual([THREAD_ID]);
+    }),
+  );
+
   it.effect("round-trips V2 shell and thread DateTime fields with the shared cache schema", () =>
     Effect.gen(function* () {
       const memory = makeDatabase();

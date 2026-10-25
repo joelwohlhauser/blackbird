@@ -3,6 +3,8 @@ import type { RelayManagedEndpointRuntimeConfig } from "@t3tools/contracts/relay
 import * as Random from "effect/Random";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
+import * as ThreadPurge from "./orchestration-v2/ThreadPurge.ts";
+import * as EffectOutbox from "./orchestration-v2/EffectOutbox.ts";
 import * as AgentInstructions from "./skills/AgentInstructions.ts";
 import * as SkillSync from "./skills/SkillSync.ts";
 import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReactor.ts";
@@ -228,7 +230,11 @@ const layerProviderEventLoggers = Layer.effect(
     );
     if (!store) return ProviderEventLoggers.NoOpProviderEventLoggers;
     yield* Effect.addFinalizer(() => store.close());
-    return { native: store.logger("native"), canonical: store.logger("canonical") };
+    return {
+      native: store.logger("native"),
+      canonical: store.logger("canonical"),
+      forgetThread: store.forgetThread,
+    };
   }),
 );
 
@@ -565,7 +571,19 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   HeldHooksWaker.layer,
   layerThreadSettlementWorker,
   layerIdleCompactionWorker,
-  StorageCleanup.layer.pipe(Layer.provide(ProjectionStoreV2.layer)),
+  StorageCleanup.layer.pipe(
+    Layer.provide(
+      ThreadPurge.layer.pipe(
+        Layer.provide(
+          Layer.merge(
+            EffectOutbox.layer,
+            ProviderAdapterRegistry.layerFromProviderInstanceRegistry,
+          ),
+        ),
+      ),
+    ),
+    Layer.provide(ProjectionStoreV2.layer),
+  ),
   DatabaseStorage.layer.pipe(
     Layer.provide(ProjectionMaintenance.layer),
     Layer.provide(

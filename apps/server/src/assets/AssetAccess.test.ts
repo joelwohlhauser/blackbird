@@ -874,7 +874,7 @@ describe("AssetAccess", () => {
 
       expect(
         yield* resolveAsset(suffix.slice(0, separatorIndex), suffix.slice(separatorIndex + 1)),
-      ).toMatchObject({ kind: "file", path: attachmentPath, download: true });
+      ).toMatchObject({ kind: "file", path: attachmentPath, download: true, noStore: true });
     }).pipe(Effect.provide(layerTest)),
   );
   it.effect("issues project favicon capabilities with a signed fallback", () =>

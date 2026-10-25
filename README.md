@@ -238,6 +238,10 @@ reserved internal `blackbird-quick-chats` project on demand
 deliberately hidden from Projects and project pickers. The legacy
 `blackboard-quick-chats` id is recognized only for migration.
 
+### Thread deletion
+
+Deleting a thread is a hard delete. After the deletion's cleanup effects finish, `ThreadPurge` removes every row of the thread and its subagent threads, their attachments, provider event logs, checkpoint refs, matching server trace lines, and the provider's own transcript (Claude, Codex, and Grok, including imported terminal sessions). SQLite runs with `secure_delete`, so removed rows are zeroed. Clients drop their cached copy and per-thread state, and reconcile cached threads against the server after reconnecting. A failed cleanup effect or a live provider session postpones the purge to the next storage sweep.
+
 ### Pinned sites
 
 The **Pinned sites** section sits above Quick chats and pins websites — for

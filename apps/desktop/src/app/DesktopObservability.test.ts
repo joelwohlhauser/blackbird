@@ -236,6 +236,36 @@ describe("DesktopObservability", () => {
     ),
   );
 
+  it.effect("removes matching lines from the current and rotated log files", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-rotating-writer-remove-lines-test-",
+      });
+      const logPath = `${baseDir}/history.ndjson`;
+      const writer = yield* DesktopObservability.makeRotatingLogFileWriter({
+        filePath: logPath,
+        maxBytes: 14,
+        maxFiles: 2,
+      });
+      for (const line of ["keep-1", "drop-1", "keep-2", "drop-2"]) {
+        yield* writer.writeText(`${line}\n`);
+      }
+
+      yield* writer.removeLines((line) => line.startsWith("drop"));
+      yield* writer.writeText("keep-3\n");
+
+      const contents = yield* Effect.forEach([`${logPath}.2`, `${logPath}.1`, logPath], (file) =>
+        fileSystem.readFileString(file).pipe(Effect.orElseSucceed(() => "")),
+      );
+      assert.deepEqual(contents.join("").split("\n").filter(Boolean), [
+        "keep-1",
+        "keep-2",
+        "keep-3",
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("retains only the last mebibyte of backend child output", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

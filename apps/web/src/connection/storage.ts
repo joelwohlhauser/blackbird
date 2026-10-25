@@ -96,6 +96,7 @@ function persistenceError(
     | "load-thread"
     | "save-thread"
     | "remove-thread"
+    | "list-threads"
     | "load-server-config"
     | "save-server-config"
     | "load-vcs-refs"
@@ -329,6 +330,35 @@ function removeDatabaseValuesInRangeOnConnection(
       resume(Effect.fail(catalogError("remove", cause)));
     }
   }).pipe(Effect.withSpan("web.connectionStorage.removeDatabaseValuesInRange"));
+}
+
+function readDatabaseKeysInRangeOnConnection(
+  database: IDBDatabase,
+  storeName: string,
+  range: IDBKeyRange,
+) {
+  return Effect.callback<ReadonlyArray<IDBValidKey>, ConnectionTransientError>((resume) => {
+    try {
+      const request = database
+        .transaction(storeName, "readonly")
+        .objectStore(storeName)
+        .getAllKeys(range);
+      request.addEventListener("error", () => {
+        resume(Effect.fail(catalogError("read", request.error ?? "Unknown IndexedDB read error")));
+      });
+      request.addEventListener("success", () => {
+        resume(Effect.succeed(request.result));
+      });
+    } catch (cause) {
+      resume(Effect.fail(catalogError("read", cause)));
+    }
+  });
+}
+
+function readDatabaseKeysInRange(database: DatabaseHandle, storeName: string, range: IDBKeyRange) {
+  return withDatabase(database, (opened) =>
+    readDatabaseKeysInRangeOnConnection(opened, storeName, range),
+  );
 }
 
 function readDatabaseValue(database: DatabaseHandle, storeName: string, key: IDBValidKey) {
@@ -902,6 +932,21 @@ export const layer = Layer.effectContext(
           VCS_REFS_STORE_NAME,
           IDBKeyRange.bound(`${environmentId}:`, `${environmentId}:\uffff`),
         ).pipe(Effect.mapError((cause) => persistenceError("clear-vcs-refs", cause))),
+      listThreadIds: (environmentId) =>
+        readDatabaseKeysInRange(
+          database,
+          THREAD_STORE_NAME,
+          IDBKeyRange.bound(`${environmentId}:`, `${environmentId}:\uffff`),
+        ).pipe(
+          Effect.map((keys) =>
+            keys.flatMap((key) =>
+              typeof key === "string" && key.startsWith(`${environmentId}:`)
+                ? [ThreadId.make(key.slice(environmentId.length + 1))]
+                : [],
+            ),
+          ),
+          Effect.mapError((cause) => persistenceError("list-threads", cause)),
+        ),
       removeThread: (environmentId, threadId) =>
         removeDatabaseValue(
           database,

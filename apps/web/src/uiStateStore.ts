@@ -461,10 +461,34 @@ export function reorderThreads(
   };
 }
 
+export function removeThreadState(state: UiState, threadKey: string): UiState {
+  const { [threadKey]: _visitedAt, ...threadLastVisitedAtById } = state.threadLastVisitedAtById;
+  const { [threadKey]: _changedFiles, ...threadChangedFilesExpandedById } =
+    state.threadChangedFilesExpandedById;
+  let orderChanged = false;
+  const threadOrderByProjectKey = Object.fromEntries(
+    Object.entries(state.threadOrderByProjectKey).map(([projectKey, order]) => {
+      if (!order.includes(threadKey)) return [projectKey, order];
+      orderChanged = true;
+      return [projectKey, order.filter((key) => key !== threadKey)];
+    }),
+  );
+  if (_visitedAt === undefined && _changedFiles === undefined && !orderChanged) {
+    return state;
+  }
+  return {
+    ...state,
+    threadLastVisitedAtById,
+    threadChangedFilesExpandedById,
+    threadOrderByProjectKey,
+  };
+}
+
 interface UiStateStore extends UiState {
   markThreadVisited: (threadId: string, visitedAt: string) => void;
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
+  removeThread: (threadKey: string) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   setSidebarProjectScopeKey: (projectKey: string | null) => void;
   setPullRequestMergeMethod: (method: PullRequestMergeMethod) => void;
@@ -490,6 +514,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
+  removeThread: (threadKey) => set((state) => removeThreadState(state, threadKey)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
   setSidebarProjectScopeKey: (projectKey) =>

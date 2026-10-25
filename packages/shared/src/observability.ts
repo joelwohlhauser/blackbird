@@ -13,7 +13,7 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as Tracer from "effect/Tracer";
 import { OtlpResource, OtlpTracer, OtlpSerialization } from "effect/observability";
 
-import { makeAsyncRotatingFileSink } from "./logging.ts";
+import { makeAsyncRotatingFileSink, type RotatingFileSinkError } from "./logging.ts";
 
 export const OtlpProtocol = Schema.Literals(["http/json", "http/protobuf"]);
 export type OtlpProtocol = typeof OtlpProtocol.Type;
@@ -146,6 +146,7 @@ export interface TraceSink {
   readonly filePath: string;
   push: (record: TraceRecord) => void;
   flush: Effect.Effect<void>;
+  removeLines: (matches: (line: string) => boolean) => Effect.Effect<void, RotatingFileSinkError>;
   close: () => Effect.Effect<void>;
 }
 
@@ -361,6 +362,7 @@ export const makeTraceSink = Effect.fn("makeTraceSink")(function* (options: Trac
   }).pipe(Effect.orDie);
 
   let buffer: Array<{ readonly text: string; readonly bytes: number }> = [];
+  const forgotten: Array<(line: string) => boolean> = [];
   let bufferBytes = 0;
   const maxBufferBytes = Math.max(options.maxBytes, 4 * 1024 * 1024);
   const flushRequests = yield* Queue.sliding<void>(1);
@@ -475,6 +477,7 @@ export const makeTraceSink = Effect.fn("makeTraceSink")(function* (options: Trac
     push(record) {
       try {
         const text = `${JSON.stringify(record)}\n`;
+        if (forgotten.some((matches) => matches(text))) return;
         const bytes = Buffer.byteLength(text);
         if (bytes > options.maxBytes) return;
         if (bufferBytes + bytes > maxBufferBytes) {
@@ -491,6 +494,19 @@ export const makeTraceSink = Effect.fn("makeTraceSink")(function* (options: Trac
       }
     },
     flush,
+    removeLines: (matches) =>
+      flushSemaphore
+        .withPermits(1)(
+          Effect.sync(() => forgotten.push(matches)).pipe(
+            Effect.andThen(flushBuffered),
+            Effect.andThen(sink.removeLines(matches)),
+          ),
+        )
+        .pipe(
+          Effect.uninterruptible,
+          Effect.withTracerEnabled(false),
+          Effect.updateContext(Context.omit(Tracer.ParentSpan)<never>),
+        ),
     close: () => flush,
   } satisfies TraceSink;
 });

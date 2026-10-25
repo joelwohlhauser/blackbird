@@ -3,6 +3,7 @@ import * as HttpObservability from "@t3tools/shared/httpObservability";
 import { makeLocalFileTracer, makeTraceSink } from "@t3tools/shared/observability";
 import * as SharedObservability from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as References from "effect/References";
@@ -16,6 +17,11 @@ import * as ServerConfig from "../config.ts";
 import * as ResourceAttribution from "../resourceTelemetry/ResourceAttribution.ts";
 import * as ServerLogger from "../serverLogger.ts";
 import * as BrowserTraceCollector from "./BrowserTraceCollector.ts";
+
+export class ServerTraceFiles extends Context.Service<
+  ServerTraceFiles,
+  { readonly removeLines: SharedObservability.TraceSink["removeLines"] }
+>()("t3/observability/Observability/ServerTraceFiles") {}
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
@@ -76,6 +82,7 @@ export const layer = Layer.unwrap(
         return Layer.mergeAll(
           Layer.succeed(Tracer.Tracer, tracer),
           BrowserTraceCollector.layer(sink),
+          Layer.succeed(ServerTraceFiles, { removeLines: sink.removeLines }),
         );
       }),
     ).pipe(Layer.provide(OtlpExporter.layerFlusher), Layer.provideMerge(layerSerialization));

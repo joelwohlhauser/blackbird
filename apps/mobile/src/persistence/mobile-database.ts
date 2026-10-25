@@ -203,6 +203,10 @@ export class MobileDatabase extends Context.Service<
     readonly listCache: (
       kind: ClientCacheKind,
     ) => Effect.Effect<ReadonlyArray<string>, MobileDatabaseError>;
+    readonly listCacheKeys: (
+      environmentId: EnvironmentId,
+      kind: ClientCacheKind,
+    ) => Effect.Effect<ReadonlyArray<string>, MobileDatabaseError>;
     readonly saveCache: (
       environmentId: EnvironmentId,
       kind: ClientCacheKind,
@@ -314,6 +318,17 @@ const makeAvailable = Effect.gen(function* () {
           ),
         catch: databaseError("list-cache"),
       }).pipe(Effect.map((rows) => rows.map((row) => row.payload))),
+    ),
+    listCacheKeys: Effect.fn("MobileDatabase.listCacheKeys")((environmentId, kind) =>
+      Effect.tryPromise({
+        try: () =>
+          database.getAllAsync<{ readonly cache_key: string }>(
+            "SELECT cache_key FROM client_cache WHERE environment_id = ? AND kind = ?",
+            environmentId,
+            kind,
+          ),
+        catch: databaseError("list-cache"),
+      }).pipe(Effect.map((rows) => rows.map((row) => row.cache_key))),
     ),
     saveCache: Effect.fn("MobileDatabase.saveCache")(
       (environmentId, kind, cacheKey, schemaVersion, payload) =>
@@ -458,6 +473,7 @@ function makeUnavailable(error: MobileDatabaseError): MobileDatabase["Service"] 
   return MobileDatabase.of({
     loadCache: () => fail,
     listCache: () => fail,
+    listCacheKeys: () => fail,
     saveCache: () => fail,
     removeCache: () => fail,
     clearCacheKind: () => fail,

@@ -900,6 +900,130 @@ describe("CodexAdapterV2 session initialize", () => {
   );
 });
 
+describe("CodexAdapterV2 deleteNativeThread", () => {
+  const nativeThreadId = "019c1ee9-b35a-73f3-bf69-8572337df90a";
+  const deleteExchange = (
+    response: { readonly result: object } | { readonly error: object },
+  ): Array<CodexReplay.CodexAppServerReplayEntry> => [
+    {
+      type: "expect_outbound",
+      label: "initialize",
+      frame: {
+        id: 1,
+        method: "initialize",
+        params: {
+          clientInfo: { name: "T3 Code", title: "T3 Code", version: packageJson.version },
+          capabilities: { experimentalApi: true },
+        },
+      },
+    },
+    {
+      type: "emit_inbound",
+      label: "initialize",
+      frame: {
+        id: 1,
+        result: {
+          userAgent: "T3 Code/0.156.1",
+          codexHome: "/tmp/codex-home",
+          platformFamily: "unix",
+          platformOs: "macos",
+        },
+      },
+    },
+    { type: "expect_outbound", label: "initialized", frame: { method: "initialized" } },
+    {
+      type: "expect_outbound",
+      label: "thread/delete",
+      frame: { id: 2, method: "thread/delete", params: { threadId: nativeThreadId } },
+    },
+    { type: "emit_inbound", label: "thread/delete", frame: { id: 2, ...response } },
+  ];
+
+  it.effect("deletes through a fresh app-server and treats a missing thread as deleted", () =>
+    Effect.gen(function* () {
+      const transcript = makeCodexReplayTranscript({
+        scenario: "delete-native-thread",
+        entries: [
+          ...deleteExchange({ result: {} }),
+          ...deleteExchange({
+            error: { code: -32600, message: `thread not found: ${nativeThreadId}` },
+          }),
+          ...deleteExchange({
+            error: {
+              code: -32600,
+              message: "cannot delete thread while attached thread x exists",
+            },
+          }),
+        ],
+      });
+      const driver = yield* CodexReplay.makeReplayDriver(transcript);
+      const adapter = yield* CodexAdapterV2.makeCodexAdapterV2({
+        instanceId: CodexAdapterV2.CODEX_DEFAULT_INSTANCE_ID,
+        settings: DEFAULT_CODEX_SETTINGS,
+        environment: {},
+        clientFactory: {
+          open: (openInput) =>
+            Layer.build(CodexReplay.layerReplayWithDriver(driver)).pipe(
+              Effect.flatMap((context) =>
+                Effect.service(CodexClient.CodexAppServerClient).pipe(Effect.provide(context)),
+              ),
+              Effect.mapError(
+                (cause) =>
+                  new ProviderAdapter.ProviderAdapterOpenSessionError({
+                    driver: CodexAdapterV2.CODEX_DRIVER_KIND,
+                    providerSessionId: openInput.providerSessionId,
+                    cause,
+                  }),
+              ),
+            ),
+        },
+        crypto: yield* Crypto.Crypto,
+        fileSystem: yield* FileSystem.FileSystem,
+        idAllocator: yield* IdAllocator.IdAllocatorV2,
+        serverConfig: yield* makeReplayServerConfig(transcript.scenario).pipe(Effect.orDie),
+      });
+      const now = yield* DateTime.now;
+      const providerThread: OrchestrationV2ProviderThread = {
+        id: ProviderThreadId.make("provider-thread-codex-delete"),
+        driver: CodexAdapterV2.CODEX_DRIVER_KIND,
+        providerInstanceId: CodexAdapterV2.CODEX_DEFAULT_INSTANCE_ID,
+        providerSessionId: null,
+        appThreadId: ThreadId.make("thread-codex-delete"),
+        ownerNodeId: null,
+        nativeThreadRef: {
+          driver: CodexAdapterV2.CODEX_DRIVER_KIND,
+          nativeId: nativeThreadId,
+          strength: "strong",
+        },
+        nativeConversationHeadRef: null,
+        status: "idle",
+        firstRunOrdinal: 1,
+        lastRunOrdinal: 1,
+        handoffIds: [],
+        forkedFrom: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const deleteNativeThread = adapter.deleteNativeThread;
+      assert.isDefined(deleteNativeThread);
+
+      yield* deleteNativeThread({ providerThread });
+      yield* deleteNativeThread({ providerThread });
+      const failure = yield* Effect.flip(deleteNativeThread({ providerThread }));
+
+      assert.equal(failure._tag, "ProviderAdapterDeleteNativeThreadError");
+      assert.deepEqual(yield* Ref.get(driver.state), {
+        cursor: transcript.entries.length,
+        failure: null,
+      });
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+});
+
 describe("CodexAdapterV2 post-settle continuation", () => {
   // The harness notifies after every recorded event or continuation, so a wait
   // re-checks exactly when the state it reads changes. Subscribing before the

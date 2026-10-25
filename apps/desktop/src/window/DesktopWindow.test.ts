@@ -296,6 +296,7 @@ function layerTest(input: {
         Layer.succeed(DesktopRendererHistory.DesktopRendererHistory, {
           register: () => Effect.void,
           recordMetrics: () => Effect.void,
+          forgetThread: () => Effect.void,
           shutdown: Effect.void,
         }),
         layerDesktopEnvironment,
@@ -417,6 +418,7 @@ const makeSplashScenario = (createOutcomes: readonly (Electron.BrowserWindow | n
           Layer.succeed(DesktopRendererHistory.DesktopRendererHistory, {
             register: () => Effect.void,
             recordMetrics: () => Effect.void,
+            forgetThread: () => Effect.void,
             shutdown: Effect.void,
           }),
           layerDesktopEnvironment,

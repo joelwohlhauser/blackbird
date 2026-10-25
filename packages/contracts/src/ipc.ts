@@ -11,7 +11,7 @@ import type {
 } from "./browserImport.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
-import { ExecutionEnvironmentDescriptor } from "./environment.ts";
+import { ExecutionEnvironmentDescriptor, type ScopedThreadRef } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
 import type { LinearAccount, LinearIssue, LinearIssueStatus } from "./linear.ts";
@@ -1065,6 +1065,7 @@ export interface DesktopBridge {
    * only the main process can spend a notification click's activation token.
    */
   revealWindow?: () => Promise<void>;
+  forgetThread?: (threadRef: ScopedThreadRef) => Promise<void>;
   /**
    * The OS locale as a BCP-47 tag, which the renderer cannot read for itself:
    * the packaged app ships only the `en-US` Chromium locale pak, so

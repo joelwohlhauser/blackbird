@@ -120,4 +120,13 @@ describe("closedViewStore", () => {
     expect(saved).not.toContain("private.example");
     expect(saved).not.toContain("Private page");
   });
+
+  it("forgets every closed view of a removed thread", () => {
+    useClosedViewStore.getState().remember(diff(refA));
+    const keptId = useClosedViewStore.getState().remember(diff(refB));
+
+    useClosedViewStore.getState().removeThread(refA);
+
+    expect(useClosedViewStore.getState().entries.map((entry) => entry.id)).toEqual([keptId]);
+  });
 });

@@ -113,6 +113,16 @@ describe("useBrowserHistoryStore", () => {
     resetBrowserHistoryForTests();
   });
 
+  it("forgets a removed thread's project mapping and pending visits", () => {
+    recordVisitForThread(threadRef, "http://pending.test/", 1);
+    useBrowserHistoryStore.getState().removeThread(threadRef);
+    expect(useBrowserHistoryStore.getState().pendingVisitsByThreadKey).toEqual({});
+
+    useBrowserHistoryStore.getState().registerThreadProject(threadRef, "proj-a");
+    useBrowserHistoryStore.getState().removeThread(threadRef);
+    expect(useBrowserHistoryStore.getState().projectKeyByThreadKey).toEqual({});
+  });
+
   it("sets titles update-only via the thread helper", () => {
     useBrowserHistoryStore.getState().registerThreadProject(threadRef, "proj-a");
     setTitleForThreadUrl(threadRef, "http://a.test/", "Should not create");

@@ -41,6 +41,7 @@ const DESKTOP_BACKEND_OUTPUT_BUFFER_MAX_CHUNKS = 256;
 export interface RotatingLogFileWriter {
   readonly writeBytes: (chunk: Uint8Array) => Effect.Effect<void>;
   readonly writeText: (chunk: string) => Effect.Effect<void>;
+  readonly removeLines: (matches: (line: string) => boolean) => Effect.Effect<void>;
 }
 
 export interface DesktopBackendOutputLogShape {
@@ -315,11 +316,35 @@ export const makeRotatingLogFileWriter = Effect.fn("makeRotatingLogFileWriter")(
     );
   };
 
+  const removeLines = (matches: (line: string) => boolean): Effect.Effect<void> =>
+    mutex.withPermits(1)(
+      Effect.gen(function* () {
+        const files = [
+          input.filePath,
+          ...Array.from({ length: maxFiles }, (_, index) => withSuffix(index + 1)),
+        ];
+        for (const file of files) {
+          const text = yield* fileSystem.readFileString(file).pipe(Effect.orElseSucceed(() => ""));
+          const lines = text.split("\n");
+          const kept = lines.filter((line) => !matches(line));
+          if (kept.length === lines.length) continue;
+          const temporary = `${file}.scrub`;
+          yield* fileSystem.writeFileString(temporary, kept.join("\n"));
+          yield* fileSystem.rename(temporary, file);
+        }
+      }).pipe(
+        Effect.ignore,
+        Effect.andThen(refreshFileSize(fileSystem, input.filePath)),
+        Effect.flatMap((size) => Ref.set(currentSize, size)),
+      ),
+    );
+
   yield* pruneOverflowBackups;
 
   return {
     writeBytes,
     writeText: (chunk) => writeBytes(textEncoder.encode(chunk)),
+    removeLines,
   } satisfies RotatingLogFileWriter;
 });
 

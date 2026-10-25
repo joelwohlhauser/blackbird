@@ -26,9 +26,10 @@ import * as ConnectionWakeups from "../connection/wakeups.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import * as Persistence from "../platform/persistence.ts";
 import { runCachePersistence } from "./cachePersistence.ts";
-import { subscribeDynamic } from "../rpc/client.ts";
+import { requestGuarded, subscribeDynamic } from "../rpc/client.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import * as ShellSnapshotLoader from "./shellSnapshotHttp.ts";
+import * as ThreadSnapshotHttp from "./threadSnapshotHttp.ts";
 import type { DeferredShellSnapshot } from "./shellPullRequests.ts";
 import {
   applyShellStreamEvent,
@@ -70,6 +71,8 @@ const SHELL_SYNCHRONIZATION_ERROR_MESSAGE = "Could not synchronize environment d
 export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")(function* () {
   const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
   const cache = yield* Persistence.EnvironmentCacheStore;
+  const threadOwnedDataCleanup = yield* Persistence.ThreadOwnedDataCleanup;
+  const threadSnapshotLoader = yield* Effect.serviceOption(ThreadSnapshotHttp.ThreadSnapshotLoader);
   const snapshotLoader = yield* ShellSnapshotLoader.ShellSnapshotLoader;
   const wakeups = yield* Effect.serviceOption(ConnectionWakeups.ConnectionWakeups);
   const environmentId = supervisor.target.environmentId;
@@ -178,6 +181,86 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
   // time, so neither can overwrite what the other wrote in between.
   const snapshotWriteLock = yield* Semaphore.make(1);
 
+  const forgetDeletedThread = Effect.fn("EnvironmentShellState.forgetDeletedThread")(function* (
+    threadId: ThreadId,
+  ) {
+    yield* cache
+      .removeThread(environmentId, threadId)
+      .pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("Could not remove the cached thread.").pipe(
+            Effect.annotateLogs({ environmentId, threadId, ...safeErrorLogAttributes(error) }),
+          ),
+        ),
+      );
+    yield* threadOwnedDataCleanup.clear(environmentId, threadId);
+  });
+
+  let reconcilingPersistedThreads = false;
+  const reconcilePersistedThreads = Effect.fn("EnvironmentShellState.reconcilePersistedThreads")(
+    function* () {
+      if (Option.isNone(threadSnapshotLoader)) return;
+      const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+      if (Option.isNone(prepared)) return;
+      const current = yield* SubscriptionRef.get(state);
+      const active = new Set(
+        Option.match(current.snapshot, {
+          onNone: () => [],
+          onSome: (snapshot) => snapshot.threads.map((thread) => thread.id),
+        }),
+      );
+      const cachedThreadIds =
+        cache.listThreadIds === undefined ? [] : yield* cache.listThreadIds(environmentId);
+      const ownedThreadIds = yield* threadOwnedDataCleanup.threadIds(environmentId);
+      const candidates = new Set(
+        [...cachedThreadIds, ...ownedThreadIds].filter((threadId) => !active.has(threadId)),
+      );
+      if (candidates.size === 0) return;
+      const archived = yield* requestGuarded(
+        ORCHESTRATION_V2_WS_METHODS.getArchivedShellSnapshot,
+        {},
+      ).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+      for (const thread of archived.threads) candidates.delete(thread.id);
+      yield* Effect.forEach(
+        candidates,
+        (threadId) =>
+          threadSnapshotLoader.value
+            .load(prepared.value, threadId)
+            .pipe(
+              Effect.flatMap((result) =>
+                result._tag === "missing" ||
+                (result._tag === "present" && result.snapshot.projection.thread.deletedAt !== null)
+                  ? forgetDeletedThread(threadId)
+                  : Effect.void,
+              ),
+            ),
+        { concurrency: 4, discard: true },
+      );
+    },
+    (effect) =>
+      Effect.suspend(() => {
+        if (reconcilingPersistedThreads) return Effect.void;
+        reconcilingPersistedThreads = true;
+        return effect.pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterrupts(cause),
+            (cause) =>
+              Effect.logWarning("Could not reconcile persisted threads.").pipe(
+                Effect.annotateLogs({
+                  environmentId,
+                  ...safeErrorLogAttributes(Cause.squash(cause)),
+                }),
+              ),
+          ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              reconcilingPersistedThreads = false;
+            }),
+          ),
+        );
+      }),
+  );
+
   const applyItems = Effect.fn("EnvironmentShellState.applyItems")(function* (
     items: ReadonlyArray<OrchestrationV2ShellStreamItem>,
     pendingLinkIds?: ReadonlySet<ThreadId>,
@@ -186,7 +269,12 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
     let waiting = yield* Ref.get(awaitingCompletion);
     let next = initial;
     let receivedSnapshot = false;
+    let receivedAuthoritativeThreads = false;
+    const deletedThreadIds: ThreadId[] = [];
     for (const item of items) {
+      if (item.kind === "thread.removed" && item.deleted === true) {
+        deletedThreadIds.push(item.threadId);
+      }
       if (item.kind === "synchronized") {
         waiting = false;
         if (Option.isSome(next.snapshot)) {
@@ -214,6 +302,8 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
             });
       if (nextSnapshot === null) continue;
       receivedSnapshot ||= item.kind === "snapshot";
+      receivedAuthoritativeThreads ||=
+        item.kind === "snapshot" && item.resolvedRepositoryIdentityRoots === undefined;
       next = {
         snapshot: Option.some(nextSnapshot),
         status: waiting ? "synchronizing" : "live",
@@ -221,6 +311,7 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
       };
     }
     yield* Ref.set(awaitingCompletion, waiting);
+    yield* Effect.forEach(deletedThreadIds, forgetDeletedThread, { discard: true });
     if (next === initial) return;
     if (pendingLinkIds !== undefined && Option.isSome(next.snapshot)) {
       pendingLinkRows = new Set(
@@ -235,6 +326,9 @@ export const makeEnvironmentShellState = Effect.fn("EnvironmentShellState.make")
       const session = yield* Ref.get(activeSubscriptionSession);
       if (session !== null) {
         yield* Ref.set(lastAuthoritativeSession, session);
+        if (receivedAuthoritativeThreads) {
+          yield* reconcilePersistedThreads().pipe(Effect.forkIn(stateScope));
+        }
       }
     }
     if (next.snapshot !== initial.snapshot && Option.isSome(next.snapshot)) {

@@ -7,8 +7,10 @@ import {
   RunId,
   type OrchestrationV2UserInputQuestion,
   type OrchestrationV2RuntimeRequest,
+  type OrchestrationV2ProviderThread,
   ProviderInstanceId,
   ProviderSessionId,
+  ProviderThreadId,
   type RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
@@ -357,6 +359,75 @@ describe("Grok launch permission mode", () => {
         ["--permission-mode", "default", "agent", "stdio"],
       ]);
     }),
+  );
+});
+
+describe("Grok deleteNativeThread", () => {
+  const layerHost = TestProviderHost.layer().pipe(Layer.provide(NodeServices.layer));
+  const layerTest = Layer.mergeAll(
+    NodeServices.layer,
+    IdAllocator.layer,
+    McpProviderSessions.layer,
+    layerHost,
+  );
+
+  it.effect("removes the session from every workspace folder and succeeds when it is gone", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const grokHome = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-grok-delete-" });
+      const sessionId = "01a03327-0c08-77f0-b22a-80f19bb2f957";
+      const sessions = path.join(grokHome, "sessions");
+      const write = (file: string) =>
+        fileSystem
+          .makeDirectory(path.dirname(file), { recursive: true })
+          .pipe(Effect.andThen(fileSystem.writeFileString(file, "{}\n")));
+      yield* write(path.join(sessions, "%2Fworkspace", sessionId, "chat_history.jsonl"));
+      yield* write(path.join(sessions, "%2Fworkspace%2Fworktree", sessionId, "events.jsonl"));
+      yield* write(path.join(sessions, "%2Fworkspace", "other-session", "chat_history.jsonl"));
+      yield* write(path.join(sessions, ".DS_Store"));
+      const instanceId = ProviderInstanceId.make("grok-delete-test");
+      const adapter = yield* makeGrokAdapterV2({
+        instanceId,
+        settings: LAUNCH_TEST_GROK_SETTINGS,
+        environment: { GROK_HOME: grokHome },
+        hostPlatform: "darwin",
+        selfInvocation: yield* resolveSelfInvocation(),
+      });
+      const now = yield* DateTime.now;
+      const providerThread: OrchestrationV2ProviderThread = {
+        id: ProviderThreadId.make("provider-thread-grok-delete"),
+        driver: GROK_PROVIDER,
+        providerInstanceId: instanceId,
+        providerSessionId: null,
+        appThreadId: ThreadId.make("thread-grok-delete"),
+        ownerNodeId: null,
+        nativeThreadRef: { driver: GROK_PROVIDER, nativeId: sessionId, strength: "strong" },
+        nativeConversationHeadRef: null,
+        status: "idle",
+        firstRunOrdinal: 1,
+        lastRunOrdinal: 1,
+        handoffIds: [],
+        forkedFrom: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const deleteNativeThread = adapter.deleteNativeThread;
+      assert.isDefined(deleteNativeThread);
+
+      yield* deleteNativeThread({ providerThread });
+      yield* deleteNativeThread({ providerThread });
+
+      assert.isFalse(yield* fileSystem.exists(path.join(sessions, "%2Fworkspace", sessionId)));
+      assert.isFalse(
+        yield* fileSystem.exists(path.join(sessions, "%2Fworkspace%2Fworktree", sessionId)),
+      );
+      assert.isTrue(yield* fileSystem.exists(path.join(sessions, "%2Fworkspace", "other-session")));
+    }).pipe(
+      Effect.scoped,
+      Effect.provideService(HostProcess.Platform, "darwin"),
+      Effect.provide(layerTest),
+    ),
   );
 });
 

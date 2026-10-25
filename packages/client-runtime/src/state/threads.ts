@@ -167,6 +167,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
 ) {
   const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
   const cache = yield* Persistence.EnvironmentCacheStore;
+  const threadOwnedDataCleanup = yield* Persistence.ThreadOwnedDataCleanup;
   const snapshotLoader = yield* ThreadSnapshotLoader.ThreadSnapshotLoader;
   const historyController = yield* Effect.serviceOption(
     ThreadHistoryController.ThreadHistoryController,
@@ -419,6 +420,7 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
         ),
       ),
     );
+    yield* threadOwnedDataCleanup.clear(environmentId, threadId);
   });
 
   type EventItem = Extract<OrchestrationV2ThreadStreamItem, { kind: "event" }>;

@@ -22,6 +22,7 @@ import * as DesktopRendererHistory from "./DesktopRendererHistory.ts";
 const layerHistory = Layer.succeed(DesktopRendererHistory.DesktopRendererHistory, {
   register: () => Effect.void,
   recordMetrics: () => Effect.void,
+  forgetThread: () => Effect.void,
   shutdown: Effect.void,
 });
 

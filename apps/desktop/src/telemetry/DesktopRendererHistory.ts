@@ -1,3 +1,4 @@
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import type * as Electron from "electron";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -24,6 +25,7 @@ export class DesktopRendererHistory extends Context.Service<
       identity: RendererIdentity,
     ) => Effect.Effect<void>;
     readonly recordMetrics: (metrics: ReadonlyArray<Electron.ProcessMetric>) => Effect.Effect<void>;
+    readonly forgetThread: (threadRef: ScopedThreadRef) => Effect.Effect<void>;
     readonly shutdown: Effect.Effect<void>;
   }
 >()("@t3tools/desktop/telemetry/DesktopRendererHistory") {}
@@ -69,6 +71,19 @@ interface TrackedRenderer {
   readonly removeListeners: () => void;
 }
 
+const threadTabIdPrefix = (threadRef: ScopedThreadRef): string =>
+  `${JSON.stringify([threadRef.environmentId, threadRef.threadId]).slice(0, -1)},`;
+
+const recordTabId = (line: string): string | undefined => {
+  try {
+    const record: unknown = JSON.parse(line);
+    if (typeof record !== "object" || record === null || !("tabId" in record)) return undefined;
+    return typeof record.tabId === "string" ? record.tabId : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const nonnegative = (value: number): number | null =>
   Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 
@@ -89,13 +104,21 @@ const make = Effect.fn("DesktopRendererHistory.make")(function* () {
   }).pipe(
     Effect.catch(() =>
       Effect.logWarning("Renderer incident history could not be opened.").pipe(
-        Effect.as({ writeText: (_chunk: string) => Effect.void }),
+        Effect.as({
+          writeText: (_chunk: string) => Effect.void,
+          removeLines: (_matches: (line: string) => boolean) => Effect.void,
+        }),
       ),
     ),
   );
 
+  const forgottenTabIdPrefixes = new Set<string>();
+  const isForgottenTabId = (tabId: string | undefined) =>
+    tabId !== undefined && [...forgottenTabIdPrefixes].some((prefix) => tabId.startsWith(prefix));
   const writeRecord = (record: RendererRecord) =>
-    writer.writeText(`${JSON.stringify(record)}\n`).pipe(Effect.ignore);
+    isForgottenTabId(record.tabId)
+      ? Effect.void
+      : writer.writeText(`${JSON.stringify(record)}\n`).pipe(Effect.ignore);
   const writerFiber = yield* Effect.forever(
     Effect.uninterruptibleMask((restore) =>
       restore(Queue.take(records)).pipe(Effect.flatMap(writeRecord)),
@@ -269,6 +292,12 @@ const make = Effect.fn("DesktopRendererHistory.make")(function* () {
         () => Effect.void,
       ),
     );
+  const forgetThread = (threadRef: ScopedThreadRef) => {
+    const prefix = threadTabIdPrefix(threadRef);
+    return Effect.sync(() => forgottenTabIdPrefixes.add(prefix)).pipe(
+      Effect.andThen(writer.removeLines((line) => recordTabId(line)?.startsWith(prefix) === true)),
+    );
+  };
   const shutdown = Effect.sync(() => {
     accepting = false;
     for (const renderer of active.values()) renderer.removeListeners();
@@ -276,7 +305,7 @@ const make = Effect.fn("DesktopRendererHistory.make")(function* () {
   }).pipe(Effect.andThen(Fiber.interrupt(writerFiber)), Effect.asVoid);
   yield* Effect.addFinalizer(() => shutdown);
 
-  return DesktopRendererHistory.of({ register, recordMetrics, shutdown });
+  return DesktopRendererHistory.of({ register, recordMetrics, forgetThread, shutdown });
 });
 
 export const layer = Layer.effect(DesktopRendererHistory, make());

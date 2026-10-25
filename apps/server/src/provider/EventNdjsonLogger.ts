@@ -15,6 +15,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
@@ -68,6 +69,7 @@ export type EventNdjsonStream = "native" | "canonical" | "orchestration";
 export interface EventNdjsonLogStore {
   readonly filePath: string;
   readonly logger: (stream: EventNdjsonStream) => ProviderEventLoggers.EventNdjsonLogger;
+  readonly forgetThread: (threadId: ThreadId) => Effect.Effect<void, PlatformError.PlatformError>;
   readonly close: () => Effect.Effect<void>;
 }
 
@@ -373,7 +375,7 @@ export function boundProviderEventForLogging(event: unknown): unknown {
 }
 
 export const writeBatchedMessages = Effect.fnUntraced(function* (
-  sink: AsyncFileSink,
+  sink: Pick<AsyncFileSink, "write">,
   records: ReadonlyArray<PendingRecord>,
   maxBytes: number,
   onWritten: (records: ReadonlyArray<PendingRecord>) => void,
@@ -753,6 +755,7 @@ export const makeEventNdjsonLogStore = Effect.fnUntraced(function* (
     yield* Scope.close(timerScope, Exit.void);
   });
 
+  const forgottenSegments = new Set<string>();
   const loggerViews = new Map<EventNdjsonStream, ProviderEventLoggers.EventNdjsonLogger>();
   const logger = (stream: EventNdjsonStream): ProviderEventLoggers.EventNdjsonLogger => {
     const existing = loggerViews.get(stream);
@@ -771,12 +774,13 @@ export const makeEventNdjsonLogStore = Effect.fnUntraced(function* (
       const observedAt = yield* DateTime.now.pipe(Effect.map(DateTime.formatIso));
       const line = `[${observedAt}] ${resolveStreamLabel(stream)}: ${payload}\n`;
       const bytes = Buffer.byteLength(line);
+      const threadSegment = resolveThreadSegment(threadId);
       const action = yield* SynchronizedRef.modifyEffect(stateRef, (state) => {
-        if (state.closed) {
+        if (state.closed || forgottenSegments.has(threadSegment)) {
           return Effect.succeed([{ flush: false }, state] as const);
         }
         const pending = state.pending;
-        pending.push({ stream, threadSegment: resolveThreadSegment(threadId), line, bytes });
+        pending.push({ stream, threadSegment, line, bytes });
         const pendingBytes = state.pendingBytes + bytes;
         const flush =
           resolved.batchWindowMs === 0 ||
@@ -808,7 +812,31 @@ export const makeEventNdjsonLogStore = Effect.fnUntraced(function* (
     return view;
   };
 
-  return { filePath, logger, close } satisfies EventNdjsonLogStore;
+  const forgetThread = (threadId: ThreadId) =>
+    SynchronizedRef.updateEffect(stateRef, (state) =>
+      Effect.gen(function* () {
+        const threadSegment = resolveThreadSegment(threadId);
+        forgottenSegments.add(threadSegment);
+        const base = providerLogPath(directory, filePrefix, threadSegment);
+        for (const file of [
+          base,
+          ...Array.from({ length: resolved.maxFiles }, (_, index) => `${base}.${index + 1}`),
+        ]) {
+          yield* fs.remove(file, { force: true });
+        }
+        const pending = state.pending.filter((record) => record.threadSegment !== threadSegment);
+        const sinks = new Map(state.sinks);
+        sinks.delete(threadSegment);
+        return {
+          ...state,
+          pending,
+          pendingBytes: pending.reduce((total, record) => total + record.bytes, 0),
+          sinks,
+        };
+      }),
+    ).pipe(Effect.uninterruptible);
+
+  return { filePath, logger, forgetThread, close } satisfies EventNdjsonLogStore;
 });
 
 export const makeEventNdjsonLogger = Effect.fnUntraced(function* (

@@ -28,6 +28,7 @@ interface ClosedViewStoreState {
   remember: (view: ClosedView) => string;
   defer: (id: string) => void;
   remove: (id: string) => void;
+  removeThread: (ref: ScopedThreadRef) => void;
 }
 
 const sameTarget = (entry: ClosedViewEntry, view: ClosedView): boolean => {
@@ -121,6 +122,14 @@ export const useClosedViewStore = create<ClosedViewStoreState>()(
         }),
       remove: (id) =>
         set((state) => ({ entries: state.entries.filter((entry) => entry.id !== id) })),
+      removeThread: (ref) =>
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          const entries = state.entries.filter(
+            (entry) => scopedThreadKey(entry.threadRef) !== threadKey,
+          );
+          return entries.length === state.entries.length ? state : { entries };
+        }),
     }),
     {
       name: "t3code:closed-views:v2",

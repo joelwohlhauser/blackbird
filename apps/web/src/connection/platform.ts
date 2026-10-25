@@ -20,7 +20,10 @@ import {
   Wakeups,
 } from "@t3tools/client-runtime/connection";
 import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
-import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
+import {
+  fetchRemoteEnvironmentDescriptor,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import { managedRelayAccountChanges, managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
 import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
 import {
@@ -50,6 +53,7 @@ import {
   type PrimaryEnvironmentTarget,
 } from "../environments/primary/target";
 import { clearComposerDraftsEnvironment } from "../composerDraftStore";
+import { forgetThread, persistedThreadIds } from "../forgetThread";
 import { isHostedStaticApp } from "../hostedPairing";
 import { isLocalEnvironmentDisabled } from "../localEnvironment";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -794,6 +798,15 @@ const layerEnvironmentOwnedDataCleanup = Layer.succeed(
   }),
 );
 
+const layerThreadOwnedDataCleanup = Layer.succeed(
+  Persistence.ThreadOwnedDataCleanup,
+  Persistence.ThreadOwnedDataCleanup.of({
+    threadIds: (environmentId) => Effect.sync(() => persistedThreadIds(environmentId)),
+    clear: (environmentId, threadId) =>
+      Effect.sync(() => forgetThread(scopeThreadRef(environmentId, threadId))),
+  }),
+);
+
 const layerRpcRequestObserver = Layer.succeed(
   EnvironmentRpcRequestObserver,
   EnvironmentRpcRequestObserver.of({
@@ -816,6 +829,7 @@ type ConnectionPlatformLayerSource =
   | typeof layerCapabilities
   | typeof layerPlatformConnectionSource
   | typeof layerEnvironmentOwnedDataCleanup
+  | typeof layerThreadOwnedDataCleanup
   | typeof layerRpcRequestObserver;
 
 export const layer: Layer.Layer<
@@ -829,5 +843,6 @@ export const layer: Layer.Layer<
   layerCapabilities,
   layerPlatformConnectionSource,
   layerEnvironmentOwnedDataCleanup,
+  layerThreadOwnedDataCleanup,
   layerRpcRequestObserver,
 );

@@ -38,6 +38,7 @@ import * as ServerConfig from "./config.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
+import * as ThreadPurge from "./orchestration-v2/ThreadPurge.ts";
 import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import { threadHasQueuedTurnStart } from "./orchestration-v2/ThreadSettlementService.ts";
@@ -214,6 +215,7 @@ const make = Effect.gen(function* () {
   const settingsService = yield* Settings.ServerSettingsService;
   const projectStore = yield* ProjectStore.ProjectStoreV2;
   const engine = yield* Orchestrator.OrchestratorV2;
+  const threadPurge = yield* ThreadPurge.ThreadPurge;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
   const sql = yield* SqlClient.SqlClient;
@@ -1135,6 +1137,7 @@ const make = Effect.gen(function* () {
         }),
       ),
     );
+    yield* threadPurge.purgeDeletedThreads;
     for (const category of [
       {
         kind: "browser-artifacts" as const,
@@ -1276,12 +1279,15 @@ const make = Effect.gen(function* () {
     );
     yield* forkParked(
       Stream.runForEach(events, (event) =>
-        (event.type === "thread.deleted" ||
-          (event.type === "provider-session.updated" &&
-            (event.payload.status === "stopped" || event.payload.status === "error"))) &&
-        anyWorktreePolicy(lastSettings, (rules) => rules.worktreeOnDelete)
-          ? requestSweep
-          : Effect.void,
+        event.type === "thread.deleted"
+          ? threadPurge
+              .afterDeletion(event.threadId)
+              .pipe(Effect.andThen(requestSweep), Effect.forkScoped, Effect.asVoid)
+          : event.type === "provider-session.updated" &&
+              (event.payload.status === "stopped" || event.payload.status === "error") &&
+              anyWorktreePolicy(lastSettings, (rules) => rules.worktreeOnDelete)
+            ? requestSweep
+            : Effect.void,
       ).pipe(
         Effect.catchCause((cause) =>
           Effect.logWarning("Storage cleanup event stream failed", { cause }),

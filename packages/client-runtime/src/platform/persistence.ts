@@ -30,6 +30,7 @@ export class ConnectionPersistenceError extends Schema.TaggedError<ConnectionPer
       "load-thread",
       "save-thread",
       "remove-thread",
+      "list-threads",
       "load-server-config",
       "save-server-config",
       "load-vcs-refs",
@@ -102,6 +103,9 @@ export class EnvironmentCacheStore extends Context.Service<
       environmentId: EnvironmentId,
       threadId: ThreadId,
     ) => Effect.Effect<void, ConnectionPersistenceError>;
+    readonly listThreadIds?: (
+      environmentId: EnvironmentId,
+    ) => Effect.Effect<ReadonlyArray<ThreadId>, ConnectionPersistenceError>;
     readonly loadServerConfig: (
       environmentId: EnvironmentId,
     ) => Effect.Effect<Option.Option<ServerConfig>, ConnectionPersistenceError>;
@@ -143,6 +147,16 @@ export class EnvironmentOwnedDataCleanup extends Context.Reference<{
   readonly clear: (environmentId: EnvironmentId) => Effect.Effect<void>;
 }>("@t3tools/client-runtime/platform/persistence/EnvironmentOwnedDataCleanup", {
   defaultValue: () => ({
+    clear: () => Effect.void,
+  }),
+}) {}
+
+export class ThreadOwnedDataCleanup extends Context.Reference<{
+  readonly threadIds: (environmentId: EnvironmentId) => Effect.Effect<ReadonlyArray<ThreadId>>;
+  readonly clear: (environmentId: EnvironmentId, threadId: ThreadId) => Effect.Effect<void>;
+}>("@t3tools/client-runtime/platform/persistence/ThreadOwnedDataCleanup", {
+  defaultValue: () => ({
+    threadIds: () => Effect.succeed([]),
     clear: () => Effect.void,
   }),
 }) {}

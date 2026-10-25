@@ -10,6 +10,7 @@ import {
   type PersistedUiState,
   persistState,
   reorderProjects,
+  removeThreadState,
   reorderThreads,
   resolveProjectExpanded,
   setProjectExpanded,
@@ -115,6 +116,27 @@ describe("uiStateStore pure functions", () => {
       "project-b": ["thread-4", "thread-3"],
     });
     expect(reorderThreads(next, "project-a", ["thread-1"], "missing", "thread-1")).toBe(next);
+  });
+
+  it("removes a thread's visit marker, changed-files expansion, and manual order", () => {
+    const state = makeUiState({
+      threadLastVisitedAtById: { "env:thread-1": "2026-01-01T00:00:00.000Z", "env:thread-2": "x" },
+      threadChangedFilesExpandedById: { "env:thread-1": { "run-1": true } },
+      threadOrderByProjectKey: {
+        "project-a": ["env:thread-2", "env:thread-1"],
+        "project-b": ["env:thread-3"],
+      },
+    });
+
+    const next = removeThreadState(state, "env:thread-1");
+
+    expect(next.threadLastVisitedAtById).toEqual({ "env:thread-2": "x" });
+    expect(next.threadChangedFilesExpandedById).toEqual({});
+    expect(next.threadOrderByProjectKey).toEqual({
+      "project-a": ["env:thread-2"],
+      "project-b": ["env:thread-3"],
+    });
+    expect(removeThreadState(next, "env:thread-1")).toBe(next);
   });
 });
 

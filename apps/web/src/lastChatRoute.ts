@@ -29,6 +29,14 @@ export function writeLastChatPath(storage: ChatRouteStorage, pathname: string): 
   }
 }
 
+export function forgetLastChatPath(pathname: string): void {
+  try {
+    if (window.localStorage.getItem(LAST_CHAT_ROUTE_STORAGE_KEY) === pathname) {
+      window.localStorage.removeItem(LAST_CHAT_ROUTE_STORAGE_KEY);
+    }
+  } catch {}
+}
+
 export function resolveStartupChatPath(
   currentPath: string,
   persistedPath: string | null,

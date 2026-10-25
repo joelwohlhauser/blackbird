@@ -1971,6 +1971,8 @@ const makeClaudeUserMessageWithAttachments = Effect.fnUntraced(function* (input:
   } satisfies SDKUserMessage;
 });
 
+const CLAUDE_SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function isClaudePromptUuid(value: string): value is NonNullable<SDKUserMessage["uuid"]> {
   return /^[^-]+-[^-]+-[^-]+-[^-]+-[^-]+$/.test(value);
 }
@@ -4020,6 +4022,49 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
     driver: CLAUDE_PROVIDER,
     getCapabilities: () => Effect.succeed(ClaudeProviderCapabilitiesV2),
     planSelectionTransition: () => Effect.succeed(turnScopedSelectionTransition()),
+    deleteNativeThread: Effect.fn("ClaudeAdapterV2.deleteNativeThread")(
+      function* ({ providerThread }) {
+        const sessionId = providerThread.nativeThreadRef?.nativeId;
+        if (!sessionId || !CLAUDE_SESSION_ID_PATTERN.test(sessionId)) return;
+        const children = (root: string) =>
+          fileSystem.readDirectory(root).pipe(
+            Effect.map((names) => names.map((name) => path.join(root, name))),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])),
+          );
+        const tmpRoot = claudeTaskOutputRoot(adapterOptions.environment, path);
+        const targets = [
+          ...(yield* children(path.join(homePath, "projects"))).flatMap((project) => [
+            path.join(project, `${sessionId}.jsonl`),
+            path.join(project, sessionId),
+          ]),
+          ...["session-env", "file-history", "tasks"].map((folder) =>
+            path.join(homePath, folder, sessionId),
+          ),
+          ...(tmpRoot === undefined ? [] : yield* children(tmpRoot)).map((project) =>
+            path.join(project, sessionId),
+          ),
+        ];
+        yield* Effect.forEach(
+          targets,
+          (target) =>
+            fileSystem
+              .remove(target, { recursive: true, force: true })
+              .pipe(Effect.catchReason("PlatformError", "BadResource", () => Effect.void)),
+          { discard: true },
+        );
+      },
+      (effect, { providerThread }) =>
+        effect.pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapter.ProviderAdapterDeleteNativeThreadError({
+                driver: CLAUDE_PROVIDER,
+                providerThreadId: providerThread.id,
+                cause,
+              }),
+          ),
+        ),
+    ),
     openSession: Effect.fn("ClaudeAdapterV2.openSession")(
       function* (input: ProviderAdapter.ProviderAdapterV2OpenSessionInput) {
         const sessionScope = yield* Effect.scope;

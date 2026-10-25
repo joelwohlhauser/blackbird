@@ -17,6 +17,7 @@ const layerSetup = Layer.effectDiscard(
     // CLI and server write from separate processes; wait rather than fail with SQLITE_BUSY.
     yield* sql`PRAGMA busy_timeout = 5000;`;
     yield* sql`PRAGMA foreign_keys = ON;`;
+    yield* sql`PRAGMA secure_delete = ON;`;
     // Only an empty file can switch modes here; an existing database needs the
     // offline VACUUM that `t3 doctor` runs, which rebuilds it with pointer maps.
     const tables = yield* sql<{

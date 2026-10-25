@@ -126,6 +126,7 @@ const makeHarness = Effect.fn("TestEnvironmentThreads.makeHarness")(function* (o
   const wakeups = yield* Queue.unbounded<ConnectionWakeups.ConnectionWakeup>();
   const savedThreads = yield* Ref.make<ReadonlyArray<OrchestrationV2ThreadDetailSnapshot>>([]);
   const removedThreads = yield* Ref.make<ReadonlyArray<ThreadId>>([]);
+  const forgottenThreads = yield* Queue.unbounded<ThreadId>();
   const supervisorState = yield* SubscriptionRef.make<SupervisorConnectionState>(
     AVAILABLE_CONNECTION_STATE,
   );
@@ -222,6 +223,10 @@ const makeHarness = Effect.fn("TestEnvironmentThreads.makeHarness")(function* (o
     Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
     Effect.provideService(Persistence.EnvironmentCacheStore, cache),
     Effect.provideService(ThreadSnapshotLoader.ThreadSnapshotLoader, snapshotLoader),
+    Effect.provideService(Persistence.ThreadOwnedDataCleanup, {
+      threadIds: () => Effect.succeed([]),
+      clear: (_environmentId, threadId) => Queue.offer(forgottenThreads, threadId),
+    }),
     Effect.provideService(
       ConnectionWakeups.ConnectionWakeups,
       ConnectionWakeups.ConnectionWakeups.of({ changes: Stream.fromQueue(wakeups) }),
@@ -270,6 +275,7 @@ const makeHarness = Effect.fn("TestEnvironmentThreads.makeHarness")(function* (o
     supervisorSession,
     savedThreads,
     removedThreads,
+    forgottenThreads,
     wakeups,
     replaceSession: SubscriptionRef.set(
       supervisorSession,
@@ -1148,6 +1154,27 @@ describe("EnvironmentThreads", () => {
       );
       expect(advanced.history.latestLocalTurnOrdinal).toBe(22);
       expect(advanced.history.historyCursor).toBe("wm-cursor");
+    }),
+  );
+
+  it.effect("forgets the thread's client data when the server deletes it", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness();
+      yield* Queue.offer(harness.inputs, snapshot(BASE_PROJECTION));
+      yield* awaitThreadState(harness.observed, (value) => value.status === "live");
+      yield* Queue.offer(harness.inputs, deleted());
+
+      expect(yield* Queue.take(harness.forgottenThreads)).toBe(THREAD_ID);
+      expect(yield* Ref.get(harness.removedThreads)).toEqual([THREAD_ID]);
+    }),
+  );
+
+  it.effect("forgets the thread's client data when its snapshot is missing", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({ httpSnapshot: { _tag: "missing" } });
+
+      expect(yield* Queue.take(harness.forgottenThreads)).toBe(THREAD_ID);
+      expect(yield* Ref.get(harness.removedThreads)).toEqual([THREAD_ID]);
     }),
   );
 

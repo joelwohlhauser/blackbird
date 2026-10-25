@@ -409,6 +409,7 @@ export function shellStreamItemFromThreadShell(input: {
     sequence: input.stored.sequence,
     location: "active",
     threadId: input.stored.event.threadId,
+    deleted: true,
   };
 }
 

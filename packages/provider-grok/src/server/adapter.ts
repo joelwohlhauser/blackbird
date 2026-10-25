@@ -341,9 +341,17 @@ export function makeGrokAcpAdapterFlavor(
 export const makeGrokAdapterV2 = Effect.fn("makeGrokAdapterV2")(function* (
   options: GrokAdapterV2Options,
 ) {
-  return yield* makeAcpAdapterV2({
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const homeDirectory = yield* HostProcess.HomeDirectory;
+  const sessionsRoot = path.join(
+    options.environment.GROK_HOME?.trim() ||
+      path.join(options.environment.HOME || homeDirectory, ".grok"),
+    "sessions",
+  );
+  const adapter = yield* makeAcpAdapterV2({
     instanceId: options.instanceId,
-    flavor: makeGrokAcpAdapterFlavor(options, yield* HostProcess.HomeDirectory),
+    flavor: makeGrokAcpAdapterFlavor(options, homeDirectory),
     selfInvocation: options.selfInvocation,
     ...(options.nativeLogging === undefined ? {} : { nativeLogging: options.nativeLogging }),
     ...(options.continuationRequests === undefined
@@ -351,6 +359,42 @@ export const makeGrokAdapterV2 = Effect.fn("makeGrokAdapterV2")(function* (
       : { continuationRequests: options.continuationRequests }),
     ...(options.testHooks === undefined ? {} : { testHooks: options.testHooks }),
   });
+  return {
+    ...adapter,
+    deleteNativeThread: Effect.fn("GrokAdapterV2.deleteNativeThread")(
+      function* ({ providerThread }) {
+        const sessionId = providerThread.nativeThreadRef?.nativeId;
+        if (!sessionId || sessionId !== path.basename(sessionId) || sessionId.startsWith(".")) {
+          return;
+        }
+        const workspaces = yield* fileSystem
+          .readDirectory(sessionsRoot)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])));
+        yield* Effect.forEach(
+          workspaces,
+          (workspace) =>
+            fileSystem
+              .remove(path.join(sessionsRoot, workspace, sessionId), {
+                recursive: true,
+                force: true,
+              })
+              .pipe(Effect.catchReason("PlatformError", "BadResource", () => Effect.void)),
+          { discard: true },
+        );
+      },
+      (effect, { providerThread }) =>
+        effect.pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapter.ProviderAdapterDeleteNativeThreadError({
+                driver: GROK_PROVIDER,
+                providerThreadId: providerThread.id,
+                cause,
+              }),
+          ),
+        ),
+    ),
+  } satisfies ProviderAdapter.ProviderAdapterV2["Service"];
 });
 
 export type GrokAdapterV2DriverEnv =

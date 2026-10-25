@@ -165,6 +165,7 @@ interface BrowserHistoryStoreState {
   ) => void;
   removeUrl: (projectKey: string, url: string) => void;
   registerThreadProject: (ref: ScopedThreadRef, projectKey: string) => void;
+  removeThread: (ref: ScopedThreadRef) => void;
 }
 
 function addPendingByThread<T>(
@@ -275,6 +276,23 @@ export const useBrowserHistoryStore = create<BrowserHistoryStoreState>()(
             pendingTitle.environmentHostname,
           );
       },
+      removeThread: (ref) =>
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          if (
+            !(threadKey in state.projectKeyByThreadKey) &&
+            !(threadKey in state.pendingVisitsByThreadKey) &&
+            !(threadKey in state.pendingTitlesByThreadKey)
+          ) {
+            return state;
+          }
+          const { [threadKey]: _project, ...projectKeyByThreadKey } = state.projectKeyByThreadKey;
+          const { [threadKey]: _visits, ...pendingVisitsByThreadKey } =
+            state.pendingVisitsByThreadKey;
+          const { [threadKey]: _titles, ...pendingTitlesByThreadKey } =
+            state.pendingTitlesByThreadKey;
+          return { projectKeyByThreadKey, pendingVisitsByThreadKey, pendingTitlesByThreadKey };
+        }),
     }),
     {
       name: BROWSER_HISTORY_STORAGE_KEY,

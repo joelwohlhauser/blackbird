@@ -7,6 +7,7 @@ import {
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -29,7 +30,14 @@ import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import { makeEnvironmentShellState } from "./shell.ts";
 import * as ShellSnapshotLoader from "./shellSnapshotHttp.ts";
-import { v2Project, v2ShellSnapshot, v2ThreadShell } from "./orchestrationV2TestFixtures.ts";
+import * as ThreadSnapshotLoader from "./threadSnapshotHttp.ts";
+import type { ThreadSnapshotLoadResult } from "./threadSnapshotHttp.ts";
+import {
+  v2Project,
+  v2Projection,
+  v2ShellSnapshot,
+  v2ThreadShell,
+} from "./orchestrationV2TestFixtures.ts";
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -661,6 +669,184 @@ describe("environment shell synchronization", () => {
         Effect.map(Option.getOrThrow),
       );
       expect(filled).toEqual([link(2)]);
+    }),
+  );
+
+  it.effect("forgets deleted threads but not archived ones", () =>
+    Effect.gen(function* () {
+      const archivedId = ThreadId.make("thread-archived");
+      const deletedId = ThreadId.make("thread-deleted");
+      const httpSnapshot: OrchestrationV2ShellSnapshot = {
+        ...LIVE_SHELL_SNAPSHOT,
+        threads: [
+          { ...v2ThreadShell, id: archivedId },
+          { ...v2ThreadShell, id: deletedId },
+        ],
+      };
+      const events = yield* Queue.unbounded<OrchestrationV2ShellStreamItem>();
+      const client = {
+        [ORCHESTRATION_V2_WS_METHODS.subscribeShell]: () => Stream.fromQueue(events),
+      } as unknown as WsRpcProtocolClient;
+      const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        target: TARGET,
+        state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
+        session: yield* SubscriptionRef.make(Option.some(session(client))),
+        prepared: yield* SubscriptionRef.make(Option.some(PREPARED)),
+        connect: Effect.void,
+        disconnect: Effect.void,
+        retryNow: Effect.void,
+      } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+      const removedThreads = yield* Ref.make<ReadonlyArray<ThreadId>>([]);
+      const forgottenThreads = yield* Queue.unbounded<ThreadId>();
+      const cache = Persistence.EnvironmentCacheStore.of({
+        loadShell: () => Effect.succeed(Option.none()),
+        saveShell: () => Effect.void,
+        loadThread: () => Effect.succeed(Option.none()),
+        saveThread: () => Effect.void,
+        removeThread: (_environmentId, threadId) =>
+          Ref.update(removedThreads, (current) => [...current, threadId]),
+        loadServerConfig: () => Effect.succeed(Option.none()),
+        saveServerConfig: () => Effect.void,
+        loadVcsRefs: () => Effect.succeed(Option.none()),
+        saveVcsRefs: () => Effect.void,
+        removeVcsRefs: () => Effect.void,
+        clearVcsRefs: () => Effect.void,
+        clear: () => Effect.void,
+      });
+      yield* makeEnvironmentShellState().pipe(
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        Effect.provideService(Persistence.EnvironmentCacheStore, cache),
+        Effect.provideService(
+          ShellSnapshotLoader.ShellSnapshotLoader,
+          ShellSnapshotLoader.ShellSnapshotLoader.of({
+            load: () => Effect.succeed(Option.some(httpSnapshot)),
+          }),
+        ),
+        Effect.provideService(Persistence.ThreadOwnedDataCleanup, {
+          threadIds: () => Effect.succeed([]),
+          clear: (_environmentId, threadId) => Queue.offer(forgottenThreads, threadId),
+        }),
+      );
+
+      yield* Queue.offerAll(events, [
+        { kind: "thread.removed", sequence: 2, location: "active", threadId: archivedId },
+        {
+          kind: "thread.removed",
+          sequence: 3,
+          location: "active",
+          threadId: deletedId,
+          deleted: true,
+        },
+      ]);
+
+      expect(yield* Queue.take(forgottenThreads)).toBe(deletedId);
+      expect(yield* Ref.get(removedThreads)).toEqual([deletedId]);
+    }),
+  );
+
+  it.effect("forgets persisted threads only when the server reports them missing", () =>
+    Effect.gen(function* () {
+      const activeId = ThreadId.make("thread-active");
+      const archivedId = ThreadId.make("thread-archived");
+      const missingId = ThreadId.make("thread-missing");
+      const erroredId = ThreadId.make("thread-errored");
+      const client = {
+        [ORCHESTRATION_V2_WS_METHODS.subscribeShell]: () => Stream.never,
+        [ORCHESTRATION_V2_WS_METHODS.getArchivedShellSnapshot]: () =>
+          Effect.succeed({
+            schemaVersion: 1,
+            snapshotSequence: LIVE_SHELL_SNAPSHOT.snapshotSequence,
+            projects: [],
+            threads: [
+              {
+                ...v2ThreadShell,
+                id: archivedId,
+                archivedAt: DateTime.makeUnsafe("2026-01-01T00:00:00.000Z"),
+              },
+            ],
+          }),
+      } as unknown as WsRpcProtocolClient;
+      const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+        target: TARGET,
+        state: yield* SubscriptionRef.make(AVAILABLE_CONNECTION_STATE),
+        session: yield* SubscriptionRef.make(Option.some(session(client))),
+        prepared: yield* SubscriptionRef.make(Option.some(PREPARED)),
+        connect: Effect.void,
+        disconnect: Effect.void,
+        retryNow: Effect.void,
+      } satisfies EnvironmentSupervisor.EnvironmentSupervisor["Service"]);
+      const checkedThreads = yield* Queue.unbounded<ThreadId>();
+      const forgottenThreads = yield* Queue.unbounded<ThreadId>();
+      const removedThreads = yield* Ref.make<ReadonlyArray<ThreadId>>([]);
+      const cache = Persistence.EnvironmentCacheStore.of({
+        loadShell: () => Effect.succeed(Option.none()),
+        saveShell: () => Effect.void,
+        loadThread: () => Effect.succeed(Option.none()),
+        saveThread: () => Effect.void,
+        removeThread: (_environmentId, threadId) =>
+          Ref.update(removedThreads, (current) => [...current, threadId]),
+        listThreadIds: () => Effect.succeed([archivedId, activeId, missingId]),
+        loadServerConfig: () => Effect.succeed(Option.none()),
+        saveServerConfig: () => Effect.void,
+        loadVcsRefs: () => Effect.succeed(Option.none()),
+        saveVcsRefs: () => Effect.void,
+        removeVcsRefs: () => Effect.void,
+        clearVcsRefs: () => Effect.void,
+        clear: () => Effect.void,
+      });
+      const threadSnapshots = ThreadSnapshotLoader.ThreadSnapshotLoader.of({
+        load: (_prepared, threadId) =>
+          Queue.offer(checkedThreads, threadId).pipe(
+            Effect.as(
+              threadId === missingId
+                ? ({ _tag: "missing" } satisfies ThreadSnapshotLoadResult)
+                : threadId === erroredId
+                  ? ({ _tag: "unavailable" } satisfies ThreadSnapshotLoadResult)
+                  : ({
+                      _tag: "present",
+                      snapshot: {
+                        snapshotSequence: 1,
+                        projection: {
+                          ...v2Projection,
+                          thread: {
+                            ...v2Projection.thread,
+                            id: threadId,
+                            archivedAt: DateTime.makeUnsafe("2026-01-01T00:00:00.000Z"),
+                          },
+                        },
+                      },
+                    } satisfies ThreadSnapshotLoadResult),
+            ),
+          ),
+      });
+      yield* makeEnvironmentShellState().pipe(
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        Effect.provideService(Persistence.EnvironmentCacheStore, cache),
+        Effect.provideService(
+          ShellSnapshotLoader.ShellSnapshotLoader,
+          ShellSnapshotLoader.ShellSnapshotLoader.of({
+            load: () =>
+              Effect.succeed(
+                Option.some({
+                  ...LIVE_SHELL_SNAPSHOT,
+                  threads: [{ ...v2ThreadShell, id: activeId }],
+                }),
+              ),
+          }),
+        ),
+        Effect.provideService(ThreadSnapshotLoader.ThreadSnapshotLoader, threadSnapshots),
+        Effect.provideService(Persistence.ThreadOwnedDataCleanup, {
+          threadIds: () => Effect.succeed([erroredId]),
+          clear: (_environmentId, threadId) => Queue.offer(forgottenThreads, threadId),
+        }),
+      );
+
+      const checked = [yield* Queue.take(checkedThreads), yield* Queue.take(checkedThreads)];
+      expect(yield* Queue.take(forgottenThreads)).toBe(missingId);
+      expect(checked.toSorted()).toEqual([erroredId, missingId].toSorted());
+      expect(yield* Queue.size(checkedThreads)).toBe(0);
+      expect(yield* Queue.size(forgottenThreads)).toBe(0);
+      expect(yield* Ref.get(removedThreads)).toEqual([missingId]);
     }),
   );
 });

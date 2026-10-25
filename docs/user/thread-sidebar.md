@@ -114,6 +114,10 @@ device keeps its own choice.
 While this is on, the active list is ordered by when each thread last came back to you, so you
 cannot drag or move threads within it. Your saved order returns when you turn it off.
 
+## Delete a thread
+
+Deleting a thread removes it for good. Its subagent threads go with it. Once its cleanup finishes, usually within a second, the server erases everything it stored for the thread: its history, attachments, provider logs, checkpoint refs, and the lines in the trace logs that mention it. The agent's own transcript is deleted too, for Claude, Codex, and Grok, including sessions you imported from a terminal. Each app also clears its local copy, the next time it connects if it was offline. There is no undo; to keep a conversation out of the way, settle or archive it instead.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list

@@ -27,6 +27,7 @@ import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
+import * as ThreadPurge from "./orchestration-v2/ThreadPurge.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import { CodexProviderCapabilitiesV2 } from "./orchestration-v2/Adapters/CodexAdapterV2.ts";
 import { ServerActivation } from "./serverActivation.ts";
@@ -378,6 +379,10 @@ const cleanupFixture = (
         subscribeMetadata: () => Effect.succeed(() => {}),
       } as unknown as TerminalManager.TerminalManager["Service"]),
       Effect.provideService(ServerActivation, Deferred.await(activated)),
+      Effect.provideService(ThreadPurge.ThreadPurge, {
+        afterDeletion: () => Effect.void,
+        purgeDeletedThreads: Effect.void,
+      }),
     );
     return {
       service: Context.get(context, StorageCleanup.StorageCleanup),

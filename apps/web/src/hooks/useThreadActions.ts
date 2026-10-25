@@ -32,7 +32,6 @@ import { threadEnvironment } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { refreshArchivedThreadsForEnvironment } from "../lib/archivedThreadsState";
-import { releaseComposerDraftUploads } from "../lib/composerDraftUploads";
 import { readLocalApi } from "../localApi";
 import {
   readEnvironmentSupportsAutoSettleOptOut,
@@ -48,8 +47,7 @@ import {
   readThreadShells,
 } from "../state/entities";
 import { useUiStateStore } from "../uiStateStore";
-import { clearThreadPreviewState } from "../previewStateStore";
-import { useTerminalUiStateStore } from "../terminalUiStateStore";
+import { forgetThread } from "../forgetThread";
 import { buildThreadRouteParams, resolveThreadRouteRef } from "../threadRoutes";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -296,11 +294,9 @@ export function useThreadActions() {
   const sidebarThreadSortOrder = useClientSettings((settings) => settings.sidebarThreadSortOrder);
   const confirmThreadDelete = useClientSettings((settings) => settings.confirmThreadDelete);
   const confirmThreadUnpin = useClientSettings((settings) => settings.confirmThreadUnpin);
-  const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
   const clearProjectDraftThreadById = useComposerDraftStore(
     (store) => store.clearProjectDraftThreadById,
   );
-  const clearTerminalUiState = useTerminalUiStateStore((state) => state.clearTerminalUiState);
   const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
   const router = useRouter();
   const handleNewThread = useNewThreadHandler();
@@ -409,7 +405,7 @@ export function useThreadActions() {
       });
       if (result._tag === "Success") {
         refreshArchivedThreadsForEnvironment(target.environmentId);
-        clearThreadPreviewState(target);
+        forgetThread(target);
       }
       return result;
     }
@@ -509,14 +505,11 @@ export function useThreadActions() {
       return deleteResult;
     }
     refreshArchivedThreadsForEnvironment(threadRef.environmentId);
-    releaseComposerDraftUploads(threadRef);
-    clearComposerDraftForThread(threadRef);
     clearProjectDraftThreadById(
       scopeProjectRef(threadRef.environmentId, thread.projectId),
       threadRef,
     );
-    clearTerminalUiState(threadRef);
-    clearThreadPreviewState(threadRef);
+    forgetThread(threadRef);
 
     if (shouldNavigateToFallback) {
       const fallbackThread = fallbackThreadId

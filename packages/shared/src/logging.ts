@@ -260,5 +260,30 @@ export const makeAsyncRotatingFileSink = Effect.fnUntraced(function* (
         ),
       )
       .pipe(Effect.uninterruptible);
-  return { write };
+  const removeLines = (matches: (line: string) => boolean) =>
+    semaphore
+      .withPermits(1)(
+        Effect.gen(function* () {
+          const files = [
+            options.filePath,
+            ...Array.from(
+              { length: options.maxFiles },
+              (_, index) => `${options.filePath}.${index + 1}`,
+            ),
+          ];
+          for (const file of files) {
+            if (!(yield* fs.exists(file))) continue;
+            const text = yield* fs.readFileString(file);
+            const lines = text.split("\n");
+            const kept = lines.filter((line) => !matches(line));
+            if (kept.length === lines.length) continue;
+            const temporary = `${file}.scrub`;
+            yield* fs.writeFileString(temporary, kept.join("\n"));
+            yield* fs.rename(temporary, file);
+          }
+          currentSize = yield* readSize;
+        }).pipe(Effect.mapError(failure("write"))),
+      )
+      .pipe(Effect.uninterruptible);
+  return { write, removeLines };
 });

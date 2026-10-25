@@ -43,6 +43,7 @@ import {
   type ProviderReplayTranscript,
   type ProviderApprovalDecision,
   ProviderSessionId,
+  ProviderThreadId,
   ProviderTurnId,
   RunAttemptId,
   RunId,
@@ -477,7 +478,9 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
       ],
       mcpServers: T3_MCP_SERVERS,
     });
-    assert.isFalse(overrides.allowedTools?.includes(rebrand(ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD)));
+    assert.isFalse(
+      overrides.allowedTools?.includes(rebrand(ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD)),
+    );
   });
 
   it("invalidates live-query reuse when MCP credentials rotate", () => {
@@ -1080,6 +1083,108 @@ describe("ClaudeAdapterV2 executable path", () => {
         );
 
         assert.deepEqual(executablePaths, [packageExe]);
+      }),
+    ).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+});
+
+describe("ClaudeAdapterV2 deleteNativeThread", () => {
+  it.effect("removes every stored copy of the session and succeeds when it is already gone", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const configDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-claude-delete-config-",
+        });
+        const tmpDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-claude-delete-tmp-",
+        });
+        const sessionId = "0b5c3f0e-6a51-4f0e-9d7e-3f1b2c4d5e6f";
+        const otherSessionId = "9f8e7d6c-5b4a-4321-8765-0fedcba98765";
+        const projects = path.join(configDir, "projects");
+        const taskRoot = path.join(tmpDir, `claude-${process.getuid?.()}`);
+        const write = (file: string) =>
+          fileSystem
+            .makeDirectory(path.dirname(file), { recursive: true })
+            .pipe(Effect.andThen(fileSystem.writeFileString(file, "{}\n")));
+        yield* write(path.join(projects, "-workspace", `${sessionId}.jsonl`));
+        yield* write(path.join(projects, "-workspace", sessionId, "subagents", "agent-a.jsonl"));
+        yield* write(path.join(projects, "-workspace-worktree", `${sessionId}.jsonl`));
+        yield* write(path.join(projects, "-workspace", `${otherSessionId}.jsonl`));
+        yield* write(path.join(projects, "stray-file"));
+        yield* write(path.join(configDir, "session-env", sessionId, "hook-0.sh"));
+        yield* write(path.join(configDir, "file-history", sessionId, "backup@v1"));
+        yield* write(path.join(configDir, "tasks", sessionId, "1.json"));
+        yield* write(path.join(taskRoot, "-workspace", sessionId, "tasks", "task.output"));
+        const adapter = yield* ClaudeAdapterV2.makeClaudeAdapterV2({
+          instanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
+          settings: DEFAULT_CLAUDE_SETTINGS,
+          environment: { CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_TMPDIR: tmpDir },
+          attachmentsDir: configDir,
+          fileSystem,
+          path,
+          crypto: yield* Crypto.Crypto,
+          idAllocator: yield* IdAllocator.IdAllocatorV2,
+          queryRunner: {
+            allocateSessionId: Effect.die("unused"),
+            open: () => Effect.die("unused"),
+            forkSession: () => Effect.die("unused"),
+            subagentLaunchToolUseId: () => Effect.succeed(null),
+            assertComplete: Effect.void,
+          },
+        });
+        const now = yield* DateTime.now;
+        const providerThread: OrchestrationV2ProviderThread = {
+          id: ProviderThreadId.make("provider-thread-claude-delete"),
+          driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
+          providerInstanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
+          providerSessionId: null,
+          appThreadId: ThreadId.make("thread-claude-delete"),
+          ownerNodeId: null,
+          nativeThreadRef: {
+            driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
+            nativeId: sessionId,
+            strength: "strong",
+          },
+          nativeConversationHeadRef: null,
+          status: "idle",
+          firstRunOrdinal: 1,
+          lastRunOrdinal: 1,
+          handoffIds: [],
+          forkedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const deleteNativeThread = adapter.deleteNativeThread;
+        assert.isDefined(deleteNativeThread);
+
+        yield* deleteNativeThread({ providerThread });
+        yield* deleteNativeThread({ providerThread });
+
+        const remaining = yield* Effect.forEach(
+          [
+            path.join(projects, "-workspace", `${sessionId}.jsonl`),
+            path.join(projects, "-workspace", sessionId),
+            path.join(projects, "-workspace-worktree", `${sessionId}.jsonl`),
+            path.join(configDir, "session-env", sessionId),
+            path.join(configDir, "file-history", sessionId),
+            path.join(configDir, "tasks", sessionId),
+            path.join(taskRoot, "-workspace", sessionId),
+          ],
+          (target) => fileSystem.exists(target),
+        );
+        assert.deepEqual(
+          remaining,
+          remaining.map(() => false),
+        );
+        assert.isTrue(
+          yield* fileSystem.exists(path.join(projects, "-workspace", `${otherSessionId}.jsonl`)),
+        );
       }),
     ).pipe(
       Effect.provide(

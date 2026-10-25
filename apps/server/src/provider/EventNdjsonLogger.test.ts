@@ -161,6 +161,33 @@ it.layer(NodeServices.layer)("EventNdjsonLogger", (it) => {
     }),
   );
 
+  it.effect("forgets a deleted thread's log files and its later events", () =>
+    Effect.gen(function* () {
+      const tempDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-provider-log-"));
+      const basePath = NodePath.join(tempDir, "events.log");
+
+      try {
+        const store = yield* makeEventNdjsonLogStore(basePath, { batchWindowMs: 0 });
+        const native = store.logger("native");
+        const deleted = ThreadId.make("thread-deleted");
+        const kept = ThreadId.make("thread-kept");
+        yield* native.write({ id: "secret" }, deleted);
+        yield* native.write({ id: "kept" }, kept);
+        NodeFS.writeFileSync(`${ownedLogPath(basePath, "thread-deleted")}.1`, "rotated secret\n");
+
+        yield* store.forgetThread(deleted);
+        yield* native.write({ id: "late" }, deleted);
+        yield* store.close();
+
+        assert.isFalse(NodeFS.existsSync(ownedLogPath(basePath, "thread-deleted")));
+        assert.isFalse(NodeFS.existsSync(`${ownedLogPath(basePath, "thread-deleted")}.1`));
+        assert.isTrue(NodeFS.existsSync(ownedLogPath(basePath, "thread-kept")));
+      } finally {
+        NodeFS.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.effect("keeps shared store views non-owning when one adapter closes", () =>
     Effect.gen(function* () {
       const tempDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-provider-log-"));

@@ -71,8 +71,8 @@ import type {
   ProviderInstanceId,
   RuntimeMode,
   RuntimeRequestId,
-  ThreadId,
 } from "@t3tools/contracts";
+import { ProviderSessionId, ThreadId } from "@t3tools/contracts";
 import * as CodexClient from "effect-codex-app-server/client";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexSchema from "effect-codex-app-server/schema";
@@ -1335,7 +1335,6 @@ export interface CodexAppServerClientFactoryShape {
     readonly instanceId: ProviderInstanceId;
     readonly threadId: ThreadId;
     readonly providerSessionId: OrchestrationV2ProviderSession["id"];
-    readonly runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
     readonly settings: CodexSettings;
     readonly environment: NodeJS.ProcessEnv;
   }) => Effect.Effect<
@@ -1759,6 +1758,46 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
     driver: CODEX_PROVIDER,
     getCapabilities: () => Effect.succeed(CodexProviderCapabilitiesV2),
     planSelectionTransition: () => Effect.succeed(turnScopedSelectionTransition()),
+    deleteNativeThread: Effect.fn("CodexAdapterV2.deleteNativeThread")(
+      function* ({ providerThread }) {
+        const nativeThreadId = providerThread.nativeThreadRef?.nativeId;
+        if (!nativeThreadId) return;
+        const resolvedRuntime =
+          adapterOptions.resolveRuntime === undefined
+            ? undefined
+            : yield* adapterOptions.resolveRuntime;
+        const client = yield* clientFactory.open({
+          instanceId: adapterOptions.instanceId,
+          threadId: providerThread.appThreadId ?? ThreadId.make(providerThread.id),
+          providerSessionId:
+            providerThread.providerSessionId ?? ProviderSessionId.make(providerThread.id),
+          settings: resolvedRuntime?.config ?? adapterOptions.settings,
+          environment: resolvedRuntime?.environment ?? adapterOptions.environment,
+        });
+        yield* client.request("initialize", buildCodexInitializeParams());
+        yield* client.notify("initialized", undefined);
+        yield* client.request("thread/delete", { threadId: nativeThreadId }).pipe(
+          Effect.catchTags({
+            CodexAppServerRequestError: (error) =>
+              error.code === -32600 && error.errorMessage.startsWith("thread not found:")
+                ? Effect.void
+                : Effect.fail(error),
+          }),
+        );
+      },
+      Effect.scoped,
+      (effect, { providerThread }) =>
+        effect.pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapter.ProviderAdapterDeleteNativeThreadError({
+                driver: CODEX_PROVIDER,
+                providerThreadId: providerThread.id,
+                cause,
+              }),
+          ),
+        ),
+    ),
     openSession: Effect.fn("CodexAdapterV2.openSession")(
       function* (input) {
         const scope = yield* Scope.Scope;
@@ -1779,7 +1818,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           instanceId: adapterOptions.instanceId,
           threadId: input.threadId,
           providerSessionId: input.providerSessionId,
-          runtimePolicy: input.runtimePolicy,
           settings: resolvedRuntime?.config ?? adapterOptions.settings,
           environment: resolvedRuntime?.environment ?? adapterOptions.environment,
         });

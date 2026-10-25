@@ -117,14 +117,7 @@ vi.mock("../components/Sidebar.logic", () => ({
 vi.mock("../composerDraftStore", () => ({
   useComposerDraftStore: (select: (store: unknown) => unknown) =>
     select({
-      clearDraftThread: () => state.localEffects.push("clear-draft"),
       clearProjectDraftThreadById: () => state.localEffects.push("clear-project-draft"),
-    }),
-}));
-vi.mock("../terminalUiStateStore", () => ({
-  useTerminalUiStateStore: (select: (store: unknown) => unknown) =>
-    select({
-      clearTerminalUiState: () => state.localEffects.push("clear-terminal-ui"),
     }),
 }));
 vi.mock("../uiStateStore", () => ({
@@ -136,8 +129,8 @@ vi.mock("../uiStateStore", () => ({
 vi.mock("../lib/archivedThreadsState", () => ({
   refreshArchivedThreadsForEnvironment: () => state.localEffects.push("refresh-archive"),
 }));
-vi.mock("../lib/composerDraftUploads", () => ({
-  releaseComposerDraftUploads: () => state.localEffects.push("release-uploads"),
+vi.mock("../forgetThread", () => ({
+  forgetThread: () => state.localEffects.push("forget-thread"),
 }));
 vi.mock("../localApi", () => ({
   readLocalApi: () => ({ dialogs: { confirm: state.confirm } }),
@@ -316,7 +309,7 @@ describe("thread action permissions", () => {
     expect((await useThreadActions().deleteThread(target))._tag).toBe("Success");
     expect(state.confirm).not.toHaveBeenCalled();
     expect(state.requests.map((request) => request.action)).toEqual(["stopSession", "delete"]);
-    expect(state.localEffects).toContain("clear-terminal-ui");
+    expect(state.localEffects).toContain("forget-thread");
   });
 
   it("does not request worktree removal after its grant is revoked during delete", async () => {
@@ -332,7 +325,7 @@ describe("thread action permissions", () => {
       expect(result._tag).toBe("Success");
       expect(state.requests.map((request) => request.action)).toEqual(["stopSession", "delete"]);
       expect(state.toasts).toContain("Failed to delete worktree");
-      expect(state.localEffects).toContain("clear-terminal-ui");
+      expect(state.localEffects).toContain("forget-thread");
     } finally {
       consoleError.mockRestore();
     }

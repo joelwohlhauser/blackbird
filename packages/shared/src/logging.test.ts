@@ -62,6 +62,27 @@ effectIt.layer(NodeServices.layer)("asynchronous rotating file sink", (it) => {
     }),
   );
 
+  it.effect("removes matching lines from the current and rotated files", () =>
+    Effect.gen(function* () {
+      const directory = makeTempDirectory();
+      const filePath = NodePath.join(directory, "trace.ndjson");
+      const sink = yield* makeAsyncRotatingFileSink({ filePath, maxBytes: 24, maxFiles: 5 });
+      for (const line of ["keep-1\n", "drop-thread\n", "keep-2\n", "drop-thread\n", "keep-3\n"]) {
+        yield* sink.write(line);
+      }
+      yield* sink.removeLines((line) => line.includes("thread"));
+      yield* sink.write("keep-4\n");
+      const names = NodeFS.readdirSync(directory)
+        .filter((name) => name.startsWith("trace.ndjson"))
+        .sort((a, b) => Number(b.slice(13) || 0) - Number(a.slice(13) || 0));
+      const contents = names.map((name) =>
+        NodeFS.readFileSync(NodePath.join(directory, name), "utf8"),
+      );
+      expect(contents.join("")).toBe("keep-1\nkeep-2\nkeep-3\nkeep-4\n");
+      expect(names.some((name) => name.endsWith(".scrub"))).toBe(false);
+    }),
+  );
+
   it.effect("reports a failed append and recovers its size before the next rotation", () =>
     Effect.gen(function* () {
       const directory = makeTempDirectory();
