@@ -37,7 +37,7 @@ When the user agrees, write the brief in chat. It's a few lines, not a file:
 - **What:** the change, in plain words.
 - **Not:** what is left out on purpose.
 - **Decisions:** the choices made and the options rejected, with reasons. These become the feature doc's lines.
-- **Validate:** not needed, unit tests, agent tests it on the preview, or the user tests it.
+- **Validate:** not needed, unit tests, agent tests it on the preview, the user tests it, or a goal loop with a measure, a finish condition, and a budget (see `../autopilot-build/references/goal-loop.md`).
 - **Merge:** the agent merges, or the agent waits for the user's OK.
 - **Watch:** anything Ship should check in production, if the default isn't enough.
 

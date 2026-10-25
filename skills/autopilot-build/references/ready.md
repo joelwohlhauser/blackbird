@@ -4,7 +4,7 @@ Build always ends with a pull request you could merge to production right now. A
 
 - Both models still say READY FOR PRODUCTION, and no "fix now" finding is open.
 - The scope check has nothing missing and nothing extra the user didn't approve.
-- The validation from the brief passed on the preview.
+- The validation from the brief passed on the preview. For a goal loop, the measurement on the latest commit shows the numbers in the description, and the guard holds.
 - Every review bot has finished, and every review thread is resolved.
 - There are no merge conflicts, and every check is green.
 - The pull request description has the problem, the change, the proof, and an **Only you can do this** section if needed.

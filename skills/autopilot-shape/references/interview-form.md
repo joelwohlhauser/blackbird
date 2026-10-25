@@ -10,7 +10,7 @@ The form collects requirements in under a minute of the user's time. It's an `ht
 - When the request contradicts a decision in the feature doc, say so in the question and ask which one wins.
 - Always include the brief's fixed questions, each preselected:
   - **Out of scope:** what you plan to leave out.
-  - **Validate:** not needed, unit tests, agent tests it on the preview, or the user tests it.
+  - **Validate:** not needed, unit tests, agent tests it on the preview, the user tests it, or a goal loop.
   - **Merge:** agent merges, or waits for the user's OK.
   - **Issue:** create one (default), use an existing one, or none, when the team has an issue tracker.
 - End with a free-text field: "Anything I didn't ask about?"

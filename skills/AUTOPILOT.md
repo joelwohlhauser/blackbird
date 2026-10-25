@@ -3,7 +3,7 @@
 Work moves through three skills. Load the matching one yourself; the user never names it.
 
 - `autopilot-shape`: the user wants to explore, brainstorm, plan, or decide how to build something. Runs in the main checkout and changes nothing.
-- `autopilot-build`: the user approves a brief ("go", "build it", "implement it"), asks for a fix, or hands over a bug report (an issue, an error-tracker link) to be fixed. Runs in a worktree and always ends with a pull request that could be merged to production.
+- `autopilot-build`: the user approves a brief ("go", "build it", "implement it"), asks for a fix, hands over a bug report (an issue, an error-tracker link) to be fixed, or names a goal to keep working toward ("hillclimb this", "optimize until...", "don't stop until..."). Runs in a worktree and always ends with a pull request that could be merged to production.
 - `autopilot-ship`: a pull request built this way is ready, the user approves the merge ("ship it", "merge it", "merged"), or a pull request watch wakes the thread after the merge.
 
 Before handing a step to the user, check whether your own tools can do it.
