@@ -2,6 +2,7 @@ import {
   AuthStandardClientScopes,
   EnvironmentId,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
+  ThreadId,
   type DesktopBridge,
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
@@ -10,7 +11,8 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { afterEach, vi } from "vite-plus/test";
-import { ClientCapabilities } from "@t3tools/client-runtime/platform";
+import { ClientCapabilities, Persistence } from "@t3tools/client-runtime/platform";
+import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   ConnectionBlockedError,
   ConnectionTransientError,
@@ -119,6 +121,25 @@ function makeBridge(
     },
   } as unknown as DesktopBridge;
 }
+
+describe("thread data cleanup", () => {
+  it.effect("finds and forgets persisted thread state after the connection platform loads", () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("window", {});
+      const { useUiStateStore } = yield* Effect.promise(() => import("../uiStateStore"));
+      const environmentId = EnvironmentId.make("cleanup-environment");
+      const threadId = ThreadId.make("cleanup-thread");
+      const key = scopedThreadKey(scopeThreadRef(environmentId, threadId));
+      useUiStateStore.setState({ threadLastVisitedAtById: { [key]: "2026-01-01T00:00:00Z" } });
+      const cleanup = yield* Persistence.ThreadOwnedDataCleanup.pipe(Effect.provide(layer));
+
+      expect(yield* cleanup.threadIds(environmentId)).toContain(threadId);
+      yield* cleanup.clear(environmentId, threadId);
+      expect(yield* cleanup.threadIds(environmentId)).not.toContain(threadId);
+      expect(useUiStateStore.getState().threadLastVisitedAtById[key]).toBeUndefined();
+    }),
+  );
+});
 
 describe("desktop SSH pairing", () => {
   it.effect("does not consume the credential when adding a route to a different machine", () =>

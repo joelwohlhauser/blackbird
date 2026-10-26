@@ -53,7 +53,6 @@ import {
   type PrimaryEnvironmentTarget,
 } from "../environments/primary/target";
 import { clearComposerDraftsEnvironment } from "../composerDraftStore";
-import { forgetThread, persistedThreadIds } from "../forgetThread";
 import { isHostedStaticApp } from "../hostedPairing";
 import { isLocalEnvironmentDisabled } from "../localEnvironment";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -801,9 +800,16 @@ const layerEnvironmentOwnedDataCleanup = Layer.succeed(
 const layerThreadOwnedDataCleanup = Layer.succeed(
   Persistence.ThreadOwnedDataCleanup,
   Persistence.ThreadOwnedDataCleanup.of({
-    threadIds: (environmentId) => Effect.sync(() => persistedThreadIds(environmentId)),
+    threadIds: (environmentId) =>
+      Effect.promise(async () => {
+        const { persistedThreadIds } = await import("../forgetThread");
+        return persistedThreadIds(environmentId);
+      }),
     clear: (environmentId, threadId) =>
-      Effect.sync(() => forgetThread(scopeThreadRef(environmentId, threadId))),
+      Effect.promise(async () => {
+        const { forgetThread } = await import("../forgetThread");
+        forgetThread(scopeThreadRef(environmentId, threadId));
+      }),
   }),
 );
 
