@@ -14,6 +14,7 @@ import { GuestShareIndicator } from "./GuestShareControls";
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
   activeThreadId: ThreadId;
+  isServerThread: boolean;
   activeProjectCwd: string | null;
   activeProjectScripts: ReadonlyArray<ProjectScript> | undefined;
   showProjectActions: boolean;
@@ -34,6 +35,7 @@ interface ChatHeaderProps {
 export const ChatHeader = memo(function ChatHeader({
   activeThreadEnvironmentId,
   activeThreadId,
+  isServerThread,
   activeProjectCwd,
   activeProjectScripts,
   showProjectActions,
@@ -80,9 +82,11 @@ export const ChatHeader = memo(function ChatHeader({
             onDeleteScript={onDeleteProjectScript}
           />
         ) : null}
-        <GuestShareIndicator
-          threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
-        />
+        {isServerThread ? (
+          <GuestShareIndicator
+            threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
+          />
+        ) : null}
         {isElectron ? (
           <ChatNotificationToggle
             threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}

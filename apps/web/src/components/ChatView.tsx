@@ -4416,6 +4416,7 @@ export default function ChatView(props: ChatViewProps) {
             <ChatHeader
               activeThreadEnvironmentId={activeThread.environmentId}
               activeThreadId={activeThread.id}
+              isServerThread={isServerThread}
               activeProjectCwd={activeProject?.workspaceRoot ?? null}
               activeProjectScripts={activeProjectScripts}
               showProjectActions={!isQuickChat}

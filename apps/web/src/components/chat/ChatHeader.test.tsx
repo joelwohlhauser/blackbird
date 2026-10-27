@@ -11,6 +11,9 @@ vi.mock("~/hooks/useT3ProjectFileScripts", () => ({
 vi.mock("../ProjectFavicon", () => ({
   ProjectFavicon: () => null,
 }));
+vi.mock("./GuestShareControls", () => ({
+  GuestShareIndicator: () => <span>Guest share</span>,
+}));
 
 import { ChatHeader } from "./ChatHeader";
 
@@ -18,11 +21,13 @@ function renderHeader(
   showProjectActions: boolean,
   rightPanelOpen = false,
   workspaceNavigatorOpen = false,
+  isServerThread = true,
 ) {
   return renderToStaticMarkup(
     <ChatHeader
       activeThreadEnvironmentId={"local" as EnvironmentId}
       activeThreadId={"thread-1" as ThreadId}
+      isServerThread={isServerThread}
       activeProjectCwd="~"
       activeProjectScripts={[]}
       showProjectActions={showProjectActions}
@@ -66,5 +71,10 @@ describe("ChatHeader project actions", () => {
 
   it("keeps the terminal control inset when both right-side surfaces are open", () => {
     expect(renderHeader(true, true, true)).toContain("pr-8");
+  });
+
+  it("leaves the guest share indicator out of drafts, which the server does not know yet", () => {
+    expect(renderHeader(true)).toContain("Guest share");
+    expect(renderHeader(true, false, false, false)).not.toContain("Guest share");
   });
 });
