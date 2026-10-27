@@ -20,12 +20,8 @@ import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
-import {
-  SettingsPageContainer,
-  SettingsRow,
-  SettingsSection,
-  useRelativeTimeTick,
-} from "./settingsLayout";
+import { useNowMinute } from "../../hooks/useNowMinute";
+import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 import { SettingsScopeNotice } from "./SettingsScopeNotice";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { searchableSetting } from "./settingsSearch";
@@ -65,7 +61,7 @@ export function SkillsSettingsPanel() {
 }
 
 function SkillsSettingsForm({ environmentId }: { readonly environmentId: EnvironmentId }) {
-  useRelativeTimeTick(60_000);
+  useNowMinute();
   const sources = useScopedSettings((settings) => settings.skillSources);
   const disabledSkills = useScopedSettings((settings) => settings.disabledSkills);
   const updateSettings = useUpdateScopedSettings();

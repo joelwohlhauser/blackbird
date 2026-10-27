@@ -7,6 +7,7 @@ describe("PreviewChromeRow", () => {
   it("renders zoom controls to the right of the address bar", () => {
     const markup = renderToStaticMarkup(
       <PreviewChromeRow
+        urlInputRef={{ current: null }}
         url="https://example.com"
         loading={false}
         canGoBack={false}
@@ -32,6 +33,7 @@ describe("PreviewChromeRow", () => {
   it("disables both zoom controls while the webview is unavailable", () => {
     const markup = renderToStaticMarkup(
       <PreviewChromeRow
+        urlInputRef={{ current: null }}
         url=""
         loading={false}
         canGoBack={false}

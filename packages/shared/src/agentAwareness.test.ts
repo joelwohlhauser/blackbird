@@ -139,7 +139,7 @@ describe("projectThreadAwarenessV2", () => {
     },
   );
 
-  it("keeps settled work held open by a monitor", () => {
+  it("keeps settled work held open by an awaited monitor", () => {
     expect(
       projectThreadAwarenessV2({
         environmentId: "env-1" as EnvironmentId,
@@ -147,7 +147,7 @@ describe("projectThreadAwarenessV2", () => {
         thread: v2Thread({
           status: "completed",
           settledOverride: "settled",
-          pendingBackgroundTasks: [{ taskId: "watch", kind: "monitor" }],
+          pendingBackgroundTasks: [{ taskId: "watch", kind: "monitor", awaited: true }],
         }),
       }),
     ).toMatchObject({ phase: "running" });
@@ -156,6 +156,19 @@ describe("projectThreadAwarenessV2", () => {
   it.each([
     ["a background command", "running", [{ taskId: "wait", kind: "command" }]],
     ["a monitor", "running", [{ taskId: "watch", kind: "monitor" }]],
+    [
+      "a command the agent waits on",
+      "running",
+      [{ taskId: "tests", kind: "command", awaited: true }],
+    ],
+    [
+      "a dev server and a subagent",
+      "running",
+      [
+        { taskId: "dev", kind: "command" },
+        { taskId: "review", kind: "subagent" },
+      ],
+    ],
   ] as const)("reports a completed run waiting on %s as %s", (_case, phase, tasks) => {
     expect(
       projectThreadAwarenessV2({

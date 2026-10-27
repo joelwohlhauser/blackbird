@@ -64,10 +64,7 @@ export class ManagedProjectFolders extends Context.Service<
     readonly ensureScratchProject: Effect.Effect<{ readonly projectId: ProjectId }, ScratchError>;
     readonly isScratchProject: (projectId: ProjectId) => Effect.Effect<boolean>;
     readonly namedProjectsRoot: string;
-    /**
-     * The folder is removed when the create fails or is cancelled before the
-     * project exists, never once another project owns it.
-     */
+    /** Removes failed/cancelled creations' folders only while no project owns them. */
     readonly createNamedProject: (input: { readonly name: string }) => Effect.Effect<
       {
         readonly projectId: ProjectId;
@@ -107,10 +104,7 @@ function escapeXml(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-/**
- * It lives at `assets/icon.svg`, a path ProjectFaviconResolver already checks,
- * so every machine that clones the project shows the same icon.
- */
+// ProjectFaviconResolver finds assets/icon.svg on every clone.
 function namedProjectIconSvg(name: string): string {
   const words = name.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   const initials =
@@ -163,10 +157,7 @@ const make = Effect.gen(function* () {
   const projects = yield* ProjectService.ProjectService;
   const crypto = yield* Crypto.Crypto;
 
-  /**
-   * Each folder is created without `recursive`, so creating it is the claim: of
-   * two racers for one name, one gets AlreadyExists and moves on to the next.
-   */
+  // Non-recursive mkdir atomically claims a name; racers move on after AlreadyExists.
   const claimFreeFolder = Effect.fnUntraced(function* <E>(
     folderFor: (attempt: number) => Effect.Effect<Option.Option<string>, E>,
     onError: (folder: string, cause: PlatformError.PlatformError) => E,
@@ -187,16 +178,14 @@ const make = Effect.gen(function* () {
   });
 
   const quickChatsRoot = yield* HostProcess.HomeDirectory;
-  const scratchRoot = Effect.succeed(Option.some(quickChatsRoot));
+  const scratchRoot = Effect.succeedSome(quickChatsRoot);
   const scratchProjectLock = yield* Semaphore.make(1);
 
   const ensureScratchProject: ManagedProjectFolders["Service"]["ensureScratchProject"] =
     scratchProjectLock.withPermits(1)(
       Effect.gen(function* () {
         const workspaceRoot = quickChatsRoot;
-        const id = yield* crypto
-          .randomUUIDv4()
-          .pipe(Effect.mapError((cause) => new ScratchProjectError({ workspaceRoot, cause })));
+        const id = yield* crypto.randomUUIDv4();
         const bootstrapped = yield* projects
           .bootstrap({
             commandId: CommandId.make(`quick-chats-project:${id}`),
@@ -214,10 +203,13 @@ const make = Effect.gen(function* () {
                   created: false,
                 }),
             }),
-            Effect.mapError((cause) => new ScratchProjectError({ workspaceRoot, cause })),
           );
         return { projectId: bootstrapped.project.id };
-      }),
+      }).pipe(
+        Effect.mapError(
+          (cause) => new ScratchProjectError({ workspaceRoot: quickChatsRoot, cause }),
+        ),
+      ),
     );
 
   const isScratchProject: ManagedProjectFolders["Service"]["isScratchProject"] = (projectId) =>
@@ -284,7 +276,7 @@ const make = Effect.gen(function* () {
       path.join(cwd, "assets", "icon.svg"),
       namedProjectIconSvg(name),
     );
-    // Named and forced so a global ignore rule (say `*.svg`) cannot drop one.
+    // Force explicit filenames so global ignore rules cannot drop them.
     yield* git.execute({
       operation: "ManagedProjectFolders.add",
       cwd,
@@ -329,11 +321,7 @@ const make = Effect.gen(function* () {
         workspaceRoot,
       })
       .pipe(
-        // A rejected create leaves the folder unused, so remove it. An
-        // interrupt can land after the create is committed, and a conflict
-        // means another project owns the folder, so it stays then; the owner
-        // is checked again first, since deleting another project's files is
-        // never acceptable.
+        // Re-check ownership before deleting rejected creations; interruption after commit or conflicts can leave an owner.
         Effect.tapError((error) =>
           error._tag === "ProjectConflictError"
             ? Effect.void

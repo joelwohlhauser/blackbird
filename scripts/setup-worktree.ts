@@ -14,7 +14,12 @@ const worktree = NodePath.dirname(import.meta.dirname);
 if (NodeFS.realpathSync(projectRoot) !== NodeFS.realpathSync(worktree)) {
   for (const file of ENV_FILES) {
     const source = NodePath.join(projectRoot, file);
-    if (!NodeFS.existsSync(source)) continue;
+    const sourceStat = NodeFS.lstatSync(source, { throwIfNoEntry: false });
+    if (!sourceStat) continue;
+    if (!sourceStat.isFile()) {
+      process.stderr.write(`Skipping ${file}: ${source} is not a regular file.\n`);
+      continue;
+    }
     const target = NodePath.join(worktree, file);
     const existing = NodeFS.lstatSync(target, { throwIfNoEntry: false });
     if (existing && !existing.isSymbolicLink()) continue;

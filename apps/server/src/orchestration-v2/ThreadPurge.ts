@@ -426,6 +426,18 @@ const make = Effect.gen(function* () {
         )
     `;
     }).pipe(sql.withTransaction);
+  });
+
+  const compactStorage = Effect.gen(function* () {
+    const searchIndex = yield* sql`
+      SELECT 1 FROM sqlite_schema WHERE name = 'orchestration_v2_message_search'
+    `;
+    if (searchIndex.length > 0) {
+      yield* sql`
+        INSERT INTO orchestration_v2_message_search (orchestration_v2_message_search)
+        VALUES ('optimize')
+      `.pipe(Effect.ignore);
+    }
     yield* sql`PRAGMA wal_checkpoint(TRUNCATE)`.pipe(Effect.ignore);
   });
 
@@ -456,6 +468,7 @@ const make = Effect.gen(function* () {
       SELECT 1 FROM orchestration_v2_projection_threads WHERE deleted_at IS NOT NULL LIMIT 1
     `;
     if (anyDeleted.length === 0) return;
+    let purged = false;
     const rows = yield* sql<ThreadRow>`
       SELECT
         thread.thread_id,
@@ -494,11 +507,17 @@ const make = Effect.gen(function* () {
         ),
       ];
       yield* purgeTree(threadIds, workspaceRoots).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            purged = true;
+          }),
+        ),
         Effect.catchCause((cause) =>
           Effect.logWarning("Could not purge a deleted thread", { cause }),
         ),
       );
     }
+    if (purged) yield* compactStorage;
   }).pipe(
     Effect.catchCause((cause) => Effect.logWarning("Deleted thread purge failed", { cause })),
   );

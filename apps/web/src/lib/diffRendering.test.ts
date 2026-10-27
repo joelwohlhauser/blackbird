@@ -16,7 +16,7 @@ import {
 describe("resolveDiffThemeName", () => {
   it("uses VS Code Dark+ syntax colors for dark code surfaces", () => {
     expect(resolveDiffThemeName("dark")).toBe("dark-plus");
-    expect(resolveDiffThemeName("light")).toBe("pierre-light");
+    expect(resolveDiffThemeName("light")).toBe("t3-light");
   });
 });
 

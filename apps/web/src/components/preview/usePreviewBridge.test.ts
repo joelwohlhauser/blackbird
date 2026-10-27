@@ -1,7 +1,9 @@
 import { ThreadId, type DesktopPreviewTabState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildReportInput, projectDesktopState } from "./usePreviewBridge";
+import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
+
+import { buildReportInput, createCaptureActivity, projectDesktopState } from "./usePreviewBridge";
 
 const favicon = {
   dataUrl: "data:image/png;base64,AAAA",
@@ -22,6 +24,7 @@ function state(navStatus: DesktopPreviewTabState["navStatus"]): DesktopPreviewTa
     audioMuted: false,
     audible: false,
     controller: "none",
+    capturing: false,
     favicon,
     updatedAt: "2026-08-09T00:00:00.000Z",
   };
@@ -68,5 +71,25 @@ describe("returning Home", () => {
     expect(
       buildReportInput({ ...input, state: { ...input.state, webContentsId: null } }),
     ).toBeNull();
+  });
+});
+
+describe("createCaptureActivity", () => {
+  it("keeps the guest painting while the host captures it, alongside other activity", () => {
+    const activity = () => useBrowserSurfaceStore.getState().activityByTabId["tab-1"];
+    const recording = useBrowserSurfaceStore.getState().acquireActivity("tab-1");
+    const capture = createCaptureActivity("tab-1");
+
+    capture.update(true);
+    capture.update(true);
+    expect(activity()).toBe(2);
+    capture.update(false);
+    expect(activity()).toBe(1);
+    capture.update(true);
+    capture.release();
+    capture.release();
+    expect(activity()).toBe(1);
+    recording();
+    expect(activity()).toBeUndefined();
   });
 });

@@ -5,7 +5,6 @@ import { describe, it } from "vite-plus/test";
 import {
   buildCodexAdditionalContext,
   buildCodexAgentInstructionsContext,
-  buildCodexDeveloperInstructions,
   CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES,
 } from "./CodexDeveloperInstructions.ts";
 
@@ -66,7 +65,20 @@ describe("buildCodexAdditionalContext", () => {
   });
 });
 
-describe("buildCodexDeveloperInstructions", () => {
+describe("Codex runtime context", () => {
+  it("describes Markdown media support in the runtime context in both modes", () => {
+    {
+      const instructions = runtimeInstructions({
+        model: "gpt-5.3-codex",
+        reasoningEffort: "high",
+      });
+      NodeAssert.match(
+        instructions,
+        /<runtime_info>.*embed images, video, and audio.*Markdown image syntax with absolute file paths.*Link any other file.*absolute path.*files viewer.*<\/runtime_info>/,
+      );
+    }
+  });
+
   it("flattens multiline metadata into single-line runtime info", () => {
     const instructions = runtimeInstructions({
       model: "gpt\n5.3\ncodex",
@@ -78,32 +90,42 @@ describe("buildCodexDeveloperInstructions", () => {
   });
 });
 
-describe("T3 browser developer instructions", () => {
+describe("Blackbird browser developer instructions", () => {
   const runtime = { model: "gpt-5.3-codex", reasoningEffort: "high" };
 
-  it("points agents at playwright-cli in both collaboration modes", () => {
-    {
-      const instructions = toolInstructions(runtime, true);
-      NodeAssert.match(instructions, /Blackbird browser/);
-      NodeAssert.match(instructions, /playwright-cli open <url>/);
-      NodeAssert.match(instructions, /Do not switch to Chrome/);
-    }
+  it("points agents at playwright-cli", () => {
+    const instructions = toolInstructions(runtime, true);
+    NodeAssert.match(instructions, /Blackbird browser/);
+    NodeAssert.match(instructions, /playwright-cli open <url>/);
+    NodeAssert.match(instructions, /Do not switch to Chrome/);
   });
 
   it("omits the browser block entirely when the preview tools are not attached", () => {
-    for (const mode of ["default", "plan"] as const) {
-      const instructions = toolInstructions(runtime, false);
-      NodeAssert.doesNotMatch(instructions, /playwright-cli/);
-      NodeAssert.doesNotMatch(instructions, /Blackbird browser/);
-      NodeAssert.doesNotMatch(instructions, /Do not switch to Chrome/);
-      NodeAssert.match(buildCodexDeveloperInstructions(mode), /<collaboration_mode>/);
-      NodeAssert.match(buildCodexDeveloperInstructions(mode), /<\/collaboration_mode>/);
-    }
+    const instructions = toolInstructions(runtime, false);
+    NodeAssert.doesNotMatch(instructions, /playwright-cli/);
+    NodeAssert.doesNotMatch(instructions, /Blackbird browser/);
+    NodeAssert.doesNotMatch(instructions, /Do not switch to Chrome/);
   });
+});
 
-  it("tracks the turn's MCP configuration rather than defaulting to on", () => {
-    NodeAssert.match(toolInstructions(runtime, true), /playwright-cli/);
-    NodeAssert.doesNotMatch(toolInstructions(runtime, false), /playwright-cli/);
+describe("Codex orchestration context", () => {
+  it("routes subagents native first, delegate_task for the rest", () => {
+    const orchestration = Object.entries(buildCodexAdditionalContext({ model: "gpt-6.1-sol" }))
+      .filter(([key]) => key.startsWith("t3_code_orchestration_"))
+      .map(([, entry]) => entry.value)
+      .join("\n");
+
+    NodeAssert.ok(orchestration.includes("use your native tool when the child uses your provider"));
+    NodeAssert.ok(orchestration.includes("`run_in_background:false`"));
+    NodeAssert.ok(orchestration.includes("A native type running another provider's model"));
+    NodeAssert.ok(
+      orchestration.includes("Every new delegate review or re-check is a new `delegate_task`"),
+    );
+    NodeAssert.ok(orchestration.includes("never a `thread_send`"));
+    NodeAssert.ok(!orchestration.includes("inheritedOptions"));
+    NodeAssert.ok(!orchestration.includes("Prefer native"));
+    // The ACP terminal fallback is ACP-only; Codex agents never need it.
+    NodeAssert.ok(!orchestration.includes("acp-mcp-call"));
   });
 });
 

@@ -287,7 +287,7 @@ Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to driv
 
 ### Keep awake
 
-**Settings → Keep Awake** keeps the MacBook awake, lid closed included, while any chat on the Mac is Working and for 3 minutes after the last one stops. Chats on remote or remote-example-2 don't count. A coffee cup in the sidebar footer opens these settings; it is dimmed unless the Mac is being kept awake, and its tooltip says why. The ideas come from [Insomnia](https://github.com/krishhgg/Insomnia).
+**Settings → Keep awake** keeps the MacBook awake, lid closed included, while any chat on the Mac is Working and for 3 minutes after the last one stops. Chats on remote or remote-example-2 don't count. A coffee cup in the sidebar footer opens these settings; it is dimmed unless the Mac is being kept awake, and its tooltip says why. The ideas come from [Insomnia](https://github.com/krishhgg/Insomnia).
 
 - **Always** keeps the Mac awake even when no chat is working, so it stays reachable. Battery, heat, and hotspot rules still apply.
 - **Set up…** asks once for the administrator password. It installs a sudoers rule (`/etc/sudoers.d/blackbird-awake`) that allows only `pmset -a disablesleep 0/1` and `pmset -a lowpowermode 0/1` without a password, plus a LaunchAgent that runs every 15 seconds. **Remove** takes both away.
@@ -310,14 +310,14 @@ The normal right panel has browser-backed integration tabs:
 - **Previews** pills at the top of the navigator's PR tab list the preview
   deployment links found in the PR's comments. Click opens one in an in-app
   browser tab; right-click copies it. The matched hosts are configurable in
-  Settings > Integrations and default to `*.staging.example.test` and
+  Settings → Diffs & pull requests and default to `*.staging.example.test` and
   `*.staging.example.test`.
 
 PR chips, composer PR actions, and **View PR** open the internal PR tab rather
 than the system browser. Links opened by a page in the in-app browser navigate
 that same tab, including links to a different domain. Other chat/terminal links
 can ask each time, always open in the normal right panel, or always open in the
-default browser; this is configurable in Settings.
+default browser; this is configurable in Settings → Browser.
 
 On desktop, new drafts in a Git project show a Linear issue picker in the composer. It lists your open assigned issues and searches the whole workspace as you type. Picking an issue uses its Linear branch name: a branch already checked out in a worktree selects **Existing worktree**, one checked out in the main checkout selects **Current checkout**, a local or remote branch without a worktree selects **New worktree** for it, and otherwise **New worktree & branch** is prefilled with the branch name. Nothing is created until you send.
 

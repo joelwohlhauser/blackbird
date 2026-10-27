@@ -4,7 +4,7 @@ import type {
   PullRequestRef,
   VcsStatusResult,
 } from "@t3tools/contracts";
-import { parseChangeRequestUrl } from "@t3tools/shared/changeRequestUrl";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 
 import type { TurnDiffFileChange } from "~/types";
 import { getDiffLineStat, getRenderablePatch, resolveFileDiffPath } from "~/lib/diffRendering";
@@ -35,7 +35,7 @@ export function checkoutPullRequestReference(
   projectRepository: string | null,
 ): PullRequestRef | null {
   if (!status?.pr || !projectId) return null;
-  const parsed = parseChangeRequestUrl(status.pr.url);
+  const parsed = sourceControlClients.parseChangeRequestUrl(status.pr.url)?.link;
   const isAzureDevOps = status.sourceControlProvider?.kind === "azure-devops";
   const repository = isAzureDevOps ? projectRepository : (parsed?.repository ?? projectRepository);
   if (!repository) return null;
@@ -43,7 +43,7 @@ export function checkoutPullRequestReference(
     projectId,
     repository,
     number: status.pr.number,
-    ...(parsed && !isAzureDevOps ? { host: parsed.host } : {}),
+    ...(parsed && !isAzureDevOps ? { host: parsed.authority ?? parsed.host } : {}),
   };
 }
 

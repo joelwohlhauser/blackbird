@@ -151,7 +151,6 @@ export function ThreadTranscriptPanel(props: {
           emptyPlaceholderInset={0}
           liveFollowEnabled={isAtEnd}
           onIsAtEndChange={setIsAtEnd}
-          onManualNavigation={noop}
           hideEmptyPlaceholder={projection === null}
         />
       </div>

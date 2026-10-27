@@ -128,8 +128,12 @@ export const make = Effect.gen(function* () {
     signIn: attempt(() => client.signIn()),
     cancelSignIn: Effect.sync(() => client.cancelSignIn()),
     signOut: attempt(() => client.signOut()),
-    searchIssues: (query) => attempt(() => client.searchIssues(query)),
-    issueStatuses: (issueIds) => attempt(() => client.issueStatuses(issueIds)),
+    searchIssues: Effect.fn("DesktopLinear.searchIssues")(function* (query) {
+      return yield* attempt(() => client.searchIssues(query));
+    }),
+    issueStatuses: Effect.fn("DesktopLinear.issueStatuses")(function* (issueIds) {
+      return yield* attempt(() => client.issueStatuses(issueIds));
+    }),
   });
 });
 

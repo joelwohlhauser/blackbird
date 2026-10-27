@@ -24,6 +24,7 @@ import { ServerTraceFiles } from "../observability/Observability.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
+import { rebuildMessageSearch } from "./messageSearchIndex.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
@@ -149,7 +150,10 @@ const seedThread = Effect.fn(function* (input: {
   yield* sql`
     INSERT INTO orchestration_v2_projection_messages (
       message_id, thread_id, role, streaming, created_at, updated_at, payload_json
-    ) VALUES (${`message:${input.threadId}`}, ${input.threadId}, 'user', 0, ${now}, ${now}, '{}')
+    ) VALUES (
+      ${`message:${input.threadId}`}, ${input.threadId}, 'user', 0, ${now}, ${now},
+      ${JSON.stringify({ text: `Message from ${input.threadId}` })}
+    )
   `;
   const providerThread = encodeProviderThread({
     id: ProviderThreadId.make(`provider-thread:${input.threadId}`),
@@ -233,6 +237,25 @@ const seedOutbox = Effect.fn(function* (
   `;
 });
 
+const searchIndexBytes = Effect.fn(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const rows = yield* sql<{ readonly bytes: number }>`
+    SELECT SUM(LENGTH(block)) AS bytes FROM orchestration_v2_message_search_data
+    WHERE id NOT IN (1, 10)
+  `;
+  return rows[0]?.bytes ?? 0;
+});
+
+const rebuiltSearchIndexBytes = Effect.fn(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* rebuildMessageSearch(sql);
+  yield* sql`
+    INSERT INTO orchestration_v2_message_search (orchestration_v2_message_search)
+    VALUES ('optimize')
+  `;
+  return yield* searchIndexBytes();
+});
+
 const rowCount = Effect.fn(function* (table: string, column: string, threadId: string) {
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* sql<{ readonly count: number }>`
@@ -289,6 +312,9 @@ it.effect("purges a deleted thread with its subagent and leaves other threads al
       yield* rowCount("orchestration_v2_projection_threads", "thread_id", other),
       1,
     );
+    const indexBytes = yield* searchIndexBytes();
+    assert.isAbove(indexBytes, 0);
+    assert.strictEqual(indexBytes, yield* rebuiltSearchIndexBytes());
     assert.deepStrictEqual(recorded.nativeDeleted.toSorted(), ["native-c", "native-p"]);
     assert.deepStrictEqual(recorded.forgotten.toSorted(), [parent, child].toSorted());
     assert.deepStrictEqual(recorded.dispatched, []);

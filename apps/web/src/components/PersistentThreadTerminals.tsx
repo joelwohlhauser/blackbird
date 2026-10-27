@@ -8,10 +8,11 @@ import {
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStableCallback } from "../hooks/useStableCallback";
 import type { TerminalContextSelection } from "../lib/terminalContext";
+import { focusActiveDrawerTerminal, focusTerminal } from "../lib/terminalFocus";
 import {
   selectThreadRightPanelState,
   useRightPanelStore,
@@ -25,7 +26,6 @@ import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { resolveTerminalWorktreePath } from "./ChatView.logic";
 
-/** Same terminal ids (order ignored) — avoids reconcile when only server session ordering differs. */
 function terminalIdListsEqual(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -43,11 +43,7 @@ function terminalIdListsEqual(left: readonly string[], right: readonly string[])
   return true;
 }
 
-/**
- * Server knows about fewer sessions than the client, but every server id still exists locally.
- * Typical right after `terminal.open`: known-session list lags; reconciling would drop the new id
- * and later re-add it as a separate group (no split layout).
- */
+/** Server sessions lag terminal.open; reconciling strict subsets would discard new split layouts. */
 function serverTerminalIdsStrictSubsetOfClient(
   serverIds: readonly string[],
   clientIds: readonly string[],
@@ -75,7 +71,6 @@ interface PersistentThreadTerminalDrawerProps {
   threadId: ThreadId;
   visible: boolean;
   composerHeight: number;
-  focusRequestId: number;
   splitShortcutLabel: string | undefined;
   splitVerticalShortcutLabel: string | undefined;
   newShortcutLabel: string | undefined;
@@ -89,7 +84,6 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
   threadId,
   visible,
   composerHeight,
-  focusRequestId,
   splitShortcutLabel,
   splitVerticalShortcutLabel,
   newShortcutLabel,
@@ -154,7 +148,6 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     }
     reconcileTerminalIds(threadRef, serverOrderedTerminalIds);
   }, [reconcileTerminalIds, serverOrderedTerminalIds, terminalUiState.terminalIds, threadRef]);
-  const [localFocusRequestId, setLocalFocusRequestId] = useState(0);
   const worktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const cwd = project
     ? projectScriptCwd({ project: { cwd: project.workspaceRoot }, worktreePath })
@@ -168,13 +161,6 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     terminalLaunchLocationsById.set(session.target.terminalId, { cwd, worktreePath, runtimeEnv });
   }
 
-  const bumpFocusRequestId = () => {
-    if (!visible) {
-      return;
-    }
-    setLocalFocusRequestId((value) => value + 1);
-  };
-
   const setTerminalHeight = (height: number) => {
     storeSetTerminalHeight(threadRef, height);
   };
@@ -186,7 +172,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
       location: { cwd, worktreePath },
     });
     if (!launched) return;
-    bumpFocusRequestId();
+    if (visible) focusTerminal(threadRef, launched.terminalId);
     void launched.result;
   };
   const splitTerminal = useStableCallback(() =>
@@ -201,14 +187,14 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
 
   const activateTerminal = (terminalId: string) => {
     storeSetActiveTerminal(threadRef, terminalId);
-    bumpFocusRequestId();
+    if (visible) focusTerminal(threadRef, terminalId);
   };
 
   const closeTerminal = useStableCallback((terminalId: string) => {
     if (!terminalActions.canWrite()) return;
     terminalActions.closeTerminalSession(terminalId);
     storeCloseTerminal(threadRef, terminalId);
-    bumpFocusRequestId();
+    if (visible) focusActiveDrawerTerminal(threadRef);
   });
 
   const handleAddTerminalContext = (selection: TerminalContextSelection) => {
@@ -238,7 +224,6 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
         activeTerminalId={terminalUiState.activeTerminalId}
         terminalGroups={terminalUiState.terminalGroups}
         activeTerminalGroupId={terminalUiState.activeTerminalGroupId}
-        focusRequestId={focusRequestId + localFocusRequestId + (visible ? 1 : 0)}
         onSplitTerminal={splitTerminal}
         onSplitTerminalVertical={splitTerminalVertical}
         onNewTerminal={createNewTerminal}
@@ -262,7 +247,6 @@ export interface PersistentThreadTerminalPanelProps {
   visible: boolean;
   threadRef: ScopedThreadRef;
   surface: Extract<RightPanelSurface, { kind: "terminal" }>;
-  focusRequestId: number;
   keybindings: ResolvedKeybindingsConfig;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   onSplitTerminal: () => void;
@@ -280,7 +264,6 @@ export const PersistentThreadTerminalPanel = memo(function PersistentThreadTermi
   visible,
   threadRef,
   surface,
-  focusRequestId,
   keybindings,
   onAddTerminalContext,
   onSplitTerminal,
@@ -370,7 +353,6 @@ export const PersistentThreadTerminalPanel = memo(function PersistentThreadTermi
         },
       ]}
       activeTerminalGroupId={surface.id}
-      focusRequestId={focusRequestId}
       onSplitTerminal={onSplitTerminal}
       onSplitTerminalVertical={onSplitTerminalVertical}
       onNewTerminal={onNewTerminal}

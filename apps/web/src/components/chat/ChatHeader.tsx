@@ -9,6 +9,7 @@ import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
 import { cn } from "~/lib/utils";
 import { isElectron } from "../../env";
 import { ChatNotificationToggle } from "./ChatNotificationToggle";
+import { GuestShareIndicator } from "./GuestShareControls";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -79,6 +80,9 @@ export const ChatHeader = memo(function ChatHeader({
             onDeleteScript={onDeleteProjectScript}
           />
         ) : null}
+        <GuestShareIndicator
+          threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
+        />
         {isElectron ? (
           <ChatNotificationToggle
             threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}

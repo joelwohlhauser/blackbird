@@ -43,10 +43,12 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
   const writer = yield* socket.writer;
   const outbox = yield* Queue.unbounded<string>();
   const ended = yield* Deferred.make<string>();
+  const services = yield* Effect.context<never>();
+  const runPromise = Effect.runPromiseWith(services);
 
   const host: AgentCdpHost = {
     listTabs: () =>
-      Effect.runPromise(
+      runPromise(
         manager
           .list({ threadId })
           .pipe(
@@ -56,7 +58,7 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
           ),
       ),
     attach: (tabId, listener) =>
-      Effect.runPromise(
+      runPromise(
         browser.openAgentPage({
           threadId,
           tabId,
@@ -65,7 +67,7 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
         }),
       ),
     createTab: (url) =>
-      Effect.runPromise(
+      runPromise(
         broker
           .invoke<PreviewAutomationStatus>({
             scope,
@@ -83,7 +85,7 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
           ),
       ),
     resizeTab: (tabId, width, height) =>
-      Effect.runPromise(
+      runPromise(
         manager
           .resize({
             threadId,
@@ -93,7 +95,7 @@ const serveAgent = Effect.fn("AgentCdpRoute.serveAgent")(function* (
           .pipe(Effect.asVoid),
       ),
     end: (reason) => {
-      Effect.runSync(Deferred.succeed(ended, reason));
+      Effect.runSyncWith(services)(Deferred.succeed(ended, reason));
     },
   };
   const connection = createAgentCdpConnection(host, (message) => {

@@ -31,7 +31,7 @@ const WorktreeToolFailure = Schema.Union([WorktreeMcpFailure, OrchestratorMcpFai
 
 const WorktreeHandoffTool = Tool.make("t3_worktree_handoff", {
   description:
-    "Needs an agent running inside a T3 thread. Move this agent thread to another workspace: a git worktree of its repository, or another repository or folder on this environment. To launch a separate agent already bound to a new or existing worktree, use t3_thread_launch with workspaceStrategy instead. Combines create_worktree and switch_directory in one call. With branch, an existing local branch is reused (the thread switches to the worktree that already has it checked out, or a new worktree checks it out), a remote-only branch is checked out tracking it, and any other name creates a new branch from baseRef (default: the repository's default branch, optionally from the base branch's remote) in a new worktree, where the project's setup script runs by default. Pass repositoryPath to change repositories or to leave a Quick chat; it is required there. With repositoryPath and no branch, the thread switches straight to that folder without creating a worktree. The thread may already be in a worktree. Changing the workspace detaches the live provider session, so the current turn ends shortly after the handoff is recorded; call this as the last action of the turn. A continuation message is always queued as the thread's next message and starts a new turn in the new workspace with the conversation preserved; pass continuationPrompt with the remaining work, otherwise a generic prompt to continue the task is used. Worktrees are not removed automatically when the thread is deleted.",
+    "Move THIS thread to another workspace: a git worktree of its repository, or another repository or folder via `repositoryPath` (required in a Quick chat). With `branch`, an existing branch is reused (its worktree, or a new one checking it out) and any other name becomes a new branch from `baseRef`; new worktrees run the setup script by default. Without `branch`, switches straight to `repositoryPath`. Combines `create_worktree` and `switch_directory`. A separate agent in a worktree: `t3_thread_launch` with `workspaceStrategy`. Call last in your turn. The move ends the live session; the thread resumes there next turn with `continuationPrompt`, or a generic prompt to continue. The worktree stays after the thread is deleted.",
   parameters: WorktreeMcpHandoffInput,
   success: WorktreeMcpHandoffResult,
   failure: WorktreeToolFailure,
@@ -46,7 +46,7 @@ const WorktreeHandoffTool = Tool.make("t3_worktree_handoff", {
 
 const CreateWorktreeTool = Tool.make("create_worktree", {
   description:
-    "Needs an agent running inside a T3 thread. Create or reuse a git worktree and return its path without moving this thread; call switch_directory with the path to work there. An existing local branch is reused, returning its existing worktree (created:false) or checking it out in a new one. A branch that exists only on a remote is checked out tracking it. Any other name creates a new branch from baseRef (default: the repository's default branch, optionally from the base branch's remote). New worktrees go in the environment's worktrees folder, get the main checkout's .env files linked, and run the project's setup script unless runSetupScript is false; dependencies are not installed. Worktrees are not removed automatically.",
+    "Create or reuse a git worktree and return its path without moving this thread; `switch_directory` moves there. An existing local branch is reused (`created: false` when it already has a checkout), a remote-only branch is checked out tracking it, and any other name becomes a new branch from `baseRef`. New worktrees go in the environment's worktrees folder, link the main checkout's .env files, and run the setup script unless `runSetupScript` is false. Dependencies are not installed. Worktrees stay until removed.",
   parameters: WorktreeMcpCreateInput,
   success: WorktreeMcpCreateResult,
   failure: WorktreeToolFailure,
@@ -61,7 +61,7 @@ const CreateWorktreeTool = Tool.make("create_worktree", {
 
 const SwitchDirectoryTool = Tool.make("switch_directory", {
   description:
-    "Needs an agent running inside a T3 thread. Move this thread to an existing folder on this environment: a worktree from create_worktree, another repository, or any other folder. Blackbird finds or creates the project for it. Nothing is created on disk. Switching detaches the live provider session, so the current turn ends shortly after; call this as the last action of the turn. A continuation message is always queued and starts a new turn in the new folder with the conversation preserved; pass continuationPrompt with the remaining work, otherwise a generic prompt to continue the task is used.",
+    "Move THIS thread to an existing folder on this environment: a worktree from `create_worktree`, another repository, or any folder. Blackbird finds or creates its project; nothing is created on disk. Call last in your turn. The switch ends the live session; the thread resumes there next turn with `continuationPrompt`, or a generic prompt to continue.",
   parameters: WorktreeMcpSwitchDirectoryInput,
   success: WorktreeMcpSwitchDirectoryResult,
   failure: WorktreeToolFailure,
@@ -76,7 +76,7 @@ const SwitchDirectoryTool = Tool.make("switch_directory", {
 
 const WorktreeStatusTool = Tool.make("t3_worktree_status", {
   description:
-    "Needs an agent running inside a T3 thread. Report this agent thread's worktree binding: whether it is attached to a git worktree, the worktree path and branch, the project's main workspace root, and the server default for create_worktree's startFromOrigin. Call this before create_worktree or switch_directory to see where the thread currently works.",
+    "Report this thread's worktree: attached or not, path, branch, project root, and the `startFromOrigin` default. Check before `create_worktree`, `switch_directory`, or `t3_worktree_handoff`.",
   // No `parameters`: Tool.make defaults to Tool.EmptyParams, which serializes
   // to a top-level `type: "object"` JSON Schema. An explicit empty
   // Schema.Struct({}) serializes to `anyOf: [object, array]`, which is not a
@@ -94,7 +94,7 @@ const WorktreeStatusTool = Tool.make("t3_worktree_status", {
 
 const WorktreeListTool = Tool.make("t3_worktree_list", {
   description:
-    "List branch refs and their associated checkout paths for a thread's workspace (omit threadId for this thread) using the app's ref inventory. Detached worktrees without a branch are not included. Use t3_worktree_status for the thread binding and create_worktree to create a new worktree.",
+    "List branch refs and checkout paths for a thread's workspace. Omit `threadId` for this thread. Detached worktrees with no branch are left out.",
   parameters: Schema.Struct({
     threadId: Schema.optional(ThreadId),
     query: VcsListRefsInput.fields.query,

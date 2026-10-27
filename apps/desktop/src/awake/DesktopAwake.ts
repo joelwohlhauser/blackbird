@@ -185,33 +185,32 @@ export const make = Effect.gen(function* () {
           .pipe(Effect.ignore)
       : fs.remove(journalPath, { force: true }).pipe(Effect.ignore);
 
-  const hold = (setting: keyof Applied, on: boolean) =>
-    Effect.gen(function* () {
-      const { pmset, flag } = PMSET_SETTINGS[setting];
-      if (!on) {
-        held = { ...held, [setting]: false };
-        if (!applied[setting]) return;
-        yield* sudoPmset(["-a", pmset, "0"]);
-        applied = { ...applied, [setting]: false };
-        yield* writeJournal(applied);
-        return;
-      }
-      if (parsePmsetFlag((yield* run(PMSET, ["-g"])).stdout, flag) === true) {
-        held = { ...held, [setting]: true };
-        return;
-      }
-      yield* writeJournal({ ...applied, [setting]: true });
-      yield* sudoPmset(["-a", pmset, "1"]);
-      applied = { ...applied, [setting]: true };
+  const hold = Effect.fn("DesktopAwake.hold")(function* (setting: keyof Applied, on: boolean) {
+    const { pmset, flag } = PMSET_SETTINGS[setting];
+    if (!on) {
+      held = { ...held, [setting]: false };
+      if (!applied[setting]) return;
+      yield* sudoPmset(["-a", pmset, "0"]);
+      applied = { ...applied, [setting]: false };
+      yield* writeJournal(applied);
+      return;
+    }
+    if (parsePmsetFlag((yield* run(PMSET, ["-g"])).stdout, flag) === true) {
       held = { ...held, [setting]: true };
-      if (setting !== "sleepDisabled") return;
-      yield* Effect.sleep(SLEEP_SETTING_SETTLE);
-      if (parsePmsetFlag((yield* run(PMSET, ["-g"])).stdout, flag) !== true) {
-        return yield* fail(
-          "macOS turned sleep back on right after Blackbird turned it off, so closing the lid would still sleep this Mac.",
-        );
-      }
-    });
+      return;
+    }
+    yield* writeJournal({ ...applied, [setting]: true });
+    yield* sudoPmset(["-a", pmset, "1"]);
+    applied = { ...applied, [setting]: true };
+    held = { ...held, [setting]: true };
+    if (setting !== "sleepDisabled") return;
+    yield* Effect.sleep(SLEEP_SETTING_SETTLE);
+    if (parsePmsetFlag((yield* run(PMSET, ["-g"])).stdout, flag) !== true) {
+      return yield* fail(
+        "macOS turned sleep back on right after Blackbird turned it off, so closing the lid would still sleep this Mac.",
+      );
+    }
+  });
 
   const restoreAll = Effect.gen(function* () {
     yield* hold("lowPower", false).pipe(Effect.ignore);
@@ -272,21 +271,23 @@ export const make = Effect.gen(function* () {
     return null;
   });
 
-  const runHotspotApp = (mode: "scan" | "authorize", timeout: Duration.Input) =>
-    Effect.gen(function* () {
-      const app = yield* hotspotApp;
-      if (app === null) return "";
-      const outputPath = path.join(environment.stateDir, `hotspot-${mode}.json`);
-      yield* fs.remove(outputPath, { force: true }).pipe(Effect.ignore);
-      yield* run(
-        "/usr/bin/open",
-        ["-W", "-n", "-g", "--stdout", outputPath, app, "--args", mode],
-        timeout,
-      );
-      const output = yield* fs.readFileString(outputPath).pipe(Effect.orElseSucceed(() => ""));
-      yield* fs.remove(outputPath, { force: true }).pipe(Effect.ignore);
-      return output;
-    });
+  const runHotspotApp = Effect.fn("DesktopAwake.runHotspotApp")(function* (
+    mode: "scan" | "authorize",
+    timeout: Duration.Input,
+  ) {
+    const app = yield* hotspotApp;
+    if (app === null) return "";
+    const outputPath = path.join(environment.stateDir, `hotspot-${mode}.json`);
+    yield* fs.remove(outputPath, { force: true }).pipe(Effect.ignore);
+    yield* run(
+      "/usr/bin/open",
+      ["-W", "-n", "-g", "--stdout", outputPath, app, "--args", mode],
+      timeout,
+    );
+    const output = yield* fs.readFileString(outputPath).pipe(Effect.orElseSucceed(() => ""));
+    yield* fs.remove(outputPath, { force: true }).pipe(Effect.ignore);
+    return output;
+  });
 
   const resolveWifiDevice = Effect.gen(function* () {
     wifiDevice ??= parseWifiDevice(
@@ -295,19 +296,20 @@ export const make = Effect.gen(function* () {
     return wifiDevice;
   });
 
-  const knownNetworksInRange = (device: string) =>
-    Effect.gen(function* () {
-      const scan = decodeWifiScan((yield* runHotspotApp("scan", "1 minute")).trim());
-      if (Option.isNone(scan)) return [];
-      if (!scan.value.authorized) {
-        networkNote =
-          "Allow Blackbird Hotspot in System Settings → Privacy & Security → Location Services to switch back to Wi-Fi.";
-      }
-      const known = parseKnownNetworks(
-        (yield* run("/usr/sbin/networksetup", ["-listpreferredwirelessnetworks", device])).stdout,
-      );
-      return scan.value.names.filter((name) => known.includes(name));
-    });
+  const knownNetworksInRange = Effect.fn("DesktopAwake.knownNetworksInRange")(function* (
+    device: string,
+  ) {
+    const scan = decodeWifiScan((yield* runHotspotApp("scan", "1 minute")).trim());
+    if (Option.isNone(scan)) return [];
+    if (!scan.value.authorized) {
+      networkNote =
+        "Allow Blackbird Hotspot in System Settings → Privacy & Security → Location Services to switch back to Wi-Fi.";
+    }
+    const known = parseKnownNetworks(
+      (yield* run("/usr/sbin/networksetup", ["-listpreferredwirelessnetworks", device])).stdout,
+    );
+    return scan.value.names.filter((name) => known.includes(name));
+  });
 
   const joinHotspot = Effect.gen(function* () {
     const device = yield* resolveWifiDevice;
@@ -349,27 +351,26 @@ export const make = Effect.gen(function* () {
     networkNote = `The network dropped, so Blackbird joined the hotspot ${name}.`;
   });
 
-  const returnToWifi = (now: number) =>
-    Effect.gen(function* () {
-      const stay = hotspotStay;
-      if (stay === null || now < nextReturnCheckAt) return;
-      nextReturnCheckAt = now + RETURN_CHECK_MS;
-      const gateway = parseDefaultGateway(
-        (yield* run("/sbin/route", ["-n", "get", "default"])).stdout,
-      );
-      if (gateway !== IPHONE_HOTSPOT_GATEWAY) {
-        hotspotStay = null;
-        networkNote = null;
-        return;
-      }
-      const device = yield* resolveWifiDevice;
-      if (device === null) return;
-      if (!shouldLeaveHotspot(stay, yield* knownNetworksInRange(device), now)) return;
+  const returnToWifi = Effect.fn("DesktopAwake.returnToWifi")(function* (now: number) {
+    const stay = hotspotStay;
+    if (stay === null || now < nextReturnCheckAt) return;
+    nextReturnCheckAt = now + RETURN_CHECK_MS;
+    const gateway = parseDefaultGateway(
+      (yield* run("/sbin/route", ["-n", "get", "default"])).stdout,
+    );
+    if (gateway !== IPHONE_HOTSPOT_GATEWAY) {
       hotspotStay = null;
       networkNote = null;
-      yield* run("/usr/sbin/networksetup", ["-setairportpower", device, "off"]);
-      yield* run("/usr/sbin/networksetup", ["-setairportpower", device, "on"]);
-    });
+      return;
+    }
+    const device = yield* resolveWifiDevice;
+    if (device === null) return;
+    if (!shouldLeaveHotspot(stay, yield* knownNetworksInRange(device), now)) return;
+    hotspotStay = null;
+    networkNote = null;
+    yield* run("/usr/sbin/networksetup", ["-setairportpower", device, "off"]);
+    yield* run("/usr/sbin/networksetup", ["-setairportpower", device, "on"]);
+  });
 
   const followNetwork = Effect.gen(function* () {
     if (!settings.awakeHotspotFailover) {
