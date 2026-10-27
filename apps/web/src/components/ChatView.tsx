@@ -127,7 +127,6 @@ import {
 import { BackgroundThreadContext } from "./chat/backgroundThread";
 import { useLocation } from "@tanstack/react-router";
 import { assistantCitationFromLocation } from "../lib/assistantCitationNavigation";
-import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { useShallow } from "zustand/react/shallow";
 import {
   isAtomCommandInterrupted,
@@ -735,11 +734,9 @@ export default function ChatView(props: ChatViewProps) {
   const [restingComposerControlsVisible, setRestingComposerControlsVisible] = useState(false);
   const citeAssistantText = (
     citation: AssistantCitation,
-    sourceAnchor: AssistantCitationSourceAnchor,
-    replacing?: AssistantCitation,
+    options?: { readonly send?: boolean },
   ) => {
-    const inserted =
-      composerRef.current?.citeAssistantText(citation, sourceAnchor, replacing) ?? false;
+    const inserted = composerRef.current?.citeAssistantText(citation, options) ?? false;
     if (!inserted) {
       toastManager.add({
         type: "warning",

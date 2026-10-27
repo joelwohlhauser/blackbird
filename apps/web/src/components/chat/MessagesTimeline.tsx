@@ -56,7 +56,6 @@ import {
   timelineContentOverflowsViewport,
 } from "./timelineScrollAnchoring";
 import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
-import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { type AssistantCitationRequest } from "./AssistantCitationSource";
 import { useAssistantCitationTarget } from "./useAssistantCitationTarget";
 import { resolveCitationPhase, type CitedHistory } from "./citationProcedure";
@@ -195,8 +194,7 @@ interface MessagesTimelineProps {
   citationHistory?: CitedHistory;
   onCiteAssistantText?: (
     citation: AssistantCitation,
-    sourceAnchor: AssistantCitationSourceAnchor,
-    replacing?: AssistantCitation,
+    options?: { readonly send?: boolean },
   ) => boolean;
   isWorking: boolean;
   runlessWorkActive?: boolean;

@@ -2,7 +2,6 @@ import { ComposerPromptEditorTiptap } from "./ComposerPromptEditorTiptap";
 import type { ComposerPromptEditorProps } from "./ComposerPromptEditorTiptap";
 
 export type {
-  ComposerCitationCommentRequest,
   ComposerPromptEditorHandle,
   ComposerPromptEditorProps,
 } from "./ComposerPromptEditorTiptap";

@@ -126,7 +126,6 @@ import {
   useAttachmentUploadStore,
 } from "../../lib/attachmentUploadQueue";
 import { attachmentUploadBlockReason } from "../../lib/attachmentUploadState";
-import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { shortcutLabelForCommand } from "../../keybindings";
 import {
   type TerminalContextDraft,
@@ -138,11 +137,7 @@ import {
   shouldUseCompactComposerFooter,
   shouldUseRestingComposerLayout,
 } from "../composerFooterLayout";
-import {
-  type ComposerCitationCommentRequest,
-  type ComposerPromptEditorHandle,
-  ComposerPromptEditor,
-} from "../ComposerPromptEditor";
+import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../ComposerPromptEditor";
 import {
   ComposerContextActionsContext,
   composerContextRecordsFromDraft,
@@ -309,8 +304,7 @@ export interface ChatComposerHandle {
   pasteTextAtEnd: (text: string, options?: { bypassAutoAttachment?: boolean }) => boolean;
   citeAssistantText: (
     citation: AssistantCitation,
-    sourceAnchor: AssistantCitationSourceAnchor,
-    replacing?: AssistantCitation,
+    options?: { readonly send?: boolean },
   ) => boolean;
   openModelPicker: () => void;
   stepReasoningEffort: (direction: 1 | -1) => void;
@@ -1784,11 +1778,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       expectedText?: string;
       expandedCursorAfterReplace?: number;
       focusEditorAfterReplace?: boolean;
-      citationComment?: {
-        start: number;
-        sourceAnchor: AssistantCitationSourceAnchor;
-        insertedSpaces: ComposerCitationCommentRequest["insertedSpaces"];
-      };
     },
   ): boolean => {
     if (
@@ -1817,15 +1806,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       nextCursor,
       isLiteralPendingAnswer,
     );
-    if (options?.citationComment) {
-      composerEditorRef.current?.requestCitationComment({
-        previousValue: currentText,
-        value: next.text,
-        citationStart: options.citationComment.start,
-        sourceAnchor: options.citationComment.sourceAnchor,
-        insertedSpaces: options.citationComment.insertedSpaces,
-      });
-    }
     promptRef.current = next.text;
     const activePendingQuestion = activePendingProgress?.activeQuestion;
     if (activePendingQuestion && activePendingUserInput) {
@@ -2581,7 +2561,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     position: "cursor" | "end",
     options?: {
       ensureLeadingBoundary?: boolean;
-      citationCommentAnchor?: AssistantCitationSourceAnchor;
       clipboardData?: DataTransfer;
     },
   ): boolean => {
@@ -2590,8 +2569,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       isConnecting ||
       activePendingIsResponding ||
       (pendingUserInputs.length > 0 && !activePendingProgress?.activeQuestion) ||
-      projectSelectionRequired ||
-      (options?.citationCommentAnchor && !composerEditorRef.current)
+      projectSelectionRequired
     ) {
       return false;
     }
@@ -2605,21 +2583,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       cursor > 0 &&
       !/\s/.test(prompt[cursor - 1] ?? "");
     const rangeEnd = extendReplacementRangeForTrailingSpace(prompt, cursor, text);
-    return applyPromptReplacement(
-      cursor,
-      rangeEnd,
-      needsLeadingSpace ? ` ${text}` : text,
-      options?.citationCommentAnchor
-        ? {
-            citationComment: {
-              start: cursor + (needsLeadingSpace ? 1 : 0),
-              sourceAnchor: options.citationCommentAnchor,
-              insertedSpaces: { before: needsLeadingSpace, after: rangeEnd === cursor },
-            },
-            focusEditorAfterReplace: false,
-          }
-        : undefined,
-    );
+    return applyPromptReplacement(cursor, rangeEnd, needsLeadingSpace ? ` ${text}` : text);
   };
   const insertComposerTextStable = useStableCallback(insertComposerText);
 
@@ -3048,26 +3012,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         focusComposer();
         return true;
       },
-      citeAssistantText: (citation, sourceAnchor, replacing) => {
-        const text = formatAssistantCitationForComposer(citation, citation.comment);
-        const previous =
-          replacing && formatAssistantCitationForComposer(replacing, replacing.comment);
-        const start = previous ? promptRef.current.lastIndexOf(previous) : -1;
-        if (previous && start !== -1) {
-          return applyPromptReplacementStable(start, start + previous.length, text, {
-            expectedText: previous,
-            citationComment: {
-              start,
-              sourceAnchor,
-              insertedSpaces: { before: false, after: false },
-            },
-            focusEditorAfterReplace: false,
-          });
-        }
-        return insertComposerTextStable(text, "cursor", {
-          ensureLeadingBoundary: true,
-          citationCommentAnchor: sourceAnchor,
-        });
+      citeAssistantText: (citation, options) => {
+        const inserted = insertComposerTextStable(
+          formatAssistantCitationForComposer(citation, citation.comment),
+          "cursor",
+          { ensureLeadingBoundary: true },
+        );
+        if (inserted && options?.send) submitCitationAndSendStable();
+        return inserted;
       },
       openModelPicker: openModelPickerStable,
       stepReasoningEffort: (direction) => {

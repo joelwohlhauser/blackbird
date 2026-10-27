@@ -4,6 +4,7 @@ import {
   type AssistantCitation,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
+import { withAssistantCitationComment } from "@t3tools/shared/assistantCitations";
 import { QuoteIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -18,6 +19,10 @@ import {
   type SelectionActionPoint,
 } from "~/lib/selectionActions";
 import { Button } from "../ui/button";
+import { Popover, PopoverPopup } from "../ui/popover";
+import { AssistantCitationCommentEditor } from "./AssistantCitationCommentEditor";
+import { resolveAssistantCitationCommentDismissal } from "./assistantCitationCommentDismissal";
+import { observeAssistantCitationCommentSource } from "./AssistantCitationSource";
 
 export function AssistantSelectionToolbar({
   viewport,
@@ -26,24 +31,61 @@ export function AssistantSelectionToolbar({
 }: {
   viewport: HTMLElement | null;
   threadRef: ScopedThreadRef;
-  onCite: (
-    citation: AssistantCitation,
-    sourceAnchor: AssistantCitationSourceAnchor,
-    replacing?: AssistantCitation,
-  ) => boolean;
+  onCite: (citation: AssistantCitation, options?: { readonly send?: boolean }) => boolean;
 }) {
   const [selection, setSelection] = useState<{
     citation: AssistantCitation;
     position: SelectionActionPoint;
     sourceAnchor: AssistantCitationSourceAnchor;
+    commenting: boolean;
   } | null>(null);
   const toolbarRef = useRef<HTMLButtonElement>(null);
+  const commentPopupRef = useRef<HTMLDivElement>(null);
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
+  const draftCommentRef = useRef<string | null>(null);
   const actionsRef = useRef<ReturnType<typeof observeSelectionActions> | null>(null);
-  const citeSelection = useEffectEvent(onCite);
+
+  const closeComment = () => {
+    draftCommentRef.current = null;
+    setSelection(null);
+  };
+  const citeWithComment = (comment: string, send = false) => {
+    if (
+      !selection ||
+      !onCite(withAssistantCitationComment(selection.citation, comment), { send })
+    ) {
+      return false;
+    }
+    closeComment();
+    return true;
+  };
+  const settleComment = (reason: string) => {
+    const dismissal = resolveAssistantCitationCommentDismissal({
+      reason,
+      draft: draftCommentRef.current,
+      savedComment: undefined,
+    });
+    if (dismissal.kind === "keep-open") return false;
+    if (dismissal.kind === "commit") return citeWithComment(dismissal.comment);
+    closeComment();
+    return true;
+  };
+  const onSourceUnavailable = useEffectEvent(() => {
+    settleComment("none");
+  });
+  // oxlint-disable-next-line t3code/react-effect-budget -- watches the cited DOM text for removal while the comment is open
+  useEffect(() => {
+    if (!selection?.commenting) return;
+    return observeAssistantCitationCommentSource({
+      anchor: selection.sourceAnchor,
+      citation: selection.citation,
+      onUnavailable: onSourceUnavailable,
+    });
+  }, [selection]);
 
   useLayoutEffect(() => {
     const toolbar = toolbarRef.current;
-    if (!toolbar || !selection) return;
+    if (!toolbar || !selection || selection.commenting) return;
     const rect = toolbar.getBoundingClientRect();
     toolbar.style.left = `${Math.max(8, Math.min(selection.position.x, window.innerWidth - rect.width - 8))}px`;
     toolbar.style.top = `${Math.max(8, Math.min(selection.position.y, window.innerHeight - rect.height - 8))}px`;
@@ -51,9 +93,9 @@ export function AssistantSelectionToolbar({
 
   useEffect(() => {
     if (!viewport) return;
-    const clear = () => setSelection(null);
-    let multiClickCitation: AssistantCitation | undefined;
-    const update = (pointer: SelectionActionPoint | null, clicks: number) => {
+    const clear = () => setSelection((current) => (current?.commenting ? current : null));
+    const update = (pointer: SelectionActionPoint | null) => {
+      if (draftCommentRef.current?.trim()) return;
       const nativeSelection = window.getSelection();
       const captured = captureAssistantTextSelection(viewport, nativeSelection);
       const messageId = captured?.source.dataset.assistantCitationSource;
@@ -130,22 +172,17 @@ export function AssistantSelectionToolbar({
         messageId: MessageId.make(messageId),
         ...captured.selector,
       };
-      const replacing = clicks >= 3 ? multiClickCitation : undefined;
-      multiClickCitation = undefined;
-      if (
-        pointer !== null &&
-        citation.text.length <= ASSISTANT_CITATION_MAX_TEXT_LENGTH &&
-        citeSelection(citation, sourceAnchor, replacing)
-      ) {
-        if (clicks >= 2) multiClickCitation = citation;
+      const commentRightAway =
+        pointer !== null && citation.text.length <= ASSISTANT_CITATION_MAX_TEXT_LENGTH;
+      if (commentRightAway) {
         actions.cancel();
         window.getSelection()?.removeAllRanges();
-        clear();
-        return;
       }
+      draftCommentRef.current = null;
       setSelection({
         sourceAnchor,
         citation,
+        commenting: commentRightAway,
         position: resolveSelectionActionPosition({
           bounds: viewportRect,
           selectionRect: rects.item(rects.length - 1) ?? rect,
@@ -156,7 +193,7 @@ export function AssistantSelectionToolbar({
     };
     const actions = observeSelectionActions({
       element: viewport,
-      getActionElement: () => toolbarRef.current,
+      getActionElement: () => commentPopupRef.current ?? toolbarRef.current,
       restoreAfterScroll: true,
       waitForMultiClick: false,
       onSelection: update,
@@ -194,16 +231,69 @@ export function AssistantSelectionToolbar({
   }, [threadRef, viewport]);
 
   if (!selection) return null;
+  if (selection.commenting) {
+    const { range, source } = selection.sourceAnchor;
+    const { messageId, start, end } = selection.citation;
+    return (
+      <Popover
+        key={`${messageId}:${start}:${end}`}
+        open
+        onOpenChange={(open, eventDetails) => {
+          if (!open && !settleComment(eventDetails.reason)) eventDetails.cancel();
+        }}
+      >
+        <PopoverPopup
+          side="bottom"
+          align="end"
+          anchor={{
+            contextElement: source,
+            getBoundingClientRect: () => {
+              const rects = range.getClientRects();
+              const rect = rects.item(rects.length - 1) ?? range.getBoundingClientRect();
+              // Code blocks and tables scroll sideways inside the message, so the cited
+              // text can end in their hidden overflow. Base UI only shifts the popup while
+              // it still touches the anchor, so clamp the anchor to the message's width.
+              const bounds = source.getBoundingClientRect();
+              const left = Math.min(Math.max(rect.left, bounds.left), bounds.right);
+              const right = Math.max(Math.min(rect.right, bounds.right), left);
+              return new DOMRect(left, rect.top, right - left, rect.height);
+            },
+          }}
+          initialFocus={() => {
+            commentInputRef.current?.focus({ preventScroll: true });
+            return false;
+          }}
+          finalFocus={false}
+          ref={commentPopupRef}
+          aria-label="Comment on citation"
+          width="md"
+          padding="compact"
+        >
+          <AssistantCitationCommentEditor
+            citation={selection.citation}
+            inputRef={commentInputRef}
+            onDraftChange={(comment) => {
+              draftCommentRef.current = comment;
+            }}
+            onSubmit={(comment) => citeWithComment(comment)}
+            onSubmitAndSend={(comment) => citeWithComment(comment, true)}
+            onCancel={closeComment}
+          />
+        </PopoverPopup>
+      </Popover>
+    );
+  }
   const tooLong = selection.citation.text.length > ASSISTANT_CITATION_MAX_TEXT_LENGTH;
   const dismiss = () => {
     actionsRef.current?.cancel();
     setSelection(null);
   };
   const cite = () => {
-    if (tooLong || !onCite(selection.citation, selection.sourceAnchor)) return false;
+    if (tooLong) return;
+    actionsRef.current?.cancel();
     window.getSelection()?.removeAllRanges();
-    dismiss();
-    return true;
+    draftCommentRef.current = null;
+    setSelection({ ...selection, commenting: true });
   };
   return createPortal(
     <Button
