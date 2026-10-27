@@ -36,7 +36,7 @@ Check that the change works in production and broke nothing next to it. Read-onl
 
 Some regressions only show up with real traffic. Schedule follow-up checks on this thread with `schedule_task`: by default one hour after the deploy and the next morning at 9 in the user's time zone. The brief can ask for more, for example after a migration.
 
-Each check repeats Verify's error-tracker, log, and data checks against the numbers from before the release. Stay quiet when nothing changed. Post only when something looks off, plus one "all clear" at the end. Delete the scheduled checks when the watch is over (`delete_scheduled_task`).
+Each check repeats Verify's error-tracker, log, and data checks against the numbers from before the release. Stay quiet when nothing changed. Post only when something looks off, plus one "all clear" at the end. When a check finds nothing, settle the thread again (`thread_organize` with `settle`); when something looks off, leave it active. Delete the scheduled checks when the watch is over (`delete_scheduled_task`).
 
 A regression is a new error-tracker issue in the changed area, a known issue that got clearly more frequent, new errors in the logs, or the changed flow failing. Not every blip.
 
@@ -55,6 +55,7 @@ When Verify or Watch finds a regression this change caused:
 - File the sidequests the user didn't pick as backlog issues.
 - In the worktree, delete `node_modules` and other installed dependencies to save disk space. Keep the worktree and the branch. Never delete branches.
 - Call `unwatch_pull_request` and post a short summary: what shipped, the production evidence, and anything only the user still has to do.
+- If Verify found nothing off and the user has nothing left to do, settle the thread (`thread_organize` with `settle`).
 
 ## Without Blackbird
 
