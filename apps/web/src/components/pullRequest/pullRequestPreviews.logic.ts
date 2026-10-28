@@ -26,7 +26,12 @@ function previewLabel(hostname: string, patterns: ReadonlyArray<string>): string
     const suffix = pattern.slice(1);
     if (suffix.length < 2 || !hostname.endsWith(suffix)) continue;
     const labels = hostname.slice(0, -suffix.length).split(".");
-    if (labels.every((label) => DNS_LABEL.test(label))) return labels.at(-1) ?? null;
+    if (!labels.every((label) => DNS_LABEL.test(label))) continue;
+    const label = labels.at(-1) ?? null;
+    const vercelBranchUrlProject = hostname.endsWith(".vercel.app")
+      ? label?.split("-git-")[0]
+      : undefined;
+    return vercelBranchUrlProject || label;
   }
   return null;
 }

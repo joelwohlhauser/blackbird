@@ -310,8 +310,11 @@ The normal right panel has browser-backed integration tabs:
 - **Previews** pills at the top of the navigator's PR tab list the preview
   deployment links found in the PR's comments. Click opens one in an in-app
   browser tab; right-click copies it. The matched hosts are configurable in
-  Settings → Diffs & pull requests and default to `*.staging.example.test` and
-  `*.staging.example.test`.
+  Settings → Diffs & pull requests and default to `*.staging.example.test`,
+  `*.staging.example.test`, and `*.vercel.app`; Vercel branch previews are
+  labelled by project. The chat header's **Preview** button opens the same
+  previews for the chat's open linked PRs: one opens directly, several open a
+  menu grouped by PR.
 
 PR chips, composer PR actions, and **View PR** open the internal PR tab rather
 than the system browser. Links opened by a page in the in-app browser navigate

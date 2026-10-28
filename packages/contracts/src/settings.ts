@@ -176,6 +176,7 @@ export const DEFAULT_LINEAR_ORGANIZATION_SLUG = "acme";
 export const DEFAULT_PULL_REQUEST_PREVIEW_HOSTS: ReadonlyArray<string> = [
   "*.staging.example.test",
   "*.staging.example.test",
+  "*.vercel.app",
 ];
 export const ExternalLinkOpenMode = Schema.Literals(["ask", "preview", "external"]);
 export type ExternalLinkOpenMode = typeof ExternalLinkOpenMode.Type;

@@ -1,4 +1,10 @@
-import { type EnvironmentId, type ProjectScript, type ThreadId } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  type ProjectId,
+  type ProjectScript,
+  type ThreadId,
+  type ThreadPullRequestLink,
+} from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { memo, type ReactNode } from "react";
 import ProjectScriptsControl, {
@@ -9,12 +15,15 @@ import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
 import { cn } from "~/lib/utils";
 import { isElectron } from "../../env";
 import { ChatNotificationToggle } from "./ChatNotificationToggle";
+import { ChatPreviewControl } from "./ChatPreviewControl";
 import { GuestShareIndicator } from "./GuestShareControls";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
   activeThreadId: ThreadId;
+  activeThreadProjectId: ProjectId;
   isServerThread: boolean;
+  pullRequests: ReadonlyArray<ThreadPullRequestLink>;
   activeProjectCwd: string | null;
   activeProjectScripts: ReadonlyArray<ProjectScript> | undefined;
   showProjectActions: boolean;
@@ -35,7 +44,9 @@ interface ChatHeaderProps {
 export const ChatHeader = memo(function ChatHeader({
   activeThreadEnvironmentId,
   activeThreadId,
+  activeThreadProjectId,
   isServerThread,
+  pullRequests,
   activeProjectCwd,
   activeProjectScripts,
   showProjectActions,
@@ -70,6 +81,13 @@ export const ChatHeader = memo(function ChatHeader({
               : "pr-24",
         )}
       >
+        {pullRequests.length > 0 ? (
+          <ChatPreviewControl
+            threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}
+            projectId={activeThreadProjectId}
+            pullRequests={pullRequests}
+          />
+        ) : null}
         {showProjectActions && activeProjectScripts ? (
           <ProjectScriptsControl
             environmentId={activeThreadEnvironmentId}

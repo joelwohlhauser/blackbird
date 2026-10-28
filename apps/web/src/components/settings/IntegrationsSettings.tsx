@@ -770,7 +770,7 @@ export function PullRequestPreviewHostsSetting() {
   return (
     <SettingsRow
       {...searchableSetting("pull-request-preview-hosts")}
-      description="Preview deployment links in pull request comments on these hosts show as pills on the PR tab. Separate hosts with commas; *. matches any subdomain. Leave empty to hide previews."
+      description="Preview deployment links in pull request comments on these hosts show as pills on the PR tab and in the chat header's Preview button. Separate hosts with commas; *. matches any subdomain. Leave empty to hide previews."
       resetAction={
         isDefault ? null : (
           <SettingResetButton

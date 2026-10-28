@@ -29,13 +29,7 @@ export function usePullRequestPreviews(
   return pullRequestPreviews(comments, hostPatterns);
 }
 
-export function PullRequestPreviewPills({
-  threadRef,
-  previews,
-}: {
-  threadRef: ScopedThreadRef | null;
-  previews: ReadonlyArray<PullRequestPreview>;
-}) {
+export function useOpenPullRequestPreview(threadRef: ScopedThreadRef | null) {
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const openLink = useOpenLink(null);
 
@@ -47,7 +41,7 @@ export function PullRequestPreviewPills({
     });
   };
 
-  const open = async (url: string) => {
+  return async (url: string) => {
     try {
       if (
         threadRef &&
@@ -65,6 +59,16 @@ export function PullRequestPreviewPills({
       reportOpenFailure(cause);
     }
   };
+}
+
+export function PullRequestPreviewPills({
+  threadRef,
+  previews,
+}: {
+  threadRef: ScopedThreadRef | null;
+  previews: ReadonlyArray<PullRequestPreview>;
+}) {
+  const open = useOpenPullRequestPreview(threadRef);
 
   const copy = async (url: string) => {
     try {

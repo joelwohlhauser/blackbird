@@ -73,6 +73,7 @@ import {
   type ServerProvider,
   type ScopedThreadRef,
   type ThreadId,
+  type ThreadPullRequestLink,
   ProviderInteractionMode,
   resolveIdleCompaction,
   RuntimeMode,
@@ -455,6 +456,7 @@ import {
 } from "./ChatView.logic";
 
 const EMPTY_PROVIDERS: ServerProvider[] = [];
+const EMPTY_PULL_REQUESTS: ReadonlyArray<ThreadPullRequestLink> = [];
 const EMPTY_PROVIDER_MODELS: ServerProvider["models"] = [];
 const EMPTY_USAGE_LIMIT_SOURCES: UsageLimitSourceSnapshots = [];
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
@@ -4416,7 +4418,11 @@ export default function ChatView(props: ChatViewProps) {
             <ChatHeader
               activeThreadEnvironmentId={activeThread.environmentId}
               activeThreadId={activeThread.id}
+              activeThreadProjectId={activeThread.projectId}
               isServerThread={isServerThread}
+              pullRequests={
+                pullRequestsSurfaceAvailable ? visiblePullRequests : EMPTY_PULL_REQUESTS
+              }
               activeProjectCwd={activeProject?.workspaceRoot ?? null}
               activeProjectScripts={activeProjectScripts}
               showProjectActions={!isQuickChat}

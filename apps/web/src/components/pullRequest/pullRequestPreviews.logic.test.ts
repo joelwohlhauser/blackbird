@@ -52,6 +52,34 @@ describe("pullRequestPreviews", () => {
     ).toEqual(["app", "pr-7"]);
   });
 
+  it("labels Vercel branch URLs by project", () => {
+    const checkoutBranch =
+      "https://acme-checkout-git-feature-login-abc123-acme.vercel.app";
+    const commit = "https://acme-checkout-abc123def-acme.vercel.app";
+    const body = [
+      "| [acme-checkout](https://vercel.com/acme/acme-checkout) |",
+      `[Ready](https://vercel.com/acme/acme-checkout/EXAMPLE) | [Preview](${checkoutBranch}) |`,
+      `Deployed ${commit}`,
+    ].join("\n");
+
+    expect(pullRequestPreviews([{ body }], hosts)).toEqual([
+      { url: checkoutBranch, label: "acme-checkout", ambiguous: false },
+      { url: commit, label: "acme-checkout-abc123def-acme", ambiguous: false },
+    ]);
+  });
+
+  it("keeps -git- in labels outside Vercel", () => {
+    expect(
+      pullRequestPreviews([{ body: "https://eng-123-fix-git-sync-abc123.staging.example.test" }], hosts),
+    ).toEqual([
+      {
+        url: "https://eng-123-fix-git-sync-abc123.staging.example.test",
+        label: "eng-123-fix-git-sync-abc123",
+        ambiguous: false,
+      },
+    ]);
+  });
+
   it("ignores unrelated, insecure, lookalike and credentialed hosts", () => {
     const body = [
       "https://example.com",

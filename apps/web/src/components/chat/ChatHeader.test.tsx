@@ -1,4 +1,4 @@
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -27,7 +27,9 @@ function renderHeader(
     <ChatHeader
       activeThreadEnvironmentId={"local" as EnvironmentId}
       activeThreadId={"thread-1" as ThreadId}
+      activeThreadProjectId={"project-1" as ProjectId}
       isServerThread={isServerThread}
+      pullRequests={[]}
       activeProjectCwd="~"
       activeProjectScripts={[]}
       showProjectActions={showProjectActions}
