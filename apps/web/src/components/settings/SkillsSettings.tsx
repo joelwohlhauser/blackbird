@@ -64,6 +64,7 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
   useNowMinute();
   const sources = useScopedSettings((settings) => settings.skillSources);
   const disabledSkills = useScopedSettings((settings) => settings.disabledSkills);
+  const autopilotEnabled = useScopedSettings((settings) => settings.autopilotEnabled);
   const updateSettings = useUpdateScopedSettings();
   const statusResult = useAtomValue(
     serverEnvironment.skillSyncStatus({ environmentId, input: {} }),
@@ -100,7 +101,7 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
   };
 
   const skillRows = [
-    ...builtIns,
+    ...builtIns.filter((source) => autopilotEnabled || source.kind !== "bundled"),
     ...sources.flatMap((source) => statusById.get(source.id) ?? []),
   ].flatMap((source) => source.skills.map((name) => ({ source, name })));
 
@@ -113,6 +114,19 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
           ))}
         </SettingsSection>
       )}
+      <SettingsSection {...searchableSetting("skills-autopilot")} title="Autopilot">
+        <SettingsRow
+          title="Autopilot"
+          description="Gives agents Blackbird's shape, build, and ship skills and the instructions on when to use them."
+          control={
+            <Switch
+              aria-label="Use autopilot"
+              checked={autopilotEnabled}
+              onCheckedChange={(enabled) => updateSettings({ autopilotEnabled: enabled })}
+            />
+          }
+        />
+      </SettingsSection>
       <SettingsSection
         {...searchableSetting("skills-sources")}
         title="Sources"

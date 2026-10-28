@@ -245,7 +245,7 @@ Provider commands must start the message to run. T3 Code commands such as
 
 **Settings → Skills** decides which skills every agent on an environment can use. Choose one environment first; each machine keeps its own sources, and `~` in a folder means that machine's home folder.
 
-Blackbird always provides its own skills (the autopilot skills) and, when `playwright-cli` is installed, the skill that ships with Playwright CLI. Add your own sources below them. A source is a folder or git checkout with `skills/<name>/SKILL.md` and optionally an `AGENTS.md`. Leave the folder empty and enter a git remote to have Blackbird clone it for you.
+Blackbird provides its own autopilot skills (shape, build, ship) together with instructions that tell every agent session when to use them. Switch **Autopilot** off to remove both. Blackbird also provides, when `playwright-cli` is installed, the Playwright CLI skill. Add your own sources below them. A source is a folder or git checkout with `skills/<name>/SKILL.md` and optionally an `AGENTS.md`. Leave the folder empty and enter a git remote to have Blackbird clone it for you.
 
 - **Git sync**: **Pull only** fast-forwards the checkout. **Two-way sync** also commits your local edits as `sync(<host>): <time>` and pushes them. Git sync only runs on a folder that is the root of its own checkout, and a checkout in the middle of a merge or rebase is skipped until you resolve it.
 - **Instructions**: **Add AGENTS.md to every session** gives every agent that file on top of its own instructions. **Use AGENTS.md as global instructions** links it as `~/.agents/AGENTS.md` and `~/.codex/AGENTS.md`, and its `CLAUDE.md` as `~/.claude/CLAUDE.md`. Only one source can do this.

@@ -1,3 +1,4 @@
+import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -11,8 +12,8 @@ import { resolveSkillSourcePath, skillsHomeDir } from "./skillSources.ts";
 
 /**
  * Instructions every agent session receives on top of the provider's own:
- * Blackbird's bundled AUTOPILOT.md and the AGENTS.md of each source set to
- * `inject`. A reference with an empty default keeps the many orchestration
+ * Blackbird's bundled AUTOPILOT.md while autopilot is on, and the AGENTS.md of
+ * each source set to `inject`. A reference with an empty default keeps the many orchestration
  * test runtimes free of a dependency they never exercise.
  */
 export class AgentInstructions extends Context.Reference<{
@@ -35,10 +36,13 @@ const make = Effect.gen(function* () {
   // Read per turn: a couple of small files, and edits apply to the next turn.
   const read = Effect.fn("AgentInstructions.read")(function* () {
     const sections: string[] = [];
-    if (bundledDir !== undefined)
+    const settings = Option.getOrElse(
+      yield* settingsService.getSettings.pipe(Effect.option),
+      () => DEFAULT_SERVER_SETTINGS,
+    );
+    if (bundledDir !== undefined && settings.autopilotEnabled)
       sections.push(yield* readText(path.join(bundledDir, "AUTOPILOT.md")));
-    const settings = yield* settingsService.getSettings.pipe(Effect.option);
-    for (const source of Option.isSome(settings) ? settings.value.skillSources : []) {
+    for (const source of settings.skillSources) {
       if (source.instructions !== "inject") continue;
       const checkout = yield* resolveSkillSourcePath(source, skillsHome);
       const text = yield* readText(path.join(checkout, "AGENTS.md"));

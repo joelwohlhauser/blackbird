@@ -283,7 +283,7 @@ Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to driv
 
 ### Shared skills and instructions
 
-**Settings → Skills** makes Blackbird the source of agent skills on each environment. It links Blackbird's bundled autopilot skills, the skill that ships with Playwright CLI, and the skills of configured folders or git checkouts into `~/.agents/skills`, `~/.claude/skills` and `~/.codex/skills`, keeping git sources pulled or synced both ways every minute. A source's `AGENTS.md` can be added to every agent session or linked as the global instructions. See [Shared skills and instructions](./docs/user/composer.md#shared-skills-and-instructions).
+**Settings → Skills** makes Blackbird the source of agent skills on each environment. It links Blackbird's bundled autopilot skills (switchable off together with their injected instructions), the skill that ships with Playwright CLI, and the skills of configured folders or git checkouts into `~/.agents/skills`, `~/.claude/skills` and `~/.codex/skills`, keeping git sources pulled or synced both ways every minute. A source's `AGENTS.md` can be added to every agent session or linked as the global instructions. See [Shared skills and instructions](./docs/user/composer.md#shared-skills-and-instructions).
 
 ### Keep awake
 

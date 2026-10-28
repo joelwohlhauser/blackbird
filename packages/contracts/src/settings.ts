@@ -1356,6 +1356,7 @@ export const ServerSettings = Schema.Struct({
   disabledSkills: Schema.Array(TrimmedNonEmptyString).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
+  autopilotEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -1625,6 +1626,7 @@ export const ServerSettingsPatch = Schema.Struct({
   threadTitleInstructions: Schema.optionalKey(TrimmedString),
   skillSources: Schema.optionalKey(Schema.Array(SkillSourceConfig)),
   disabledSkills: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
+  autopilotEnabled: Schema.optionalKey(Schema.Boolean),
   branchNamingMode: Schema.optionalKey(BranchNamingMode),
   branchNamePrefix: Schema.optionalKey(TrimmedString),
   branchNameInstructions: Schema.optionalKey(TrimmedString),

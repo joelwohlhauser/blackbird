@@ -1214,6 +1214,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "skills-autopilot",
+    title: "Autopilot",
+    to: "/settings/skills",
+    searchTerms: [
+      "autopilot shape build ship skills agent instructions system prompt enable disable",
+    ],
+  },
+  {
     id: "skills-sources",
     title: "Skill sources",
     to: "/settings/skills",

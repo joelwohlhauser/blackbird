@@ -83,7 +83,10 @@ export class SkillSourceSyncSkippedError extends Schema.TaggedError<SkillSourceS
   }
 }
 
-export type SkillSyncSettings = Pick<ServerSettings, "skillSources" | "disabledSkills">;
+export type SkillSyncSettings = Pick<
+  ServerSettings,
+  "skillSources" | "disabledSkills" | "autopilotEnabled"
+>;
 
 const EMPTY_SKILL_SYNC_STATUS: SkillSyncStatus = {
   finishedAt: null,
@@ -326,7 +329,12 @@ export const runSkillSyncPass = Effect.fn("SkillSync.runPass")(function* (input:
       ? new Map([["playwright-cli", playwright.linkPath]])
       : null;
   const sources: ReadonlyArray<SkillLinkSource> = [
-    { label: "Blackbird", skills: bundledSkills, owns: bundled.linkPath },
+    {
+      label: "Blackbird",
+      skills:
+        bundledSkills !== null && !input.settings.autopilotEnabled ? new Map() : bundledSkills,
+      owns: bundled.linkPath,
+    },
     { label: "Playwright", skills: playwrightSkills, owns: playwright.linkPath },
     ...configured.map(({ config, checkout, skills }) => ({
       label: config.label || config.id,
@@ -551,7 +559,8 @@ const make = Effect.gen(function* () {
       Stream.runForEach(changes, (settings) => {
         if (
           Equal.equals(settings.skillSources, lastSettings.skillSources) &&
-          Equal.equals(settings.disabledSkills, lastSettings.disabledSkills)
+          Equal.equals(settings.disabledSkills, lastSettings.disabledSkills) &&
+          settings.autopilotEnabled === lastSettings.autopilotEnabled
         ) {
           return Effect.void;
         }

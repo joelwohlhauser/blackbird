@@ -42,8 +42,12 @@ const fixture = Effect.gen(function* () {
   const pass = (
     sources: ReadonlyArray<SkillSourceConfig>,
     disabledSkills: ReadonlyArray<string> = [],
+    autopilotEnabled = true,
   ) =>
-    runSkillSyncPass({ settings: { skillSources: sources, disabledSkills }, t3Home }).pipe(
+    runSkillSyncPass({
+      settings: { skillSources: sources, disabledSkills, autopilotEnabled },
+      t3Home,
+    }).pipe(
       Effect.provideService(HostProcess.HomeDirectory, home),
       // Keep the developer's Playwright install out of the fixture.
       Effect.provideService(HostProcess.Environment, { PATH: "" }),
@@ -89,6 +93,13 @@ describe.skipIf(!symlinksSupported)("runSkillSyncPass", () => {
       assert.notInclude(disabled.linkedSkills, "autopilot-build");
       assert.isFalse(
         yield* fileSystem.exists(path.join(home, ".agents", "skills", "autopilot-build")),
+      );
+
+      const autopilotOff = yield* pass(configured, [], false);
+      assert.notInclude(autopilotOff.linkedSkills, "autopilot-ship");
+      assert.include(autopilotOff.linkedSkills, "pr-review");
+      assert.isFalse(
+        yield* fileSystem.exists(path.join(home, ".claude", "skills", "autopilot-ship")),
       );
 
       const removed = yield* pass([]);
