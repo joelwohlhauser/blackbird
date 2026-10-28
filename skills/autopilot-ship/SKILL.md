@@ -55,7 +55,7 @@ When Verify or Watch finds a regression this change caused:
 - File the sidequests the user didn't pick as backlog issues.
 - In the worktree, delete `node_modules` and other installed dependencies to save disk space. Keep the worktree and the branch. Never delete branches.
 - Call `unwatch_pull_request` and post a short summary: what shipped, the production evidence, and anything only the user still has to do.
-- If Verify found nothing off and the user has nothing left to do, settle the thread (`thread_organize` with `settle`).
+- Settle the thread (`thread_organize` with `settle`) when the change shipped, Verify found no regression or new error, and everything the brief set out to do is done. Reminders unrelated to this change, such as deploying another repository, don't keep it open. Leave it active only when something looks off or this change still needs the user.
 
 ## Without Blackbird
 
