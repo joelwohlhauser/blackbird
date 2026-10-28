@@ -8,6 +8,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { ExternalLinkIcon } from "lucide-react";
+import type { MouseEvent } from "react";
 
 import { canOpenLinksInApp } from "~/browser/browserLinkTarget";
 import { openUrlInPreview } from "~/browser/openFileInPreview";
@@ -41,9 +42,10 @@ export function useOpenPullRequestPreview(threadRef: ScopedThreadRef | null) {
     });
   };
 
-  return async (url: string) => {
+  return async (url: string, event?: MouseEvent) => {
     try {
       if (
+        !(event && (event.button === 1 || event.metaKey || event.ctrlKey)) &&
         threadRef &&
         readEnvironmentScope(threadRef.environmentId, AuthPreviewOperateScope) &&
         canOpenLinksInApp(threadRef)
@@ -93,7 +95,10 @@ export function PullRequestPreviewPills({
             className="min-w-0 max-w-full"
             render={<button type="button" />}
             aria-label={`Open preview ${preview.url}`}
-            onClick={() => void open(preview.url)}
+            onClick={(event) => void open(preview.url, event)}
+            onAuxClick={(event) => {
+              if (event.button === 1) void open(preview.url, event);
+            }}
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();

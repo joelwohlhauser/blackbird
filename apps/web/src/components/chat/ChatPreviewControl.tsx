@@ -75,7 +75,10 @@ export function ChatPreviewControl({
               variant="outline"
               aria-label={`Open preview ${only.label}`}
               data-toolbar-control=""
-              onClick={() => void open(only.url)}
+              onClick={(event) => void open(only.url, event)}
+              onAuxClick={(event) => {
+                if (event.button === 1) void open(only.url, event);
+              }}
             />
           }
         >
@@ -101,7 +104,13 @@ export function ChatPreviewControl({
               <MenuGroupLabel>{`${ref.repository.split("/").at(-1)} #${ref.number}`}</MenuGroupLabel>
             ) : null}
             {previews.map((preview) => (
-              <MenuItem key={preview.url} onClick={() => void open(preview.url)}>
+              <MenuItem
+                key={preview.url}
+                onClick={(event) => void open(preview.url, event)}
+                onAuxClick={(event) => {
+                  if (event.button === 1) void open(preview.url, event);
+                }}
+              >
                 {preview.ambiguous ? new URL(preview.url).host : preview.label}
               </MenuItem>
             ))}
