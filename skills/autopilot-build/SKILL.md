@@ -53,7 +53,12 @@ Get a read-only review from the model that didn't write the code, before the pul
 ## 6. Pull request
 
 1. Commit with a short subject. Later fixes are small commits on the same pull request.
-2. Push and open a real pull request, not a draft. The title says why the change matters. The description starts with the problem from the brief, then the change. End it with an **Only you can do this** section when the user has to do something the agent can't, such as adding a secret or changing a dashboard setting. Leave the section out when it would be empty.
+2. Push and open a real pull request, not a draft. The title says why the change matters. Keep the description short; the pull request guide gives the tour.
+   - Open with 1 to 3 sentences: the problem from the brief and what the change does about it.
+   - Then a short **What changes** list: a few bullets, one line each, about behavior a reviewer should know. Leave out implementation details, numbers, and copy that the diff already shows.
+   - End with an **Only you can do this** section when the user has to do something the agent can't, such as adding a secret or changing a dashboard setting. Leave it out when it would be empty.
+   - Nothing else: no list of tests, no "Tested on the preview" section, no "Left out on purpose" section. The proof goes in the chat report.
+   - Don't name file paths unless the reader has to open that file.
 3. Link the pull request to the thread (`link_pull_request`) and to the issue.
 4. Turn any question that is still open into its own issue.
 5. Call `watch_pull_request` and end the turn. Blackbird wakes the thread when a check finishes, a bot comments, or the branch conflicts.
