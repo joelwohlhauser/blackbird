@@ -68,6 +68,10 @@ list by environment or project. Each task runs on the environment you choose,
 using its project, model, and workspace settings. Fixed-time schedules use that
 environment's time zone, which may differ from your phone's.
 
+One-time tasks run once at the chosen date and time, even if the environment was
+offline then, and delete themselves after a successful run. Mobile shows and
+manages them; create them on web or ask an agent.
+
 Deleting a thread also deletes tasks that post into that thread. Tasks that start
 a new thread on each run survive deletion of their previous threads.
 

@@ -678,6 +678,36 @@ export const layer = Layer.effect(
         ),
       );
 
+    const deleteFinishedRun = (
+      id: ScheduledTaskId,
+      startedAtIso: string,
+      ranSchedule: ScheduledTask["schedule"],
+    ) =>
+      sql
+        .withTransaction(
+          Effect.gen(function* () {
+            const [row] = yield* sql<ScheduledTaskRow>`
+              SELECT * FROM scheduled_tasks
+              WHERE task_id = ${id}
+                AND last_run_status = 'running'
+                AND last_run_at = ${startedAtIso}
+            `;
+            if (row === undefined) return false;
+            const stored = yield* Effect.result(decodeScheduleJson(row.schedule_json));
+            if (Result.isFailure(stored) || !isSameSchedule(stored.success, ranSchedule)) {
+              return false;
+            }
+            yield* sql`DELETE FROM scheduled_task_webhook_deliveries WHERE task_id = ${id}`;
+            yield* sql`DELETE FROM scheduled_tasks WHERE task_id = ${id}`;
+            return true;
+          }),
+        )
+        .pipe(
+          Effect.mapError((cause) =>
+            taskError("Could not delete finished one-time task.", { taskId: id, cause }),
+          ),
+        );
+
     // A failure between markRunning and markCompleted must still write a terminal record:
     // runDueTasks skips 'running' rows forever, and the dispatch may already have gone out,
     // so next_run_at must advance. Pending webhook attempts count only with their completion.
@@ -859,11 +889,17 @@ export const layer = Layer.effect(
         const threadId = runSucceeded ? result.value : null;
         const current = yield* findTask(task.id);
         const scheduleSource = current ?? task;
+        const rescheduledMidRun =
+          current !== null &&
+          (current.enabled !== active.enabled ||
+            !isSameSchedule(current.schedule, active.schedule));
         const completed: ScheduledTask = {
           ...scheduleSource,
           updatedAt: iso(completedAt),
           lastRunAt: startedAtIso,
-          nextRunAt: nextRunAt(scheduleSource, completedAt),
+          nextRunAt: rescheduledMidRun
+            ? scheduleSource.nextRunAt
+            : nextRunAt(scheduleSource, completedAt),
           lastRunStatus,
           lastRunError,
           runCount: scheduleSource.runCount + 1,
@@ -872,7 +908,7 @@ export const layer = Layer.effect(
           // startedAtIso in the guard ensures this writes only to the row this
           // run marked as running — a task deleted mid-run and recreated with
           // the same id (idempotent commandId replay) must not be stamped.
-          const completion = markCompleted({
+          const record = markCompleted({
             id: task.id,
             completedAtIso: completed.updatedAt,
             nextRunAtIso: completed.nextRunAt,
@@ -880,6 +916,12 @@ export const layer = Layer.effect(
             error: lastRunError,
             startedAtIso,
           });
+          const completion =
+            trigger === "scheduled" && runSucceeded && active.schedule.type === "once"
+              ? deleteFinishedRun(task.id, startedAtIso, active.schedule).pipe(
+                  Effect.flatMap((deleted) => (deleted ? forgetWebhookTask(task.id) : record)),
+                )
+              : record;
           if (webhook === undefined) yield* completion;
           else
             yield* sql
@@ -1136,6 +1178,14 @@ export const layer = Layer.effect(
         existingTask !== null &&
         existingTask.enabled === input.enabled &&
         isSameSchedule(existingTask.schedule, schedule);
+      if (
+        schedule.type === "once" &&
+        input.enabled &&
+        !scheduleUnchanged &&
+        nextRunAt({ enabled: true, schedule }, now) === null
+      ) {
+        return yield* taskError("A one-time task needs a time in the future.", { taskId: id });
+      }
       const task: ScheduledTask = {
         id,
         title: input.title,
@@ -1172,6 +1222,11 @@ export const layer = Layer.effect(
       if (existing.enabled === input.enabled) return { task: existing };
       const now = yield* localNow;
       const next = nextRunAt({ enabled: input.enabled, schedule: existing.schedule }, now);
+      if (input.enabled && existing.schedule.type === "once" && next === null) {
+        return yield* taskError("A one-time task needs a time in the future.", {
+          taskId: input.id,
+        });
+      }
       // RETURNING so a task deleted between the load and this UPDATE is a
       // visible not-found error, not a false success.
       const updated = yield* sql<{ task_id: string }>`

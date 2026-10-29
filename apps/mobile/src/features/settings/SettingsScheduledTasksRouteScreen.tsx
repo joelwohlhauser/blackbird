@@ -109,8 +109,13 @@ const DAYS = [
 function describeSchedule(task: ScheduledTask): string {
   if (task.schedule.type === "webhook") return "On webhook";
   if (task.schedule.type === "interval") return formatScheduledTaskInterval(task.schedule.everyMs);
+  if (task.schedule.type === "once") return `Once on ${formatOnceAt(task.schedule.at)}`;
   const days = task.schedule.weekdays?.length ? repeatLabel(task.schedule.weekdays) : "Every day";
   return `${days} at ${formatTime(task.schedule.timeOfDay)}`;
+}
+
+function formatOnceAt(value: string): string {
+  return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function formatTime(value: string): string {
@@ -954,6 +959,9 @@ function TaskForm({
               variant="card"
               options={[
                 { value: "fixed_time", label: "At a time" },
+                ...(draft.task?.schedule.type === "once"
+                  ? [{ value: "once" as const, label: "Once" }]
+                  : []),
                 { value: "interval", label: "Interval" },
                 { value: "webhook", label: "On webhook" },
               ]}
@@ -971,7 +979,16 @@ function TaskForm({
               }}
             />
           </View>
-          {draft.schedule.mode === "fixed_time" ? (
+          {draft.schedule.mode === "once" ? (
+            <View className="min-h-14 flex-row items-center gap-3 border-t border-border-subtle px-4 py-3">
+              <Text textRole="body" className="text-foreground">
+                Runs on
+              </Text>
+              <Text textRole="footnote" className="min-w-0 flex-1 text-right text-foreground-muted">
+                {formatOnceAt(draft.schedule.at)}
+              </Text>
+            </View>
+          ) : draft.schedule.mode === "fixed_time" ? (
             <>
               <Pressable
                 accessibilityRole="button"

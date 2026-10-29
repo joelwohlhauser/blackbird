@@ -151,6 +151,21 @@ describe("editing scheduled task branch settings", () => {
   });
 });
 
+describe("one-time scheduled tasks", () => {
+  it("round-trips the run time through the local date and time field", () => {
+    const at = "2026-10-30T08:00:00.000Z";
+    const draft = taskToDraft({ ...legacyTask, schedule: { type: "once", at } });
+    expect(draft.scheduleMode).toBe("once");
+    expect(scheduleFromDraft(draft)).toEqual({ type: "once", at });
+  });
+
+  it("keeps the exact stored instant when the time is left unchanged", () => {
+    const at = "2026-10-30T09:00:45.123+01:00";
+    const draft = taskToDraft({ ...legacyTask, schedule: { type: "once", at } });
+    expect(scheduleFromDraft(draft)).toEqual({ type: "once", at });
+  });
+});
+
 describe("webhook scheduled tasks", () => {
   const signature = { header: "x-signature", encoding: "base64", prefix: "" } as const;
   const webhookTask: ScheduledTask = {
