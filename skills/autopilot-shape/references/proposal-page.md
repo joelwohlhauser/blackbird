@@ -13,7 +13,7 @@ The proposal is an `html_render` page the user can understand in a minute. Write
 7. **Call path**, only when the change crosses three or more layers: a short indented chain from the entry point to the new code, like `HTTP handler -> Service -> Store -> SQL`. Skip it otherwise.
 8. **The council box**, when a council ran: verdicts, what you took, what you rejected.
 9. **Open questions**, numbered, each with your recommendation. Only questions that block the build.
-10. **Sidequests** you found, each with a recommendation (see `../../autopilot-build/references/sidequests.md`).
+10. **Sidequests** you found, each with a recommendation and the question what to do with it (see `../../autopilot-build/references/sidequests.md`).
 11. **Size**: rough lines and files touched, and what validation you plan.
 
 ## How to keep it simple

@@ -61,7 +61,7 @@ When Verify or Watch finds a regression this change caused:
 ## 6. Done
 
 - Move the issue to the done state (see `../autopilot-build/references/issues.md`). If the tracker's GitHub integration already did, just check.
-- File the sidequests the user didn't pick as backlog issues.
+- Act on the sidequest choices the user made (see `../autopilot-build/references/sidequests.md`). Ignore the ones they didn't answer.
 - In the worktree, delete `node_modules` and other installed dependencies to save disk space. Keep the worktree and the branch. Never delete branches.
 - Call `unwatch_pull_request` and post a short summary: what shipped, the production evidence, and anything only the user still has to do.
 - Settle the thread (`thread_organize` with `settle`) when the change shipped, Verify found no regression or new error, and everything the brief set out to do is done. Reminders unrelated to this change, such as deploying another repository, don't keep it open. Leave it active only when something looks off or this change still needs the user.

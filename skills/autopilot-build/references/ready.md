@@ -10,4 +10,4 @@ Build always ends with a pull request you could merge to production right now. A
 - The pull request description is short and follows step 6 of the skill: the problem, what changes, and an **Only you can do this** section if needed.
 - The feature doc matches the brief.
 
-The report you post in the chat, not on the pull request, when the work is ready, or when you hand it back, covers: what changed, how it was checked (with the proof), what you chose not to fix and why, any review bot still running, anything only the user can do, and the sidequests you found with your recommendation for each (see `sidequests.md`).
+The report you post in the chat, not on the pull request, when the work is ready, or when you hand it back, covers: what changed, how it was checked (with the proof), what you chose not to fix and why, any review bot still running, anything only the user can do, and the sidequests you found, asking what to do with each (see `sidequests.md`).
