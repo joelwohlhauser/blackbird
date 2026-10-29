@@ -1127,62 +1127,6 @@ it.live("only the current controller can answer a file picker", () =>
   ).pipe(Effect.provide(layer)),
 );
 
-it.live("an agent's CDP page stops acting while a human controls the tab", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const { browser, tabId } = yield* ready;
-      const page = yield* browser.openAgentPage({
-        threadId: scope.thread.threadId,
-        tabId,
-        agentSessionId: Broker.hostAssignmentKey(scope),
-        listener: { onEvent: () => {}, onClose: () => {} },
-      });
-      yield* Effect.promise(() => page.send("Runtime.evaluate", { expression: "1" }));
-
-      const viewer = yield* browser.attachViewer(viewerInput(tabId, true));
-      yield* viewer.input({ type: "takeControl" });
-
-      const blocked = yield* Effect.promise(() =>
-        page.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 1, y: 1 }).then(
-          () => "sent",
-          (error: Error) => error.message,
-        ),
-      );
-      expect(blocked).toBe("A human controls this tab.");
-      const rewritten = yield* Effect.promise(() =>
-        page.send("Page.setDocumentContent", { frameId: "main", html: "<p>agent</p>" }).then(
-          () => "sent",
-          (error: Error) => error.message,
-        ),
-      );
-      expect(rewritten).toBe("A human controls this tab.");
-      const closed = yield* Effect.promise(() =>
-        page.close().then(
-          () => "closed",
-          (error: Error) => error.message,
-        ),
-      );
-      expect(closed).toBe("A human controls this tab.");
-      yield* Effect.promise(() => page.send("DOM.getDocument", {}));
-
-      const other = yield* browser.openAgentPage({
-        threadId: scope.thread.threadId,
-        tabId,
-        agentSessionId: Broker.hostAssignmentKey(asSession("agent-b")),
-        listener: { onEvent: () => {}, onClose: () => {} },
-      });
-      yield* viewer.input({ type: "releaseControl" });
-      const mismatch = yield* Effect.promise(() =>
-        other.send("Runtime.evaluate", { expression: "1" }).then(
-          () => "sent",
-          (error: Error) => error.message,
-        ),
-      );
-      expect(mismatch).toBe("This tab belongs to another agent.");
-    }),
-  ).pipe(Effect.provide(layer)),
-);
-
 it.live("agents read a human's tab with no arguments and act on it only while nobody drives", () =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -1341,35 +1285,6 @@ it.live(
     ).pipe(Effect.provide(layer)),
 );
 
-it.live("an agent's desktop page leaves and returns with the desktop's", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const browser = yield* ServerBrowser.ServerBrowser;
-      const manager = yield* Manager.PreviewManager;
-      yield* Effect.yieldNow;
-      desktopRendersNext = true;
-      const opened = yield* manager.open({ threadId: scope.thread.threadId, runtime: "server" });
-      const agentCloses: Array<boolean | undefined> = [];
-      yield* browser.openAgentPage({
-        threadId: scope.thread.threadId,
-        tabId: opened.tabId,
-        agentSessionId: Broker.hostAssignmentKey(scope),
-        listener: { onEvent: () => {}, onClose: (replaced) => agentCloses.push(replaced) },
-      });
-      const connected = yield* browser.connectedTabs.pipe(Stream.runHead, Effect.forkScoped);
-      while (desktopDetaches.listenerCount("detach") === 0) yield* Effect.yieldNow;
-      desktopDetaches.emit("detach", { threadId: scope.thread.threadId, tabId: opened.tabId });
-      while (agentCloses.length === 0) yield* Effect.yieldNow;
-      expect(agentCloses).toEqual([false]);
-      desktopDetaches.emit("attach", { threadId: scope.thread.threadId, tabId: opened.tabId });
-      expect(yield* Fiber.join(connected)).toEqual(
-        Option.some({ threadId: scope.thread.threadId, tabId: opened.tabId }),
-      );
-      expect(desktopConnections).toHaveLength(2);
-    }),
-  ).pipe(Effect.provide(layer)),
-);
-
 it.live("a desktop that attaches a headless tab late takes it over", () =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -1377,27 +1292,17 @@ it.live("a desktop that attaches a headless tab late takes it over", () =>
       expect(desktopConnections).toEqual([]);
       const headless = contexts[0]!;
       const viewer = yield* browser.attachViewer(viewerInput(tabId, false));
-      const agentCloses: Array<boolean | undefined> = [];
-      yield* browser.openAgentPage({
-        threadId: scope.thread.threadId,
-        tabId,
-        agentSessionId: Broker.hostAssignmentKey(scope),
-        listener: { onEvent: () => {}, onClose: (replaced) => agentCloses.push(replaced) },
-      });
-      const connected = yield* browser.connectedTabs.pipe(Stream.runHead, Effect.forkScoped);
-      while (desktopDetaches.listenerCount("attach") === 0) yield* Effect.yieldNow;
+      yield* Effect.promise(() =>
+        vi.waitFor(() => expect(desktopDetaches.listenerCount("attach")).toBeGreaterThan(0)),
+      );
       desktopTabs.add(tabId);
       desktopDetaches.emit("attach", { threadId: scope.thread.threadId, tabId });
-      while (desktopConnections.length === 0) yield* Effect.yieldNow;
+      yield* Effect.promise(() => vi.waitFor(() => expect(desktopConnections).toHaveLength(1)));
       expect(headless.page.close).toHaveBeenCalled();
       let end = yield* Queue.take(viewer.output);
       while (end._tag !== "reconnect" && end._tag !== "gone")
         end = yield* Queue.take(viewer.output);
       expect(end._tag).toBe("reconnect");
-      expect(agentCloses).toHaveLength(1);
-      expect(yield* Fiber.join(connected)).toEqual(
-        Option.some({ threadId: scope.thread.threadId, tabId }),
-      );
       yield* broker.invoke({
         scope,
         tabId,

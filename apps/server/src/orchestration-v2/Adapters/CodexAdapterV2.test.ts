@@ -255,29 +255,6 @@ describe("CodexAdapterV2 runtime policy", () => {
       });
     }),
   );
-
-  it("gives the thread's shell commands the agent browser connection", () => {
-    const { config } = CodexAdapterV2.codexThreadRuntimeParams({
-      mcpSession: {
-        environmentId: EnvironmentId.make("environment-codex-browser"),
-        threadId: ThreadId.make("thread-codex-browser"),
-        providerSessionId: "mcp-session-browser",
-        providerInstanceId: ProviderInstanceId.make("codex"),
-        endpoint: "http://127.0.0.1:43123/mcp",
-        authorizationHeader: "Bearer secret-codex-token",
-        browserToolsAvailable: true,
-        browserEnvironment: {
-          PLAYWRIGHT_CLI_SESSION: "blackbird-thread",
-          PLAYWRIGHT_MCP_CDP_ENDPOINT: "ws://127.0.0.1:43123/api/agent-cdp/cdp-token",
-        },
-      },
-    });
-    assert.equal(
-      config["shell_environment_policy.set.PLAYWRIGHT_MCP_CDP_ENDPOINT"],
-      "ws://127.0.0.1:43123/api/agent-cdp/cdp-token",
-    );
-    assert.equal(config["shell_environment_policy.set.PLAYWRIGHT_CLI_SESSION"], "blackbird-thread");
-  });
 });
 
 describe("CodexAdapterV2 native protocol logging", () => {

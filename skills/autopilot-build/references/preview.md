@@ -6,8 +6,8 @@ Test the change where users will meet it: the preview deployment the pull reques
 - **Unit tests:** write or update focused tests for what changed, and let CI run them.
 - **Agent tests it:**
   1. Wait for the preview deployment of the latest commit.
-  2. Follow the repository's verify skill if it has one (`verify-<repo>`): it knows how to reach the preview, log in, and test each feature. Otherwise use `playwright-cli`, with any test credentials the repository's environment files provide.
-  3. Record a short video with chapters and take screenshots of each state. See `playwright-cli`'s video reference.
+  2. Follow the repository's verify skill if it has one (`verify-<repo>`): it knows how to reach the preview, log in, and test each feature. Otherwise use the browser: Blackbird's `preview_*` tools, or `playwright-cli` outside Blackbird, with any test credentials the repository's environment files provide.
+  3. Record a short video and take screenshots of each state: `preview_recording_start` in Blackbird, otherwise `playwright-cli`'s video reference.
   4. When the flow should change data, check the data or the logs too.
   5. Show the proof in the thread as an `html_render` page. Keep it out of the pull request description.
 - **The user tests it:** test what you can yourself first, then give the user the preview link and a short checklist. The pull request only counts as ready after their "works".

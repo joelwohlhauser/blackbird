@@ -25,7 +25,6 @@ export class SessionControl {
   private pending: Promise<void> = Promise.resolve();
   private readonly handoff = new Set<Promise<void>>();
   private owner: string | null = null;
-  private guest: string | null = null;
   private epoch = 0;
   private closed = false;
 
@@ -40,10 +39,6 @@ export class SessionControl {
 
   get generation() {
     return this.epoch;
-  }
-
-  get sharedWith() {
-    return this.guest;
   }
 
   private enqueue<A>(run: () => Promise<A>): Promise<A> {
@@ -119,31 +114,6 @@ export class SessionControl {
   observe<A>(run: () => Promise<A>) {
     this.assertOpen();
     return run();
-  }
-
-  shared<A>(agentId: string, run: () => Promise<A>) {
-    if (this.agentId !== null && this.agentId !== agentId)
-      return Promise.reject(
-        new BrowserControlInterrupted("This tab belongs to another agent.", "agentMismatch"),
-      );
-    if (this.owner !== null)
-      return Promise.reject(
-        new BrowserControlInterrupted("A human controls this tab.", "humanControl"),
-      );
-    if (this.agentId === null && this.guest !== agentId) {
-      this.guest = agentId;
-      this.epoch++;
-      this.onGenerationChange();
-    }
-    return this.action(() => this.owner === null && (this.agentId ?? this.guest) === agentId, run);
-  }
-
-  leave(agentId: string) {
-    if (this.guest !== agentId) return false;
-    this.guest = null;
-    this.epoch++;
-    this.onGenerationChange();
-    return true;
   }
 
   system<A>(run: () => Promise<A>) {

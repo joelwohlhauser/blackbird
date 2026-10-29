@@ -3,33 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { BrowserControlInterrupted, SessionControl } from "./SessionControl.ts";
 
 describe("SessionControl", () => {
-  it("lets an agent share a tab no agent owns until a human takes control", async () => {
-    const control = new SessionControl(null);
-
-    await expect(control.shared("agent", async () => "acted")).resolves.toBe("acted");
-    expect(control.sharedWith).toBe("agent");
-
-    await control.take("viewer");
-    await expect(control.shared("agent", async () => "blocked")).rejects.toThrow(
-      "A human controls this tab.",
-    );
-    await control.release("viewer");
-    await expect(control.shared("agent", async () => "resumed")).resolves.toBe("resumed");
-
-    expect(control.leave("agent")).toBe(true);
-    expect(control.sharedWith).toBeNull();
-  });
-
-  it("keeps agents off tabs another agent owns", async () => {
-    const control = new SessionControl("owner");
-
-    await expect(control.shared("owner", async () => "acted")).resolves.toBe("acted");
-    await expect(control.shared("intruder", async () => "acted")).rejects.toThrow(
-      "This tab belongs to another agent.",
-    );
-    expect(control.sharedWith).toBeNull();
-  });
-
   it("returns an action result before tracked navigation but drains it before already queued actions", async () => {
     const control = new SessionControl("agent");
     const committed = Promise.withResolvers<void>();

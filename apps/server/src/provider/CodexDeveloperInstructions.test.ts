@@ -90,24 +90,6 @@ describe("Codex runtime context", () => {
   });
 });
 
-describe("Blackbird browser developer instructions", () => {
-  const runtime = { model: "gpt-5.3-codex", reasoningEffort: "high" };
-
-  it("points agents at playwright-cli", () => {
-    const instructions = toolInstructions(runtime, true);
-    NodeAssert.match(instructions, /Blackbird browser/);
-    NodeAssert.match(instructions, /playwright-cli open <url>/);
-    NodeAssert.match(instructions, /Do not switch to Chrome/);
-  });
-
-  it("omits the browser block entirely when the preview tools are not attached", () => {
-    const instructions = toolInstructions(runtime, false);
-    NodeAssert.doesNotMatch(instructions, /playwright-cli/);
-    NodeAssert.doesNotMatch(instructions, /Blackbird browser/);
-    NodeAssert.doesNotMatch(instructions, /Do not switch to Chrome/);
-  });
-});
-
 describe("Codex orchestration context", () => {
   it("routes subagents native first, delegate_task for the rest", () => {
     const orchestration = Object.entries(buildCodexAdditionalContext({ model: "gpt-6.1-sol" }))
@@ -131,10 +113,4 @@ describe("Codex orchestration context", () => {
 
 function runtimeInstructions(runtime: Parameters<typeof buildCodexAdditionalContext>[0]) {
   return buildCodexAdditionalContext(runtime).t3_code_runtime!.value;
-}
-function toolInstructions(
-  runtime: Parameters<typeof buildCodexAdditionalContext>[0],
-  available: boolean,
-) {
-  return buildCodexAdditionalContext(runtime, available).t3_code_tools?.value ?? "";
 }

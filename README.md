@@ -268,18 +268,14 @@ its routes without deleting saved pins.
 
 Assistant messages can be read aloud with Google Gemini text-to-speech (`gemini-3.1-flash-tts-preview`). Add a Gemini API key under **Settings → General → Text to speech**, where you also pick a voice (Alnilam by default, Achernar, or Kore) and the default reading speed. A speaker button then appears next to each message's copy button; clicking it generates the audio and then plays it, clicking again stops it, and a speed button beside it cycles the speed while listening. Code blocks and Markdown syntax are skipped. The key is stored on the device only, and the browser calls Gemini directly.
 
-### Agent browser (Playwright CLI)
+### Agent browser
 
-Agents use [Playwright CLI](https://github.com/microsoft/playwright-cli) to drive the same browser tabs you see, on top of the environment server's browser engine. Each agent session starts with `PLAYWRIGHT_CLI_SESSION` and `PLAYWRIGHT_MCP_CDP_ENDPOINT` in its environment, so plain `playwright-cli open <url>`, `click`, `snapshot`, `tab-new` and so on work without flags or setup. The endpoint is tied to the agent session and revoked with it. Agents do not get upstream's `preview_*` MCP browser tools.
+Agents drive the same browser tabs you see with upstream T3 Code's `preview_*` MCP tools: `preview_status` first, then `preview_open`, `preview_snapshot`, `preview_act` and the rest. `preview_open` takes a browser profile, so an agent can open a tab signed in with a saved profile, for example a test account.
 
-- Playwright sees the chat's browser tabs. `open <url>` navigates the current tab, and pages the agent opens become new agent tabs.
-- Tabs an agent opens start at the MacBook Air 13″ size (1470 × 956). `playwright-cli resize` resizes the real tab.
-- `playwright-cli close` only disconnects; your tabs stay open.
+- Tabs an agent opens start at the MacBook Air 13″ size (1470 × 956).
 - Agent typing and pasting go to the page as native input, and focus returns to what you were typing in after an agent click.
-- Chats on the MacBook drive the tab shown in the desktop app. Chats on remote use a headless Chrome on remote that is streamed into the app, so `localhost` on remote works but your Mac's logins do not.
-- While you hold control of a tab, the agent's clicks, typing, scripts, navigation and closes fail until you release it.
-- Agents only reach the chat's own tabs, can navigate only to http, https, about and data URLs, and get no extra browser contexts. Cross-site iframes work in remote tabs but not in desktop tabs.
-- `playwright-cli` has to be installed on the agent's machine. It is installed on the local Mac and remote, not on remote-example-2.
+- Chats on the MacBook drive the tab shown in the desktop app, also when the chat is in the background. Chats on remote use a headless Chrome on remote that is streamed into the app, so `localhost` on remote works but your Mac's logins do not.
+- While you hold control of a tab, the agent's actions fail until you release it.
 
 ### Shared skills and instructions
 

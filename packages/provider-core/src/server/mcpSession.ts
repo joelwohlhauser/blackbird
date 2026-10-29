@@ -11,16 +11,7 @@ export interface McpProviderSessionConfig {
   readonly browserToolsAvailable: boolean;
   readonly capabilities?: ReadonlySet<string>;
   readonly agentDeviceEnvironment?: Readonly<Record<string, string>>;
-  readonly browserEnvironment?: Readonly<Record<string, string>>;
 }
-
-export const playwrightEnvironment = (
-  config: Pick<McpProviderSessionConfig, "threadId" | "providerSessionId">,
-  cdpEndpoint: string,
-): Record<string, string> => ({
-  PLAYWRIGHT_CLI_SESSION: `blackbird-${config.threadId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12)}-${config.providerSessionId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`,
-  PLAYWRIGHT_MCP_CDP_ENDPOINT: cdpEndpoint,
-});
 
 export function withAgentDeviceEnvironment(
   base: NodeJS.ProcessEnv,

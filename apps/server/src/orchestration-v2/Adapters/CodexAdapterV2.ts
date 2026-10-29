@@ -1322,12 +1322,6 @@ export function codexThreadRuntimeParams(input: {
     ...(input.modelSelection === undefined ? {} : { model: input.modelSelection.model }),
     config: {
       ...CODEX_THREAD_CONFIG,
-      ...Object.fromEntries(
-        Object.entries(mcpSession?.browserEnvironment ?? {}).map(([name, value]) => [
-          `shell_environment_policy.set.${name}`,
-          value,
-        ]),
-      ),
       ...(mcpSession === undefined
         ? {}
         : {

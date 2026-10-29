@@ -18,7 +18,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { HttpRouter, HttpServer } from "effect/http";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
@@ -88,10 +87,8 @@ it.effect.each([
       ack: Effect.sync(() => acked.resolve()),
     });
     const browser = ServerBrowser.ServerBrowser.of({
-      openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
-      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
       attachViewer: (input) =>
@@ -165,10 +162,8 @@ it.effect("sends replies ahead of stale frames and only the newest frame after a
       ack: Effect.sync(() => void released.push(id)),
     });
     const browser = ServerBrowser.ServerBrowser.of({
-      openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
-      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
       attachViewer: () => Effect.succeed({ output, input: () => Effect.void }),
@@ -238,10 +233,8 @@ it.effect.each([
     const auth = makeAuth(testCase.scopes, testCase.error);
     let attachments = 0;
     const browser = ServerBrowser.ServerBrowser.of({
-      openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
-      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
       attachViewer: () => {
@@ -281,10 +274,8 @@ it.effect("serves a tab's download only to an authorized session", () =>
     yield* fs.writeFileString(path, "report contents");
     const requests: Array<unknown> = [];
     const browser = ServerBrowser.ServerBrowser.of({
-      openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
-      connectedTabs: Stream.empty,
       openDownload: (input) =>
         Effect.sync(() => {
           requests.push(input);
@@ -331,10 +322,8 @@ it.effect("passes uploaded files to the page's open picker and needs operate sco
   Effect.gen(function* () {
     const answers: Array<{ chooserId: string; files: Array<{ name: string; text: string }> }> = [];
     const browser = ServerBrowser.ServerBrowser.of({
-      openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
-      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: (input) =>
         Effect.sync(() => {
@@ -402,10 +391,8 @@ it.effect.each([
 ])("tells viewers the command that sets up the host ($need)", ({ error, need }) =>
   Effect.gen(function* () {
     const browser = ServerBrowser.ServerBrowser.of({
-      openAgentPage: () => Effect.die("unused"),
       clearProfile: () => Effect.void,
       reportProfiles: () => Effect.void,
-      connectedTabs: Stream.empty,
       openDownload: () => Effect.succeedNone,
       answerFileChooser: () => Effect.succeed(false),
       attachViewer: () => Effect.fail(new ServerBrowser.ServerBrowserLaunchError({ cause: error })),

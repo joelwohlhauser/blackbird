@@ -24,9 +24,10 @@ Ordinary coding tasks need no T3 tools.
 
 - To work in a worktree: \`create_worktree\` with \`branch\` (it does not move the thread), then \`switch_directory\` with the returned \`path\`. \`t3_worktree_handoff\` does both. An existing branch is reused; other names branch from \`baseRef\` (default: the repository's default branch). \`repositoryPath\` picks another repository; required in a Quick chat.
 - \`switch_directory\` moves this thread to any existing folder. Call it last in your turn with the remaining work as \`continuationPrompt\`. A shell \`cd\` or \`git worktree add\` does not move the thread.`,
-  `### Visuals
+  `### Visuals and preview
 
-- Answer data with a trend or comparison with a chart, and show any visual the user asks for here: pass its HTML to \`html_preview\`, then \`html_render\`. If the visual is a file, pass that file's HTML. A screenshot on disk or a text description does not show it. Never start a server for it. Tools a web page exposes give data only. Never use them to show results. Asked for an image to post, send, or use elsewhere: a \`.png\` file and its path, never \`html_render\`.`,
+- Answer data with a trend or comparison with a chart, and show any visual the user asks for here: pass its HTML to \`html_preview\`, then \`html_render\`. If the visual is a file, pass that file's HTML. A screenshot on disk or a text description does not show it. Never start a server for it. Tools a web page exposes give data only. Never use them to show results. Asked for an image to post, send, or use elsewhere: a \`.png\` file and its path, never \`html_render\`.
+- Never use \`preview_*\` to verify or show your own edit, even a frontend edit or an open tab. Do not repeat preview calls from an earlier turn. Use them only when the current request asks for browser work or names a page or tab. Public pages: web fetch or search unless browser work was asked; then preview tools only, no web fetch. Close a tab you opened before you reply, unless the user asked for it or uses it.`,
 ].map(rebrand);
 
 export const T3_CODE_ORCHESTRATION_INSTRUCTIONS = `
@@ -34,18 +35,12 @@ export const T3_CODE_ORCHESTRATION_INSTRUCTIONS = `
 ${T3_CODE_ORCHESTRATION_SECTIONS.join("\n\n")}
 `;
 
-export const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = `
+export const T3_CODE_BROWSER_TOOL_INSTRUCTIONS = rebrand(`
 
-## Blackbird browser
+## T3 Code browser
 
-You are running inside Blackbird, which shares a browser with the user. Use \`playwright-cli\` for all browser work; it is already connected to that browser, so do not pass \`-s=\`, \`--cdp\`, or other connection flags.
-
-Start with \`playwright-cli open <url>\` (this navigates the current tab), then use normal commands such as \`goto\`, \`click\`, \`fill\`, \`snapshot\`, and \`tab-new\`. Every action already prints the updated page and snapshot, so do not re-run \`snapshot\` or add sleeps. Element refs such as \`e15\` come from the latest snapshot and go stale after navigation. \`playwright-cli close\` only disconnects; the user's tabs stay open. If the browser disconnects, run \`playwright-cli open\` again.
-
-The browser shares one profile with the user, so extra browser contexts, downloads, and PDF export are unavailable. Use \`playwright-cli video-start\` and \`video-stop\` to record it.
-
-Do not switch to Chrome, standalone Playwright, agent-browser, or other browser tools unless the user asks for them.
-`;
+When browser work was asked, \`preview_*\` is the browser you share with the user: \`preview_status\` first, then \`preview_open\` if no tab can be automated. Prefer snapshot locators over coordinates. Switch browsers only if the tools are absent or \`preview_open\` says unsupported, the user asks, or two preview calls fail on one step. Then quote the error and switch.
+`);
 
 // ACP only: some ACP agents accept the injected MCP server but never expose
 // its tools, so they need the terminal transport other harnesses never use.

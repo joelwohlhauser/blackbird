@@ -27,7 +27,7 @@ Production stays read-only apart from three things: the merge, the data scripts 
 
 Check that the change works in production and broke nothing next to it. Read-only.
 
-- Run the changed flow with the repository's verify skill, or `playwright-cli`. Logging in with a test account is always allowed. Beyond that, only actions that don't change data.
+- Run the changed flow with the repository's verify skill, or the browser (`preview_*` in Blackbird, `playwright-cli` elsewhere). Logging in with a test account is always allowed. Beyond that, only actions that don't change data.
 - Compare the error tracker before and after the release: new issues in the changed area, and known issues that got clearly more frequent.
 - Read the logs for the affected services, and check the data when the change writes data.
 - Show the result as one `html_render` page: what you checked, before and after.
