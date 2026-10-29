@@ -68,7 +68,8 @@ Get a read-only review from the model that didn't write the code, before the pul
 Both run once the pull request exists:
 
 - Test on the preview deployment to the level the brief set. See `references/preview.md`.
-- Handle review-bot comments as they arrive. See `references/bot-loop.md`.
+- Handle review-bot comments as they arrive. Read `references/bot-loop.md` before you handle the first one.
+- Reply only inside review threads. Never post a top-level comment on the pull request, except a command a review bot needs, such as asking it to resume a paused review. Findings outside a thread get no reply.
 
 ## 8. Ready
 

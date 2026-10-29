@@ -13,7 +13,7 @@ Review bots comment on the pull request. Handle them like a skeptical maintainer
    - **Ask the user:** a real risk that needs a big change or a product decision. Note it for the report.
 5. Fix the "fix now" items with the smallest change. Do small fixes yourself; hand a bigger one to a subagent. A fix that changes behavior gets a new review round on the other model (see `review.md`).
 6. Test the preview again only when a fix touched the tested flow.
-7. On a review thread you don't act on, reply in that thread in one to three sentences saying why. Then resolve every review thread you evaluated, whatever the verdict. Findings without a thread, such as those in a review body or CodeRabbit's outside-diff comments, get no reply; list the ones you didn't fix in your report. Never post a top-level comment on the pull request.
+7. On a review thread you don't act on, reply in that thread in one to three sentences saying why. Then resolve every review thread you evaluated, whatever the verdict. Findings without a thread, such as those in a review body or CodeRabbit's outside-diff comments, get no reply; list the ones you didn't fix in your report. Never post a top-level comment on the pull request, except a command a review bot needs, such as asking it to resume a paused review.
 8. Commit and push, then end the turn and wait for the next wake.
 
 Also on a wake:
