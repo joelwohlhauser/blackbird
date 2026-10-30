@@ -45,7 +45,7 @@ One check is usually enough, and never more than three unless the brief or the u
 
 Use a one-time trigger, `{type: "once", at}`, with the user's time zone offset for that date in `at`, so the time is right on any server. A one-time check deletes itself as soon as its prompt reaches the thread. Name in each check's prompt what changed, when it deployed, and the numbers from before the release.
 
-Each check repeats Verify's error-tracker, log, and data checks against those numbers and ends with one verdict: working, regression, or no evidence yet. Stay quiet when nothing changed. Post only when something looks off, plus one closing message after the last check: all clear, or still unproven and why. Once a check confirms the change works, end the watch and delete the remaining checks (`delete_scheduled_task`). When a check finds nothing, settle the thread again (`thread_organize` with `settle`); when something looks off, leave it active.
+Each check repeats Verify's error-tracker, log, and data checks against those numbers and ends with one verdict: verified working, regression, or unproven. No errors without a successful use of the changed flow means unproven. Stay quiet when nothing changed. Post only when something looks off, plus one closing message after the last check: verified working, or still unproven and why. Once a check confirms the change works, end the watch and delete the remaining checks (`delete_scheduled_task`). When a check finds nothing, settle the thread again (`thread_organize` with `settle`); when something looks off, leave it active.
 
 A regression is a new error-tracker issue in the changed area, a known issue that got clearly more frequent, new errors in the logs, or the changed flow failing. Not every blip.
 

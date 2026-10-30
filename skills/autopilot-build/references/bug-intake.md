@@ -6,7 +6,7 @@ A bug report the user hands over is a go for a fix pull request. The user's next
 
 1. Fetch `origin` and fast-forward the default branch. Stop if the checkout has local changes.
 2. Read the report: the issue, the error-tracker issue and its recent events, screenshots.
-3. Search for earlier work: issues including closed ones, pull requests including closed and unmerged ones, and git history (`git log -S`, `git log --grep`). A bug that was "fixed" before is a different investigation. When that turns up someone's earlier work on it, also search their Blackbird chats with `thread_search`.
+3. Search for earlier work: issues including closed ones, pull requests including closed and unmerged ones, and git history (`git log -S`, `git log --grep`). A bug that was "fixed" before is a different investigation. When earlier work is relevant, read the matching Blackbird conversation. Check for active work on the same issue or files before starting another implementation.
 4. Find the cause in the code, and the change that introduced it (`git log` / `git blame` on the failing lines).
 5. Work out the impact: who is affected, since when, and how many users or records. Use read-only production access where the team instructions allow it.
 

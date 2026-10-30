@@ -40,10 +40,10 @@ Post the plan in one short message and keep going.
 ## 4. Build
 
 - For a bug: reproduce it first, then fix it. Never restructure code just so a test can be written.
-- Stay inside the brief and follow the codebase's patterns.
+- Stay inside the brief and follow the codebase's patterns. Reuse existing permissions, queries and storage. Add files, tests or abstractions only when the change needs them.
 - When the change touches stored data, follow `references/migrations.md`.
 - Reread the diff. Delete comments that restate the code or narrate the change, and undo formatting churn in files you didn't mean to touch.
-- Update the feature doc from the brief, not from the code. See `references/feature-docs.md`.
+- Update a feature doc only when the change adds or changes a lasting decision or constraint. See `references/feature-docs.md`.
 - When subagents built parts, put them together and check that they fit.
 
 ## 5. Review
@@ -60,7 +60,7 @@ Get a read-only review from the model that didn't write the code, before the pul
    - Nothing else: no list of tests, no "Tested on the preview" section, no "Left out on purpose" section. The proof goes in the chat report.
    - Don't name file paths unless the reader has to open that file.
 3. Link the pull request to the thread (`link_pull_request`) and to the issue.
-4. Turn any question that is still open into its own issue.
+4. For open questions, follow `references/sidequests.md`: ask the user what to do; ignore by default.
 5. Call `watch_pull_request` and end the turn. Blackbird wakes the thread when a check finishes, a bot comments, or the branch conflicts.
 
 ## 7. Preview and review bots

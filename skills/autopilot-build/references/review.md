@@ -12,7 +12,7 @@ Start every reviewer with `delegate_task` (`role: "review"`, `mode: "async"`) in
 - **Scope:** the other model again. Can be the same subagent as correctness.
 - **Security:** only when the change touches authentication, permissions, user data, payments, secrets, or input from outside. You decide.
 
-Small, local changes can merge the lenses into one reviewer on the other model.
+Small, local changes should merge the lenses into one reviewer on the other model.
 
 ## Prompts
 
@@ -35,7 +35,7 @@ Then add the lens:
 
 ## Sorting the findings
 
-Treat every finding as a claim. Check it against the code before acting.
+Treat every finding as a claim. Check it against the code before acting. Check realistic inputs across the full flow, including retries, deadlines and persistence. A defect that still prevents the agreed outcome is a blocker even if it predates this change.
 
 - **Fix now:** a real release blocker, or a small, obviously correct improvement with no risk.
 - **No action:** a false positive, a duplicate, something already handled, a rare hypothetical, style, or scope creep. Note the reason.
