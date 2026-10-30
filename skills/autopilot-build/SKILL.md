@@ -76,7 +76,7 @@ Both run once the pull request exists:
 Check `references/ready.md`. When everything holds:
 
 - If the brief says the agent merges, load `autopilot-ship` and continue.
-- Otherwise post the report (problem, change, proof, anything only the user can do), write a pull request guide with `write_pull_request_guides`, call `unwatch_pull_request` so the thread lands in the user's inbox, and wait for their OK. Their "ship it" starts `autopilot-ship`.
+- Otherwise post the report (problem, change, proof, anything only the user can do), write a pull request guide with `write_pull_request_guides` (if it says guides are off, drop it without mentioning it), call `unwatch_pull_request` so the thread lands in the user's inbox, and wait for their OK. Their "ship it" starts `autopilot-ship`.
 
 ## Without Blackbird
 
