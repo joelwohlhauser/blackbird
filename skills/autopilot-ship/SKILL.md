@@ -51,12 +51,19 @@ A regression is a new error-tracker issue in the changed area, a known issue tha
 
 ## 5. Revert or fix
 
-When Verify or Watch finds a regression this change caused:
+When Verify or Watch shows that this change broke something, or doesn't fully do what the brief said:
 
 1. Tell the user at once, with the evidence: what broke, since when, and who is affected.
-2. Open a revert pull request.
-3. Merge the revert yourself only when the cause is clearly this change, users are blocked right now, and the brief let the agent merge. Otherwise wait for the user's OK.
-4. The real fix starts again with `autopilot-build`, in a new pull request.
+2. Revert when users are blocked and the fix isn't quick. Open a revert pull request, and merge it yourself only when the cause is clearly this change, users are blocked right now, and the brief let the agent merge. Otherwise wait for the user's OK.
+3. Otherwise, and after a revert, fix forward with `autopilot-build` in a new pull request. If the user approved merging this change, or the brief let the agent merge, the fix's brief says the agent merges when all of these hold:
+   - It only makes this change do what its brief said. Nothing new in scope.
+   - It's a small, contained fix that needs no product decision.
+   - The cause is reproduced, and a test that fails without the fix proves it.
+   - It doesn't change how data is stored, add a dependency, or touch auth, permissions or billing.
+
+   If any of these doesn't hold, the fix waits for the user's OK like any other pull request.
+
+4. After the fix merges, run Rollout, Verify and Watch again for it. Re-running the brief's data scripts for the affected records is part of that. In the summary, say that you merged the fix yourself and why it qualified.
 
 ## 6. Done
 
