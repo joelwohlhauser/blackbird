@@ -159,10 +159,28 @@ jobs:
             exit 0
           fi
           tag="v$VERSION"
+          if (( latest > 0 )); then
+            previous="v0.3.$latest"
+            gh api --paginate "repos/$GH_REPO/compare/$previous...$SOURCE_SHA?per_page=100" \
+              --jq '.commits[].commit.message | split("\n")[0] | "- " + .' > "$RUNNER_TEMP/changes"
+            if [[ ! -s "$RUNNER_TEMP/changes" ]]; then
+              printf '%s\n' '- Rebuilt the previous release with no source changes.' > "$RUNNER_TEMP/changes"
+            fi
+            changelog="https://github.com/$GH_REPO/compare/$previous...$tag"
+          else
+            printf '%s\n' '- Initial Blackbird release.' > "$RUNNER_TEMP/changes"
+            changelog="https://github.com/$GH_REPO/commit/$SOURCE_SHA"
+          fi
+          {
+            printf "%s\n\n" "## What's changed"
+            cat "$RUNNER_TEMP/changes"
+            printf '\n## Full changelog\n\n[View changes](%s)\n\nBuilt from commit `%s`.\n' "$changelog" "$SOURCE_SHA"
+            printf '\n## Installation\n\nDownload the DMG for the first installation on macOS Apple Silicon. Existing release installations can download updates from the sidebar and restart when ready.\n\nThis build is self-signed and is not notarized by Apple. macOS may require approval in Privacy & Security on first installation and may ask for Keychain access after an update.\n'
+          } > "$RUNNER_TEMP/release-notes"
           if gh release view "$tag" --json isDraft --jq .isDraft > "$RUNNER_TEMP/release-draft" 2>/dev/null; then
             test "$(cat "$RUNNER_TEMP/release-draft")" = true
+            gh release edit "$tag" --notes-file "$RUNNER_TEMP/release-notes"
           else
-            printf 'Blackbird for macOS Apple Silicon.\n\nBuilt from commit `%s`.\n\nDownload the DMG for the first installation. Existing release installations can download updates from the sidebar and restart when ready.\n\nThis build is self-signed and is not notarized by Apple. macOS may require approval in Privacy & Security on first installation and may ask for Keychain access after an update.\n' "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes"
             gh release create "$tag" --draft --target "$SOURCE_SHA" --title "Blackbird $VERSION" --notes-file "$RUNNER_TEMP/release-notes"
           fi
           gh release upload "$tag" ./* --clobber

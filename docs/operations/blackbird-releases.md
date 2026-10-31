@@ -2,6 +2,8 @@
 
 The `Blackbird release` workflow owns macOS Apple Silicon releases. Push to `main`, or dispatch that workflow on `main`. Builds use versions `0.3.<run number>` and one serialized publication queue. Re-running a failed run keeps its version; re-running an older run cannot replace a newer published release. A failed upload leaves a draft that the same run can complete. Release assets are also retained as Actions artifacts for 14 days.
 
+Release notes list commit subjects since the previous published release, including direct pushes to `main`. Write commit subjects that describe the change clearly. The sidebar shows those changes; the GitHub release page also includes a full comparison and installation guidance. A new build of the same source is labelled as a rebuild without source changes.
+
 ## Signing identity
 
 Configure two repository Actions secrets before enabling the workflow:
