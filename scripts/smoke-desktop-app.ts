@@ -9,8 +9,8 @@ import * as NodeTimersPromises from "node:timers/promises";
 import * as NodeUtil from "node:util";
 import { _electron, type ElectronApplication } from "playwright-core";
 
-// A snapshot from an older build on purpose: the packaged server must migrate it forward, as it
-// does for every upgrading user. It holds one project and two threads, nothing else.
+// Synthetic snapshot built with Blackbird migrations through 71, so startup must migrate it
+// forward. It holds one project and two threads, without credentials or scheduled tasks.
 const FIXTURE_DB = NodePath.join(import.meta.dirname, "fixtures/desktop-launch/statev2.sqlite");
 const THREAD_TITLE = "Release launch check";
 const THREAD_MESSAGE = "The release opens and shows this thread.";
