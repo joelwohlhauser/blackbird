@@ -9,6 +9,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   getThemeColorsForMode,
   getThemeModes,
+  T3_CODE_THEME,
   type ThemeAppearance,
   type ThemeDefinition,
 } from "../../themePalette";
@@ -35,7 +36,7 @@ export type ThemeCardDefinition = {
 export type ThemeMode = ThemeAppearance | "system";
 export type ThemeCardPreviewColors = ThemeCardPreview["colors"];
 
-const STANDARD_THEME_PREVIEW_COLORS: Record<
+const T3_CODE_PREVIEW_COLORS: Record<
   ThemeAppearance,
   Readonly<Record<ThemePreviewRole, string>>
 > = {
@@ -55,15 +56,36 @@ const STANDARD_THEME_PREVIEW_COLORS: Record<
   },
 };
 
-export const STANDARD_THEME_CARDS: ReadonlyArray<ThemeCardDefinition> = [
-  {
-    id: "default",
-    label: "T3 Code",
-    previews: (["light", "dark"] as const).map((mode) => ({
-      mode,
-      colors: STANDARD_THEME_PREVIEW_COLORS[mode],
-    })),
+const BLACKBIRD_PREVIEW_COLORS: Record<
+  ThemeAppearance,
+  Readonly<Record<ThemePreviewRole, string>>
+> = {
+  light: T3_CODE_PREVIEW_COLORS.light,
+  dark: {
+    sidebar: "#1b1b1b",
+    canvas: "#111111",
+    surface: "#191919",
+    accentSurface: "#252525",
+    accent: "#252525",
+    messageSurface: "#252525",
+    messageAction: "#5c89f4",
   },
+};
+
+function standardPaletteCard(
+  id: string,
+  label: string,
+  colors: Record<ThemeAppearance, Readonly<Record<ThemePreviewRole, string>>>,
+): ThemeCardDefinition {
+  return {
+    id,
+    label,
+    previews: (["light", "dark"] as const).map((mode) => ({ mode, colors: colors[mode] })),
+  };
+}
+
+export const STANDARD_THEME_CARDS: ReadonlyArray<ThemeCardDefinition> = [
+  standardPaletteCard("default", "Blackbird", BLACKBIRD_PREVIEW_COLORS),
 ];
 
 export function previewColorsOf(
@@ -74,6 +96,9 @@ export function previewColorsOf(
 }
 
 export function getThemeCardDefinition(theme: ThemeDefinition): ThemeCardDefinition {
+  if (theme.id === T3_CODE_THEME.id) {
+    return standardPaletteCard(theme.id, theme.label, T3_CODE_PREVIEW_COLORS);
+  }
   return {
     id: theme.id,
     label: theme.label,
