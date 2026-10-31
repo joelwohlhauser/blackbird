@@ -3,8 +3,12 @@ import * as NodeCrypto from "node:crypto";
 import type {
   LinearAccount,
   LinearAccountResult,
+  LinearCreatedIssueResult,
+  LinearIssuePageResult,
+  LinearIssueQuery,
   LinearIssueStatusesResult,
-  LinearIssuesResult,
+  LinearStatesResult,
+  LinearTeamsResult,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -40,9 +44,16 @@ export class DesktopLinear extends Context.Service<
     readonly signIn: Effect.Effect<LinearAccount, LinearConnectionError>;
     readonly cancelSignIn: Effect.Effect<void>;
     readonly signOut: Effect.Effect<void, LinearConnectionError>;
-    readonly searchIssues: (
-      query: string,
-    ) => Effect.Effect<LinearIssuesResult, LinearConnectionError>;
+    readonly listIssues: (
+      query: LinearIssueQuery,
+    ) => Effect.Effect<LinearIssuePageResult, LinearConnectionError>;
+    readonly listTeams: Effect.Effect<LinearTeamsResult, LinearConnectionError>;
+    readonly listStates: (
+      teamId: string | null,
+    ) => Effect.Effect<LinearStatesResult, LinearConnectionError>;
+    readonly findCreatedIssue: (
+      since: string,
+    ) => Effect.Effect<LinearCreatedIssueResult, LinearConnectionError>;
     readonly issueStatuses: (
       issueIds: ReadonlyArray<string>,
     ) => Effect.Effect<LinearIssueStatusesResult, LinearConnectionError>;
@@ -128,8 +139,15 @@ const make = Effect.gen(function* () {
     signIn: attempt(() => client.signIn()),
     cancelSignIn: Effect.sync(() => client.cancelSignIn()),
     signOut: attempt(() => client.signOut()),
-    searchIssues: Effect.fn("DesktopLinear.searchIssues")(function* (query) {
-      return yield* attempt(() => client.searchIssues(query));
+    listIssues: Effect.fn("DesktopLinear.listIssues")(function* (query) {
+      return yield* attempt(() => client.listIssues(query));
+    }),
+    listTeams: attempt(() => client.listTeams()).pipe(Effect.withSpan("DesktopLinear.listTeams")),
+    listStates: Effect.fn("DesktopLinear.listStates")(function* (teamId) {
+      return yield* attempt(() => client.listStates(teamId));
+    }),
+    findCreatedIssue: Effect.fn("DesktopLinear.findCreatedIssue")(function* (since) {
+      return yield* attempt(() => client.findCreatedIssue(since));
     }),
     issueStatuses: Effect.fn("DesktopLinear.issueStatuses")(function* (issueIds) {
       return yield* attempt(() => client.issueStatuses(issueIds));

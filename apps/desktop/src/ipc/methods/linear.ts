@@ -2,9 +2,14 @@ import {
   LinearAccount,
   LinearAccountResult,
   LinearIssueIdsInput,
+  LinearCreatedIssueResult,
+  LinearCreatedSince,
+  LinearIssuePageResult,
+  LinearIssueQuery,
   LinearIssueStatusesResult,
-  LinearIssuesResult,
-  LinearSearchQuery,
+  LinearStatesInput,
+  LinearStatesResult,
+  LinearTeamsResult,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -55,12 +60,39 @@ export const signOutOfLinear = makeIpcMethod({
   }),
 });
 
-export const searchLinearIssues = makeIpcMethod({
-  channel: IpcChannels.LINEAR_SEARCH_ISSUES_CHANNEL,
-  payload: LinearSearchQuery,
-  result: LinearIssuesResult,
-  handler: Effect.fn("desktop.ipc.linear.searchIssues")(function* (query) {
-    return yield* (yield* DesktopLinear).searchIssues(query);
+export const listLinearIssues = makeIpcMethod({
+  channel: IpcChannels.LINEAR_LIST_ISSUES_CHANNEL,
+  payload: LinearIssueQuery,
+  result: LinearIssuePageResult,
+  handler: Effect.fn("desktop.ipc.linear.listIssues")(function* (query) {
+    return yield* (yield* DesktopLinear).listIssues(query);
+  }),
+});
+
+export const listLinearTeams = makeIpcMethod({
+  channel: IpcChannels.LINEAR_LIST_TEAMS_CHANNEL,
+  payload: Schema.Void,
+  result: LinearTeamsResult,
+  handler: Effect.fn("desktop.ipc.linear.listTeams")(function* () {
+    return yield* (yield* DesktopLinear).listTeams;
+  }),
+});
+
+export const listLinearStates = makeIpcMethod({
+  channel: IpcChannels.LINEAR_LIST_STATES_CHANNEL,
+  payload: LinearStatesInput,
+  result: LinearStatesResult,
+  handler: Effect.fn("desktop.ipc.linear.listStates")(function* (teamId) {
+    return yield* (yield* DesktopLinear).listStates(teamId);
+  }),
+});
+
+export const findCreatedLinearIssue = makeIpcMethod({
+  channel: IpcChannels.LINEAR_FIND_CREATED_ISSUE_CHANNEL,
+  payload: LinearCreatedSince,
+  result: LinearCreatedIssueResult,
+  handler: Effect.fn("desktop.ipc.linear.findCreatedIssue")(function* (since) {
+    return yield* (yield* DesktopLinear).findCreatedIssue(since);
   }),
 });
 

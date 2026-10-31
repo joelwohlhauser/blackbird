@@ -120,6 +120,7 @@ interface BranchToolbarProps {
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onOpenPullRequestRequest?: () => void;
   onComposerFocusRequest?: () => void;
+  onOpenLinearUrl?: ((url: string) => void) | undefined;
   /** Shown at the end of the composer strip, such as the new thread's permissions. */
   trailing?: ReactNode;
   availableEnvironments?: readonly EnvironmentOption[];
@@ -661,6 +662,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   onCheckoutPullRequestRequest,
   onOpenPullRequestRequest,
   onComposerFocusRequest,
+  onOpenLinearUrl,
   availableEnvironments,
   onEnvironmentChange,
   trailing,
@@ -836,22 +838,27 @@ export const BranchToolbar = memo(function BranchToolbar({
         return;
       case "new":
         onEnvModeChange("worktree");
-        setDraftThreadContext(target, {
-          worktreePath: null,
-          ...(effectiveEnvMode === "worktree" ? {} : { branch: null }),
-        });
+        setDraftThreadContext(target, { worktreePath: null, branch: null });
         onNewBranchNameChange(workspace.newBranchName);
     }
+  };
+  const selectedLinearIssueId = linearIssueIdFromBranch(
+    effectiveEnvMode === "worktree" ? newBranchName : draftBranch,
+  );
+  const onLinearIssueUnlink = () => {
+    onEnvModeChange("local");
+    setDraftThreadContext(draftId ?? threadRef, { branch: null, worktreePath: null });
+    onNewBranchNameChange("");
   };
   const linearIssuePicker =
     showGitControls && canReuseExistingWorktree && !forceNewWorktree && getDesktopLinearBridge() ? (
       <LinearIssuePicker
-        label={
-          linearIssueIdFromBranch(effectiveEnvMode === "worktree" ? newBranchName : draftBranch) ??
-          "Issue"
-        }
+        label={selectedLinearIssueId ?? "Issue"}
         disabled={resolvingLinearIssue}
+        preferencesKey={`${environmentId}:${projectId}`}
         onSelect={(issue) => void onLinearIssueSelect(issue)}
+        onUnlink={selectedLinearIssueId ? onLinearIssueUnlink : undefined}
+        onOpenLinear={onOpenLinearUrl}
       />
     ) : null;
 

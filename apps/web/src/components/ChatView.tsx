@@ -2264,6 +2264,11 @@ export default function ChatView(props: ChatViewProps) {
     });
   };
   const createLinearSurfaceStable = useStableCallback(createLinearSurface);
+  const openLinearUrl = (url: string) => {
+    if (!activeThreadRef) return;
+    void addLinearSurface({ threadRef: activeThreadRef, openPreview, url });
+  };
+  const openLinearUrlStable = useStableCallback(openLinearUrl);
   const createGitHubPullRequestSurface = () => {
     if (!githubPullRequest) return;
     openGitHubPullRequestSurface(githubPullRequest.url);
@@ -5079,6 +5084,9 @@ export default function ChatView(props: ChatViewProps) {
                                   envLocked={envLocked}
                                   onOpenPullRequestRequest={createGitHubPullRequestSurfaceStable}
                                   onComposerFocusRequest={scheduleComposerFocusStable}
+                                  {...(canOperatePreview && browserAvailable
+                                    ? { onOpenLinearUrl: openLinearUrlStable }
+                                    : {})}
                                   {...(canCheckoutPullRequestIntoThread
                                     ? { onCheckoutPullRequestRequest: openPullRequestDialogStable }
                                     : {})}

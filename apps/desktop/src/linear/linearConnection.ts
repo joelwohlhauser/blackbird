@@ -1,6 +1,17 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Node crypto implements the PKCE hash and random state.
 import * as NodeCrypto from "node:crypto";
-import { LinearAccount, LinearIssue, type LinearIssueStatus } from "@t3tools/contracts";
+import {
+  LINEAR_CLOSED_STATE_TYPES,
+  LINEAR_PRIORITY_ORDER,
+  LinearAccount,
+  LinearIssue,
+  LinearPriority,
+  LinearTeam,
+  LinearWorkflowState,
+  type LinearIssuePage,
+  type LinearIssueQuery,
+  type LinearIssueStatus,
+} from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -46,14 +57,58 @@ const decodeIdentity = Schema.decodeUnknownSync(
     }),
   }),
 );
-const IssueNodes = Schema.Struct({ nodes: Schema.Array(LinearIssue) });
-const decodeAssigned = Schema.decodeUnknownSync(
-  Schema.Struct({
-    data: Schema.Struct({ viewer: Schema.Struct({ assignedIssues: IssueNodes }) }),
+const ApiIssue = Schema.Struct({
+  ...LinearIssue.fields,
+  state: Schema.Struct({
+    name: Schema.String,
+    type: Schema.String,
+    color: Schema.String,
+    position: Schema.Number,
+    team: Schema.Struct({
+      states: Schema.Struct({ nodes: Schema.Array(Schema.Struct({ position: Schema.Number })) }),
+    }),
   }),
+});
+const PageInfo = Schema.Struct({
+  hasNextPage: Schema.Boolean,
+  endCursor: Schema.NullOr(Schema.String),
+});
+const IssuePage = Schema.Struct({ nodes: Schema.Array(ApiIssue), pageInfo: PageInfo });
+const decodeIssues = Schema.decodeUnknownSync(
+  Schema.Struct({ data: Schema.Struct({ issues: IssuePage }) }),
 );
 const decodeSearch = Schema.decodeUnknownSync(
-  Schema.Struct({ data: Schema.Struct({ searchIssues: IssueNodes }) }),
+  Schema.Struct({ data: Schema.Struct({ searchIssues: IssuePage }) }),
+);
+const decodeTeams = Schema.decodeUnknownSync(
+  Schema.Struct({
+    data: Schema.Struct({
+      teams: Schema.Struct({ nodes: Schema.Array(LinearTeam) }),
+    }),
+  }),
+);
+const ApiState = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  color: Schema.String,
+  type: Schema.String,
+  position: Schema.Number,
+  team: LinearWorkflowState.fields.team,
+});
+const decodeStates = Schema.decodeUnknownSync(
+  Schema.Struct({
+    data: Schema.Struct({
+      workflowStates: Schema.Struct({
+        nodes: Schema.Array(ApiState),
+        pageInfo: PageInfo,
+      }),
+    }),
+  }),
+);
+const decodePriorityCursor = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({ priority: LinearPriority, after: Schema.NullOr(Schema.String) }),
+  ),
 );
 const decodeStatuses = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -75,10 +130,61 @@ const decodeStatuses = Schema.decodeUnknownSync(
   }),
 );
 
-const ISSUE_FIELDS = "identifier title branchName state { name type color }";
+const ISSUE_FIELDS = `identifier title branchName priority assignee { name avatarUrl }
+  state { name type color position team { states(filter: { type: { eq: "started" } }) { nodes { position } } } }`;
+const PAGE_FIELDS = `nodes { ${ISSUE_FIELDS} } pageInfo { hasNextPage endCursor }`;
 const IDENTITY_QUERY = "query { viewer { id name email } organization { name urlKey } }";
-const ASSIGNED_QUERY = `query Assigned { viewer { assignedIssues(first: 50, orderBy: updatedAt, filter: { state: { type: { nin: ["completed", "canceled"] } } }) { nodes { ${ISSUE_FIELDS} } } } }`;
-const SEARCH_QUERY = `query Search($term: String!) { searchIssues(term: $term, first: 50, orderBy: updatedAt) { nodes { ${ISSUE_FIELDS} } } }`;
+const ISSUES_QUERY = `query Issues($filter: IssueFilter, $after: String) { issues(filter: $filter, first: 50, after: $after, orderBy: updatedAt) { ${PAGE_FIELDS} } }`;
+const SEARCH_QUERY = `query Search($term: String!, $filter: IssueFilter, $after: String) { searchIssues(term: $term, filter: $filter, first: 50, after: $after, orderBy: updatedAt) { ${PAGE_FIELDS} } }`;
+const CREATED_QUERY = `query Created($filter: IssueFilter) { issues(filter: $filter, first: 1, orderBy: createdAt) { ${PAGE_FIELDS} } }`;
+const TEAMS_QUERY = "query Teams { teams(first: 250) { nodes { id key name } } }";
+const STATES_PAGE_QUERY =
+  "query States($filter: WorkflowStateFilter, $after: String) { workflowStates(first: 100, after: $after, filter: $filter) { nodes { id name color type position team { id key } } pageInfo { hasNextPage endCursor } } }";
+const MAX_LIST_PAGES = 10;
+const STATE_TYPE_ORDER = [
+  "triage",
+  "backlog",
+  "unstarted",
+  "started",
+  "completed",
+  "canceled",
+  "duplicate",
+];
+
+function linearStartedProgress(position: number, startedPositions: ReadonlyArray<number>) {
+  return (
+    (startedPositions.filter((other) => other < position).length + 1) /
+    (startedPositions.length + 1)
+  );
+}
+
+function toLinearIssue(issue: typeof ApiIssue.Type): LinearIssue {
+  const { state, ...fields } = issue;
+  const progress =
+    state.type === "started"
+      ? linearStartedProgress(
+          state.position,
+          state.team.states.nodes.map((other) => other.position),
+        )
+      : 0;
+  return { ...fields, state: { name: state.name, type: state.type, color: state.color, progress } };
+}
+
+function issueFilter(query: LinearIssueQuery) {
+  const state = {
+    ...(query.view === "triage" ? { type: { eq: "triage" } } : {}),
+    ...(query.view === "assigned" && query.stateIds.length === 0
+      ? { type: { nin: LINEAR_CLOSED_STATE_TYPES } }
+      : {}),
+    ...(query.stateIds.length > 0 ? { id: { in: query.stateIds } } : {}),
+  };
+  return {
+    ...(query.view === "assigned" ? { assignee: { isMe: { eq: true } } } : {}),
+    ...(Object.keys(state).length > 0 ? { state } : {}),
+    ...(query.teamId ? { team: { id: { eq: query.teamId } } } : {}),
+    ...(query.priorities.length > 0 ? { priority: { in: query.priorities } } : {}),
+  };
+}
 const STATUSES_QUERY = `
     query WorkspaceIssues($filter: IssueFilter!) {
       issues(filter: $filter, first: 200, includeArchived: true) {
@@ -273,17 +379,112 @@ export function createLinearConnection(dependencies: LinearConnectionDependencie
         .catch(() => undefined);
     });
 
-  const searchIssues = (query: string) => {
-    const term = query.trim();
-    return withAccessToken(async (accessToken) => {
-      if (term.length === 0) {
-        const response = await graphql(accessToken, ASSIGNED_QUERY);
-        return decodeOrThrow(() => decodeAssigned(response)).data.viewer.assignedIssues.nodes;
+  const loadIssuePage = async (
+    accessToken: string,
+    term: string,
+    filter: object,
+    after: string | null,
+  ) => {
+    if (term.length === 0) {
+      const response = await graphql(accessToken, ISSUES_QUERY, { filter, after });
+      return decodeOrThrow(() => decodeIssues(response)).data.issues;
+    }
+    const response = await graphql(accessToken, SEARCH_QUERY, { term, filter, after });
+    return decodeOrThrow(() => decodeSearch(response)).data.searchIssues;
+  };
+
+  const listIssues = (query: LinearIssueQuery) => {
+    const term = query.search.trim();
+    const filter = issueFilter(query);
+    return withAccessToken(async (accessToken): Promise<LinearIssuePage> => {
+      if (query.sort === "updatedAt") {
+        const page = await loadIssuePage(accessToken, term, filter, query.cursor);
+        return {
+          issues: page.nodes.map(toLinearIssue),
+          nextCursor: page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null,
+        };
       }
-      const response = await graphql(accessToken, SEARCH_QUERY, { term });
-      return decodeOrThrow(() => decodeSearch(response)).data.searchIssues.nodes;
+      const priorities = LINEAR_PRIORITY_ORDER.filter(
+        (priority) => query.priorities.length === 0 || query.priorities.includes(priority),
+      );
+      const cursor =
+        query.cursor === null ? null : decodeOrThrow(() => decodePriorityCursor(query.cursor));
+      const start = cursor === null ? 0 : Math.max(0, priorities.indexOf(cursor.priority));
+      for (let index = start; index < priorities.length; index++) {
+        const priority = priorities[index]!;
+        const page = await loadIssuePage(
+          accessToken,
+          term,
+          { ...filter, priority: { in: [priority] } },
+          index === start ? (cursor?.after ?? null) : null,
+        );
+        const nextPriority = priorities[index + 1];
+        const next =
+          page.pageInfo.hasNextPage && page.pageInfo.endCursor
+            ? { priority, after: page.pageInfo.endCursor }
+            : nextPriority === undefined
+              ? null
+              : { priority: nextPriority, after: null };
+        if (page.nodes.length > 0 || next === null) {
+          return {
+            issues: page.nodes.map(toLinearIssue),
+            nextCursor: next === null ? null : JSON.stringify(next),
+          };
+        }
+      }
+      return { issues: [], nextCursor: null };
     });
   };
+
+  const listTeams = () =>
+    withAccessToken(async (accessToken) => {
+      const response = await graphql(accessToken, TEAMS_QUERY);
+      return decodeOrThrow(() => decodeTeams(response)).data.teams.nodes.toSorted((left, right) =>
+        left.name.localeCompare(right.name),
+      );
+    });
+
+  const listStates = (teamId: string | null) =>
+    withAccessToken(async (accessToken) => {
+      const states: Array<typeof ApiState.Type> = [];
+      const filter = teamId ? { team: { id: { eq: teamId } } } : {};
+      let after: string | null = null;
+      for (let page = 0; page < MAX_LIST_PAGES; page++) {
+        const response = await graphql(accessToken, STATES_PAGE_QUERY, { filter, after });
+        const { nodes, pageInfo } = decodeOrThrow(() => decodeStates(response)).data.workflowStates;
+        states.push(...nodes);
+        if (!pageInfo.hasNextPage || !pageInfo.endCursor) break;
+        after = pageInfo.endCursor;
+      }
+      return states
+        .toSorted(
+          (left, right) =>
+            STATE_TYPE_ORDER.indexOf(left.type) - STATE_TYPE_ORDER.indexOf(right.type) ||
+            left.position - right.position ||
+            left.name.localeCompare(right.name),
+        )
+        .map(({ position, ...state }): LinearWorkflowState => ({
+          ...state,
+          progress:
+            state.type === "started"
+              ? linearStartedProgress(
+                  position,
+                  states
+                    .filter((other) => other.team.id === state.team.id && other.type === "started")
+                    .map((other) => other.position),
+                )
+              : 0,
+        }));
+    });
+
+  const findCreatedIssue = (since: string) =>
+    withAccessToken(async (accessToken) => {
+      const response = await graphql(accessToken, CREATED_QUERY, {
+        filter: { creator: { isMe: { eq: true } }, createdAt: { gte: since } },
+      });
+      const issue = decodeOrThrow(() => decodeIssues(response)).data.issues.nodes[0];
+      return issue ? toLinearIssue(issue) : null;
+    });
 
   const issueStatuses = (issueIds: ReadonlyArray<string>) => {
     const uniqueIds = [...new Set(issueIds.map((issueId) => issueId.toUpperCase()))];
@@ -319,7 +520,10 @@ export function createLinearConnection(dependencies: LinearConnectionDependencie
     signIn,
     cancelSignIn: () => pendingSignIn?.abort(),
     signOut,
-    searchIssues,
+    listIssues,
+    listTeams,
+    listStates,
+    findCreatedIssue,
     issueStatuses,
   };
 }

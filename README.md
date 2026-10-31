@@ -328,7 +328,7 @@ that same tab, including links to a different domain. Other chat/terminal links
 can ask each time, always open in the normal right panel, or always open in the
 default browser; this is configurable in Settings → Browser.
 
-On desktop, new drafts in a Git project show a Linear issue picker in the composer. It lists your open assigned issues and searches the whole workspace as you type. Picking an issue uses its Linear branch name: a branch already checked out in a worktree selects **Existing worktree**, one checked out in the main checkout selects **Current checkout**, a local or remote branch without a worktree selects **New worktree** for it, and otherwise **New worktree & branch** is prefilled with the branch name. Nothing is created until you send.
+On desktop, new drafts in a Git project show a Linear issue picker in the composer. Its **Assigned to me**, **Triage**, and **All issues** views search as you type and load more issues as you scroll, with priority and status icons. A team filter, status and priority filters, and a priority sort are saved per project. Picking an issue uses its Linear branch name: a branch already checked out in a worktree selects **Existing worktree**, one checked out in the main checkout selects **Current checkout**, a local or remote branch without a worktree selects **New worktree** for it, and otherwise **New worktree & branch** is prefilled with the branch name and starts from the default branch. Nothing is created until you send. **Unlink** returns the draft to the current checkout. **Create issue** opens Linear's own new-issue page in a Linear tab and picks up the issue you create there.
 
 ## Local and remote environments
 

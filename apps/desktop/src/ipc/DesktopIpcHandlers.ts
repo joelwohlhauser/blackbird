@@ -170,7 +170,10 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(LinearIpc.signInToLinear);
   yield* ipc.handle(LinearIpc.cancelLinearSignIn);
   yield* ipc.handle(LinearIpc.signOutOfLinear);
-  yield* ipc.handle(LinearIpc.searchLinearIssues);
+  yield* ipc.handle(LinearIpc.listLinearIssues);
+  yield* ipc.handle(LinearIpc.listLinearTeams);
+  yield* ipc.handle(LinearIpc.listLinearStates);
+  yield* ipc.handle(LinearIpc.findCreatedLinearIssue);
   yield* ipc.handle(LinearIpc.getLinearIssueStatuses);
   for (const previewMethod of PreviewIpc.methods) {
     // Explicit types preserve the error/service union of these heterogeneous preview methods.
