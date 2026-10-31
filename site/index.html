@@ -87,6 +87,143 @@
           </p>
         </article>
       </section>
+
+      <section class="autopilot" aria-labelledby="autopilot-title">
+        <h2 id="autopilot-title">Autopilot</h2>
+        <p class="section-lede">
+          Three bundled skills take a change from idea to production. You never name them; the agent
+          picks the one that fits what you ask.
+        </p>
+
+        <div class="autopilot-grid">
+          <div class="timeline-wrap">
+            <ol class="timeline" role="tablist" aria-orientation="vertical" style="--step: 0">
+              <li>
+                <button role="tab" id="tab-shape" aria-controls="panel-shape" aria-selected="true">
+                  <span class="dot">1</span>
+                  <span class="step-text">
+                    <span class="step-name">Shape</span>
+                    <span class="step-sub">Plan it together</span>
+                  </span>
+                </button>
+              </li>
+              <li>
+                <button
+                  role="tab"
+                  id="tab-build"
+                  aria-controls="panel-build"
+                  aria-selected="false"
+                  tabindex="-1"
+                >
+                  <span class="dot">2</span>
+                  <span class="step-text">
+                    <span class="step-name">Build</span>
+                    <span class="step-sub">Build and review it</span>
+                  </span>
+                </button>
+              </li>
+              <li>
+                <button
+                  role="tab"
+                  id="tab-ship"
+                  aria-controls="panel-ship"
+                  aria-selected="false"
+                  tabindex="-1"
+                >
+                  <span class="dot">3</span>
+                  <span class="step-text">
+                    <span class="step-name">Ship</span>
+                    <span class="step-sub">Prove it in production</span>
+                  </span>
+                </button>
+              </li>
+            </ol>
+            <p class="timeline-note">
+              <a href="https://github.com/joelwohlhauser/blackbird/blob/main/skills/AUTOPILOT.md"
+                >Rules for every stage</a
+              >
+            </p>
+          </div>
+
+          <div class="panels">
+            <article class="panel" role="tabpanel" id="panel-shape" aria-labelledby="tab-shape">
+              <h3>Shape</h3>
+              <p class="panel-when">
+                Starts when you want to explore, brainstorm, or decide how to build something.
+              </p>
+              <ul>
+                <li>Reads the docs, the code, and earlier work first. Changes nothing.</li>
+                <li>Asks a few questions in a quick form, with recommended answers preselected.</li>
+                <li>Has a second model critique the plan.</li>
+                <li>Proposes the simplest design as an interactive page.</li>
+              </ul>
+              <p class="panel-end"><span>Ends with</span> a short brief you approve.</p>
+              <a
+                class="panel-link"
+                href="https://github.com/joelwohlhauser/blackbird/blob/main/skills/autopilot-shape/SKILL.md"
+                >Read the skill on GitHub</a
+              >
+            </article>
+
+            <article
+              class="panel"
+              role="tabpanel"
+              id="panel-build"
+              aria-labelledby="tab-build"
+              hidden
+            >
+              <h3>Build</h3>
+              <p class="panel-when">
+                Starts when you approve a brief, ask for a fix, hand over a bug report, or name a
+                goal to keep working toward.
+              </p>
+              <ul>
+                <li>Works in its own git worktree, never in your main checkout.</li>
+                <li>Splits bigger changes across parallel subagents.</li>
+                <li>
+                  The model that didn't write the code reviews it. Both must agree it's ready.
+                </li>
+                <li>
+                  Tests the preview and handles review-bot comments until every check is green.
+                </li>
+              </ul>
+              <p class="panel-end"><span>Ends with</span> a pull request you could merge today.</p>
+              <a
+                class="panel-link"
+                href="https://github.com/joelwohlhauser/blackbird/blob/main/skills/autopilot-build/SKILL.md"
+                >Read the skill on GitHub</a
+              >
+            </article>
+
+            <article
+              class="panel"
+              role="tabpanel"
+              id="panel-ship"
+              aria-labelledby="tab-ship"
+              hidden
+            >
+              <h3>Ship</h3>
+              <p class="panel-when">
+                Starts when you say "ship it", or when the brief lets the agent merge.
+              </p>
+              <ul>
+                <li>Merges and follows the deploy until production runs the change.</li>
+                <li>Checks that the change works in production, without changing data.</li>
+                <li>Comes back later to look for regressions under real traffic.</li>
+                <li>Reverts or fixes forward when something broke, then closes the issue.</li>
+              </ul>
+              <p class="panel-end">
+                <span>Ends with</span> a change that has proven itself in production.
+              </p>
+              <a
+                class="panel-link"
+                href="https://github.com/joelwohlhauser/blackbird/blob/main/skills/autopilot-ship/SKILL.md"
+                >Read the skill on GitHub</a
+              >
+            </article>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer>
@@ -96,5 +233,6 @@
         guaranteed support or release schedule.
       </p>
     </footer>
+    <script src="autopilot.js"></script>
   </body>
 </html>
