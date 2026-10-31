@@ -4,7 +4,7 @@ Blackbird is Joel Wohlhauser's personal IDE built on top of [T3 Code](https://gi
 
 Blackbird works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity.
 
-[Install Blackbird](docs/user/install.md) on an Apple Silicon Mac, or [run it from source](docs/operations/development.md#first-checkout). Blackbird preserves T3 Code's [MIT license](LICENSE), including the T3 Tools Inc. copyright notice.
+[Install Blackbird](docs/user/install.md) on an Apple Silicon Mac, or [run it from source](docs/operations/development.md#first-checkout). The public page is [joelwohlhauser.github.io/blackbird](https://joelwohlhauser.github.io/blackbird/); its source is in `site/`. Blackbird preserves T3 Code's [MIT license](LICENSE), including the T3 Tools Inc. copyright notice.
 
 The repository has two remotes:
 

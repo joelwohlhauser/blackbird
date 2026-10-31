@@ -1,0 +1,39 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths: [site/**, .github/workflows/pages.yml]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    if: github.repository == 'joelwohlhauser/blackbird'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out site
+        run: |
+          set -euo pipefail
+          git init -q .
+          git sparse-checkout set site
+          git fetch -q --depth=1 --filter=blob:none "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" "$GITHUB_SHA"
+          git checkout -q --detach FETCH_HEAD
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
