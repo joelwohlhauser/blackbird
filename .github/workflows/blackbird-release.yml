@@ -69,16 +69,26 @@ jobs:
           security unlock-keychain -p "$password" "$keychain"
           security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
+          python3 - "$keychain" <<'PYTHON'
+          import shlex, subprocess, sys
+          existing = shlex.split(subprocess.check_output(["security", "list-keychains", "-d", "user"], text=True))
+          subprocess.run(["security", "list-keychains", "-d", "user", "-s", sys.argv[1], *existing], check=True)
+          PYTHON
           rm "$RUNNER_TEMP/signing.p12"
           echo "CSC_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
           fingerprint=$(security find-certificate -c "Blackbird Release" -p "$keychain" | openssl x509 -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)
           test -n "$fingerprint"
           echo "SIGNING_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+          echo "CSC_NAME=$fingerprint" >> "$GITHUB_ENV"
+          security find-identity -p codesigning "$keychain"
+          cp /usr/bin/true "$RUNNER_TEMP/signing-probe"
+          codesign --force --sign "$fingerprint" --keychain "$keychain" --timestamp=none "$RUNNER_TEMP/signing-probe"
+          codesign --verify --strict "$RUNNER_TEMP/signing-probe"
+          rm "$RUNNER_TEMP/signing-probe"
 
       - name: Build signed DMG and update ZIP
         env:
           BLACKBIRD_SELF_SIGNED: "true"
-          CSC_NAME: Blackbird Release
         run: node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --build-version "$VERSION" --output-dir release --signed
 
       - name: Verify and launch packaged app
