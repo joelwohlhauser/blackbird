@@ -10,7 +10,7 @@ Turn a request into a short brief the user approves. Everything here happens in 
 ## 1. Start
 
 1. Make sure the main checkout is current: fetch `origin` and fast-forward the default branch. If it has local changes or isn't on the default branch, stop and say so. Never stash, reset, or clean to get there.
-2. Read the feature doc for the area, if there is one (see `../autopilot-build/references/feature-docs.md`). It says why the feature exists and which options were already turned down.
+2. Read existing documentation for the area to understand why the feature exists, its constraints, and which options were already turned down.
 3. Search for earlier work before forming a theory: issues in the tracker including closed ones, pull requests including closed and unmerged ones, matching error-tracker issues, and git history (`git log -S`, `git log --grep`).
 4. Read the code the change touches. Investigation is read-only; production reads are fine.
 
@@ -36,13 +36,9 @@ When the user agrees, write the brief in chat. It's a few lines, not a file:
 
 - **What:** the change, in plain words.
 - **Not:** what is left out on purpose.
-- **Decisions:** the choices made and the options rejected, with reasons. These become the feature doc's lines.
+- **Decisions:** the choices made and the options rejected, with reasons.
 - **Validate:** not needed, unit tests, agent tests it on the preview, the user tests it, or a goal loop with a measure, a finish condition, and a budget (see `../autopilot-build/references/goal-loop.md`).
 - **Merge:** the agent merges, or the agent waits for the user's OK.
 - **Watch:** anything Ship should check in production, if the default isn't enough.
 
 Then load `autopilot-build`. It moves the thread into a worktree; don't edit anything before that.
-
-## Without Blackbird
-
-Without `html_render`, ask the interview as numbered questions with your recommendation in each, and describe the proposal in text with one small diagram. See `../autopilot-build/references/environments.md`.

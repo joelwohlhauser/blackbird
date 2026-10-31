@@ -2,7 +2,7 @@
 
 The user named a goal to reach instead of a finished change: "hillclimb this", "optimize until...", "don't stop until...", "keep going until...". Build then loops: try one change, measure it, keep it or drop it, and go again until the goal is met.
 
-Branch as usual (Build step 2) and pass the goal along in the continuation prompt. The loop replaces how Plan and Build make the change. Their rules still apply: stay in scope, follow `migrations.md` for stored data, and update the feature doc. Review and everything after it run as usual on the kept changes.
+Branch as usual (Build step 2) and pass the goal along in the continuation prompt. The loop replaces how Plan and Build make the change. Their rules still apply. Review and everything after it run as usual on the kept changes.
 
 ## 1. The contract
 
@@ -67,5 +67,3 @@ Otherwise:
 ```
 
 After a restart, a context compaction, or a finished child waking the thread, read the goal file first. Check each running attempt with `task_status`. When its line has no task ID yet, call `delegate_task` again with the same `clientRequestId`; in the same session that returns the task already started. After a full restart it may start a second child. That only costs tokens, because children don't measure; use whichever finishes first. Also check `git log` for kept commits the log doesn't show yet. Never repeat an attempt the log already has.
-
-Without `delegate_task`, make each attempt yourself on a fresh branch from your latest commit, and measure it the same way.

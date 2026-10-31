@@ -43,7 +43,7 @@ Post the plan in one short message and keep going.
 - Stay inside the brief and follow the codebase's patterns. Reuse existing permissions, queries and storage. Add files, tests or abstractions only when the change needs them.
 - When the change touches stored data, follow `references/migrations.md`.
 - Reread the diff. Delete comments that restate the code or narrate the change, and undo formatting churn in files you didn't mean to touch.
-- Update a feature doc only when the change adds or changes a lasting decision or constraint. See `references/feature-docs.md`.
+- Update documentation only when the change adds or changes a lasting decision or constraint. Follow the repository's documentation rules, format, and location; record why the decision was made, not how the code works.
 - When subagents built parts, put them together and check that they fit.
 
 ## 5. Review
@@ -77,7 +77,3 @@ Check `references/ready.md`. When everything holds:
 
 - If the brief says the agent merges, load `autopilot-ship` and continue.
 - Otherwise post the report (problem, change, proof, anything only the user can do), write a pull request guide with `write_pull_request_guides` (if it says guides are off, drop it without mentioning it), call `unwatch_pull_request` so the thread lands in the user's inbox, and wait for their OK. Their "ship it" starts `autopilot-ship`.
-
-## Without Blackbird
-
-Some steps need Blackbird's tools. `references/environments.md` says what to do without them, for example on a headless agent host.

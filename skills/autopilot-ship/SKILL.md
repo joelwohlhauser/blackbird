@@ -27,7 +27,7 @@ Production stays read-only apart from three things: the merge, the data scripts 
 
 Check that the change works in production and broke nothing next to it. Read-only.
 
-- Run the changed flow with the repository's verify skill, or the browser (`preview_*` in Blackbird, `playwright-cli` elsewhere). Logging in with a test account is always allowed. Beyond that, only actions that don't change data.
+- Run the changed flow with the repository's verify skill, or Blackbird's browser (`preview_*`). Logging in with a test account is always allowed. Beyond that, only actions that don't change data.
 - Compare the error tracker before and after the release: new issues in the changed area, and known issues that got clearly more frequent.
 - Read the logs for the affected services, and check the data when the change writes data.
 - Show the result as one `html_render` page: what you checked, before and after.
@@ -72,7 +72,3 @@ When Verify or Watch shows that this change broke something, or doesn't fully do
 - In the worktree, delete `node_modules` and other installed dependencies to save disk space. Keep the worktree and the branch. Never delete branches.
 - Call `unwatch_pull_request` and post a short summary: what shipped, the production evidence, and anything only the user still has to do.
 - Settle the thread (`thread_organize` with `settle`) when the change shipped, Verify found no regression or new error, and everything the brief set out to do is done. Reminders unrelated to this change, such as deploying another repository, don't keep it open. Leave it active only when something looks off or this change still needs the user.
-
-## Without Blackbird
-
-Without `schedule_task`, list the follow-up checks in the summary instead. See `../autopilot-build/references/environments.md`.
