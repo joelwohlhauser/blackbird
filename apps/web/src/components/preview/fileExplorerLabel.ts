@@ -1,10 +1,19 @@
 import type { ExecutionEnvironmentPlatformOs, FileManagerRevealKind } from "@t3tools/contracts";
+import { FolderOpenIcon } from "lucide-react";
+import { FileExplorerIcon, FinderIcon } from "~/components/Icons";
 
 export function revealInFileExplorerLabel(platform: string): string {
   const normalized = platform.toLowerCase();
   if (normalized.includes("mac")) return "Reveal in Finder";
   if (normalized.includes("win")) return "Reveal in File Explorer";
   return "Reveal in Files";
+}
+
+export function revealInFileExplorerIcon(platform: string) {
+  const normalized = platform.toLowerCase();
+  if (normalized.includes("mac")) return FinderIcon;
+  if (normalized.includes("win")) return FileExplorerIcon;
+  return FolderOpenIcon;
 }
 
 export function revealInFileExplorerLabelForOs(os: ExecutionEnvironmentPlatformOs): string {

@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { previewStreamDownloadUrl } from "@t3tools/client-runtime/preview/server-browser-stream";
@@ -76,7 +77,15 @@ import { useBrowserLayoutZoomFactor } from "~/browser/useBrowserLayoutZoomFactor
 import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
 import { BrowserSettingsReadError } from "~/browser/openFileInPreview";
 import { PreviewFileNotShown, PreviewUnreachable } from "./PreviewUnreachable";
-import { revealInFileExplorerLabel } from "./fileExplorerLabel";
+import { revealInFileExplorerIcon, revealInFileExplorerLabel } from "./fileExplorerLabel";
+import {
+  attachBrowserScreenshotToChat,
+  type BrowserScreenshotChat,
+} from "./attachBrowserScreenshot";
+import { buildDraftThreadRouteParams, buildThreadRouteParams } from "~/threadRoutes";
+import { dispatchSnapShotComposerFocus } from "~/lib/desktopSnapShot";
+import { MorphIcon } from "~/components/MorphIcon";
+import { Check, Copy, Link as LinkGlyph, MessageSquarePlus } from "lucide";
 import { shouldShowPreviewEmptyState } from "./previewEmptyStateLogic";
 import { Badge } from "~/components/ui/badge";
 import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
@@ -155,6 +164,7 @@ export function PreviewView({
   layoutVersion,
   onSendAnnotation,
 }: Props) {
+  const navigate = useNavigate();
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const [findTarget, setFindTarget] = useState<{ tabId: string; url: string } | null>(null);
   const [findFocusNonce, setFindFocusNonce] = useState(0);
@@ -662,48 +672,77 @@ export function PreviewView({
     }
     void bridge.captureScreenshot(runtimeTabId).then(
       (artifact) => {
-        const revealAction = {
-          children: revealInFileExplorerLabel(navigator.platform),
-          onClick: () => void bridge.revealArtifact(artifact.path),
-        };
+        const RevealIcon = revealInFileExplorerIcon(navigator.platform);
+        const captureThreadRef = threadRef;
         let pathCopied = false;
         let imageCopied = false;
+        let pasteState: "idle" | "pasting" | "pasted" = "idle";
         let toastId: ReturnType<typeof toastManager.add>;
+
+        const screenshotToast = (type: "success" | "error", title: string, description?: string) =>
+          stackedThreadToast({
+            type,
+            title,
+            description,
+            actionProps: {
+              children: (
+                <>
+                  <MorphIcon icon={pasteState === "pasted" ? Check : MessageSquarePlus} />
+                  {pasteState === "pasted" ? "Pasted" : "Paste in chat"}
+                </>
+              ),
+              disabled: pasteState !== "idle",
+              onClick: () => void pasteInChat(),
+            },
+            data: {
+              additionalActions: [
+                {
+                  id: "copy-image",
+                  label: imageCopied ? "Copied image" : "Copy image",
+                  props: {
+                    children: (
+                      <MorphIcon
+                        className={cn(imageCopied && "text-success")}
+                        icon={imageCopied ? Check : Copy}
+                      />
+                    ),
+                    disabled: imageCopied,
+                    onClick: copyImage,
+                  },
+                },
+                {
+                  id: "copy-path",
+                  label: pathCopied ? "Copied path" : "Copy path",
+                  props: {
+                    children: (
+                      <MorphIcon
+                        className={cn(pathCopied && "text-success")}
+                        icon={pathCopied ? Check : LinkGlyph}
+                      />
+                    ),
+                    disabled: pathCopied,
+                    onClick: copyPath,
+                  },
+                },
+                {
+                  id: "reveal",
+                  label: revealInFileExplorerLabel(navigator.platform),
+                  props: {
+                    children: <RevealIcon />,
+                    onClick: () => void bridge.revealArtifact(artifact.path),
+                  },
+                },
+              ],
+              secondaryActionVariant: "outline",
+            },
+          });
 
         const updateScreenshotToast = (
           type: "success" | "error" = "success",
           title = "Screenshot saved",
           description?: string,
         ) => {
-          toastManager.update(
-            toastId,
-            stackedThreadToast({
-              type,
-              title,
-              description,
-              actionProps: {
-                children: imageCopied ? "Copied!" : "Copy image",
-                disabled: imageCopied,
-                onClick: copyImage,
-              },
-              data: {
-                additionalActions: [
-                  {
-                    id: "copy-path",
-                    props: {
-                      children: pathCopied ? "Copied!" : "Copy path",
-                      disabled: pathCopied,
-                      onClick: copyPath,
-                    },
-                  },
-                ],
-                secondaryActionProps: {
-                  ...revealAction,
-                },
-                secondaryActionVariant: "outline",
-              },
-            }),
-          );
+          toastManager.update(toastId, screenshotToast(type, title, description));
         };
 
         const copyPath = () => {
@@ -755,31 +794,47 @@ export function PreviewView({
           );
         };
 
-        toastId = toastManager.add(
-          stackedThreadToast({
-            type: "success",
-            title: "Screenshot saved",
-            actionProps: {
-              children: "Copy image",
-              onClick: copyImage,
-            },
-            data: {
-              additionalActions: [
-                {
-                  id: "copy-path",
-                  props: {
-                    children: "Copy path",
-                    onClick: copyPath,
-                  },
-                },
-              ],
-              secondaryActionProps: {
-                ...revealAction,
-              },
-              secondaryActionVariant: "outline",
-            },
-          }),
-        );
+        const pasteInChat = async () => {
+          if (pasteState !== "idle") return;
+          pasteState = "pasting";
+          updateScreenshotToast();
+          let chat: BrowserScreenshotChat;
+          try {
+            chat = await attachBrowserScreenshotToChat(
+              (path) => bridge.readArtifactImage(path),
+              artifact,
+              captureThreadRef,
+            );
+          } catch (error) {
+            pasteState = "idle";
+            updateScreenshotToast(
+              "error",
+              "Unable to paste screenshot",
+              error instanceof Error ? error.message : "An error occurred.",
+            );
+            return;
+          }
+          pasteState = "pasted";
+          updateScreenshotToast();
+          window.setTimeout(() => {
+            pasteState = "idle";
+            updateScreenshotToast();
+          }, 2_000);
+          await (
+            chat.kind === "draft"
+              ? navigate({
+                  to: "/draft/$draftId",
+                  params: buildDraftThreadRouteParams(chat.draftId),
+                })
+              : navigate({
+                  to: "/$environmentId/$threadId",
+                  params: buildThreadRouteParams(chat.threadRef),
+                })
+          ).catch(() => undefined);
+          dispatchSnapShotComposerFocus();
+        };
+
+        toastId = toastManager.add(screenshotToast("success", "Screenshot saved"));
       },
       (error) => {
         toastManager.add({

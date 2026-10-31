@@ -2,21 +2,16 @@ import {
   type DesktopBridge,
   type DesktopPendingSnapShot,
   type DesktopSnapShotEvent,
-  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
-  PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import {
-  type DraftId,
-  type PersistedComposerImageAttachment,
-  useComposerDraftStore,
-} from "../../composerDraftStore";
+import { type DraftId, useComposerDraftStore } from "../../composerDraftStore";
 import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { getClientSettings, useClientSettings } from "../../hooks/useSettings";
 import { readThreadShell } from "../../state/entities";
+import { addCapturedImageToDraft, fitCapturedImage } from "../../lib/capturedImageDraft";
 import { resolveThreadActionProjectRef } from "../../lib/chatThreadActions";
 import {
   beginSnapShotAnimation,
@@ -30,10 +25,7 @@ import {
 import { resizeSnapShotSource } from "../../lib/snapShotSource";
 import { playSnapShotSound } from "../../lib/snapShotSound";
 import { dispatchSnapShotComposerFocus, getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
-import {
-  countQuestionRequestAttachments,
-  openQuestionAttachmentDraft,
-} from "../../questionAttachments";
+import { openQuestionAttachmentDraft } from "../../questionAttachments";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 
 type CaptureTarget = DraftId | ScopedThreadRef;
@@ -155,60 +147,19 @@ export async function deliverSnapShot(
   item: DesktopPendingSnapShot,
   resolveTarget: () => CaptureTarget,
 ): Promise<void> {
-  const store = useComposerDraftStore.getState();
   updateSnapShotAnimationSource(item.id, item.source);
   const capture = await bridge.readSnapShot(item.id);
-  const { compressImageToByteLimit, dataUrlToFile, readFileAsDataUrl } =
-    await import("../../lib/imageCompression");
-  const original = dataUrlToFile(capture.dataUrl, capture.name, capture.mimeType);
-  const compressed = await compressImageToByteLimit(original, PROVIDER_SEND_TURN_MAX_IMAGE_BYTES);
-  if (!compressed.ok) {
+  const fitted = await fitCapturedImage(capture);
+  if (!fitted) {
     finishSnapShotAnimation(item.id);
     throw new Error("The captured window is too large to attach.");
   }
-  const file = compressed.file;
-  const source = resizeSnapShotSource(capture.source, compressed.imageSize);
-  const dataUrl = compressed.recompressed ? await readFileAsDataUrl(file) : capture.dataUrl;
-  const target = resolveTarget();
-  const alreadyAttached =
-    store.getComposerDraft(target)?.images.some(({ id }) => id === capture.id) ?? false;
-  if (!alreadyAttached) {
-    const questionAttachmentCount =
-      typeof target === "string" ? countQuestionRequestAttachments(target) : null;
-    const image = {
-      type: "image" as const,
-      id: capture.id,
-      name: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      previewUrl: dataUrl,
-      file,
-      source,
-    };
-    // Only question drafts may bypass addImage's thread-session gate.
-    const added =
-      questionAttachmentCount === null
-        ? store.addImage(target, image)
-        : questionAttachmentCount < PROVIDER_SEND_TURN_MAX_ATTACHMENTS &&
-          store.addImages(target, [image]).includes(capture.id);
-    if (!added) throw new Error("Remove an attachment, then try this capture again.");
-  }
-  const persisted: PersistedComposerImageAttachment = {
+  await addCapturedImageToDraft(resolveTarget(), {
     id: capture.id,
-    name: file.name,
-    mimeType: file.type,
-    sizeBytes: file.size,
-    dataUrl,
-    source,
-  };
-  const persistedAttachments =
-    store
-      .getComposerDraft(target)
-      ?.persistedAttachments.filter((attachment) => attachment.id !== capture.id) ?? [];
-  await store.syncPersistedAttachments(target, [...persistedAttachments, persisted]);
-  if (!store.getComposerDraft(target)?.persistedAttachments.some(({ id }) => id === capture.id)) {
-    throw new Error("The captured window could not be saved to the draft.");
-  }
+    file: fitted.file,
+    dataUrl: fitted.dataUrl,
+    source: resizeSnapShotSource(capture.source, fitted.imageSize),
+  });
 
   // Paint the attachment before removing the capture overlay to avoid missing frames at landing.
   if (getPendingSnapShotAnimations().some((animation) => animation.id === capture.id)) {
