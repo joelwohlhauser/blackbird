@@ -33,7 +33,7 @@ import {
 } from "./updateEverythingRun";
 
 /** Servers this desktop app runs; they update with it. */
-export function isHostedByThisApp(
+function isHostedByThisApp(
   environment: ReturnType<typeof useEnvironments>["environments"][number],
 ) {
   return (

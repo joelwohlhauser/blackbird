@@ -24,7 +24,7 @@ export function MobileAppSettingsRow() {
   return (
     <SettingsRow
       {...searchableSetting("mobile-app")}
-      description="Connect to your server from your phone or tablet."
+      description="Blackbird has no mobile app of its own. The official T3 Code app works with Blackbird hosts, so you can use it to connect from your phone or tablet."
       control={
         <div className="flex items-center gap-2">
           {stores.map(({ label, store, url, Icon }) => (
