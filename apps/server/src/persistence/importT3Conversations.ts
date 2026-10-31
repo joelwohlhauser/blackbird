@@ -195,7 +195,7 @@ function importedThread(
     runtimeMode: source.runtimeMode,
     interactionMode: source.interactionMode,
     branch: source.branch,
-    worktreePath: null,
+    worktreePath: source.worktreePath,
     activeProviderThreadId: null,
     // Runless history uses the existing handoff path to start a fresh native session.
     historyOrigin: "v1_import",

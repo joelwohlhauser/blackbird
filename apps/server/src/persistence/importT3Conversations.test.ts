@@ -343,7 +343,7 @@ it.effect(
         assert.equal(conversation.messages[0]?.text, "Question committed in WAL");
         assert.equal(conversation.thread.historyOrigin, "v1_import");
         assert.isNull(conversation.thread.activeProviderThreadId);
-        assert.isNull(conversation.thread.worktreePath);
+        assert.equal(conversation.thread.worktreePath, "/example/worktree");
         assert.isEmpty(conversation.runs);
         assert.isEmpty(conversation.providerThreads);
         assert.isEmpty(conversation.checkpoints);
