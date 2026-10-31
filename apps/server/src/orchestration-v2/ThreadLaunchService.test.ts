@@ -38,6 +38,7 @@ import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
@@ -481,6 +482,92 @@ it.effect("runs a thread-bound automation on the provider the thread uses now", 
     assert.deepStrictEqual(projection.thread.modelSelection, claudeModelSelection);
   }).pipe(Effect.provide(Layer.mergeAll(harness.layer, layerScheduledTasks)));
 });
+
+it.effect.each(["new", "busy"] as const)(
+  "catches up a missed fixed-time automation through real thread services in a %s chat",
+  (target) => {
+    const harness = makeHarness({
+      serverSettings: { automationCatchUpEnabled: true },
+      runSetup: () => Effect.never,
+    });
+    const layerScheduledTasks = ScheduledTasks.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          harness.layer,
+          NodeCrypto.layer,
+          Scheduler.layer,
+          Layer.mock(SecretRequests.SecretRequests)({}),
+        ),
+      ),
+    );
+    return Effect.gen(function* () {
+      const tasks = yield* ScheduledTasks.ScheduledTaskService;
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const sql = yield* SqlClient.SqlClient;
+      const existing =
+        target === "busy"
+          ? yield* launches.launch(
+              launchInput({
+                command: "command:catch-up:busy",
+                thread: "thread:catch-up:busy",
+                message: "Existing work",
+              }),
+            )
+          : null;
+      const { task } = yield* tasks.upsert({
+        id: ScheduledTaskId.make("scheduled-task:integration-catch-up"),
+        title: "Daily brief",
+        prompt: "Create one current brief.",
+        enabled: true,
+        schedule: { type: "fixed_time", timeOfDay: "09:00" },
+        projectId,
+        threadId: existing?.threadId ?? null,
+        workspaceStrategy: { type: "root" },
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+      });
+      const now = yield* DateTime.now;
+      yield* sql`UPDATE scheduled_tasks SET next_run_at = ${DateTime.formatIso(DateTime.subtract(now, { days: 14 }))} WHERE task_id = ${task.id}`;
+      const completed = yield* Deferred.make<void>();
+      yield* tasks.subscribeList().pipe(
+        Stream.filter((snapshot) =>
+          snapshot.tasks.some((item) => item.id === task.id && item.lastRunStatus === "succeeded"),
+        ),
+        Stream.runHead,
+        Effect.andThen(Deferred.succeed(completed, undefined)),
+        Effect.forkScoped,
+      );
+      yield* TestClock.adjust("6 seconds");
+      yield* Deferred.await(completed);
+      const projectThreads = yield* threads.listProjectThreads({
+        projectId,
+        includeSubagents: false,
+      });
+      assert.equal(projectThreads.length, 1);
+      const projection = yield* threads.getThreadProjection(projectThreads[0]!.id);
+      const messages = projection.messages.filter((message) => message.scheduledTaskId === task.id);
+      assert.equal(messages.length, 1);
+      assert.equal(messages[0]?.text, task.prompt);
+      if (existing) {
+        assert.equal(projection.thread.id, existing.threadId);
+        assert.equal(projection.runs[0]?.id, existing.projection.runs[0]?.id);
+        assert.include(["preparing", "starting", "running"], projection.runs[0]?.status);
+        assert.equal(projection.runs[1]?.status, "queued");
+      }
+      yield* TestClock.adjust("6 seconds");
+      const current = (yield* tasks.list()).tasks.find((item) => item.id === task.id)!;
+      assert.equal(current.runCount, 1);
+      assert.isAbove(Date.parse(current.nextRunAt!), DateTime.toEpochMillis(now));
+      const after = yield* threads.getThreadProjection(projection.thread.id);
+      assert.equal(
+        after.messages.filter((message) => message.scheduledTaskId === task.id).length,
+        1,
+      );
+    }).pipe(Effect.provide(Layer.mergeAll(harness.layer, layerScheduledTasks)));
+  },
+);
 
 it.effect("retains automation and sender attribution while a message waits in the queue", () => {
   const harness = makeHarness({ runSetup: () => Effect.never });

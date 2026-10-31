@@ -20,6 +20,7 @@ import {
   type ScheduledTaskListResult,
   type ScheduledTaskMutationResult,
   type ScheduledTaskRunNowInput,
+  type ScheduledTaskRunCatchUp,
   type ScheduledTaskRunNowResult,
   type ScheduledTaskSetEnabledInput,
   type ScheduledTaskUpsertInput,
@@ -51,7 +52,14 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as DueHint from "../scheduling/DueHint.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
-import { isMissedFixedTimeRun, isSameSchedule, nextScheduledRunAt } from "./Schedule.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import {
+  countMissedFixedTimeRuns,
+  isMissedFixedTimeRun,
+  isSameSchedule,
+  nextScheduledRunAt,
+} from "./Schedule.ts";
 import {
   redactHeaders,
   redactQuery,
@@ -204,6 +212,8 @@ interface ScheduledTaskRow {
   readonly last_run_status: string;
   readonly last_run_error: string | null;
   readonly run_count: number;
+  readonly last_run_missed_since: string | null;
+  readonly last_run_missed_count: number | null;
   readonly webhook_token: string | null;
   readonly webhook_secret: string | null;
 }
@@ -349,6 +359,14 @@ const decodeRow = Effect.fnUntraced(
       lastRunStatus: row.last_run_status,
       lastRunError: row.last_run_error,
       runCount: row.run_count,
+      ...(row.last_run_missed_since === null || row.last_run_missed_count === null
+        ? {}
+        : {
+            lastRunCatchUp: {
+              missedSince: row.last_run_missed_since,
+              missedCount: row.last_run_missed_count,
+            },
+          }),
       ...(webhook === undefined ? {} : { webhook }),
     });
   },
@@ -407,6 +425,7 @@ export const layer = Layer.effect(
     const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
     const secretRequests = yield* SecretRequests.SecretRequests;
     const scheduler = yield* Scheduler.Scheduler;
+    const serverSettings = yield* ServerSettings.ServerSettingsService;
     const readWebhookOrigin = yield* ScheduledTaskWebhookOrigin;
     const webhookPermits = yield* Ref.make<ReadonlyMap<ScheduledTaskId, Semaphore.Semaphore>>(
       new Map(),
@@ -458,6 +477,8 @@ export const layer = Layer.effect(
         last_run_status,
         last_run_error,
         run_count,
+        last_run_missed_since,
+        last_run_missed_count,
         webhook_token,
         webhook_secret
       FROM scheduled_tasks
@@ -495,6 +516,8 @@ export const layer = Layer.effect(
         last_run_status,
         last_run_error,
         run_count,
+        last_run_missed_since,
+        last_run_missed_count,
         webhook_token,
         webhook_secret
       FROM scheduled_tasks
@@ -648,14 +671,21 @@ export const layer = Layer.effect(
           ),
         );
 
-    const markRunning = (id: ScheduledTaskId, startedAtIso: string, webhookDeliveryId?: string) =>
+    const markRunning = (
+      id: ScheduledTaskId,
+      startedAtIso: string,
+      catchUp: ScheduledTaskRunCatchUp | null,
+      webhookDeliveryId?: string,
+    ) =>
       sql<{ task_id: string }>`
         UPDATE scheduled_tasks
         SET updated_at = ${startedAtIso},
             last_run_at = ${startedAtIso},
             last_run_webhook_delivery_id = ${webhookDeliveryId ?? null},
             last_run_status = 'running',
-            last_run_error = NULL
+            last_run_error = NULL,
+            last_run_missed_since = ${catchUp?.missedSince ?? null},
+            last_run_missed_count = ${catchUp?.missedCount ?? null}
         WHERE task_id = ${id}
         RETURNING task_id
       `.pipe(
@@ -811,6 +841,35 @@ export const layer = Layer.effect(
         ) {
           return { task: active, threadId: null };
         }
+        let catchUp: ScheduledTaskRunCatchUp | null = null;
+        if (
+          trigger === "scheduled" &&
+          Option.isSome(parsedNextRunAt) &&
+          isMissedFixedTimeRun(active.schedule, parsedNextRunAt.value, startedAt)
+        ) {
+          const settings = yield* serverSettings.getSettings.pipe(
+            Effect.mapError((cause) =>
+              taskError("Could not read automation catch-up settings.", {
+                taskId: active.id,
+                cause,
+              }),
+            ),
+          );
+          if (
+            !resolveProjectSettings(settings, active.projectId).settings.automationCatchUpEnabled
+          ) {
+            yield* rescheduleMissedRun(active, startedAt);
+            return { task: active, threadId: null };
+          }
+          catchUp = {
+            missedSince: iso(parsedNextRunAt.value),
+            missedCount: countMissedFixedTimeRuns(
+              active.schedule,
+              DateTime.setZone(parsedNextRunAt.value, startedAt.zone),
+              startedAt,
+            ),
+          };
+        }
         // Reject queued deliveries after pause, same-id recreation or trigger changes.
         if (webhook !== undefined) {
           const reason =
@@ -824,12 +883,12 @@ export const layer = Layer.effect(
           if (reason !== null) return yield* new WebhookDeliverySkipped({ reason });
         }
 
-        if (webhook === undefined) yield* markRunning(active.id, startedAtIso);
+        if (webhook === undefined) yield* markRunning(active.id, startedAtIso, catchUp);
         else
           yield* sql
             .withTransaction(
               Effect.gen(function* () {
-                yield* markRunning(active.id, startedAtIso, webhook.deliveryId);
+                yield* markRunning(active.id, startedAtIso, null, webhook.deliveryId);
                 // Recovery must distinguish this delivery from other windows waiting on the same task.
                 yield* sql`UPDATE scheduled_task_webhook_pending SET state = 'running' WHERE delivery_id = ${webhook.deliveryId}`;
               }),
@@ -1046,17 +1105,10 @@ export const layer = Layer.effect(
       const tasks = yield* listDueTasks(now).pipe(
         Effect.mapError((cause) => taskError("Could not list schedule tasks.", { cause })),
       );
-      const due = tasks.flatMap((task) =>
-        task.nextRunAt === null ? [] : [{ task, dueAt: DateTime.makeUnsafe(task.nextRunAt) }],
-      );
       yield* Effect.forEach(
-        due,
-        ({ task, dueAt }) =>
-          Effect.suspend(() =>
-            isMissedFixedTimeRun(task.schedule, dueAt, now)
-              ? rescheduleMissedRun(task, now)
-              : runTask(task, "scheduled"),
-          ).pipe(
+        tasks,
+        (task) =>
+          runTask(task, "scheduled").pipe(
             Effect.catch((cause) =>
               Effect.logWarning("Scheduled task run failed", { taskId: task.id, cause }),
             ),

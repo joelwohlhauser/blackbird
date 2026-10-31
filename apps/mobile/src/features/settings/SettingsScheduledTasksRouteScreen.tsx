@@ -32,6 +32,7 @@ import {
   WEBHOOK_FILTER_OPS,
   type WebhookFilterDraft,
 } from "@t3tools/client-runtime/scheduled-task-webhook";
+import { formatScheduledTaskCatchUp } from "@t3tools/client-runtime/scheduled-task-catch-up";
 import { useRef, useState, type ReactNode } from "react";
 import { useFocusEffect, useNavigation, usePreventRemove } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -69,6 +70,7 @@ import {
 } from "./components/SettingsEnvironmentFilterHeader";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
+import { AutomationCatchUpSettings } from "./components/AutomationCatchUpSettings";
 import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
 import {
   editDraft,
@@ -437,6 +439,7 @@ export function SettingsScheduledTasksRouteScreen() {
           contentContainerClassName="gap-5 px-5 pt-4"
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
         >
+          <AutomationCatchUpSettings />
           {visibleEnvironments.length > 0 ? (
             visibleEnvironments.map((environment) => (
               <EnvironmentTasks
@@ -1356,90 +1359,98 @@ function EnvironmentTasks({
           {projectIds === null ? "No scheduled tasks yet." : "No tasks in this project."}
         </Text>
       ) : (
-        visibleTasks?.map((task, index) => (
-          <View
-            key={task.id}
-            className={
-              index === 0
-                ? "flex-row items-start gap-1 px-4 py-3"
-                : "flex-row items-start gap-1 border-t border-border-subtle px-4 py-3"
-            }
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${task.title}`}
-              onPress={() => {
-                onEdit(task);
-              }}
-              className="min-w-0 flex-1 gap-1 active:opacity-70"
-            >
-              <Text textRole="body" className="text-foreground" numberOfLines={1}>
-                {task.title}
-              </Text>
-              <Text className="text-sm text-foreground-muted" numberOfLines={2}>
-                {describeSchedule(task)}
-                {!task.enabled
-                  ? " · Paused"
-                  : task.nextRunAt
-                    ? ` · ${formatNextScheduledTaskRun(task.nextRunAt, now)}`
-                    : ""}
-              </Text>
-              {task.lastRunError ? (
-                <Text className="text-sm text-danger-foreground" numberOfLines={2}>
-                  Last run failed: {task.lastRunError}
-                </Text>
-              ) : null}
-            </Pressable>
-            <Menu
-              actions={[
-                { id: "edit", title: "Edit" },
-                {
-                  id: "toggle",
-                  title: task.enabled ? "Pause" : "Resume",
-                  attributes: { disabled: !canOperate },
-                },
-                ...(task.schedule.type === "webhook"
-                  ? []
-                  : [{ id: "run", title: "Run now", attributes: { disabled: !canOperate } }]),
-                {
-                  id: "delete",
-                  title: "Delete",
-                  attributes: { destructive: true, disabled: !canOperate },
-                },
-              ]}
-              onPressAction={({ nativeEvent }) => {
-                const action = nativeEvent.event;
-                if (action === "edit") {
-                  onEdit(task);
-                } else if (action === "delete") {
-                  Dialog.alert("Delete task?", task.title, [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Delete",
-                      style: "destructive",
-                      onPress: () => void act(task, "delete"),
-                    },
-                  ]);
-                } else if (action === "toggle" || action === "run") {
-                  void act(task, action);
-                }
-              }}
+        visibleTasks?.map((task, index) => {
+          const catchUp = formatScheduledTaskCatchUp(task, now);
+          return (
+            <View
+              key={task.id}
+              className={
+                index === 0
+                  ? "flex-row items-start gap-1 px-4 py-3"
+                  : "flex-row items-start gap-1 border-t border-border-subtle px-4 py-3"
+              }
             >
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Actions for ${task.title}`}
-                className="h-11 w-11 items-center justify-center"
+                accessibilityLabel={`Edit ${task.title}`}
+                onPress={() => {
+                  onEdit(task);
+                }}
+                className="min-w-0 flex-1 gap-1 active:opacity-70"
               >
-                <SymbolView
-                  name="ellipsis"
-                  size={18}
-                  tintColorClassName="accent-icon"
-                  type="monochrome"
-                />
+                <Text textRole="body" className="text-foreground" numberOfLines={1}>
+                  {task.title}
+                </Text>
+                <Text className="text-sm text-foreground-muted" numberOfLines={2}>
+                  {describeSchedule(task)}
+                  {!task.enabled
+                    ? " · Paused"
+                    : task.nextRunAt
+                      ? ` · ${formatNextScheduledTaskRun(task.nextRunAt, now)}`
+                      : ""}
+                </Text>
+                {catchUp ? (
+                  <Text className="text-sm text-warning-foreground" numberOfLines={2}>
+                    {catchUp}
+                  </Text>
+                ) : null}
+                {task.lastRunError ? (
+                  <Text className="text-sm text-danger-foreground" numberOfLines={2}>
+                    Last run failed: {task.lastRunError}
+                  </Text>
+                ) : null}
               </Pressable>
-            </Menu>
-          </View>
-        ))
+              <Menu
+                actions={[
+                  { id: "edit", title: "Edit" },
+                  {
+                    id: "toggle",
+                    title: task.enabled ? "Pause" : "Resume",
+                    attributes: { disabled: !canOperate },
+                  },
+                  ...(task.schedule.type === "webhook"
+                    ? []
+                    : [{ id: "run", title: "Run now", attributes: { disabled: !canOperate } }]),
+                  {
+                    id: "delete",
+                    title: "Delete",
+                    attributes: { destructive: true, disabled: !canOperate },
+                  },
+                ]}
+                onPressAction={({ nativeEvent }) => {
+                  const action = nativeEvent.event;
+                  if (action === "edit") {
+                    onEdit(task);
+                  } else if (action === "delete") {
+                    Dialog.alert("Delete task?", task.title, [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: () => void act(task, "delete"),
+                      },
+                    ]);
+                  } else if (action === "toggle" || action === "run") {
+                    void act(task, action);
+                  }
+                }}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Actions for ${task.title}`}
+                  className="h-11 w-11 items-center justify-center"
+                >
+                  <SymbolView
+                    name="ellipsis"
+                    size={18}
+                    tintColorClassName="accent-icon"
+                    type="monochrome"
+                  />
+                </Pressable>
+              </Menu>
+            </View>
+          );
+        })
       )}
     </SettingsSection>
   );

@@ -34,6 +34,37 @@ describe("resolveSendEnvMode", () => {
 });
 
 describe("resolveProjectSettings", () => {
+  it("resolves catch-up opt-ins, opt-outs and reset-to-inherit", () => {
+    let settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      projectSettingsOverrides: { [projectId]: { automationCatchUpEnabled: true } },
+    });
+    expect(resolveProjectSettings(settings, projectId).settings.automationCatchUpEnabled).toBe(
+      true,
+    );
+    expect(resolveProjectSettings(settings, otherProjectId).settings.automationCatchUpEnabled).toBe(
+      false,
+    );
+    settings = applyServerSettingsPatch(settings, {
+      automationCatchUpEnabled: true,
+      projectSettingsOverrides: { [projectId]: { automationCatchUpEnabled: false } },
+    });
+    expect(resolveProjectSettings(settings, projectId).settings.automationCatchUpEnabled).toBe(
+      false,
+    );
+    expect(resolveProjectSettings(settings, otherProjectId).settings.automationCatchUpEnabled).toBe(
+      true,
+    );
+    settings = applyServerSettingsPatch(settings, {
+      projectSettingsOverrides: { [projectId]: null },
+    });
+    expect(resolveProjectSettings(settings, projectId).settings.automationCatchUpEnabled).toBe(
+      true,
+    );
+    expect(resolveProjectSettings(settings, projectId).sources.automationCatchUpEnabled).toBe(
+      "environment",
+    );
+  });
+
   it("ignores an override left undefined by a forward-compatible decode", () => {
     const resolved = resolveProjectSettings(
       {

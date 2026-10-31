@@ -4,6 +4,7 @@ import * as NodeUtil from "node:util";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import {
+  DEFAULT_SERVER_SETTINGS,
   ProjectId,
   ProviderInstanceId,
   ScheduledTaskError,
@@ -28,6 +29,7 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as ScheduledTaskService from "./ScheduledTaskService.ts";
 
 const isScheduledTaskError = Schema.is(ScheduledTaskError);
@@ -210,6 +212,9 @@ it.effect(
                 Layer.mock(SecretRequests.SecretRequests)({}),
                 NodeCrypto.layer,
                 Scheduler.layer,
+                Layer.mock(ServerSettings.ServerSettingsService)({
+                  getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+                }),
               ),
             ),
           );
@@ -307,6 +312,9 @@ it.effect(
                 Layer.mock(SecretRequests.SecretRequests)({}),
                 NodeCrypto.layer,
                 Scheduler.layer,
+                Layer.mock(ServerSettings.ServerSettingsService)({
+                  getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+                }),
               ),
             ),
           );
@@ -361,6 +369,9 @@ it.effect("thread cleanup notifies subscribers and a finishing run cannot recrea
           }),
           NodeCrypto.layer,
           Scheduler.layer,
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+          }),
         ),
       ),
     );
@@ -427,6 +438,9 @@ it.effect("a one-time task runs late after downtime and deletes itself only when
           }),
           NodeCrypto.layer,
           Scheduler.layer,
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+          }),
         ),
       ),
     );
@@ -505,6 +519,9 @@ it.effect("a one-time task edited mid-run survives, and an expired one cannot be
           }),
           NodeCrypto.layer,
           Scheduler.layer,
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+          }),
         ),
       ),
     );
@@ -597,6 +614,9 @@ it.effect("a bound run follows its thread when promotion moves it mid-send", () 
           }),
           NodeCrypto.layer,
           Scheduler.layer,
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+          }),
         ),
       ),
     );

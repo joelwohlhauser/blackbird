@@ -40,6 +40,21 @@ const encodeServerSettings = Schema.encodeSync(ServerSettings);
 const encodeServerSettingsPatch = Schema.encodeSync(ServerSettingsPatch);
 const decodeClaudeSettings = Schema.decodeUnknownSync(ClaudeSettings);
 
+describe("automation catch-up settings", () => {
+  it("keeps catch-up disabled for existing installations", () => {
+    expect(decodeServerSettings({}).automationCatchUpEnabled).toBe(false);
+  });
+
+  it.each([true, false])("round-trips %s and its project override", (automationCatchUpEnabled) => {
+    const input = {
+      automationCatchUpEnabled,
+      projectSettingsOverrides: { project: { automationCatchUpEnabled } },
+    };
+    expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(input);
+    expect(decodeServerSettingsPatch(input)).toEqual(input);
+  });
+});
+
 describe("storage cleanup settings", () => {
   it("keeps cleanup disabled for existing installations", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();

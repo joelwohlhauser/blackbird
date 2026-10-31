@@ -304,6 +304,10 @@ Agents drive the same browser tabs you see with upstream T3 Code's `preview_*` M
 - Blackbird only undoes what it changed. If sleep was already disabled or Low Power Mode was already on, it stays that way afterwards. If the battery can't be read, the Mac is allowed to sleep.
 - Every change is written to `awake-journal.json` in the state directory before it is made. Quitting Blackbird undoes it. If Blackbird crashes or hangs, the LaunchAgent turns sleep and Low Power Mode back on within about a minute. The next launch also cleans up, and a restore that fails is retried rather than forgotten.
 
+### Missed automations
+
+**Catch up missed automations**, next to Scheduled tasks in Settings, is off by default. It is set per environment, with an on/off override per project. When it is on, a fixed-time task that was missed while the Mac slept or Blackbird was closed runs once when the app wakes, then returns to its normal schedule. Missed days aren't replayed one by one, and time a task spent paused doesn't count as missed. The task row says what happened, for example "Caught up at 10:27 AM · 11 missed runs since Thu, Oct 15". When it is off, a fixed-time run more than 10 minutes late is skipped.
+
 ### Linear, GitHub, and links
 
 The normal right panel has browser-backed integration tabs:

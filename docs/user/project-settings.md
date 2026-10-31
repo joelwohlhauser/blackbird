@@ -88,6 +88,13 @@ One-time tasks run once at the chosen date and time, even if the environment was
 offline then, and delete themselves after a successful run. Mobile shows and
 manages them; create them on web or ask an agent.
 
+Turn on **Catch up missed automations** to run each overdue fixed-time task once
+when its environment starts or wakes, even after a long absence. It is off by
+default. Select a project in the settings filter to override the environment's
+choice, or reset its override to inherit again. Missed occurrences become one
+fresh run; paused tasks do not accumulate catch-up work. After a catch-up, the
+task shows when it ran and how many runs it missed, until its next run.
+
 Deleting a thread also deletes tasks that post into that thread. Tasks that start
 a new thread on each run survive deletion of their previous threads.
 

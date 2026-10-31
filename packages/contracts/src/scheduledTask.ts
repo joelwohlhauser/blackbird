@@ -4,6 +4,7 @@ import {
   CommandId,
   ForwardCompatibleArray,
   IsoDateTime,
+  PositiveInt,
   ProjectId,
   ScheduledTaskId,
   SecretRef,
@@ -205,6 +206,12 @@ export type ScheduledTaskUpsertSchedule = typeof ScheduledTaskUpsertSchedule.Typ
 export const ScheduledTaskRunStatus = Schema.Literals(["never", "running", "succeeded", "failed"]);
 export type ScheduledTaskRunStatus = typeof ScheduledTaskRunStatus.Type;
 
+export const ScheduledTaskRunCatchUp = Schema.Struct({
+  missedSince: IsoDateTime,
+  missedCount: PositiveInt,
+});
+export type ScheduledTaskRunCatchUp = typeof ScheduledTaskRunCatchUp.Type;
+
 export const ScheduledTaskWebhookEndpoint = Schema.Struct({
   path: TrimmedNonEmptyString,
   url: Schema.NullOr(TrimmedNonEmptyString),
@@ -233,6 +240,7 @@ export const ScheduledTask = Schema.Struct({
   lastRunStatus: ScheduledTaskRunStatus,
   lastRunError: Schema.NullOr(Schema.String),
   runCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  lastRunCatchUp: Schema.optional(ScheduledTaskRunCatchUp),
   webhook: Schema.optional(ScheduledTaskWebhookEndpoint),
 });
 export type ScheduledTask = typeof ScheduledTask.Type;

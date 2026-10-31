@@ -79,3 +79,19 @@ export function isMissedFixedTimeRun(
   if (schedule.type !== "fixed_time") return false;
   return DateTime.toEpochMillis(now) - DateTime.toEpochMillis(dueAt) > MISSED_FIXED_TIME_GRACE_MS;
 }
+
+export function countMissedFixedTimeRuns(
+  schedule: ScheduledTaskSchedule,
+  firstMissed: DateTime.DateTime,
+  now: DateTime.DateTime,
+): number {
+  let count = 1;
+  for (
+    let next = nextScheduledRunAt(schedule, firstMissed);
+    next !== null && DateTime.toEpochMillis(next) <= DateTime.toEpochMillis(now);
+    next = nextScheduledRunAt(schedule, next)
+  ) {
+    count += 1;
+  }
+  return count;
+}

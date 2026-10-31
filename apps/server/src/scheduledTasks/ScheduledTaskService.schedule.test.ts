@@ -1,7 +1,7 @@
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
-import { ScheduledTaskUpsertInput } from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, ScheduledTaskUpsertInput } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -14,6 +14,7 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as ScheduledTaskService from "./ScheduledTaskService.ts";
 
 const decodeUpsertInput = Schema.decodeUnknownEffect(ScheduledTaskUpsertInput);
@@ -23,6 +24,9 @@ it.effect("rejects a stale form save after deletion while preserving explicit-id
     const layerDependencies = Layer.mergeAll(
       NodeCrypto.layer,
       Scheduler.layer,
+      Layer.mock(ServerSettings.ServerSettingsService)({
+        getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+      }),
       Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
         namedProjectsRoot: "/projects",
@@ -70,6 +74,9 @@ it.effect("preserves a due run when a save only pads the scheduled hour", () =>
     const layerDependencies = Layer.mergeAll(
       NodeCrypto.layer,
       Scheduler.layer,
+      Layer.mock(ServerSettings.ServerSettingsService)({
+        getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+      }),
       Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
         namedProjectsRoot: "/projects",
@@ -124,6 +131,9 @@ it.effect("keeps the task list order when a toggle or edit rewrites updated_at",
     const layerDependencies = Layer.mergeAll(
       NodeCrypto.layer,
       Scheduler.layer,
+      Layer.mock(ServerSettings.ServerSettingsService)({
+        getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+      }),
       Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
         namedProjectsRoot: "/projects",
@@ -169,6 +179,58 @@ it.effect("keeps the task list order when a toggle or edit rewrites updated_at",
   }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
 
+it.effect("resumes a paused fixed-time automation at its next future occurrence", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(Date.parse("2026-10-01T12:00:00Z"));
+    yield* Effect.gen(function* () {
+      const tasks = yield* ScheduledTaskService.ScheduledTaskService;
+      const input = yield* decodeUpsertInput({
+        title: "Daily brief",
+        prompt: "A fresh brief",
+        enabled: false,
+        schedule: { type: "fixed_time", timeOfDay: "09:00" },
+        projectId: "project-paused",
+        workspaceStrategy: { type: "root" },
+        modelSelection: { instanceId: "codex", model: "gpt-5.4" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+      });
+      const { task } = yield* tasks.upsert(input);
+      expect(task.nextRunAt).toBeNull();
+      yield* TestClock.setTime(Date.parse("2026-10-29T12:00:00Z"));
+      const resumed = yield* tasks.setEnabled({ id: task.id, enabled: true });
+      expect(Date.parse(resumed.task.nextRunAt!)).toBeGreaterThan(
+        Date.parse("2026-10-29T12:00:00Z"),
+      );
+      expect(resumed.task.runCount).toBe(0);
+    }).pipe(
+      Effect.provide(
+        ScheduledTaskService.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              NodeCrypto.layer,
+              Layer.mock(Scheduler.Scheduler)({ register: () => Effect.void }),
+              Layer.mock(ServerSettings.ServerSettingsService)({
+                getSettings: Effect.succeed({
+                  ...DEFAULT_SERVER_SETTINGS,
+                  automationCatchUpEnabled: true,
+                }),
+              }),
+              Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+              Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
+                namedProjectsRoot: "/projects",
+                isScratchProject: () => Effect.succeed(false),
+              }),
+              Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+              Layer.mock(SecretRequests.SecretRequests)({}),
+            ),
+          ),
+        ),
+      ),
+    );
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);
+
 it.effect(
   "idle polls still wake for tasks saved later, recorded due times, and beside far-future tasks",
   () =>
@@ -178,6 +240,9 @@ it.effect(
       const layerDependencies = Layer.mergeAll(
         NodeCrypto.layer,
         Scheduler.layer,
+        Layer.mock(ServerSettings.ServerSettingsService)({
+          getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+        }),
         Layer.mock(ThreadLaunchService.ThreadLaunchService)({
           launch: (input) =>
             Deferred.succeed(launched, input.title).pipe(

@@ -1,6 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "@effect/vitest";
-import { ScheduledTaskUpsertInput } from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, ScheduledTaskUpsertInput } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -14,6 +14,7 @@ import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import { ServerActivation } from "../serverActivation.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as ScheduledTaskService from "./ScheduledTaskService.ts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -21,6 +22,9 @@ afterEach(() => vi.unstubAllEnvs());
 const dependencies = Layer.mergeAll(
   NodeCrypto.layer,
   Scheduler.layer,
+  Layer.mock(ServerSettings.ServerSettingsService)({
+    getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+  }),
   Layer.mock(ThreadLaunchService.ThreadLaunchService)({
     launch: () => Effect.die("synthetic dispatch failure"),
   }),
