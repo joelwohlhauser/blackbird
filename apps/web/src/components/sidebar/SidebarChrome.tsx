@@ -319,7 +319,14 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           />
           {awakeState?.supported ? (
             <SidebarUtilityItem
-              icon={<CoffeeIcon className={cn(!awakeState.active && "opacity-50")} />}
+              icon={
+                <CoffeeIcon
+                  className={cn(
+                    awakeEnabled && "text-info-foreground",
+                    !awakeState.active && "opacity-50",
+                  )}
+                />
+              }
               label={awakeLabel(awakeState, awakeEnabled, awakeAlways)}
               onClick={handleAwakeClick}
             />
