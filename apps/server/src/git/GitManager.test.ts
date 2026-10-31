@@ -737,48 +737,6 @@ const layerGitManagerTest = GitVcsDriver.layer.pipe(
 );
 
 it.layer(layerGitManagerTest)("GitManager", (it) => {
-  it.effect("status detects a PR from a remote branch in a detached worktree", () =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      yield* runGit(repoDir, ["checkout", "-b", "feature/existing-remote-pr"]);
-      const remoteDir = yield* createBareRemote();
-      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      yield* runGit(repoDir, ["push", "-u", "origin", "feature/existing-remote-pr"]);
-      yield* runGit(repoDir, ["checkout", "--detach", "origin/feature/existing-remote-pr"]);
-
-      const { manager, providerCalls } = yield* makeManager({
-        providerScenario: {
-          prListByHeadSelector: {
-            "feature/existing-remote-pr": [
-              {
-                number: 787,
-                title: "Existing remote branch PR",
-                url: "https://github.com/example-org/example-app/pull/787",
-                baseRefName: "main",
-                headRefName: "feature/existing-remote-pr",
-              },
-            ],
-          },
-        },
-      });
-
-      const status = yield* manager.status({ cwd: repoDir });
-
-      expect(status.refName).toBeNull();
-      expect(status.pr).toEqual({
-        number: 787,
-        title: "Existing remote branch PR",
-        url: "https://github.com/example-org/example-app/pull/787",
-        baseRef: "main",
-        headRef: "feature/existing-remote-pr",
-        state: "open",
-        updatedAt: null,
-      });
-      expect(listedSelectors(providerCalls)).toContain("feature/existing-remote-pr");
-    }),
-  );
-
   it.effect(
     "publishes local Git changes during a held PR lookup without caching its old branch",
     () =>

@@ -1177,11 +1177,9 @@ export function GeneralSettingsPanel() {
               value={settings.linearOrganizationSlug}
               onCommit={(next) => {
                 const organizationSlug = next.trim().toLowerCase();
-                if (organizationSlug.length > 0) {
-                  updateSettings({ linearOrganizationSlug: organizationSlug });
-                }
+                updateSettings({ linearOrganizationSlug: organizationSlug });
               }}
-              placeholder="acme"
+              placeholder="your-workspace"
               spellCheck={false}
               aria-label="Linear organization slug"
             />

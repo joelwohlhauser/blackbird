@@ -42,7 +42,7 @@ describe("isPinnedSiteHomeUrl", () => {
   });
 
   it("detects navigation away from the pinned URL", () => {
-    expect(isPinnedSiteHomeUrl(pinned, "https://linear.app/acme/issue/ENG-124/timeout")).toBe(
+    expect(isPinnedSiteHomeUrl(pinned, "https://linear.app/acme/issue/APP-123/timeout")).toBe(
       false,
     );
     expect(isPinnedSiteHomeUrl(pinned, "https://example.com/acme/inbox")).toBe(false);

@@ -1,18 +1,13 @@
 # Blackbird
 
-Blackbird is a private, personal IDE built on top of
-[T3 Code](https://github.com/pingdotgg/t3code). It is a hobby project for Joel
-Wohlhauser: one engineer, one user, and no critical infrastructure. The goal is
-not to become a separate general-purpose product; it is to keep T3 Code's
-architecture and updates while layering Joel's preferred coding workflow and
-desktop experience on top.
+Blackbird is Joel Wohlhauser's personal IDE built on top of [T3 Code](https://github.com/pingdotgg/t3code), being prepared for public open-source distribution. It keeps T3 Code's architecture and updates while adding a different coding workflow and desktop experience. It is a hobby project with no guaranteed support or release schedule.
 
 Blackbird works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and
 Google Antigravity.
 
 The repository has two remotes:
 
-- `origin` — the private `joelwohlhauser/blackbird` repository
+- `origin` — the `joelwohlhauser/blackbird` repository
 - `upstream` — `pingdotgg/t3code`, which remains the base application
 
 ## What is custom in Blackbird?
@@ -203,7 +198,7 @@ New worktrees:
 - run all filesystem and Git operations on the environment that owns the
   project.
 
-Agents can start the same workflow from an active chat with two MCP tools. `create_worktree` creates or reuses a worktree for a branch and returns its path: an existing branch reuses its checkout or gets a new worktree, a remote-only branch is checked out, and an unknown branch creates a new one. `switch_directory` moves the chat to any existing folder, such as that worktree or another repository (Blackbird finds or creates the project for it), which also takes a Quick chat into a repository. The same conversation keeps its history; the current turn ends after the switch, and a new turn always resumes work in the destination, using the agent's `continuationPrompt` when it gives one. `worktree_handoff` does both in one call. Paths and worktree setup run on the owning environment, including remote. New worktrees honor the environment's **Start from origin** setting and project setup script.
+Agents can start the same workflow from an active chat with two MCP tools. `create_worktree` creates or reuses a worktree for a branch and returns its path: an existing branch reuses its checkout or gets a new worktree, a remote-only branch is checked out, and an unknown branch creates a new one. `switch_directory` moves the chat to any existing folder, such as that worktree or another repository (Blackbird finds or creates the project for it), which also takes a Quick chat into a repository. The same conversation keeps its history; the current turn ends after the switch, and a new turn always resumes work in the destination, using the agent's `continuationPrompt` when it gives one. `worktree_handoff` does both in one call. Paths and worktree setup run on the owning local or remote environment. New worktrees honor the environment's **Start from origin** setting and project setup script.
 
 An active worktree chat shows a **Delete it** action. It removes the worktree
 directly, including when it has uncommitted changes, without a confirmation
@@ -282,7 +277,7 @@ Agents drive the same browser tabs you see with upstream T3 Code's `preview_*` M
 
 - Tabs an agent opens start at the MacBook Air 13″ size (1470 × 956).
 - Agent typing and pasting go to the page as native input, and focus returns to what you were typing in after an agent click.
-- Chats on the MacBook drive the tab shown in the desktop app, also when the chat is in the background. Chats on remote use a headless Chrome on remote that is streamed into the app, so `localhost` on remote works but your Mac's logins do not.
+- Chats on the MacBook drive the tab shown in the desktop app, also when the chat is in the background. Remote chats use a headless Chrome on the remote environment that is streamed into the app, so its `localhost` works but your Mac's logins do not.
 - While you hold control of a tab, the agent's actions fail until you release it.
 
 ### Shared skills and instructions
@@ -291,7 +286,7 @@ Agents drive the same browser tabs you see with upstream T3 Code's `preview_*` M
 
 ### Keep awake
 
-**Settings → Keep awake** keeps the MacBook awake, lid closed included, while any chat on the Mac is Working and for 3 minutes after the last one stops. Chats on remote or remote-example-2 don't count. A coffee cup in the sidebar footer opens these settings; it is dimmed unless the Mac is being kept awake, and its tooltip says why. The ideas come from [Insomnia](https://github.com/krishhgg/Insomnia).
+**Settings → Keep awake** keeps the MacBook awake, lid closed included, while any chat on the Mac is Working and for 3 minutes after the last one stops. Chats on remote environments don't count. A coffee cup in the sidebar footer opens these settings; it is dimmed unless the Mac is being kept awake, and its tooltip says why. The ideas come from [Insomnia](https://github.com/krishhgg/Insomnia).
 
 - **Always** keeps the Mac awake even when no chat is working, so it stays reachable. Battery, heat, and hotspot rules still apply.
 - **Set up…** asks once for the administrator password. It installs a sudoers rule (`/etc/sudoers.d/blackbird-awake`) that allows only `pmset -a disablesleep 0/1` and `pmset -a lowpowermode 0/1` without a password, plus a LaunchAgent that runs every 15 seconds. **Remove** takes both away.
@@ -307,15 +302,14 @@ The normal right panel has browser-backed integration tabs:
 
 - **Issue** extracts a Linear issue id such as `ENG-123` from the current
   branch and opens it in the configured organization. The organization slug is
-  configurable and defaults to `acme`.
+  configurable and empty by default. Set it under Settings → General → Linear to open and pin issue tabs; until then, the Linear action opens its home page.
 - **PR** uses the authenticated GitHub CLI (`gh`) to detect the pull request for
   the current branch, open the GitHub page inside Blackbird, and populate the
   workspace navigator's PR file tree from the same PR.
 - **Previews** pills at the top of the navigator's PR tab list the preview
   deployment links found in the PR's comments. Click opens one in an in-app
   browser tab; right-click copies it. The matched hosts are configurable in
-  Settings → Diffs & pull requests and default to `*.staging.example.test`,
-  `*.staging.example.test`, and `*.vercel.app`; Vercel branch previews are
+  Settings → Diffs & pull requests and default to `*.vercel.app`; Vercel branch previews are
   labelled by project. The chat header's **Preview** button opens the same
   previews for the chat's open linked PRs: one opens directly, several open a
   menu grouped by PR.
@@ -330,27 +324,9 @@ On desktop, new drafts in a Git project show a Linear issue picker in the compos
 
 ## Local and remote environments
 
-The normal local environment is **Example Mac**. The remote machine is
-named **remote** and is reached with:
+Environment settings are host-specific. Remote worktrees default to `~/repositories/.worktrees`; `~`, `.env` links, and setup scripts resolve on the machine that owns the repository. Environment labels are user-chosen and can differ from the SSH hostname.
 
-```bash
-ssh remote
-```
-
-The UI should call this environment `remote`, not its internal hostname
-`dev-server`.
-
-Environment settings are host-specific. In particular, worktrees on remote
-belong under:
-
-```text
-~/repositories/.worktrees
-```
-
-The leading `~` resolves on remote. `.env` links must point to the corresponding
-main checkout on remote, and dependency installation must also execute there.
-
-`pnpm deploy:desktop` updates both the local app and the existing `blackbird.service` on remote using the server archive bundled with that app. Desktop and mobile share this service through the existing Remote link. Do not run the banner's generic `npx t3@…` command or add a second SSH environment for remote; those paths can start an upstream or duplicate backend.
+The desktop app bundles a matching remote server. Desktop and mobile share an existing remote service through its Remote link. Keep desktop and remote versions aligned rather than starting a separate upstream backend against the same database.
 
 Agents can request a link to another environment, subject to the destination's access approval. Linked environments use the same scoped tool permissions as other remote connections. The Details navigator also lists development servers started by the thread so they can be inspected or stopped.
 
@@ -367,7 +343,7 @@ The web client is suitable for everyday UI development and browser testing.
 Use focused tests and typechecks for the code being changed; the inherited
 `AGENTS.md` contains the repository's detailed safety and verification rules.
 
-In this project, **"deploy it" means update Blackbird on the local Mac and its matching server on remote**. Run:
+The maintainer deployment command updates the local macOS app and the remote servers configured in the installer:
 
 ```bash
 pnpm deploy:desktop
@@ -381,7 +357,7 @@ Development identity from the login keychain, whose stable identity lets the
 notification permission survive redeploys, and otherwise signs ad-hoc, which
 works but resets the permission on every deploy.
 
-The deployment script builds and signs the replacement first, uploads its bundled server to remote, installs dependencies, and restarts the existing service. A failed server health check restores the previous server build. Once remote responds, the script replaces and relaunches the local app. Finish active remote turns before deploying; desktop and mobile briefly reconnect during the server restart.
+The deployment script builds and signs the replacement first, uploads its bundled server to configured remote environments, installs dependencies, and restarts the existing service. A failed server health check restores the previous server build. Once those servers respond, the script replaces and relaunches the local app. Finish active remote turns before deploying; desktop and mobile briefly reconnect during the server restart.
 
 Routine deployments do not back up the database. The previous server build remains available, but restoring that build does not undo database migrations. Take a database backup separately when a migration needs one.
 

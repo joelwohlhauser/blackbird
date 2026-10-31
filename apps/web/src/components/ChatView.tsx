@@ -1892,8 +1892,10 @@ export default function ChatView(props: ChatViewProps) {
   const githubPullRequest = githubPullRequestFromStatus(gitStatusQuery.data);
   const attachedBranch =
     activeThread?.branch ?? draftThread?.branch ?? gitStatusQuery.data?.refName ?? null;
-  const attachedLinearIssueId = linearIssueIdFromBranch(attachedBranch);
   const linearOrganizationSlug = useClientSettings((settings) => settings.linearOrganizationSlug);
+  const attachedLinearIssueId = linearOrganizationSlug
+    ? linearIssueIdFromBranch(attachedBranch)
+    : null;
   useWorkspaceMutationRefresh({
     enabled: gitStatusCwd !== null,
     mutationId: workspaceMutationId,

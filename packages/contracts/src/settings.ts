@@ -220,12 +220,7 @@ export const EnvironmentIdentificationMode = Schema.Literals([
 ]);
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
-const DEFAULT_LINEAR_ORGANIZATION_SLUG = "acme";
-export const DEFAULT_PULL_REQUEST_PREVIEW_HOSTS: ReadonlyArray<string> = [
-  "*.staging.example.test",
-  "*.staging.example.test",
-  "*.vercel.app",
-];
+export const DEFAULT_PULL_REQUEST_PREVIEW_HOSTS: ReadonlyArray<string> = ["*.vercel.app"];
 export const ExternalLinkOpenMode = Schema.Literals(["ask", "preview", "external"]);
 export type ExternalLinkOpenMode = typeof ExternalLinkOpenMode.Type;
 export const DEFAULT_EXTERNAL_LINK_OPEN_MODE: ExternalLinkOpenMode = "ask";
@@ -493,9 +488,7 @@ export const ClientSettingsSchema = Schema.Struct({
   externalLinkOpenMode: ExternalLinkOpenMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_EXTERNAL_LINK_OPEN_MODE)),
   ),
-  linearOrganizationSlug: TrimmedNonEmptyString.pipe(
-    Schema.withDecodingDefault(Effect.succeed(DEFAULT_LINEAR_ORGANIZATION_SLUG)),
-  ),
+  linearOrganizationSlug: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   fontSizeInterface: InterfaceFontSize.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_INTERFACE_FONT_SIZE)),
   ),
@@ -1868,7 +1861,7 @@ export const ClientSettingsPatch = Schema.Struct({
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   externalLinkOpenMode: Schema.optionalKey(ExternalLinkOpenMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
-  linearOrganizationSlug: Schema.optionalKey(TrimmedNonEmptyString),
+  linearOrganizationSlug: Schema.optionalKey(TrimmedString),
   onboardingCompletedAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   fontSizeInterface: Schema.optionalKey(InterfaceFontSize),
   fontSizePrompt: Schema.optionalKey(PromptFontSize),

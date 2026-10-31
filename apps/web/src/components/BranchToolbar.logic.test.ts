@@ -457,7 +457,7 @@ describe("sanitizeNewRefName", () => {
 });
 
 describe("resolveLinearIssueWorkspace", () => {
-  const branchName = "example/eng-123-fix-login";
+  const branchName = "user/app-123-fix-login";
   const ref = (overrides: Partial<VcsRef> & Pick<VcsRef, "name">): VcsRef => ({
     current: false,
     isDefault: false,

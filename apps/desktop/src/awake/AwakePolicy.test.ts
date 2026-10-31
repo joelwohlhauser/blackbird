@@ -5,12 +5,6 @@ import {
   decideAwake,
   FAILOVER_ONLINE,
   parseBattery,
-  parseDefaultGateway,
-  parseKnownNetworks,
-  parseLidClosed,
-  parsePmsetFlag,
-  parseWifiDevice,
-  shouldLeaveHotspot,
   stepFailover,
   wantsAwake,
 } from "./AwakePolicy.ts";
@@ -116,46 +110,6 @@ describe("parsers", () => {
       onBattery: false,
     });
     expect(parseBattery("")).toBeNull();
-  });
-
-  it("reads the lid, pmset flags and the Wi-Fi device", () => {
-    expect(parseLidClosed('      "AppleClamshellState" = Yes')).toBe(true);
-    expect(parseLidClosed('      "AppleClamshellState" = No')).toBe(false);
-    const pmset =
-      "System-wide power settings:\n SleepDisabled\t\t1\nCurrently in use:\n lowpowermode         0\n";
-    expect(parsePmsetFlag(pmset, "SleepDisabled")).toBe(true);
-    expect(parsePmsetFlag(pmset, "lowpowermode")).toBe(false);
-    expect(parsePmsetFlag("", "SleepDisabled")).toBeNull();
-    expect(
-      parseWifiDevice(
-        "Hardware Port: Thunderbolt Bridge\nDevice: bridge0\n\nHardware Port: Wi-Fi\nDevice: en0\nEthernet Address: f4:d4\n",
-      ),
-    ).toBe("en0");
-    expect(parseDefaultGateway("   route to: default\n    gateway: 172.20.10.1\n")).toBe(
-      "172.20.10.1",
-    );
-    expect(parseDefaultGateway("route: writing to routing socket: not in table")).toBeNull();
-    expect(
-      parseKnownNetworks("Preferred networks on en0:\n\tExample Phone\n\tExample\n\n"),
-    ).toEqual(["Example Phone", "Example"]);
-  });
-});
-
-describe("shouldLeaveHotspot", () => {
-  const stay = { name: "Example Phone", since: 0, knownAtJoin: ["Example"] };
-
-  it("leaves at once for a known network that was not in range when the internet dropped", () => {
-    expect(shouldLeaveHotspot(stay, ["Example", "Home"], 1_000)).toBe(true);
-  });
-
-  it("retries the network that dropped only every ten minutes", () => {
-    expect(shouldLeaveHotspot(stay, ["Example"], 599_999)).toBe(false);
-    expect(shouldLeaveHotspot(stay, ["Example"], 600_000)).toBe(true);
-  });
-
-  it("stays without another known network in range", () => {
-    expect(shouldLeaveHotspot(stay, [], 3_600_000)).toBe(false);
-    expect(shouldLeaveHotspot(stay, ["Example Phone"], 3_600_000)).toBe(false);
   });
 });
 

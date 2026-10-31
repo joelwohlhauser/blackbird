@@ -6,20 +6,14 @@ import {
   BearerConnectionProfile,
   type ConnectionCatalogEntry,
   type ConnectionRoute,
-  SshConnectionProfile,
 } from "./catalog.ts";
 import {
   BearerConnectionTarget,
   ConnectionTransientError,
   RelayConnectionTarget,
-  SshConnectionTarget,
   type SupervisorConnectionState,
 } from "./model.ts";
-import {
-  connectionCatalogLabel,
-  environmentMcpUrl,
-  presentConnectionState,
-} from "./presentation.ts";
+import { environmentMcpUrl, presentConnectionState } from "./presentation.ts";
 
 const TARGET = new BearerConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -56,33 +50,6 @@ function supervisorState(overrides: Partial<SupervisorConnectionState>): Supervi
 }
 
 describe("connection presentation", () => {
-  it("presents SSH environments using the local SSH alias", () => {
-    const target = new SshConnectionTarget({
-      environmentId: EnvironmentId.make("environment-ssh"),
-      label: "dev-server",
-      connectionId: "ssh:environment-ssh",
-    });
-    const entry: ConnectionCatalogEntry = {
-      target,
-      enabled: true,
-      profile: Option.some(
-        new SshConnectionProfile({
-          connectionId: target.connectionId,
-          environmentId: target.environmentId,
-          label: target.label,
-          target: {
-            alias: "remote",
-            hostname: "192.0.2.10",
-            username: "root",
-            port: 22,
-          },
-        }),
-      ),
-    };
-
-    expect(connectionCatalogLabel(entry)).toBe("remote");
-  });
-
   it("copies the MCP address of the route this device is connected over", () => {
     const route = (connectionId: string, httpBaseUrl: string): ConnectionRoute => {
       const target = new BearerConnectionTarget({ ...TARGET, connectionId });

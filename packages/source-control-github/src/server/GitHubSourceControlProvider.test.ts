@@ -745,7 +745,7 @@ it("accepts authenticated GitHub accounts from plain-text stderr output", () => 
     processResult("", {
       stderr: [
         "github.com",
-        "  ✓ Logged in to github.com account remote-example-2 (keyring)",
+        "  ✓ Logged in to github.com account example-user (keyring)",
         "  - Active account: true",
         "  - Git operations protocol: https",
       ].join("\n"),
@@ -760,7 +760,7 @@ it("accepts authenticated GitHub accounts from plain-text stderr output", () => 
     },
     {
       status: "authenticated",
-      account: Option.some("remote-example-2"),
+      account: Option.some("example-user"),
       host: Option.some("github.com"),
     },
   );

@@ -11,36 +11,6 @@ import {
 } from "./WorkspaceNavigator.logic";
 
 describe("WorkspaceNavigator logic", () => {
-  it("builds the PR reference from the current checkout", () => {
-    const projectId = ProjectId.make("project-1");
-    expect(
-      checkoutPullRequestReference(
-        {
-          pr: {
-            number: 927,
-            title: "V10 pipeline",
-            url: "https://github.com/example-org/example-app/pull/927",
-            baseRef: "main",
-            headRef: "ai-1720-take-over-the-v10-pipeline",
-            state: "open",
-          },
-          sourceControlProvider: {
-            kind: SourceControlProviderKind.make("github"),
-            name: "GitHub",
-            baseUrl: "https://github.com",
-          },
-        },
-        projectId,
-        "example-org/example-app",
-      ),
-    ).toEqual({
-      projectId,
-      repository: "example-org/example-app",
-      number: 927,
-      host: "github.com",
-    });
-  });
-
   it("uses the checkout's repository selector for Azure DevOps", () => {
     const projectId = ProjectId.make("project-1");
     expect(

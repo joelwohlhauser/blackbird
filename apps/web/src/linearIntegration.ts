@@ -23,6 +23,7 @@ export function linearUrl(input: {
   readonly branch: string | null | undefined;
 }): string {
   const organizationSlug = encodeURIComponent(input.organizationSlug.trim().toLowerCase());
+  if (!organizationSlug) return LINEAR_APP_ORIGIN;
   const organizationUrl = `${LINEAR_APP_ORIGIN}/${organizationSlug}`;
   const issueId = linearIssueIdFromBranch(input.branch);
   return issueId ? `${organizationUrl}/issue/${issueId}/` : organizationUrl;

@@ -26,7 +26,15 @@ async function fixture(
   const bin = NodePath.join(root, "bin");
   const serverRoot = NodePath.join(root, "server");
   const previous = NodePath.join(serverRoot, "a".repeat(64));
-  const archive = "fixture server archive";
+  const packageDir = NodePath.join(root, "package");
+  const archivePath = NodePath.join(root, "server.tgz");
+  await NodeFSP.mkdir(packageDir);
+  await NodeFSP.writeFile(
+    NodePath.join(packageDir, "package.json"),
+    JSON.stringify({ name: "t3", version: "0.0.0", dependencies: {}, optionalDependencies: {} }),
+  );
+  await execute("tar", ["-czf", archivePath, "-C", root, "package"]);
+  const archive = await NodeFSP.readFile(archivePath);
   const digest = NodeCrypto.createHash("sha256").update(archive).digest("hex");
   const release = NodePath.join(serverRoot, digest);
   await NodeFSP.mkdir(bin);

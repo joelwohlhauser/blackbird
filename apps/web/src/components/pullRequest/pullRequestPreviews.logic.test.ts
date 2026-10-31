@@ -1,16 +1,15 @@
-import { DEFAULT_PULL_REQUEST_PREVIEW_HOSTS } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { parsePullRequestPreviewHosts, pullRequestPreviews } from "./pullRequestPreviews.logic";
 
-const hosts = DEFAULT_PULL_REQUEST_PREVIEW_HOSTS;
+const hosts = ["*.staging.example.test", "*.preview.example.test", "*.vercel.app"];
 const checkout = "https://prod-123-one.checkout.staging.example.test";
 const otherCheckout = "https://prod-123-two.checkout.staging.example.test";
 const backstage = "https://prod-123-one.backstage.staging.example.test";
 
 describe("pullRequestPreviews", () => {
   it("finds deployment comments whose Markdown link text is the destination URL", () => {
-    const cockpit = "https://prod-123-one.cockpit.staging.example.test";
+    const cockpit = "https://prod-123-one.cockpit.preview.example.test";
     const urls = [checkout, backstage, cockpit, otherCheckout];
     const body = [
       "## Preview Deployment",
@@ -53,12 +52,11 @@ describe("pullRequestPreviews", () => {
   });
 
   it("labels Vercel branch URLs by project", () => {
-    const checkoutBranch =
-      "https://acme-checkout-git-feature-login-abc123-acme.vercel.app";
+    const checkoutBranch = "https://acme-checkout-git-feature-login-abc123-acme.vercel.app";
     const commit = "https://acme-checkout-abc123def-acme.vercel.app";
     const body = [
       "| [acme-checkout](https://vercel.com/acme/acme-checkout) |",
-      `[Ready](https://vercel.com/acme/acme-checkout/EXAMPLE) | [Preview](${checkoutBranch}) |`,
+      `[Ready](https://vercel.com/acme/acme-checkout/deployment-1) | [Preview](${checkoutBranch}) |`,
       `Deployed ${commit}`,
     ].join("\n");
 
@@ -70,10 +68,13 @@ describe("pullRequestPreviews", () => {
 
   it("keeps -git- in labels outside Vercel", () => {
     expect(
-      pullRequestPreviews([{ body: "https://eng-123-fix-git-sync-abc123.staging.example.test" }], hosts),
+      pullRequestPreviews(
+        [{ body: "https://eng-123-fix-git-sync-abc123.preview.example.test" }],
+        hosts,
+      ),
     ).toEqual([
       {
-        url: "https://eng-123-fix-git-sync-abc123.staging.example.test",
+        url: "https://eng-123-fix-git-sync-abc123.preview.example.test",
         label: "eng-123-fix-git-sync-abc123",
         ambiguous: false,
       },
@@ -126,7 +127,12 @@ describe("pullRequestPreviews", () => {
         ],
         hosts,
       ).map((preview) => preview.url),
-    ).toEqual([checkout, `${backstage}/path`, otherCheckout, "https://pr-1.app.staging.example.test"]);
+    ).toEqual([
+      checkout,
+      `${backstage}/path`,
+      otherCheckout,
+      "https://pr-1.app.staging.example.test",
+    ]);
   });
 });
 
@@ -134,8 +140,8 @@ describe("parsePullRequestPreviewHosts", () => {
   it("splits on commas and whitespace, lowercases and deduplicates", () => {
     expect(
       parsePullRequestPreviewHosts(
-        " *.Staging.example.test, *.staging.example.test\n*.staging.example.test ,",
+        " *.Staging.example.test, *.preview.example.test\n*.staging.example.test ,",
       ),
-    ).toEqual(["*.staging.example.test", "*.staging.example.test"]);
+    ).toEqual(["*.staging.example.test", "*.preview.example.test"]);
   });
 });

@@ -14,11 +14,11 @@ describe("macOS desktop installer", () => {
       resolveSigningIdentity(
         [
           '  1) ABC123 "Blackbird Local Signing"',
-          '  2) DEF456 "Apple Development: developer@example.com (TEAM123456)"',
+          '  2) DEF456 "Apple Development: user@example.com (TEAM123456)"',
           "     2 valid identities found",
         ].join("\n"),
       ),
-    ).toBe("Apple Development: developer@example.com (TEAM123456)");
+    ).toBe("Apple Development: user@example.com (TEAM123456)");
     expect(resolveSigningIdentity("     0 valid identities found")).toBe("-");
   });
 

@@ -184,7 +184,7 @@ describe("ElectronBrowserHost", () => {
     });
     useRightPanelStore
       .getState()
-      .openLinear(threadRef, "tab_linear", "https://linear.app/acme/issue/ENG-1", {
+      .openLinear(threadRef, "tab_linear", "https://linear.app/acme/issue/APP-1", {
         pinned: true,
       });
     markBrowserThreadViewed(scopedThreadKey(threadRef));

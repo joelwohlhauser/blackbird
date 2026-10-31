@@ -28,7 +28,7 @@ beforeEach(() => {
 
 describe("addLinearSurface", () => {
   it("opens the resolved URL and registers the tab as Linear", async () => {
-    const url = "https://linear.app/acme/issue/ENG-123/";
+    const url = "https://linear.app/acme/issue/APP-123/";
     const snapshot: PreviewSessionSnapshot = {
       threadId: threadRef.threadId,
       tabId: "linear-tab",
@@ -51,7 +51,7 @@ describe("addLinearSurface", () => {
 
     expect(openPreview).toHaveBeenCalledWith({
       threadId: "thread-1",
-      url: "https://linear.app/acme/issue/ENG-123/",
+      url: "https://linear.app/acme/issue/APP-123/",
       viewport: FILL_PREVIEW_VIEWPORT,
       profileId: DEFAULT_BROWSER_PROFILE_ID,
     });

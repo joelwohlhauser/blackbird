@@ -329,8 +329,9 @@ describe("ClientSettings external links", () => {
 });
 
 describe("ClientSettings Linear integration", () => {
-  it("defaults the organization slug to acme", () => {
-    expect(decodeClientSettings({}).linearOrganizationSlug).toBe("acme");
+  it("leaves the organization unconfigured and uses public preview hosts by default", () => {
+    expect(decodeClientSettings({}).linearOrganizationSlug).toBe("");
+    expect(decodeClientSettings({}).pullRequestPreviewHosts).toEqual(["*.vercel.app"]);
   });
 
   it("trims organization slug updates", () => {
@@ -338,6 +339,9 @@ describe("ClientSettings Linear integration", () => {
       decodeClientSettingsPatch({ linearOrganizationSlug: "  another-workspace  " })
         .linearOrganizationSlug,
     ).toBe("another-workspace");
+    expect(decodeClientSettingsPatch({ linearOrganizationSlug: "  " }).linearOrganizationSlug).toBe(
+      "",
+    );
   });
 });
 

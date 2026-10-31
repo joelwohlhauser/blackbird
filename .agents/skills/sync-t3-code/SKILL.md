@@ -41,4 +41,4 @@ Watch for these recurring hazards:
 6. Create the merge commit on `main` with a plain conventional title, then push `main` to `origin`.
 7. End with a short "What T3 added" summary based on the upstream commits and diff since the recorded merge base. Use 3-5 bullets covering only notable user-facing changes and meaningful fixes. Skip internal churn.
 
-Do not deploy the desktop app, update remote, open a pull request, or merge anything into `upstream` unless Joel asks separately.
+Do not deploy the desktop app, update remote servers, open a pull request, or merge anything into `upstream` unless Joel asks separately.
