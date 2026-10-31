@@ -60,14 +60,7 @@ import {
 } from "@t3tools/contracts";
 import type { OlderSettledScope } from "@t3tools/client-runtime/state/threads";
 
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  FolderIcon,
-  ListFilterIcon,
-  PlusIcon,
-  SettingsIcon,
-} from "lucide-react";
+import { CheckIcon, FolderIcon, ListFilterIcon, PlusIcon, SettingsIcon } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -242,6 +235,7 @@ import {
   ComboboxTrigger,
   useComboboxFilter,
 } from "./ui/combobox";
+import { SettledShelfMoreRow } from "./sidebar/SettledShelfMoreRow";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarPinnedSites } from "./sidebar/SidebarPinnedSites";
@@ -3516,29 +3510,17 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       return items;
                     })()}
                     {settledShelfExpanded && hiddenSettledCount > 0 ? (
-                      <li className="list-none">
-                        <button
-                          type="button"
-                          role="treeitem"
-                          tabIndex={-1}
-                          data-sidebar-row="settled:more"
-                          data-sidebar-parent="shelf:settled"
-                          disabled={olderSettledShelf.loading}
-                          onClick={() => {
-                            olderSettledShelf.retry();
-                            showMoreSettled();
-                          }}
-                          className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground disabled:cursor-default"
-                        >
-                          {/* Plus means "add", so revealing more uses a chevron. */}
-                          <ChevronDownIcon aria-hidden className="size-4 shrink-0" />
-                          {olderSettledShelf.loading
-                            ? "Loading"
-                            : olderSettledShelf.failed
-                              ? "Could not load older threads. Retry"
-                              : `Show ${Math.min(hiddenSettledCount, SETTLED_TAIL_PAGE_COUNT)} more`}
-                        </button>
-                      </li>
+                      <SettledShelfMoreRow
+                        key={settledVisibleCount}
+                        canShowMore={
+                          !olderSettledShelf.loading &&
+                          !olderSettledShelf.failed &&
+                          settledCount - hiddenSettledCount >= settledVisibleCount
+                        }
+                        failed={olderSettledShelf.failed}
+                        onShowMore={showMoreSettled}
+                        onRetry={olderSettledShelf.retry}
+                      />
                     ) : null}
                   </ul>
                 </SortableContext>
