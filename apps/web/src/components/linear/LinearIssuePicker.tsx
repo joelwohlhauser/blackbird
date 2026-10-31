@@ -8,7 +8,9 @@ import {
 } from "../../lib/desktopLinear";
 import { useDebouncedValue } from "../../state/queries";
 import { useComposerMenuProps } from "../chat/composerEventScope";
+import { ComposerContextLabel } from "../ComposerContextLabel";
 import { LinearIcon } from "../Icons";
+import { ComposerControl } from "../chat/ComposerControl";
 import { Button } from "../ui/button";
 import {
   Combobox,
@@ -90,6 +92,7 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
   const issues = result.issues;
   const status = result.requestKey !== requestKey ? "loading" : result.failed ? "error" : "ready";
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- searches Linear through the desktop bridge while the picker is open
   useEffect(() => {
     const bridge = getDesktopLinearBridge();
     if (!isOpen || !bridge || !account) return;
@@ -131,12 +134,12 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
       disabled={disabled}
     >
       <ComboboxTrigger
-        render={<Button variant="ghost" size="xs" />}
-        className="shrink-0"
+        render={<ComposerControl size="xs" />}
         aria-label="Linear issue"
+        data-composer-context-control
       >
-        <LinearIcon className="size-3 shrink-0" />
-        <span className="truncate">{label}</span>
+        <LinearIcon className="size-2.5" />
+        <ComposerContextLabel>{label}</ComposerContextLabel>
       </ComboboxTrigger>
       <ComboboxPopup side="top" className="flex w-96 flex-col" {...composerMenuProps}>
         {account === null ? (
