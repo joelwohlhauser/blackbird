@@ -43,7 +43,7 @@ it.effect(
       const path = yield* Path.Path;
       const input = yield* setup;
       const prompts: Electron.MessageBoxOptions[] = [];
-      yield* offerImport(input).pipe(
+      yield* offerImport(input, () => Effect.void).pipe(
         Effect.provideService(ElectronDialog.ElectronDialog, dialogFor([1], prompts)),
       );
       assert.lengthOf(prompts, 1);
@@ -57,13 +57,13 @@ it.effect(
         path.join(input.destinationStateDir, "statev2.sqlite"),
         "existing history",
       );
-      yield* offerImport(input).pipe(
+      yield* offerImport(input, () => Effect.void).pipe(
         Effect.provideService(ElectronDialog.ElectronDialog, dialogFor([], prompts)),
       );
       assert.lengthOf(prompts, 1);
       yield* fs.remove(input.sourceStateDir, { recursive: true });
       yield* fs.remove(input.destinationStateDir, { recursive: true });
-      yield* offerImport(input).pipe(
+      yield* offerImport(input, () => Effect.void).pipe(
         Effect.provideService(ElectronDialog.ElectronDialog, dialogFor([], prompts)),
       );
       assert.lengthOf(prompts, 1);
@@ -88,22 +88,49 @@ if (!fs.existsSync(marker)) {
   process.stderr.write("The source snapshot could not be read.");
   process.exit(1);
 }
+const progressVisible = new Promise(resolve => {
+  const watcher = fs.watch(destination, (_event, name) => {
+    if (name === "progress-visible") { watcher.close(); resolve(); }
+  });
+});
+process.stdout.write('{"stage":"conversations","completedConversations":0,');
+process.stdout.write('"totalConversations":1,"importedMessageCount":0}\\n');
+await progressVisible;
 fs.writeFileSync(path.join(destination, "statev2.sqlite"), "imported history");
+process.stdout.write(JSON.stringify({stage:"complete",importedProjectCount:1,importedThreadCount:1,importedMessageCount:2}));
 `,
     );
     const prompts: Electron.MessageBoxOptions[] = [];
-    yield* offerImport(input).pipe(
-      Effect.provideService(ElectronDialog.ElectronDialog, dialogFor([0, 0], prompts)),
-    );
+    const progress: string[] = [];
+    yield* offerImport(input, (update) =>
+      Effect.gen(function* () {
+        progress.push(update.stage);
+        if (update.stage === "conversations") {
+          assert.isFalse(yield* fs.exists(path.join(input.destinationStateDir, "statev2.sqlite")));
+          yield* fs.writeFileString(path.join(input.destinationStateDir, "progress-visible"), "1");
+        }
+      }).pipe(Effect.orDie),
+    ).pipe(Effect.provideService(ElectronDialog.ElectronDialog, dialogFor([0, 0], prompts)));
+    assert.deepEqual(progress, ["preparing", "failed", "preparing", "conversations", "complete"]);
     assert.lengthOf(prompts, 2);
     assert.include(prompts[1]?.detail, "The source snapshot could not be read.");
     assert.equal(
       yield* fs.readFileString(path.join(input.destinationStateDir, "statev2.sqlite")),
       "imported history",
     );
-    yield* offerImport(input).pipe(
+    yield* offerImport(input, () => Effect.void).pipe(
       Effect.provideService(ElectronDialog.ElectronDialog, dialogFor([], prompts)),
     );
     assert.lengthOf(prompts, 2);
+    yield* fs.remove(path.join(input.destinationStateDir, "statev2.sqlite"));
+    yield* fs.remove(path.join(input.destinationStateDir, "attempted"));
+    const fallbackProgress: string[] = [];
+    yield* offerImport(input, (update) =>
+      Effect.sync(() => {
+        fallbackProgress.push(update.stage);
+      }),
+    ).pipe(Effect.provideService(ElectronDialog.ElectronDialog, dialogFor([0, 1], prompts)));
+    assert.deepEqual(fallbackProgress, ["preparing", "failed", "opening"]);
+    assert.isFalse(yield* fs.exists(path.join(input.destinationStateDir, "statev2.sqlite")));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

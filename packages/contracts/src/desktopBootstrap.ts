@@ -33,3 +33,26 @@ export type DesktopBackendBootstrap = typeof DesktopBackendBootstrap.Type;
 
 /** Written to `<t3Home>/runtime` before update shutdown so the backend retains its managed tunnel. */
 export const DESKTOP_UPDATE_RESTART_MARKER_FILE = "desktop-update-restart";
+
+export const ConversationImportProgress = Schema.Union([
+  Schema.Struct({ stage: Schema.Literal("preparing") }),
+  Schema.Struct({
+    stage: Schema.Literal("snapshot"),
+    completedPages: Schema.Number,
+    totalPages: Schema.Number,
+  }),
+  Schema.Struct({
+    stage: Schema.Literal("conversations"),
+    completedConversations: Schema.Number,
+    totalConversations: Schema.Number,
+    importedMessageCount: Schema.Number,
+  }),
+  Schema.Struct({ stage: Schema.Literal("saving") }),
+  Schema.Struct({
+    stage: Schema.Literal("complete"),
+    importedProjectCount: Schema.Number,
+    importedThreadCount: Schema.Number,
+    importedMessageCount: Schema.Number,
+  }),
+]);
+export type ConversationImportProgress = typeof ConversationImportProgress.Type;

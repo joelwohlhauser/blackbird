@@ -7,6 +7,7 @@ import * as NodeSqlite from "node:sqlite";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   type ChatAttachment,
+  type ConversationImportProgress,
   ChatAttachmentId,
   CommandId,
   EventId,
@@ -283,6 +284,7 @@ const importDatabase = Effect.fn("importT3ConversationDatabase")(function* (
   destinationPath: string,
   sourceDirectory: string,
   attachmentDirectory: string,
+  onProgress: ((progress: ConversationImportProgress) => void) | undefined,
 ) {
   const source = yield* Layer.build(offlineDatabase(sourcePath));
   const sourceSql = Context.get(source, SqlClient.SqlClient);
@@ -336,6 +338,12 @@ const importDatabase = Effect.fn("importT3ConversationDatabase")(function* (
       .filter((row) => projectIds.has(row.project_id))
       .map((row) => [row.thread_id, ThreadId.make(NodeCrypto.randomUUID())]),
   );
+  onProgress?.({
+    stage: "conversations",
+    completedConversations: 0,
+    totalConversations: importedIds.size,
+    importedMessageCount: 0,
+  });
   for (const row of rows) {
     const projectId = projectIds.get(row.project_id);
     if (projectId === undefined) continue;
@@ -483,6 +491,12 @@ const importDatabase = Effect.fn("importT3ConversationDatabase")(function* (
     }
     importedThreadCount++;
     importedMessageCount += messages.size;
+    onProgress?.({
+      stage: "conversations",
+      completedConversations: importedThreadCount,
+      totalConversations: importedIds.size,
+      importedMessageCount,
+    });
   }
   return {
     importedProjectCount: projectIds.size,
@@ -494,7 +508,9 @@ const importDatabase = Effect.fn("importT3ConversationDatabase")(function* (
 export async function importT3Conversations(
   sourceStateDir: string,
   destinationStateDir: string,
+  onProgress?: (progress: ConversationImportProgress) => void,
 ): Promise<T3ConversationImportResult> {
+  onProgress?.({ stage: "preparing" });
   const sourceDirectory = NodeFS.realpathSync(sourceStateDir);
   NodeFS.mkdirSync(destinationStateDir, { recursive: true, mode: 0o700 });
   const destinationDirectory = NodeFS.realpathSync(destinationStateDir);
@@ -531,16 +547,36 @@ export async function importT3Conversations(
       // Hold one WAL snapshot so writes in the source app cannot restart the backup.
       source.exec("BEGIN");
       source.prepare("SELECT COUNT(*) FROM sqlite_schema").get();
-      await NodeSqlite.backup(source, snapshotPath, { rate: 1_000 });
+      onProgress?.({
+        stage: "snapshot",
+        completedPages: 0,
+        totalPages: Number(source.prepare("PRAGMA page_count").get()!.page_count),
+      });
+      const copiedPages = await NodeSqlite.backup(source, snapshotPath, {
+        rate: 1_000,
+        progress: ({ totalPages, remainingPages }) =>
+          onProgress?.({
+            stage: "snapshot",
+            completedPages: totalPages - remainingPages,
+            totalPages,
+          }),
+      });
+      onProgress?.({ stage: "snapshot", completedPages: copiedPages, totalPages: copiedPages });
     } finally {
       source.close();
     }
     NodeFS.mkdirSync(stagedAttachments);
+    onProgress?.({ stage: "preparing" });
     const result = await Effect.runPromise(
-      importDatabase(snapshotPath, importedPath, sourceDirectory, stagedAttachments).pipe(
-        Effect.provide(Logger.layer([], { mergeWithExisting: false })),
-      ),
+      importDatabase(
+        snapshotPath,
+        importedPath,
+        sourceDirectory,
+        stagedAttachments,
+        onProgress,
+      ).pipe(Effect.provide(Logger.layer([], { mergeWithExisting: false }))),
     );
+    onProgress?.({ stage: "saving" });
     assertEmpty();
     const attachmentsDirectory = NodePath.join(destinationDirectory, "attachments");
     if (!NodeFS.existsSync(attachmentsDirectory)) {
@@ -559,6 +595,7 @@ export async function importT3Conversations(
     }
     NodeFS.linkSync(importedPath, targetPath);
     published = true;
+    onProgress?.({ stage: "complete", ...result });
     return result;
   } finally {
     if (!published) {
@@ -574,8 +611,9 @@ export async function runT3ConversationImportCli(args: ReadonlyArray<string>) {
   try {
     if (args.length !== 2 || !args[0] || !args[1])
       throw new Error("Expected source and destination data directories.");
-    const result = await importT3Conversations(args[0], args[1]);
-    process.stdout.write(`${JSON.stringify(result)}\n`);
+    await importT3Conversations(args[0], args[1], (progress) => {
+      process.stdout.write(`${JSON.stringify(progress)}\n`);
+    });
   } catch (error) {
     process.stderr.write(
       `${error instanceof Error ? error.message : "Could not import T3 Code conversations."}\n`,

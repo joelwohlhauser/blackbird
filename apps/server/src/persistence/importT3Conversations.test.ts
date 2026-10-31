@@ -25,6 +25,7 @@ import {
 } from "@t3tools/contracts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import type { ConversationImportProgress } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -299,7 +300,13 @@ it.effect(
             "UPDATE orchestration_v2_projection_messages SET payload_json = json_set(payload_json, '$.text', ?) WHERE message_id = ?",
           )
           .run("Question committed in WAL", sourceMessageId);
-        const importing = importT3Conversations(sourceDirectory, targetDirectory);
+        const progress: ConversationImportProgress[] = [];
+        const importing = importT3Conversations(sourceDirectory, targetDirectory, (update) => {
+          if (update.stage === "complete") {
+            assert.isTrue(NodeFS.existsSync(NodePath.join(targetDirectory, "statev2.sqlite")));
+          }
+          progress.push(update);
+        });
         writer
           .prepare(
             "UPDATE orchestration_v2_projection_messages SET payload_json = json_set(payload_json, '$.text', ?) WHERE message_id = ?",
@@ -313,6 +320,44 @@ it.effect(
           importedThreadCount: 2,
           importedMessageCount: 1,
         });
+        assert.deepStrictEqual(progress[0], { stage: "preparing" });
+        const snapshotProgress = progress.filter((update) => update.stage === "snapshot");
+        assert.isNotEmpty(snapshotProgress);
+        assert.equal(snapshotProgress[0]?.completedPages, 0);
+        for (const update of snapshotProgress) {
+          assert.isAtLeast(update.completedPages, 0);
+          assert.isAtMost(update.completedPages, update.totalPages);
+        }
+        const finishedSnapshot = snapshotProgress.at(-1)!;
+        assert.equal(finishedSnapshot.completedPages, finishedSnapshot.totalPages);
+        assert.isAbove(finishedSnapshot.totalPages, 0);
+        assert.deepStrictEqual(
+          progress.filter((update) => update.stage === "conversations"),
+          [
+            {
+              stage: "conversations",
+              completedConversations: 0,
+              totalConversations: 2,
+              importedMessageCount: 0,
+            },
+            {
+              stage: "conversations",
+              completedConversations: 1,
+              totalConversations: 2,
+              importedMessageCount: 0,
+            },
+            {
+              stage: "conversations",
+              completedConversations: 2,
+              totalConversations: 2,
+              importedMessageCount: 1,
+            },
+          ],
+        );
+        assert.deepStrictEqual(progress.slice(-2), [
+          { stage: "saving" },
+          { stage: "complete", ...result },
+        ]);
         assert.deepStrictEqual(NodeFS.readFileSync(sourcePath), originalDatabase);
         assert.deepStrictEqual(NodeFS.readFileSync(`${sourcePath}-wal`), originalWal);
         assert.isFalse(NodeFS.existsSync(NodePath.join(targetDirectory, "settings.json")));
@@ -482,9 +527,11 @@ it.effect(
       NodeFS.unlinkSync(attachmentPath);
       NodeFS.symlinkSync(NodePath.join(sourceDirectory, "state.sqlite"), attachmentPath);
       const rejectedTarget = NodePath.join(directory, "rejected-target");
-      yield* Effect.tryPromise(() => importT3Conversations(sourceV2, rejectedTarget)).pipe(
-        Effect.flip,
-      );
+      const rejectedProgress: ConversationImportProgress[] = [];
+      yield* Effect.tryPromise(() =>
+        importT3Conversations(sourceV2, rejectedTarget, (update) => rejectedProgress.push(update)),
+      ).pipe(Effect.flip);
+      assert.isFalse(rejectedProgress.some((update) => update.stage === "complete"));
       assert.isFalse(NodeFS.existsSync(NodePath.join(rejectedTarget, "statev2.sqlite")));
       assert.deepStrictEqual(NodeFS.readdirSync(rejectedTarget), []);
     }).pipe(

@@ -332,12 +332,16 @@ const startup = Effect.gen(function* () {
   yield* DesktopStartupRecovery.listen;
   yield* linuxUrlHandler.register;
   if (!environment.isDevelopment) {
-    yield* DesktopConversationImport.offerImport({
-      sourceStateDir: environment.path.join(yield* HostProcess.HomeDirectory, ".t3", "userdata"),
-      destinationStateDir: environment.stateDir,
-      backendEntryPath: environment.backendEntryPath,
-      backendCwd: environment.backendCwd,
-    });
+    const window = yield* DesktopWindow.DesktopWindow;
+    yield* DesktopConversationImport.offerImport(
+      {
+        sourceStateDir: environment.path.join(yield* HostProcess.HomeDirectory, ".t3", "userdata"),
+        destinationStateDir: environment.stateDir,
+        backendEntryPath: environment.backendEntryPath,
+        backendCwd: environment.backendCwd,
+      },
+      window.showStartupProgress,
+    );
   }
   yield* bootstrap.pipe(Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)));
 }).pipe(Effect.withSpan("desktop.startup"));

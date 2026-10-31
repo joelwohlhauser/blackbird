@@ -69,6 +69,7 @@ function makeFakeBrowserWindow() {
   let zoomLevel = 0;
   const webContents = {
     copyImageAt: vi.fn(),
+    executeJavaScript: vi.fn(() => Promise.resolve()),
     focus: vi.fn(),
     isDestroyed: vi.fn(() => false),
     getURL: vi.fn(() => "t3code-dev://app/"),
@@ -94,6 +95,7 @@ function makeFakeBrowserWindow() {
 
   const window = {
     close: vi.fn(),
+    destroy: vi.fn(),
     focus: vi.fn(),
     getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1100, height: 780 })),
     getNormalBounds: vi.fn(() => ({ x: 0, y: 0, width: 1100, height: 780 })),
@@ -124,6 +126,8 @@ function makeFakeBrowserWindow() {
 
   return {
     window: window as unknown as Electron.BrowserWindow,
+    destroy: window.destroy,
+    executeJavaScript: webContents.executeJavaScript,
     getBounds: window.getBounds,
     getNormalBounds: window.getNormalBounds,
     isDestroyed: window.isDestroyed,
@@ -1044,6 +1048,38 @@ describe("DesktopWindow", () => {
           assert.equal(Option.getOrThrow(registeredMain), main.window);
         }).pipe(Effect.provide(scenario.layer));
       }),
+  );
+
+  it.effect("keeps import progress visible until the main window is revealed", () =>
+    Effect.gen(function* () {
+      const splash = makeFakeBrowserWindow();
+      const main = makeFakeBrowserWindow();
+      const scenario = yield* makeSplashScenario([splash.window, main.window]);
+      yield* Effect.gen(function* () {
+        const windows = yield* DesktopWindow.DesktopWindow;
+        yield* windows.showStartupProgress({ stage: "preparing" });
+        yield* windows.showStartupProgress({
+          stage: "conversations",
+          completedConversations: 3,
+          totalConversations: 10,
+          importedMessageCount: 12,
+        });
+        assert.equal(yield* Ref.get(scenario.createCalls), 1);
+        assert.equal(splash.executeJavaScript.mock.calls.length, 1);
+        yield* windows.showConnectingSplash;
+        assert.equal(splash.executeJavaScript.mock.calls.length, 1);
+        yield* windows.activate;
+        assert.deepEqual(yield* Ref.get(scenario.revealedWindows), [splash.window]);
+        yield* windows.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        assert.equal(splash.destroy.mock.calls.length, 0);
+        const mainRevealed = main.windowListeners.get("ready-to-show");
+        assert.isDefined(mainRevealed);
+        mainRevealed!();
+        yield* Effect.promise(() => Promise.resolve());
+        assert.deepEqual(yield* Ref.get(scenario.revealedWindows), [splash.window, main.window]);
+        assert.equal(splash.destroy.mock.calls.length, 1);
+      }).pipe(Effect.provide(scenario.layer));
+    }),
   );
 
   it.effect("delivers capture completion and late errors without taking focus back", () =>

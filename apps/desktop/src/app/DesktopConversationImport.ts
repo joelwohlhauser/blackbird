@@ -5,8 +5,10 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { ConversationImportProgress } from "@t3tools/contracts";
 
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
+import type { StartupProgress } from "../window/StartupProgress.ts";
 
 class ConversationImportError extends Schema.TaggedError<ConversationImportError>()(
   "ConversationImportError",
@@ -14,6 +16,7 @@ class ConversationImportError extends Schema.TaggedError<ConversationImportError
 ) {}
 
 const isConversationImportError = Schema.is(ConversationImportError);
+const decodeProgress = Schema.decodeEffect(Schema.fromJsonString(ConversationImportProgress));
 
 interface ImportOptions {
   readonly sourceStateDir: string;
@@ -22,7 +25,10 @@ interface ImportOptions {
   readonly backendCwd: string;
 }
 
-const runImport = Effect.fn("desktop.importConversations.run")(function* (input: ImportOptions) {
+const runImport = Effect.fn("desktop.importConversations.run")(function* (
+  input: ImportOptions,
+  onProgress: (progress: StartupProgress) => Effect.Effect<void>,
+) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const handle = yield* spawner.spawn(
     ChildProcess.make(
@@ -38,13 +44,22 @@ const runImport = Effect.fn("desktop.importConversations.run")(function* (input:
         env: { ELECTRON_RUN_AS_NODE: "1" },
         extendEnv: true,
         stdin: "ignore",
-        stdout: "ignore",
+        stdout: "pipe",
         stderr: "pipe",
       },
     ),
   );
   const [exitCode, stderr] = yield* Effect.all(
-    [handle.exitCode, handle.stderr.pipe(Stream.decodeText(), Stream.mkString)],
+    [
+      handle.exitCode,
+      handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
+      handle.stdout.pipe(
+        Stream.decodeText(),
+        Stream.splitLines,
+        Stream.filter((line) => line.trim().length > 0),
+        Stream.runForEach((line) => decodeProgress(line).pipe(Effect.flatMap(onProgress))),
+      ),
+    ],
     { concurrency: "unbounded" },
   );
   if (exitCode !== 0) {
@@ -56,6 +71,7 @@ const runImport = Effect.fn("desktop.importConversations.run")(function* (input:
 
 export const offerImport = Effect.fn("desktop.importConversations.offer")(function* (
   input: ImportOptions,
+  onProgress: (progress: StartupProgress) => Effect.Effect<void>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -93,9 +109,14 @@ export const offerImport = Effect.fn("desktop.importConversations.offer")(functi
       cancelId: 1,
       noLink: true,
     });
-    if (response !== 0) return;
-    const result = yield* runImport(input).pipe(Effect.scoped, Effect.result);
+    if (response !== 0) {
+      if (failure !== undefined) yield* onProgress({ stage: "opening" });
+      return;
+    }
+    yield* onProgress({ stage: "preparing" });
+    const result = yield* runImport(input, onProgress).pipe(Effect.scoped, Effect.result);
     if (result._tag === "Success") return;
+    yield* onProgress({ stage: "failed" });
     failure = isConversationImportError(result.failure)
       ? result.failure.message
       : "The importer could not start. Check that Blackbird is installed correctly.";
