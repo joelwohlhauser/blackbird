@@ -1011,24 +1011,11 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           }),
         })),
       openSideChat: (ref, threadId) =>
-        set((state) => ({
-          ...userAction(state, scopedThreadKey(ref), (current) => {
-            const surface: RightPanelSurface = {
-              id: `side-chat:${threadId}`,
-              kind: "side-chat",
-              threadId,
-            };
-            if (findSurface(current, (entry) => entry.id === surface.id)) {
-              return upsertSurface(current, surface);
-            }
-            return {
-              ...current,
-              isOpen: true,
-              surfaces: [...current.surfaces, surface],
-              activeSurfaceId: surface.id,
-            };
-          }),
-        })),
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) =>
+            upsertSurface(current, { id: `side-chat:${threadId}`, kind: "side-chat", threadId }),
+          ),
+        ),
       renameDevice: (ref, surfaceId, title) =>
         set((state) => ({
           ...userAction(state, scopedThreadKey(ref), (current) => {

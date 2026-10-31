@@ -2013,6 +2013,17 @@ describe("workspace tab containers", () => {
         revealLine: 12,
       });
     });
+
+    it("places new side chat tabs by layout as well", () => {
+      workspaceLayoutProbe.isWide = () => false;
+      useRightPanelStore.getState().openSideChat(refA, ThreadId.make("side-1"));
+
+      expect(threadState()).toMatchObject({
+        isOpen: false,
+        surfaces: [],
+        activeMainSurfaceId: "side-chat:side-1",
+      });
+    });
   });
 
   it("terminal splits and closes work for terminals living in the main area", () => {
