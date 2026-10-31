@@ -44,8 +44,13 @@ jobs:
           toolchain: stable
           targets: aarch64-apple-darwin
 
-      - name: Check packaging and update behavior
-        run: vp test run scripts/build-desktop-artifact.test.ts scripts/sign-macos.test.ts apps/web/src/components/sidebar/updateEverything.logic.test.ts apps/web/src/components/sidebar/updateEverythingRun.test.ts
+      - name: Check packaging
+        working-directory: scripts
+        run: vp test run --config ../vite.config.ts build-desktop-artifact.test.ts sign-macos.test.ts
+
+      - name: Check update behavior
+        working-directory: apps/web
+        run: vp test run --project unit src/components/sidebar/updateEverything.logic.test.ts src/components/sidebar/updateEverythingRun.test.ts
 
       - name: Import persistent signing identity
         env:
