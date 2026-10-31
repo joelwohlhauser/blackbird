@@ -6,6 +6,7 @@ import {
   resolveAddressBarInput,
   previewPdfAssetUrl,
   resolvePreviewShortcut,
+  resolvePreviewZoomShortcut,
   resolveSearchUrlTemplate,
 } from "./preview.ts";
 
@@ -202,5 +203,43 @@ describe("resolvePreviewShortcut", () => {
     expect(resolvePreviewShortcut(press("[", { meta: false, ctrl: true }))).toBeNull();
     expect(resolvePreviewShortcut(press("[", { alt: true }))).toBeNull();
     expect(resolvePreviewShortcut(press("{", { shift: true }, "BracketLeft"))).toBeNull();
+  });
+});
+
+describe("resolvePreviewZoomShortcut", () => {
+  const press = (
+    key: string,
+    modifiers: Partial<Record<"meta" | "ctrl" | "alt" | "shift", boolean>> = {},
+  ) => ({
+    key,
+    metaKey: modifiers.meta ?? false,
+    ctrlKey: modifiers.ctrl ?? false,
+    altKey: modifiers.alt ?? false,
+    shiftKey: modifiers.shift ?? false,
+  });
+
+  it("maps Command zoom chords on macOS and Control chords elsewhere", () => {
+    expect(resolvePreviewZoomShortcut(press("=", { meta: true }), "MacIntel")).toBe("zoom-in");
+    expect(resolvePreviewZoomShortcut(press("+", { meta: true, shift: true }), "MacIntel")).toBe(
+      "zoom-in",
+    );
+    expect(resolvePreviewZoomShortcut(press("-", { meta: true }), "MacIntel")).toBe("zoom-out");
+    expect(resolvePreviewZoomShortcut(press("0", { meta: true }), "MacIntel")).toBe("reset-zoom");
+    expect(resolvePreviewZoomShortcut(press("=", { ctrl: true }), "Win32")).toBe("zoom-in");
+  });
+
+  it("leaves other chords alone", () => {
+    expect(resolvePreviewZoomShortcut(press("=", { ctrl: true }), "MacIntel")).toBeNull();
+    expect(resolvePreviewZoomShortcut(press("=", { meta: true }), "Win32")).toBeNull();
+    expect(
+      resolvePreviewZoomShortcut(press("-", { meta: true, alt: true }), "MacIntel"),
+    ).toBeNull();
+    expect(
+      resolvePreviewZoomShortcut(press("_", { meta: true, shift: true }), "MacIntel"),
+    ).toBeNull();
+    expect(
+      resolvePreviewZoomShortcut(press("=", { meta: true, shift: true }), "MacIntel"),
+    ).toBeNull();
+    expect(resolvePreviewZoomShortcut(press("="), "MacIntel")).toBeNull();
   });
 });

@@ -836,6 +836,10 @@ describe("PreviewManager", () => {
           ["]", false, "forward"],
           ["f", false, "find"],
           ["C", true, "copy-url"],
+          ["=", false, "zoom-in"],
+          ["+", true, "zoom-in"],
+          ["-", false, "zoom-out"],
+          ["0", false, "reset-zoom"],
         ] as const) {
           const input = { type: "keyDown", key, meta: true, control: false, alt: false, shift };
           const preventDefault = vi.fn();

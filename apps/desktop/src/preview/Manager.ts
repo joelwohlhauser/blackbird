@@ -22,7 +22,11 @@ import type {
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { matchesKeybindingShortcut } from "@t3tools/shared/keybindings";
-import { normalizePreviewUrl, resolvePreviewShortcut } from "@t3tools/shared/preview";
+import {
+  normalizePreviewUrl,
+  resolvePreviewShortcut,
+  resolvePreviewZoomShortcut,
+} from "@t3tools/shared/preview";
 import {
   BrowserWindow,
   Menu,
@@ -1569,16 +1573,20 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         return;
       }
       const host = wc.hostWebContents;
+      const keys = {
+        key: input.key,
+        code: input.code,
+        metaKey: input.meta,
+        ctrlKey: input.control,
+        shiftKey: input.shift,
+        altKey: input.alt,
+      };
       const browserShortcut =
-        hostPlatform === "darwin" && input.type === "keyDown"
-          ? resolvePreviewShortcut({
-              key: input.key,
-              code: input.code,
-              metaKey: input.meta,
-              ctrlKey: input.control,
-              shiftKey: input.shift,
-              altKey: input.alt,
-            })
+        input.type === "keyDown" && !input.isComposing
+          ? (resolvePreviewZoomShortcut(
+              keys,
+              hostPlatform === "darwin" ? "MacIntel" : hostPlatform,
+            ) ?? (hostPlatform === "darwin" ? resolvePreviewShortcut(keys) : null))
           : null;
       if (browserShortcut && host && !host.isDestroyed() && holdsKeyboardFocus(wc)) {
         event.preventDefault();

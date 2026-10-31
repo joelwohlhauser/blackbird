@@ -487,7 +487,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
           (shortcut === "back" ||
             shortcut === "forward" ||
             shortcut === "copy-url" ||
-            shortcut === "find")
+            shortcut === "find" ||
+            shortcut === "zoom-in" ||
+            shortcut === "zoom-out" ||
+            shortcut === "reset-zoom")
         )
           listener(tabId, shortcut);
       };

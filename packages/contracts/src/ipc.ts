@@ -959,7 +959,14 @@ export const DesktopPreviewFindResultSchema = Schema.Struct({
 });
 export type DesktopPreviewFindResult = typeof DesktopPreviewFindResultSchema.Type;
 
-export type DesktopPreviewShortcut = "back" | "forward" | "copy-url" | "find";
+export type DesktopPreviewShortcut =
+  | "back"
+  | "forward"
+  | "copy-url"
+  | "find"
+  | "zoom-in"
+  | "zoom-out"
+  | "reset-zoom";
 
 /** Apply zoom and color scheme at creation to avoid flashing browser defaults. */
 export const DesktopPreviewCreateTabInputSchema = Schema.Struct({
