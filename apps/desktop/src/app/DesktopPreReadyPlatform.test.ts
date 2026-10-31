@@ -141,17 +141,17 @@ describe("DesktopPreReadyPlatform", () => {
     vi.stubEnv("XDG_DATA_HOME", "/xdg");
     vi.stubEnv("APPIMAGE", "/Applications/current.AppImage");
     getSwitchValueMock.mockReturnValue("");
-    let desktopName = "t3code.desktop";
+    let desktopName = "upstream.desktop";
     let desktopEntry = previousEntry;
     let iconInstalled = false;
     copyFileSyncMock.mockImplementation((_source: string, destination: string) => {
-      iconInstalled = destination === "/xdg/icons/com.t3tools.T3Code.desktop.png";
+      iconInstalled = destination === "/xdg/icons/blackbird.desktop.png";
     });
     setDesktopNameMock.mockImplementation((name: string) => {
       desktopName = name;
     });
     writeFileSyncMock.mockImplementation((path: string, contents: string) => {
-      if (path === "/xdg/applications/com.t3tools.T3Code.desktop") desktopEntry = contents;
+      if (path === "/xdg/applications/blackbird.desktop") desktopEntry = contents;
     });
 
     return Effect.scoped(
@@ -167,14 +167,11 @@ describe("DesktopPreReadyPlatform", () => {
           ),
         );
         const identity = yield* Effect.promise(() => portalIdentity);
-        assert.equal(identity.desktopName, "com.t3tools.T3Code.desktop");
+        assert.equal(identity.desktopName, "blackbird.desktop");
         assert.include(identity.desktopEntry ?? "", "Exec=/Applications/current.AppImage %U");
         assert.include(identity.desktopEntry ?? "", "Name=Blackbird\n");
-        assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/t3code;");
-        assert.include(
-          identity.desktopEntry ?? "",
-          "Icon=/xdg/icons/com.t3tools.T3Code.desktop.png",
-        );
+        assert.include(identity.desktopEntry ?? "", "MimeType=x-scheme-handler/blackbird;");
+        assert.include(identity.desktopEntry ?? "", "Icon=/xdg/icons/blackbird.desktop.png");
         assert.isTrue(identity.iconInstalled);
       }),
     ).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())));
@@ -195,7 +192,7 @@ describe("DesktopPreReadyPlatform", () => {
           ),
         );
         const entry = writeFileSyncMock.mock.calls.find(
-          ([path]) => path === "/xdg/applications/com.t3tools.T3Code.desktop",
+          ([path]) => path === "/xdg/applications/blackbird.desktop",
         )?.[1];
         assert.include(entry, 'Exec="/opt/T3 Code/t3code" %U');
       }),

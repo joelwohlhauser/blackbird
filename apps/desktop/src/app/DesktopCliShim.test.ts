@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 const tempRoot = () => {
-  const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-cli-shim-"));
+  const root = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "blackbird-cli-shim-"));
   directories.push(root);
   return root;
 };
@@ -27,7 +27,7 @@ const writeExecutable = (path: string, content: string) => {
 };
 
 const writeShim = (root: string, target: CliShimTarget) => {
-  const shim = NodePath.join(root, "bin", "t3");
+  const shim = NodePath.join(root, "bin", "blackbird");
   writeExecutable(shim, renderCliShim({ target, shimPath: shim, t3Home: `${root}/home` }));
   return shim;
 };
@@ -45,7 +45,7 @@ const fakeAppImage = (canMount = true) => {
   const root = tempRoot();
   const image = NodePath.join(root, "image");
   writeExecutable(NodePath.join(image, "t3code"), REPORTER);
-  const appImage = NodePath.join(root, "T3 Code.AppImage");
+  const appImage = NodePath.join(root, "Blackbird.AppImage");
   writeExecutable(
     appImage,
     [
@@ -73,7 +73,7 @@ describe("renderCliShim", () => {
     );
   });
 
-  it("keeps the install's T3 home under sudo, unless one is set", () => {
+  it("keeps the install's Blackbird home under sudo, unless one is set", () => {
     const root = tempRoot();
     writeExecutable(NodePath.join(root, "app"), REPORTER);
     const shim = writeShim(root, {
@@ -83,13 +83,16 @@ describe("renderCliShim", () => {
     });
     expect(run(shim, []).stdout).toContain(`home=${root}/home`);
     expect(run(shim, [], { T3CODE_HOME: "/elsewhere" }).stdout).toContain("home=/elsewhere");
-    const relative = NodeChildProcess.spawnSync("./bin/t3", [], { cwd: root, encoding: "utf8" });
+    const relative = NodeChildProcess.spawnSync("./bin/blackbird", [], {
+      cwd: root,
+      encoding: "utf8",
+    });
     expect(relative.stdout).toContain(`cli=${shim}`);
   });
 
   it("runs an installed app's server directly", () => {
     const root = tempRoot();
-    const executable = NodePath.join(root, "opt", "T3 Code", "t3code");
+    const executable = NodePath.join(root, "opt", "Blackbird", "t3code");
     writeExecutable(executable, REPORTER);
     const shim = writeShim(root, {
       kind: "direct",
@@ -105,22 +108,24 @@ describe("renderCliShim", () => {
   });
 
   it("writes a Windows launcher that keeps cmd from reinterpreting paths", () => {
-    const executable = "C:\\Apps\\R&whoami&X 100%\\!CHANNEL!\\T3 Code.exe";
+    const executable = "C:\\Apps\\R&whoami&X 100%\\!CHANNEL!\\Blackbird.exe";
     const script = renderCliShim({
       target: { kind: "windows", executable, entry: "C:\\Apps\\server.asar\\bin.mjs" },
-      shimPath: "C:\\Users\\José\\.t3\\bin\\t3.cmd",
-      t3Home: "C:\\Users\\José\\.t3",
+      shimPath: "C:\\Users\\José\\.blackbird\\bin\\blackbird.cmd",
+      t3Home: "C:\\Users\\José\\.blackbird",
     });
     const lines = script.split("\r\n");
     expect(lines).toContain("setlocal EnableExtensions DisableDelayedExpansion");
     expect(lines).toContain("chcp 65001 >nul");
     expect(lines).toContain(
-      'if exist "C:\\Apps\\R&whoami&X 100%%\\!CHANNEL!\\T3 Code.exe" goto run',
+      'if exist "C:\\Apps\\R&whoami&X 100%%\\!CHANNEL!\\Blackbird.exe" goto run',
     );
     const bare = lines.filter(
       (line) => line.includes("whoami") && !/"[^"]*whoami[^"]*"/.test(line),
     );
     expect(bare).toEqual([]);
-    expect(lines).toContain('set "T3CODE_CLI_PATH=C:\\Users\\José\\.t3\\bin\\t3.cmd"');
+    expect(lines).toContain(
+      'set "T3CODE_CLI_PATH=C:\\Users\\José\\.blackbird\\bin\\blackbird.cmd"',
+    );
   });
 });

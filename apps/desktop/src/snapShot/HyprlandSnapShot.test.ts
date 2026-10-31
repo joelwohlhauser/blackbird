@@ -75,16 +75,22 @@ it("installs offline at a stable executable path and probes only capabilities", 
   ]);
 });
 it("updates explicitly and removes only its helper", async () => {
+  const upstream = NodePath.join(
+    paths.dataHome,
+    "t3code",
+    "hyprland-capture",
+    "t3-hyprland-snap-shot",
+  );
+  await NodeFSP.mkdir(NodePath.dirname(upstream), { recursive: true });
+  await NodeFSP.writeFile(upstream, "upstream helper");
   await setup.perform("install-hyprland-helper");
-  const unrelated = NodePath.join(paths.dataHome, "keep.txt");
-  await NodeFSP.writeFile(unrelated, "keep");
   await NodeFSP.writeFile(paths.bundle, "update");
   expect((await setup.state()).status).toBe("update-required");
   await setup.perform("install-hyprland-helper");
   expect((await setup.state()).status).toBe("ready");
   await setup.perform("remove-hyprland-helper");
   expect((await setup.state()).status).toBe("not-installed");
-  expect(await NodeFSP.readFile(unrelated, "utf8")).toBe("keep");
+  expect(await NodeFSP.readFile(upstream, "utf8")).toBe("upstream helper");
 });
 it("does not overwrite a linked executable", async () => {
   const executable = hyprlandCaptureExecutable(paths);

@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { CaptureService, CLIENT_NAMES, isWaylandSession } from "./captureService.js";
+import { CaptureService, isWaylandSession } from "./captureService.js";
 
 it("supports GNOME 50 without the removed X11 API, rejecting older X11 sessions", () => {
   expect(isWaylandSession({})).toBe(true);
@@ -10,7 +10,7 @@ it("supports GNOME 50 without the removed X11 API, rejecting older X11 sessions"
 function fixture(overrides = {}) {
   let snapshots = 0;
   const options = {
-    getNameOwner: async (name) => (name === CLIENT_NAMES[0] ? ":1.23" : null),
+    getNameOwner: async (name) => (name === "blackbird.SnapShot" ? ":1.23" : null),
     isAvailable: () => true,
     takeSnapshot: async () => {
       snapshots++;

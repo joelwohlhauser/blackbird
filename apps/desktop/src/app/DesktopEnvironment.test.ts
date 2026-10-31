@@ -13,9 +13,9 @@ const defaultInput = {
   platform: "darwin",
   processArch: "arm64",
   appVersion: "0.0.22",
-  appPath: "/Applications/T3 Code.app/Contents/Resources/app.asar",
+  appPath: "/Applications/Blackbird.app/Contents/Resources/app.asar",
   isPackaged: false,
-  resourcesPath: "/Applications/T3 Code.app/Contents/Resources",
+  resourcesPath: "/Applications/Blackbird.app/Contents/Resources",
   runningUnderArm64Translation: false,
 } satisfies DesktopEnvironment.MakeDesktopEnvironmentInput;
 
@@ -44,7 +44,7 @@ describe("DesktopEnvironment", () => {
 
       assert.equal(
         environment.remoteServerPackageArchivePath,
-        "/Applications/T3 Code.app/Contents/Resources/blackbird-remote-server.tgz",
+        "/Applications/Blackbird.app/Contents/Resources/blackbird-remote-server.tgz",
       );
     }),
   );
@@ -78,9 +78,19 @@ describe("DesktopEnvironment", () => {
         { VITE_DEV_SERVER_URL: "http://localhost:5173" },
       );
       const production = yield* makeEnvironment();
+      const configured = yield* makeEnvironment(
+        {},
+        {
+          VITE_DEV_SERVER_URL: "http://localhost:5173",
+          T3CODE_HOME: "/configured-home",
+          T3CODE_DESKTOP_APP_USER_MODEL_ID: "com.example.custom-app",
+        },
+      );
 
-      assert.equal(development.stateDir, "/Users/alice/.t3/dev");
-      assert.equal(production.stateDir, "/Users/alice/.t3/userdata");
+      assert.equal(development.stateDir, "/Users/alice/.blackbird/dev");
+      assert.equal(production.stateDir, "/Users/alice/.blackbird/userdata");
+      assert.equal(configured.stateDir, "/configured-home/userdata");
+      assert.equal(configured.appUserModelId, "com.example.custom-app");
     }),
   );
 });

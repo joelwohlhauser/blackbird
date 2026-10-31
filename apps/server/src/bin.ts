@@ -17,7 +17,10 @@ if (
   // Guard sockets before either dispatch path can load outbound-capable modules.
   const { ignoreMacosTypeOfServiceEinval } = await import("./outboundHttp.ts");
   ignoreMacosTypeOfServiceEinval();
-  if (command === "__document-text") {
+  if (command === "__import-t3-conversations") {
+    const { runT3ConversationImportCli } = await import("./persistence/importT3Conversations.ts");
+    await runT3ConversationImportCli(process.argv.slice(3));
+  } else if (command === "__document-text") {
     const { extractDocumentText } = await import("./provider/documentTextWorker.ts");
     try {
       process.stdout.write(await extractDocumentText(process.argv[3]!, process.argv[4]!));

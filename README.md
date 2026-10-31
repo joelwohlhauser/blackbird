@@ -12,6 +12,12 @@ The repository has two remotes:
 
 ## What is custom in Blackbird?
 
+### Separate installation and T3 Code import
+
+Blackbird can be installed alongside T3 Code. Its desktop app has its own application identity, browser profile, `blackbird://` links, and local data under `~/.blackbird/userdata`. Development uses a separate profile and `blackbird-dev://` links. The optional terminal command is `blackbird`; it does not replace `t3`. An explicit `T3CODE_HOME` still overrides the data location.
+
+On the first launch, Blackbird offers **Import conversations from T3 Code** when it finds a local T3 Code profile in `~/.t3/userdata`. The import copies conversations and attachments into the empty Blackbird profile. T3 Code keeps its original data. Settings, sign-ins, remote connections, scheduled tasks, and checkpoint/rollback history are not imported. Plans and subagent output appear as read-only notes. Imported conversations continue in new agent sessions using their conversation history as context.
+
 ### Codex-inspired desktop interface
 
 The visual direction is deliberately close to the Codex desktop app: a quiet,

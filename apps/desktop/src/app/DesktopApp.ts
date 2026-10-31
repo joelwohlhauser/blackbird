@@ -15,6 +15,7 @@ import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
+import * as DesktopConversationImport from "./DesktopConversationImport.ts";
 import * as DesktopApplicationMenu from "../window/DesktopApplicationMenu.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as PreviewPasskeys from "../preview/Passkeys.ts";
@@ -330,6 +331,14 @@ const startup = Effect.gen(function* () {
   yield* DesktopRemoteUpdates.listen;
   yield* DesktopStartupRecovery.listen;
   yield* linuxUrlHandler.register;
+  if (!environment.isDevelopment) {
+    yield* DesktopConversationImport.offerImport({
+      sourceStateDir: environment.path.join(yield* HostProcess.HomeDirectory, ".t3", "userdata"),
+      destinationStateDir: environment.stateDir,
+      backendEntryPath: environment.backendEntryPath,
+      backendCwd: environment.backendCwd,
+    });
+  }
   yield* bootstrap.pipe(Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)));
 }).pipe(Effect.withSpan("desktop.startup"));
 
