@@ -20,6 +20,7 @@ import {
   ProviderInstanceId,
   ProviderThreadId,
   RunId,
+  ScheduledTaskId,
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
@@ -490,6 +491,137 @@ it.effect(
     );
   },
 );
+
+it.effect("keeps automated messages in chronology with their original attribution", () => {
+  const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "blackbird-import-order-"));
+  const sourceDirectory = NodePath.join(directory, "source");
+  const targetDirectory = NodePath.join(directory, "target");
+  return Effect.gen(function* () {
+    yield* Effect.gen(function* () {
+      yield* seed(sourceDirectory);
+      const sink = yield* EventSink.EventSinkV2;
+      const base = {
+        threadId: sourceThreadId,
+        runId: null,
+        nodeId: null,
+        attachments: [],
+        streaming: false,
+      };
+      const messages: OrchestrationV2ConversationMessage[] = [
+        {
+          ...base,
+          id: MessageId.make("watch-update"),
+          role: "user",
+          createdBy: "agent",
+          creationSource: "server",
+          text: "Checks passed",
+          createdAt: DateTime.makeUnsafe("2026-01-01T00:00:01Z"),
+          updatedAt: DateTime.makeUnsafe("2026-01-01T00:00:01Z"),
+        },
+        {
+          ...base,
+          id: MessageId.make("scheduled-message"),
+          role: "user",
+          createdBy: "agent",
+          creationSource: "mcp",
+          scheduledTaskId: ScheduledTaskId.make("source-schedule"),
+          text: "Check the deployment",
+          createdAt: DateTime.makeUnsafe("2026-01-01T00:00:02Z"),
+          updatedAt: DateTime.makeUnsafe("2026-01-01T00:00:02Z"),
+        },
+        {
+          ...base,
+          id: MessageId.make("assistant-reply"),
+          role: "assistant",
+          createdBy: "agent",
+          creationSource: "provider",
+          text: "Deployment verified",
+          createdAt: DateTime.makeUnsafe("2026-01-01T00:00:03Z"),
+          updatedAt: DateTime.makeUnsafe("2026-01-01T00:00:03Z"),
+        },
+      ];
+      const reply = messages[2]!;
+      yield* sink.write({
+        events: [
+          ...messages.map((message): OrchestrationV2DomainEvent => ({
+            id: EventId.make(`event:${message.id}`),
+            type: "message.updated",
+            threadId: sourceThreadId,
+            occurredAt: message.createdAt,
+            payload: message,
+          })),
+          {
+            id: EventId.make("assistant-item-event"),
+            type: "turn-item.updated",
+            threadId: sourceThreadId,
+            occurredAt: reply.createdAt,
+            payload: {
+              id: TurnItemId.make("assistant-item"),
+              ...base,
+              providerThreadId: null,
+              providerTurnId: null,
+              nativeItemRef: null,
+              parentItemId: null,
+              ordinal: 3,
+              status: "completed",
+              title: null,
+              startedAt: reply.createdAt,
+              completedAt: reply.updatedAt,
+              updatedAt: reply.updatedAt,
+              type: "assistant_message",
+              messageId: reply.id,
+              text: reply.text,
+            },
+          },
+        ],
+      });
+    }).pipe(Effect.provide(databaseLayer(NodePath.join(sourceDirectory, "statev2.sqlite"))));
+    yield* Effect.tryPromise(() => importT3Conversations(sourceDirectory, targetDirectory));
+    yield* Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const [row] = yield* sql<{
+        thread_id: string;
+      }>`SELECT thread_id FROM orchestration_v2_projection_threads WHERE title = ${sourceThreadId}`;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const importedId = ThreadId.make(row!.thread_id);
+      const check = Effect.gen(function* () {
+        const projection = yield* projections.getThreadProjection(importedId);
+        assert.deepStrictEqual(
+          projection.messages.map((message) => message.text),
+          ["Question before WAL", "Checks passed", "Check the deployment", "Deployment verified"],
+        );
+        for (const entries of [
+          projection.messages,
+          projection.turnItems.filter((item) => item.type === "user_message"),
+        ]) {
+          const watch = entries.find((entry) => entry.text === "Checks passed")!;
+          assert.equal(watch.createdBy, "agent");
+          assert.equal(watch.creationSource, "server");
+          const scheduled = entries.find((entry) => entry.text === "Check the deployment")!;
+          assert.equal(scheduled.createdBy, "agent");
+          assert.equal(scheduled.creationSource, "mcp");
+          assert.equal(scheduled.scheduledTaskId, "source-schedule");
+        }
+        assert.deepStrictEqual(
+          projection.turnItems.map((item) => item.ordinal),
+          [1, 2, 3, 4, 5],
+        );
+        assert.isEmpty(projection.runs);
+        assert.isEmpty(projection.providerThreads);
+        const [tasks] = yield* sql<{
+          count: number;
+        }>`SELECT count(*) AS count FROM scheduled_tasks`;
+        assert.equal(tasks!.count, 0);
+      });
+      yield* check;
+      yield* (yield* ProjectionMaintenance.ProjectionMaintenanceV2).rebuild;
+      yield* check;
+    }).pipe(Effect.provide(databaseLayer(NodePath.join(targetDirectory, "statev2.sqlite"))));
+  }).pipe(
+    Effect.ensuring(Effect.sync(() => NodeFS.rmSync(directory, { recursive: true, force: true }))),
+    Effect.provide(Logger.layer([], { mergeWithExisting: false })),
+  );
+});
 
 it.effect(
   "imports V1 messages and rejects symlink attachments without publishing partial data",

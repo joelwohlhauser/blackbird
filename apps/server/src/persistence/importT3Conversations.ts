@@ -125,7 +125,7 @@ function attachmentCopier(
     ): OrchestrationMessageContext | undefined {
       if (context === undefined) return undefined;
       return {
-        version: 1,
+        ...context,
         records: context.records.map((record) => {
           if (isThreadContextRecord(record) || isEnvironmentContextRecord(record)) {
             return {
@@ -369,8 +369,15 @@ const importDatabase = Effect.fn("importT3ConversationDatabase")(function* (
     for (const message of projection.messages) {
       const messageId = MessageId.make(NodeCrypto.randomUUID());
       messages.set(message.id, {
-        createdBy: message.role === "user" ? "user" : "agent",
-        creationSource: "server",
+        createdBy: message.createdBy,
+        creationSource: message.creationSource,
+        scheduledTaskId: message.scheduledTaskId,
+        senderThreadId:
+          message.senderThreadId === undefined
+            ? undefined
+            : importedIds.get(message.senderThreadId),
+        idleCompaction: message.idleCompaction,
+        workflowScript: message.workflowScript,
         id: messageId,
         threadId,
         runId: null,
@@ -422,9 +429,13 @@ const importDatabase = Effect.fn("importT3ConversationDatabase")(function* (
             ? {
                 ...base,
                 type: "user_message",
-                createdBy: "user",
-                creationSource: "server",
-                inputIntent: "turn_start",
+                createdBy: message.createdBy,
+                creationSource: message.creationSource,
+                scheduledTaskId: message.scheduledTaskId,
+                senderThreadId: message.senderThreadId,
+                idleCompaction: message.idleCompaction,
+                workflowScript: message.workflowScript,
+                inputIntent: item.inputIntent,
                 attachments: message.attachments,
               }
             : {
@@ -439,7 +450,11 @@ const importDatabase = Effect.fn("importT3ConversationDatabase")(function* (
         if (safe !== null) turnItems.push(safe);
       }
     }
-    for (const [sourceMessageId, message] of messages) {
+    const chronologicalMessages = Array.from(messages).sort(
+      ([, left], [, right]) =>
+        DateTime.toEpochMillis(left.createdAt) - DateTime.toEpochMillis(right.createdAt),
+    );
+    for (const [sourceMessageId, message] of chronologicalMessages) {
       if (representedMessages.has(sourceMessageId)) continue;
       const base = {
         id: TurnItemId.make(NodeCrypto.randomUUID()),
@@ -460,13 +475,24 @@ const importDatabase = Effect.fn("importT3ConversationDatabase")(function* (
         text: message.text,
         context: message.context,
       };
-      turnItems.push(
+      const insertionIndex = turnItems.findIndex(
+        (item) =>
+          DateTime.toEpochMillis(item.startedAt ?? item.updatedAt) >
+          DateTime.toEpochMillis(message.createdAt),
+      );
+      turnItems.splice(
+        insertionIndex === -1 ? turnItems.length : insertionIndex,
+        0,
         message.role === "user"
           ? {
               ...base,
               type: "user_message",
-              createdBy: "user",
-              creationSource: "server",
+              createdBy: message.createdBy,
+              creationSource: message.creationSource,
+              scheduledTaskId: message.scheduledTaskId,
+              senderThreadId: message.senderThreadId,
+              idleCompaction: message.idleCompaction,
+              workflowScript: message.workflowScript,
               inputIntent: "turn_start",
               attachments: message.attachments,
             }
