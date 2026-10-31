@@ -19,6 +19,7 @@ Production stays read-only apart from three things: the merge, the data scripts 
 
 - Find the deploy run for the merge commit and follow it to the end.
 - Check that production really runs the merge commit, not an older build.
+- Some changes reach users only after a step the agent can't take, such as installing an app update or running a manual deploy. Follow what runs on its own, such as a release build, then name the remaining step as something only the user can do and stop. The change is unproven in production until then.
 - Run the data scripts the brief named: dry run, apply, then the counts again (see `../autopilot-build/references/migrations.md`).
 - Post short progress updates with ETAs based on earlier runs of the same job.
 - If the deploy fails, stop and report it with the logs. Don't retry blindly.
@@ -70,5 +71,5 @@ When Verify or Watch shows that this change broke something, or doesn't fully do
 - Move the issue to the team's done state. If the tracker's GitHub integration already did, just check. Skip this without a tracker.
 - Act on the user's sidequest choices: ignore, start a new thread in its own worktree with `thread_launch`, or create a backlog issue. If they chose to include a fix in this change and it's still unfinished, return to Build. Ignore unanswered items.
 - In the worktree, delete `node_modules` and other installed dependencies to save disk space. Keep the worktree and the branch. Never delete branches.
-- Call `unwatch_pull_request` and post a short summary: what shipped, the production evidence, and anything only the user still has to do.
-- Settle the thread (`thread_organize` with `settle`) when the change shipped, Verify found no regression or new error, and everything the brief set out to do is done. Reminders unrelated to this change, such as deploying another repository, don't keep it open. Leave it active only when something looks off or this change still needs the user.
+- Call `unwatch_pull_request` and post a short summary: what shipped, the production evidence, anything only the user still has to do, and the unrelated findings with what happened to each, for reference.
+- Settle the thread (`thread_organize` with `settle`) when the change shipped, Verify found no regression or new error, and everything the brief set out to do is done. Reminders unrelated to this change, such as deploying another repository, and unanswered unrelated findings don't keep it open. Leave it active only when something looks off or this change still needs the user.

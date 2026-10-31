@@ -87,6 +87,7 @@ When the user agrees, write the brief in chat. It's a few lines, not a file:
 - **Decisions:** the choices made and the options rejected, with reasons.
 - **Validate:** not needed, unit tests, agent tests it on the preview, the user tests it, or a goal loop with a measure, a finish condition, and a budget (see `../autopilot-build/references/goal-loop.md`).
 - **Merge:** the agent merges, or the agent waits for the user's OK.
+- **Data:** the data scripts Ship runs after the merge, if any. Naming them here is the OK to run them on production.
 - **Watch:** anything Ship should check in production, if the default isn't enough.
 
-Then load `autopilot-build`. It moves the thread into a worktree; don't edit anything before that.
+Then load `autopilot-build`. It decides where the edits happen; don't edit anything before that.

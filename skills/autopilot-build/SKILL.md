@@ -32,7 +32,7 @@ For a bug report without a brief, follow `references/bug-intake.md` first. It in
 3. Call `create_worktree` with `branch` and, when it isn't the default branch, `baseRef`. It reuses an existing worktree or branch and returns the path.
 4. Call `switch_directory` with that path as the last action of the turn. Pass the brief and remaining work as `continuationPrompt`, starting with "Continue with autopilot-build from Plan."
 
-Edits happen in the worktree. Never run `git worktree add` yourself; the environment's tool owns the folder layout. Install dependencies only when building or testing needs them. If the repository instructs you to commit directly to its default branch, skip the worktree and pull request and push after Review agrees.
+Edits happen in the worktree. Never run `git worktree add` yourself; the environment's tool owns the folder layout. Install dependencies only when building or testing needs them. If the repository instructs you to commit directly to its default branch, work in the main checkout and skip steps 6 and 7. After Review agrees, run the brief's validation locally, push, post the Ready report, and continue with `autopilot-ship` from Rollout. The push is the merge.
 
 ## 3. Plan
 
@@ -55,7 +55,7 @@ Post the plan in one short message and keep going.
 
 ## 5. Review
 
-Get a read-only review before the pull request exists. Reviewers report and never edit. Start the panel with `delegate_task` (`role: "review"`, `mode: "async"`) in the same turn, in the shared checkout. Find current models with `orchestrator_capabilities`.
+Get a read-only review before the pull request exists. Reviewers report and never edit. Start the panel with `delegate_task` (`role: "review"`, `mode: "async"`) in the same turn, in the checkout you built in. Find current models with `orchestrator_capabilities`.
 
 - **Correctness:** the other main model at high reasoning: GPT when Claude built it, Claude when GPT built it.
 - **Simplicity:** a fresh subagent on the builder's model.
@@ -102,8 +102,8 @@ Both run once the pull request exists. The brief sets the validation level.
 
 - **Not needed:** repository checks and CI are enough. The preview still has to deploy without errors.
 - **Unit tests:** write or update focused tests for what changed, and let CI run them.
-- **Agent tests it:** wait for the latest commit's preview. Follow the repository's verify skill (`verify-<repo>`) if it has one; otherwise use Blackbird's `preview_*` tools and test credentials from the repository's environment files. Record a short video with `preview_recording_start` and screenshots of each state. When the flow changes data, check data or logs too. Show proof in the thread with `html_render`, not in the pull request description.
-- **The user tests it:** test what you can first, then give the preview link and a short checklist. Ready requires their "works."
+- **Agent tests it:** wait for the latest commit's preview, or run the app locally when the repository has no preview deployments. Follow the repository's verify skill (`verify-<repo>`) if it has one; otherwise use Blackbird's `preview_*` tools and test credentials from the repository's environment files. Record a short video with `preview_recording_start` and screenshots of each state. When the flow changes data, check data or logs too. Show proof in the thread with `html_render`, not in the pull request description.
+- **The user tests it:** test what you can first, then give the preview link, or how to run it locally, and a short checklist. Ready requires their "works."
 
 Update the repository's verify skill when the feature you changed is missing from its feature map or its recipe or selectors are wrong. Keep that update in the same pull request. A test that didn't run never counts as passed. Fix failures and push for a new preview. After later fixes, test again only when the tested flow changed.
 
@@ -123,7 +123,7 @@ All of these must hold on the latest commit:
 
 - Both models still say READY FOR PRODUCTION and no "fix now" finding is open.
 - The scope check has nothing missing or extra that the user didn't approve.
-- The brief's validation passed on the preview. For a goal loop, the latest measurement matches the numbers in the description and the guard holds.
+- The brief's validation passed on the preview, or locally when the repository has none. For a goal loop, the latest measurement matches the numbers in the description and the guard holds.
 - Every review thread is resolved. Don't wait for a bot still running once everything else holds: a stalled bot may never wake the thread. Name it in the report; Ship checks again for late findings.
 - No merge conflicts remain and every check is green.
 - The pull request description follows step 6, or the goal-loop format when applicable.
