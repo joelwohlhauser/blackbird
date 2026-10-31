@@ -62,6 +62,7 @@ import Migration0057 from "./Migrations/057_OrchestrationV2.ts";
 import Migration0058 from "./Migrations/058_RemoveRedundantProjectionIndexes.ts";
 import Migration0059 from "./Migrations/059_ScheduledTaskWebhooks.ts";
 import Migration0060 from "./Migrations/060_WebhookRelayDeliveries.ts";
+import Migration0061 from "./Migrations/061_AuthSessionClientConnectionRepair.ts";
 import Migration0062 from "./Migrations/062_McpAppModelContext.ts";
 import Migration0063 from "./Migrations/063_ThreadSnapshotWindowIndexes.ts";
 import Migration0064 from "./Migrations/064_PullRequestReviewGuides.ts";
@@ -73,6 +74,12 @@ import Migration0069 from "./Migrations/069_RepairClientSettlementTimestamps.ts"
 import Migration0070 from "./Migrations/070_WebhookDedupe.ts";
 import Migration0071 from "./Migrations/071_ShellStopRequestIndex.ts";
 import Migration0072 from "./Migrations/072_ThreadMessageSearch.ts";
+import Migration0073 from "./Migrations/073_PeerLinks.ts";
+import Migration0074 from "./Migrations/074_PeerLinkFence.ts";
+import Migration0075 from "./Migrations/075_WaitingLinkRequestIndex.ts";
+import Migration0076 from "./Migrations/076_ActiveTurnItemIndexes.ts";
+import Migration0077 from "./Migrations/077_ExcludeAttachmentPlaceholdersFromSearch.ts";
+import Migration0078 from "./Migrations/078_SubagentDeliveryState.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -136,7 +143,7 @@ const migrationEntries = [
   [58, "RemoveRedundantProjectionIndexes", Migration0058],
   [59, "ScheduledTaskWebhooks", Migration0059],
   [60, "WebhookRelayDeliveries", Migration0060],
-  [61, "AuthSessionClientConnectionRepair", Migration0041],
+  [61, "AuthSessionClientConnectionRepair", Migration0061],
   [62, "McpAppModelContext", Migration0062],
   [63, "ThreadSnapshotWindowIndexes", Migration0063],
   [64, "PullRequestReviewGuides", Migration0064],
@@ -148,6 +155,12 @@ const migrationEntries = [
   [70, "WebhookDedupe", Migration0070],
   [71, "ShellStopRequestIndex", Migration0071],
   [72, "ThreadMessageSearch", Migration0072],
+  [73, "PeerLinks", Migration0073],
+  [74, "PeerLinkFence", Migration0074],
+  [75, "WaitingLinkRequestIndex", Migration0075],
+  [76, "ActiveTurnItemIndexes", Migration0076],
+  [77, "ExcludeAttachmentPlaceholdersFromSearch", Migration0077],
+  [78, "SubagentDeliveryState", Migration0078],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

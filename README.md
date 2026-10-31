@@ -85,6 +85,8 @@ character-level highlights and change markers alongside the scrollbar. Large
 diffs report complete file counts up front and load their patches
 progressively, file by file, so the aggregate Diff view stays responsive.
 
+The Diff view can review a selected local commit as well as working-tree and branch changes. File tabs opened from the workspace navigator continue to show the whole-file diff.
+
 ### Workspace tabs and two right-side surfaces
 
 The chat area and the **normal right panel** form one tab workspace with two
@@ -221,6 +223,10 @@ desktop app's **Sign in with Linear** under **Settings → General → Linear**,
 remote environments show it too. The organization slug there continues to
 control Linear URLs opened in workspace tabs.
 
+### Composer and agent controls
+
+Images, videos, voice notes, pasted text, and file-only messages keep distinct attachment cards in the conversation. When a provider reaches its usage limit, configured load balancing can choose an available provider. Stop completes even when the provider does not cooperate, with force stop available for a stuck agent.
+
 ### Quick chats
 
 Quick chats are for questions and small tasks that do not belong to a project,
@@ -241,6 +247,8 @@ deliberately hidden from Projects and project pickers. The legacy
 ### Thread deletion
 
 Deleting a thread is a hard delete. After the deletion's cleanup effects finish, `ThreadPurge` removes every row of the thread and its subagent threads, their attachments, provider event logs, checkpoint refs, matching server trace lines, and the provider's own transcript (Claude, Codex, and Grok, including imported terminal sessions). SQLite runs with `secure_delete`, so removed rows are zeroed. Clients drop their cached copy and per-thread state, and reconcile cached threads against the server after reconnecting. A failed cleanup effect or a live provider session postpones the purge to the next storage sweep.
+
+Deletion of a delegated child on a linked environment waits through temporary outages. If the link expires, is revoked, is replaced, or no longer permits controlling the child, local deletion still finishes; delete the remote child chat on its owning environment.
 
 ### Pinned sites
 
@@ -343,6 +351,8 @@ The leading `~` resolves on remote. `.env` links must point to the corresponding
 main checkout on remote, and dependency installation must also execute there.
 
 `pnpm deploy:desktop` updates both the local app and the existing `blackbird.service` on remote using the server archive bundled with that app. Desktop and mobile share this service through the existing Remote link. Do not run the banner's generic `npx t3@…` command or add a second SSH environment for remote; those paths can start an upstream or duplicate backend.
+
+Agents can request a link to another environment, subject to the destination's access approval. Linked environments use the same scoped tool permissions as other remote connections. The Details navigator also lists development servers started by the thread so they can be inspected or stopped.
 
 ## Development and deployment
 

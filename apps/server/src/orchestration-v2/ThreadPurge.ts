@@ -1,5 +1,6 @@
 import {
   CommandId,
+  OrchestrationV2RemoteTaskChild,
   type OrchestrationV2ProviderThread,
   OrchestrationV2ProviderThreadJson,
   ProviderDriverKind,
@@ -8,6 +9,7 @@ import {
   ProviderThreadId,
   ThreadId,
 } from "@t3tools/contracts";
+import { agentToolName } from "@t3tools/shared/blackbirdMcp";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -24,6 +26,9 @@ import {
   toSafeThreadAttachmentSegment,
 } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as PeerMcpClient from "../peer/PeerMcpClient.ts";
+import { DeleteDelegatedThread } from "../peer/PeerThreadDeletion.ts";
 import { ServerTraceFiles } from "../observability/Observability.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
@@ -48,6 +53,9 @@ const LEGACY_NATIVE_ID_FIELD: Record<string, string> = {
 
 const decodeProviderThread = Schema.decodeUnknownEffect(
   Schema.fromJsonString(OrchestrationV2ProviderThreadJson),
+);
+const decodeRemoteChild = Schema.decodeEffect(
+  Schema.fromJsonString(OrchestrationV2RemoteTaskChild),
 );
 const decodeCheckpointRef = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Struct({ ref: Schema.String })),
@@ -123,6 +131,8 @@ const make = Effect.gen(function* () {
   const traceFiles = yield* ServerTraceFiles;
   const git = yield* GitVcsDriver.GitVcsDriver;
   const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
+  const peers = yield* PeerMcpClient.PeerMcpClient;
+  const environment = yield* ServerEnvironment.ServerEnvironment;
 
   const deleteWhere = Effect.fn("ThreadPurge.deleteWhere")(function* (
     table: string,
@@ -202,9 +212,51 @@ const make = Effect.gen(function* () {
         AND json_extract(payload_json, '$.lineage.parentThreadId') = ${threadId}
     `.pipe(Effect.flatMap((children) => deleteThreads(children.map((row) => row.thread_id))));
 
+  const deleteRemoteChildren = Effect.fn("ThreadPurge.deleteRemoteChildren")(function* (
+    threadIds: ReadonlyArray<string>,
+  ) {
+    const children = yield* sql<{ readonly thread_id: string; readonly remote_child_json: string }>`
+      SELECT thread_id, json_extract(payload_json, '$.remoteChild') AS remote_child_json
+      FROM orchestration_v2_projection_subagents
+      WHERE thread_id IN ${sql.in(threadIds)}
+        AND json_extract(payload_json, '$.remoteChild') IS NOT NULL
+    `;
+    const parentEnvironmentId = yield* environment.getEnvironmentId;
+    for (const child of children) {
+      const remote = yield* decodeRemoteChild(child.remote_child_json);
+      yield* peers
+        .call({
+          environmentId: remote.environmentId,
+          tool: agentToolName(DeleteDelegatedThread.name),
+          arguments: {
+            threadId: remote.threadId,
+            parentThreadId: child.thread_id,
+            parentEnvironmentId,
+          },
+          limits: { runtimeMode: "full-access", interactionMode: "default" },
+          success: DeleteDelegatedThread.successSchema,
+        })
+        .pipe(
+          Effect.catchIf(
+            (error) =>
+              error.code === "invalid_request" ||
+              error.code === "capability_denied" ||
+              error.code === "runtime_mode_escalation_denied",
+            (error) =>
+              Effect.logWarning("Remote subagent deletion was refused; continuing local cleanup", {
+                environmentId: remote.environmentId,
+                threadId: remote.threadId,
+                code: error.code,
+              }),
+          ),
+        );
+    }
+  });
+
   const afterDeletion = Effect.fn("ThreadPurge.afterDeletion")(
     function* (threadId: ThreadId) {
       yield* deleteChildren(threadId);
+      yield* deleteRemoteChildren([threadId]);
       const pending = yield* unsettledEffectIds([threadId]);
       yield* Effect.forEach(pending, ({ effect_id }) => outbox.awaitSettled(effect_id), {
         discard: true,
@@ -445,6 +497,8 @@ const make = Effect.gen(function* () {
     threadIds: ReadonlyArray<string>,
     workspaceRoots: ReadonlyArray<string>,
   ) {
+    // Keep task records across temporary peer outages so remote deletion can be retried.
+    yield* deleteRemoteChildren(threadIds);
     const nativeIds = yield* deleteNativeThreads(threadIds);
     yield* deleteCheckpointRefs(threadIds, workspaceRoots);
     yield* deleteAttachments(threadIds);

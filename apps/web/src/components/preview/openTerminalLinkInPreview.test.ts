@@ -23,8 +23,6 @@ const browserDefaultsMocks = vi.hoisted(() => ({ resolve: vi.fn() }));
 
 vi.mock("~/browser/browserDefaults", () => ({
   resolveBrowserDefaults: browserDefaultsMocks.resolve,
-  browserDefaultOpenViewport: (defaults: { viewport: unknown }) => defaults.viewport,
-  browserDefaultOpenProfileId: (defaults: { profileId: string }) => defaults.profileId,
 }));
 
 const hydratedDefaults = {

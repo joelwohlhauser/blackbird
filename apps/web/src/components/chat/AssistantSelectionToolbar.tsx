@@ -73,7 +73,7 @@ export function AssistantSelectionToolbar({
   const onSourceUnavailable = useEffectEvent(() => {
     settleComment("none");
   });
-  // oxlint-disable-next-line t3code/react-effect-budget -- watches the cited DOM text for removal while the comment is open
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- watches the cited DOM text for removal while the comment is open
   useEffect(() => {
     if (!selection?.commenting) return;
     return observeAssistantCitationCommentSource({
@@ -83,6 +83,7 @@ export function AssistantSelectionToolbar({
     });
   }, [selection]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the toolbar DOM node and clamps its position inside the window before paint
   useLayoutEffect(() => {
     const toolbar = toolbarRef.current;
     if (!toolbar || !selection || selection.commenting) return;
@@ -91,6 +92,7 @@ export function AssistantSelectionToolbar({
     toolbar.style.top = `${Math.max(8, Math.min(selection.position.y, window.innerHeight - rect.height - 8))}px`;
   }, [selection]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to document selectionchange and keydown to track text selections in the viewport
   useEffect(() => {
     if (!viewport) return;
     const clear = () => setSelection((current) => (current?.commenting ? current : null));

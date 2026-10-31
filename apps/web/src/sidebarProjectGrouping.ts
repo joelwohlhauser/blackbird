@@ -5,7 +5,7 @@ import {
   type ProjectGroupingSettings,
 } from "./logicalProject";
 import { resolveScratchProjectScopeKey } from "@t3tools/client-runtime/state/project-grouping";
-import { sortThreads, type ThreadSortInput } from "./lib/threadSort";
+import { sortThreads, type ThreadSortInput } from "@t3tools/client-runtime/state/thread-sort";
 import type { Project } from "./types";
 
 export type EnvironmentPresence = "local-only" | "remote-only" | "mixed";
@@ -83,6 +83,17 @@ export function resolveSidebarProjectScopeKey(input: {
           candidate.projectKey,
     );
   return group?.projectKey ?? (input.canClearMissingScope ? null : input.key);
+}
+
+export function resolveSidebarProjectScopeKeys(input: {
+  readonly groups: ReadonlyArray<SidebarProjectSnapshot>;
+  readonly keys: ReadonlyArray<string>;
+  readonly settings?: ProjectGroupingSettings;
+  readonly canClearMissingScope?: boolean;
+}): string[] {
+  return [
+    ...new Set(input.keys.flatMap((key) => resolveSidebarProjectScopeKey({ ...input, key }) ?? [])),
+  ];
 }
 
 interface ProjectUsageThread extends ThreadSortInput {

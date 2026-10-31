@@ -1,6 +1,6 @@
 export const SUDOERS_PATH = "/etc/sudoers.d/blackbird-awake";
 export const PMSET = "/usr/bin/pmset";
-export const JOURNAL_STALE_SECONDS = 45;
+const JOURNAL_STALE_SECONDS = 45;
 
 const PMSET_COMMANDS = [
   `${PMSET} -a disablesleep 1`,

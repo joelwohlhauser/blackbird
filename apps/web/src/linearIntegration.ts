@@ -1,4 +1,4 @@
-export const LINEAR_APP_ORIGIN = "https://linear.app";
+const LINEAR_APP_ORIGIN = "https://linear.app";
 
 const LINEAR_ISSUE_ID_PATTERN = /(?:^|[^a-z0-9])([a-z][a-z0-9]*-\d+)(?=$|[^a-z0-9])/i;
 

@@ -71,7 +71,12 @@ describe("agent instructions in prompts", () => {
   });
 
   it("re-sends ACP instructions when the agent instructions change", () => {
-    const state = { interactionMode: "default", hasT3Mcp: false, agentInstructions: "v1" } as const;
+    const state = {
+      interactionMode: "default",
+      hasT3Mcp: false,
+      hasDeviceTools: false,
+      agentInstructions: "v1",
+    } as const;
     expect(t3AcpPromptWithInstructions({ prompt: "go", state })).toContain("v1");
     expect(t3AcpPromptWithInstructions({ prompt: "go", state, previousState: state })).toBe("go");
     expect(

@@ -94,7 +94,7 @@ const isPointerDown = (method: string, params: unknown) =>
   (method === "Input.dispatchTouchEvent" && readParam(params, "type") === "touchStart") ||
   method === "Input.synthesizeTapGesture";
 
-export const nativeKeyEvents = (params: unknown): Array<Electron.KeyboardInputEvent> => {
+const nativeKeyEvents = (params: unknown): Array<Electron.KeyboardInputEvent> => {
   const key = readString(params, "key");
   const text = readString(params, "text");
   const modifiers: Array<NativeModifier> = [
@@ -137,7 +137,7 @@ const readClipboardFormats = async () => {
   return formats;
 };
 
-export function editingCommandExpression(
+function editingCommandExpression(
   params: unknown,
   commands: ReadonlyArray<string>,
   clipboardData: ReadonlyArray<{ readonly type: string; readonly data: string }> = [],

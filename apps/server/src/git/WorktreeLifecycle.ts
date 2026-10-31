@@ -46,7 +46,7 @@ export class WorktreeLifecycle extends Context.Service<
   }
 >()("t3/git/WorktreeLifecycle") {}
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
 

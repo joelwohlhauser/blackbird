@@ -67,7 +67,7 @@ export class WorkspaceCleanupService extends Context.Service<
   }
 >()("t3/workspace/WorkspaceCleanupService") {}
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const git = yield* GitWorkflowService.GitWorkflowService;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

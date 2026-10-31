@@ -56,7 +56,7 @@ import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { usePullRequestDefaultMergeMethodResolver } from "./usePullRequestActions";
 import { offHeadPullRequestCheckoutToast } from "./pullRequestCheckoutToast";
-import { usePreparePullRequestThreadAction } from "~/lib/sourceControlActions";
+import { usePreparePullRequestThreadAction } from "~/state/sourceControlActions";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import type { ReviewCommentContext } from "~/reviewCommentContext";
@@ -102,6 +102,7 @@ import { PullRequestBaseBranch } from "./PullRequestBaseBranch";
 import { PullRequestDetailCrumbs } from "./PullRequestDetailCrumbs";
 import { PullRequestTitleEditor } from "./PullRequestTitleEditor";
 import { PullRequestActivityUnavailableState } from "./PullRequestActivityUnavailableState";
+import { SourceControlAppAccessNotice } from "../SourceControlAppAccessNotice";
 import { DiffPanelLoadingState } from "../DiffPanelShell";
 import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import type { PullRequestAgentSelectionInput } from "./PullRequestCodeTab";
@@ -133,8 +134,10 @@ import {
   readableFailure,
   resolvePullRequestReferenceHost,
   resolvePullRequestPrimaryControl,
+  allowedPullRequestMergeMethods,
   allowsSinglePullRequestMerge,
   canDeletePullRequestBranch,
+  isPullRequestConflicting,
   resolveBaseFreshness,
   resolvePullRequestMergeMethod,
   type PullRequestFinding,
@@ -238,7 +241,11 @@ function pullRequestMarkdownContext(
   detail: Pick<PullRequestDetail, "provider" | "url"> | null,
   threadRef: ScopedThreadRef | null,
 ) {
-  return { autolinks: changeRequestReferenceAutolinker(detail), threadRef };
+  return {
+    autolinks: changeRequestReferenceAutolinker(detail),
+    lineBreaks: sourceControlClients.find(detail?.provider ?? "")?.hardLineBreaks ?? false,
+    threadRef,
+  };
 }
 
 function pullRequestStackReference(
@@ -305,8 +312,7 @@ export function PullRequestDetailPanel({
       project.id === requestedReference.projectId && project.environmentId === environmentId,
   );
   const repositoryIdentity = project?.repositoryIdentity;
-  const supportsThreadPullRequests =
-    environmentConfigs.get(environmentId)?.environment.capabilities.threadPullRequests === true;
+  const supportsThreadPullRequests = environmentConfigs.get(environmentId) !== undefined;
   const reference = resolvePullRequestReference(
     requestedReference,
     repositoryIdentity,
@@ -439,6 +445,7 @@ export function PullRequestDetailPanel({
     scroller: HTMLDivElement;
     target: number;
   } | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- restores the scroller's scrollTop before paint after the header condenses
   useLayoutEffect(() => {
     const compensation = compensationRef.current;
     if (compensation === null) return;
@@ -492,6 +499,7 @@ export function PullRequestDetailPanel({
     event.stopPropagation();
     if (!event.repeat) copyReference(`#${reference.number}`, `${terminology.shortLabel} number`);
   });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- window keydown capture listener for the copy-number shortcut
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => copyFromShortcut(event);
     window.addEventListener("keydown", onKeyDown, true);
@@ -544,9 +552,7 @@ export function PullRequestDetailPanel({
   const supportsStackActions =
     supportsThreadPullRequests &&
     detail?.capabilities.stacks === true &&
-    detail.capabilities.stackActions === true &&
-    environmentConfigs.get(environmentId)?.environment.capabilities.pullRequestStackActions ===
-      true;
+    detail.capabilities.stackActions === true;
   const canMergeSinglePullRequest = allowsSinglePullRequestMerge({
     supportsStackActions,
     hasStack: nativeStack !== null,
@@ -582,6 +588,7 @@ export function PullRequestDetailPanel({
     }
   }
   const revalidateActivity = useEffectEvent(() => activityQuery.refresh());
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- refreshes the activity query after commit when render counts a new detail revision
   useEffect(() => {
     if (activityRevalidations > 0) revalidateActivity();
   }, [activityRevalidations]);
@@ -605,6 +612,7 @@ export function PullRequestDetailPanel({
   };
   const refreshFromHostOnRequest = useEffectEvent(() => void refreshFromHost());
   const appliedForcedToken = useRef(forcedRefreshToken);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a new forced refresh token invalidates the host cache and refetches
   useEffect(() => {
     if (appliedForcedToken.current === forcedRefreshToken) return;
     appliedForcedToken.current = forcedRefreshToken;
@@ -1100,9 +1108,7 @@ export function PullRequestDetailPanel({
   };
   const selectActingEnvironment = (next: EnvironmentId) =>
     setActingScope({ pullRequestKey, environmentId: next });
-  const allowedMergeMethods = detail
-    ? detail.capabilities.mergeMethods.filter((method) => detail.mergeCapabilities[method])
-    : [];
+  const allowedMergeMethods = allowedPullRequestMergeMethods(detail);
   const currentMergeMethod =
     mergeMethodSelection?.pullRequestKey === pullRequestKey ? mergeMethodSelection.method : null;
   const selectedMergeMethod = resolvePullRequestMergeMethod(
@@ -1113,7 +1119,7 @@ export function PullRequestDetailPanel({
   );
   const selectedMergeMethodLabel = PULL_REQUEST_MERGE_METHOD_LABELS[selectedMergeMethod];
   const pendingAutoMergeLabel = `Auto-merge (${selectedMergeMethodLabel.toLowerCase()})`;
-  const conflicting = detail?.state === "open" && detail.mergeability === "conflicting";
+  const conflicting = isPullRequestConflicting(detail);
   const autoMergeArmed = detail?.state === "open" && detail.autoMergeEnabled === true;
   const armedMergeMethod = detail?.autoMergeMethod;
   const armedAutoMergeLabel = armedMergeMethod
@@ -1230,7 +1236,7 @@ export function PullRequestDetailPanel({
   const resolveConflictsControl = (
     <PullRequestResolveConflictsButton
       handoff={handoff}
-      unavailable={attachTarget === null && checkoutRoot === null}
+      unavailable={attachTarget === null && (checkoutRoot === null || !canPrepareWorktree)}
       onResolve={startResolveConflicts}
     />
   );
@@ -1289,7 +1295,7 @@ export function PullRequestDetailPanel({
           openOnHostText={openOnHostText}
           onBack={onBack}
         />
-        <div className="mr-4 flex h-7 shrink-0 items-center justify-end gap-1">
+        <div className="mr-4 flex h-7 shrink-0 select-none items-center justify-end gap-1">
           {detail ? (
             <TooltipProvider delay={150} closeDelay={150} timeout={400}>
               {!nativeStack && supportsStackActions && nativeStackQuery.error ? (
@@ -1386,6 +1392,8 @@ export function PullRequestDetailPanel({
                 onSelectMergeMethod={selectMergeMethod}
                 showsDeleteBranch={showsDeleteBranch}
                 environmentConnected={environmentConnected}
+                canWriteSourceControl={canWriteSourceControl}
+                onMaintainerEditsSaved={refreshDetail}
                 confirmDeleteBranch={confirmDeleteBranch}
                 pendingAction={pendingAction}
                 perform={perform}
@@ -1687,6 +1695,13 @@ export function PullRequestDetailPanel({
         ) : null}
       </div>
 
+      <SourceControlAppAccessNotice
+        environmentId={environmentId}
+        provider={detail?.provider ?? repositoryIdentity?.provider}
+        host={reference.host}
+        repository={reference.repository}
+        className="border-b border-border/60"
+      />
       <div
         className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
         onScrollCapture={(event) => {

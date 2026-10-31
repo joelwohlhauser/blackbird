@@ -47,7 +47,7 @@ export interface GitActionResultToastTiming {
   readonly dismissAfterVisibleMs: number | null;
 }
 
-export const GIT_ACTION_SUCCESS_VISIBLE_MS = 10_000;
+const GIT_ACTION_SUCCESS_VISIBLE_MS = 10_000;
 
 export function resolveGitActionResultToastTiming(
   type: "error" | "success",
@@ -212,7 +212,7 @@ export function resolveQuickAction(
   }
 
   if (hasChanges) {
-    if (!gitStatus.hasUpstream && !hasPrimaryRemote) {
+    if (isBehind || (!gitStatus.hasUpstream && !hasPrimaryRemote)) {
       return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
     }
     if (hasOpenPr || isDefaultRef) {
@@ -425,5 +425,3 @@ export function resolveLiveThreadBranchUpdate(input: {
     branch: input.gitStatus.refName,
   };
 }
-
-export { resolveAutoFeatureBranchName } from "@t3tools/shared/git";

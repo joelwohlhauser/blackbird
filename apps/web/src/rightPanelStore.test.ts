@@ -1631,6 +1631,25 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("hides the panel when browser reconciliation removes its last session tab", () => {
+    const store = useRightPanelStore.getState();
+    store.openBrowser(refA, "tab-a");
+    store.reconcileBrowserSurfaces(refA, []);
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      ...EMPTY_MAIN_TAB_STATE,
+      isOpen: false,
+      activeSurfaceId: null,
+      surfaces: [],
+    });
+
+    store.openBrowser(refA, "tab-b");
+    store.open(refA, "diff");
+    store.reconcileBrowserSurfaces(refA, []);
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA),
+    ).toMatchObject({ isOpen: true, activeSurfaceId: "diff" });
+  });
+
   it("adds agent-created browser sessions to the main area in the background", () => {
     const originalIsWide = workspaceLayoutProbe.isWide;
     try {

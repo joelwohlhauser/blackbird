@@ -1,4 +1,3 @@
-import type { EnvironmentId } from "@t3tools/contracts";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
   getProjectFaviconResourceKey,
@@ -6,7 +5,6 @@ import {
 } from "@t3tools/shared/projectFavicon";
 import { FolderCodeIcon } from "lucide-react";
 import { createElement, lazy, Suspense, useState, type ReactNode } from "react";
-import { useAssetUrlState } from "../assets/assetUrls";
 import { useAtomValue } from "@effect/atom-react";
 import { projectFaviconUrlAtom } from "../state/assets";
 import { projectIconColorClassName } from "../projectIconColors";
@@ -38,13 +36,6 @@ export function ProjectFavicon(input: {
   fallback?: ReactNode;
 }) {
   const { project } = input;
-  const src = useAtomValue(
-    projectFaviconUrlAtom({
-      environmentId: project.environmentId,
-      cwd: project.workspaceRoot,
-      faviconPath: project.faviconPath,
-    }),
-  );
   if (project.projectIcon?.kind === "monogram") {
     return (
       <ProjectMonogram
@@ -75,6 +66,18 @@ export function ProjectFavicon(input: {
       </span>
     );
   }
+  return <AutomaticProjectFavicon {...input} />;
+}
+
+function AutomaticProjectFavicon(input: Parameters<typeof ProjectFavicon>[0]) {
+  const { project } = input;
+  const src = useAtomValue(
+    projectFaviconUrlAtom({
+      environmentId: project.environmentId,
+      cwd: project.workspaceRoot,
+      faviconPath: project.faviconPath,
+    }),
+  );
   if (!project.faviconPath || !src || isProjectFaviconFallbackUrl(src)) {
     return input.fallback ?? null;
   }
@@ -86,17 +89,6 @@ export function ProjectFavicon(input: {
   );
 
   return <ProjectFaviconImage key={cacheKey} src={src} className={input.className} />;
-}
-
-export function useProjectFaviconAsset(input: {
-  readonly environmentId: EnvironmentId;
-  readonly cwd: string;
-  readonly faviconPath?: string | null | undefined;
-}) {
-  return useAssetUrlState(
-    input.environmentId,
-    input.faviconPath ? { _tag: "project-favicon", cwd: input.cwd, path: input.faviconPath } : null,
-  );
 }
 
 function ProjectEmojiIcon({

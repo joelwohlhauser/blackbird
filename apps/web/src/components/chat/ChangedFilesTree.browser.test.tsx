@@ -22,6 +22,7 @@ describe("ChangedFilesCard", () => {
         <ChangedFilesCard
           runId={runId}
           files={[file("apps/web/src/App.tsx", 120, 20), file("README.md", 3)]}
+          totals={{ count: 2, additions: 123, deletions: 20 }}
           expanded={expanded}
           resolvedTheme="light"
           onExpandedChange={setExpanded}

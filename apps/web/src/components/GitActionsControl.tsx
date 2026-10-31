@@ -59,6 +59,7 @@ import {
 import { WizardPopup, WizardHeader, WizardSteps, WizardPanel, WizardFooter } from "./ui/wizard";
 import { StartTruncatedPath } from "./StartTruncatedPath";
 import { Button } from "~/components/ui/button";
+import { Group, GroupSeparator } from "~/components/ui/group";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
   Dialog,
@@ -69,17 +70,16 @@ import {
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { Group, GroupSeparator } from "~/components/ui/group";
 import { Input } from "~/components/ui/input";
 import {
   Menu,
   MenuItem,
   MenuItemLabel,
   MenuPopup,
-  MenuSub,
-  MenuSubTrigger,
-  MenuSubPopup,
   MenuTrigger,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
 } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -92,8 +92,8 @@ import {
   useSourceControlActionRunning,
   useSourceControlPublishRepositoryAction,
   useVcsPullAction,
-} from "~/lib/sourceControlActions";
-import { useThreadProjection, useQuietThreadShell } from "~/state/entities";
+} from "../state/sourceControlActions";
+import { useQuietThreadProjection, useQuietThreadShell } from "~/state/entities";
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { useEnvironmentQuery } from "~/state/query";
 import { serverEnvironment } from "~/state/server";
@@ -111,11 +111,13 @@ import { useGitHubPullRequestSurface } from "~/components/preview/useGitHubPullR
 import { useOpenLink } from "~/browser/useOpenLink";
 
 interface GitActionsControlProps {
-  presentation?: "toolbar" | "menu";
   gitCwd: string | null;
   activeThreadRef: ScopedThreadRef | null;
   draftId?: DraftId;
+  presentation?: "toolbar" | "menu";
 }
+
+type GitActionToastId = ReturnType<typeof toastManager.add>;
 
 interface PendingDefaultBranchAction {
   action: DefaultBranchConfirmableAction;
@@ -125,8 +127,6 @@ interface PendingDefaultBranchAction {
   onConfirmed?: () => void;
   filePaths?: string[];
 }
-
-type GitActionToastId = ReturnType<typeof toastManager.add>;
 
 interface RunGitActionWithToastInput {
   action: GitStackedAction;
@@ -876,10 +876,10 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
 }
 
 export default function GitActionsControl({
-  presentation = "toolbar",
   gitCwd,
   activeThreadRef,
   draftId,
+  presentation = "toolbar",
 }: GitActionsControlProps) {
   const updateThreadMetadata = useAtomCommand(
     threadEnvironment.updateMetadata,
@@ -906,7 +906,7 @@ export default function GitActionsControl({
         ? store.getDraftThreadByRef(activeThreadRef)
         : null,
   );
-  const activeServerThreadProjection = useThreadProjection(
+  const activeServerThreadProjection = useQuietThreadProjection(
     activeDraftThread !== null && activeServerThreadShell === null ? null : activeThreadRef,
   );
   const activeServerThread =
@@ -1013,6 +1013,7 @@ export default function GitActionsControl({
     activeDraftThread?.envMode !== undefined &&
     activeDraftThread.worktreePath === null;
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- persists the draft thread branch when the live git status subscription reports a different branch
   useEffect(() => {
     if (isGitActionRunning || isSelectingWorktreeBase || activeServerThread) {
       return;
@@ -1078,7 +1079,6 @@ export default function GitActionsControl({
     ),
   );
 
-  // Toast actions must retain their original checkout/thread, so do not use an effect event.
   async function runGitActionWithToast({
     action,
     commitMessage,
@@ -1303,12 +1303,7 @@ export default function GitActionsControl({
           title,
           description,
           timeout: successToastTiming.timeout,
-          data: {
-            ...threadToastData,
-            ...(successToastTiming.dismissAfterVisibleMs !== null
-              ? { dismissAfterVisibleMs: successToastTiming.dismissAfterVisibleMs }
-              : {}),
-          },
+          ...(threadToastData !== undefined ? { data: threadToastData } : {}),
         });
       })();
       return;
@@ -1395,17 +1390,6 @@ export default function GitActionsControl({
           isBusy: isGitActionRunning,
           hasPrimaryRemote,
         });
-        if (item.disabled && disabledReason && presentation === "menu") {
-          return (
-            <div key={`${item.id}-${item.label}`}>
-              <MenuItem density={presentation === "menu" ? "touch" : "default"} disabled>
-                <GitActionItemIcon icon={item.icon} SourceControlIcon={SourceControlIcon} />
-                <MenuItemLabel>{item.label}</MenuItemLabel>
-              </MenuItem>
-              <p className="max-w-64 px-2 pb-2 text-xs text-muted-foreground">{disabledReason}</p>
-            </div>
-          );
-        }
         if (item.disabled && disabledReason) {
           return (
             <Popover key={`${item.id}-${item.label}`}>
@@ -1414,11 +1398,7 @@ export default function GitActionsControl({
                 nativeButton={false}
                 render={<span className="block w-full cursor-not-allowed" />}
               >
-                <MenuItem
-                  density={presentation === "menu" ? "touch" : "default"}
-                  className="w-full"
-                  disabled
-                >
+                <MenuItem className="w-full" disabled>
                   <GitActionItemIcon icon={item.icon} SourceControlIcon={SourceControlIcon} />
                   <MenuItemLabel>{item.label}</MenuItemLabel>
                 </MenuItem>
@@ -1432,7 +1412,6 @@ export default function GitActionsControl({
 
         return (
           <MenuItem
-            density={presentation === "menu" ? "touch" : "default"}
             key={`${item.id}-${item.label}`}
             disabled={!canWriteSourceControl || item.disabled}
             onClick={() => {
@@ -1446,7 +1425,6 @@ export default function GitActionsControl({
       })}
       {canPublishRepository ? (
         <MenuItem
-          density={presentation === "menu" ? "touch" : "default"}
           disabled={isGitActionRunning}
           onClick={() => {
             setIsPublishDialogOpen(true);

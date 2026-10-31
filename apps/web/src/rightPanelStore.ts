@@ -17,7 +17,7 @@ import { useClosedViewStore } from "./closedViewStore";
 import { resolveStorage } from "./lib/storage";
 import type { ChatFileAttachment } from "./types";
 
-export const RIGHT_PANEL_KINDS = [
+const RIGHT_PANEL_KINDS = [
   "new-tab",
   "diff",
   "files",
@@ -99,14 +99,9 @@ const RIGHT_PANEL_STORAGE_VERSION = 15;
 /** The two workspace tab containers: the right panel and the main content area. */
 export type WorkspaceTabContainer = "panel" | "main";
 
-/**
- * Minimum window width at which a closed right panel is still the preferred
- * home for new tabs. Every MacBook fullscreen width must stay below this
- * threshold (a 16" at "More Space" scaling is 2056px logical), so only
- * genuinely large desktop windows auto-open the panel; everything smaller
- * opens new tabs in the main content area instead.
- */
-export const WIDE_WORKSPACE_MIN_WIDTH = 2200;
+// Keep every MacBook fullscreen width below this threshold, including 2056px
+// at 16-inch More Space scaling, so only large desktop windows open the panel.
+const WIDE_WORKSPACE_MIN_WIDTH = 2200;
 
 /** Seam for tests; window is absent there, which defaults to the panel. */
 export const workspaceLayoutProbe = {
@@ -152,7 +147,7 @@ export function resolveAdjacentRightPanelSurface(
   return state.surfaces[nextIndex] ?? null;
 }
 
-export const WORKSPACE_NAVIGATOR_TABS = ["details", "file", "changes", "pr"] as const;
+const WORKSPACE_NAVIGATOR_TABS = ["details", "file", "changes", "pr"] as const;
 export type WorkspaceNavigatorTab = (typeof WORKSPACE_NAVIGATOR_TABS)[number];
 const DEFAULT_WORKSPACE_NAVIGATOR_TAB: WorkspaceNavigatorTab = "details";
 
@@ -163,6 +158,7 @@ interface RightPanelStoreState {
   userActionRevisionByThreadKey: Record<string, number>;
   closeRevisionByThreadKey: Record<string, number>;
   getUserActionRevision: (ref: ScopedThreadRef) => number;
+  markUserAction: (ref: ScopedThreadRef) => number;
   /** Refused if the user chose a panel after expectedUserActionRevision was read. */
   openProactive: (
     ref: ScopedThreadRef,
@@ -878,6 +874,16 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
       closeRevisionByThreadKey: {},
       getUserActionRevision: (ref) =>
         get().userActionRevisionByThreadKey[scopedThreadKey(ref)] ?? 0,
+      markUserAction: (ref) => {
+        const revision = get().getUserActionRevision(ref) + 1;
+        set((state) => ({
+          userActionRevisionByThreadKey: {
+            ...state.userActionRevisionByThreadKey,
+            [scopedThreadKey(ref)]: revision,
+          },
+        }));
+        return revision;
+      },
       openProactive: (ref, request, expectedUserActionRevision, activateExisting = false) => {
         let opened = false;
         set((state) => {
@@ -1617,8 +1623,14 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             const activeMainStillExists =
               current.activeMainSurfaceId === null ||
               mainSurfaces.some((surface) => surface.id === current.activeMainSurfaceId);
+            // A closed session tab was the last surface: hide the panel rather than leave it on
+            // the empty picker, as a user close would. A dropped `browser:new` placeholder does not count.
+            const closedLastSessionTab =
+              surfaces.length === 0 &&
+              current.surfaces.some((surface) => surface.kind === "preview" && surface.resourceId);
             return {
               ...current,
+              isOpen: closedLastSessionTab ? false : current.isOpen,
               surfaces,
               activeSurfaceId: activeStillExists
                 ? current.activeSurfaceId

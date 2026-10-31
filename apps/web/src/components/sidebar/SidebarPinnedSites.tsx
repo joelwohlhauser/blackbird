@@ -27,7 +27,7 @@ import {
 } from "~/components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { updateClientSettings, useClientSettings } from "~/hooks/useSettings";
-import { faviconUrlForOrigin } from "~/lib/favicon";
+import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
 import { cn, randomUUID } from "~/lib/utils";
 import { isPinnedSiteHomeUrl, pinnedSiteLabel, pinnedSiteThreadRef } from "~/pinnedSites";
 import {

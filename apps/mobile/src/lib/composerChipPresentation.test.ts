@@ -22,6 +22,7 @@ const CHIP_ACCENTS = [
         "pull-request",
         "skill",
         "thread",
+        "environment",
       ].map((kind) => contextChipPresentation(kind)),
       ...[
         { state: "open", isDraft: false },
@@ -104,6 +105,16 @@ describe("contextChipAccent", () => {
 
   it("keeps an accent that already reads everywhere", () => {
     const theme = getMobileThemeVariables("t3-code", "dark");
-    expect(contextChipAccent("#009f6e", theme, theme["--color-md-body"])).toBe("#009f6e");
+    const accent = "#00cc88";
+    for (const { surface } of chipSurfaces(theme)) {
+      expect(contrastRatio(accent, surface)).toBeGreaterThanOrEqual(5);
+    }
+    expect(contextChipAccent(accent, theme, theme["--color-md-body"])).toBe(accent);
+  });
+});
+
+describe("contextChipPresentation", () => {
+  it("draws a mentioned machine as a machine, not the generic file chip", () => {
+    expect(contextChipPresentation("environment")).toEqual({ accent: "#3f9a4f", icon: "server" });
   });
 });

@@ -184,7 +184,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
   const createNewTerminalStable = useStableCallback(createNewTerminal);
   const closeTerminal = (terminalId: string) => {
     if (!hasTerminalWriteAccess() || !activeThreadRef) return;
-    terminalActions.closeTerminalSession(terminalId);
+    terminalActions.closeTerminalSession(terminalId, activeThreadRef);
     storeCloseTerminal(activeThreadRef, terminalId);
     focusActiveDrawerTerminal(activeThreadRef);
   };
@@ -349,24 +349,37 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     useRightPanelStore.getState().activateTerminal(activeThreadRef, surface.id, terminalId);
     focusTerminal(activeThreadRef, terminalId);
   };
-  const closeTerminalInSurface = (surface: RightPanelSurface, terminalId: string) => {
-    if (!hasTerminalWriteAccess() || !activeThreadRef || surface.kind !== "terminal") return;
-    terminalActions.closeTerminalSession(terminalId);
-    storeCloseTerminal(activeThreadRef, terminalId);
-    useRightPanelStore.getState().closeTerminal(activeThreadRef, surface.id, terminalId);
+  const closeTerminalInSurface = (
+    surface: RightPanelSurface,
+    terminalId: string,
+    target = activeThreadRef,
+  ) => {
+    if (
+      !target ||
+      !readEnvironmentScope(target.environmentId, AuthTerminalOperateScope) ||
+      surface.kind !== "terminal"
+    )
+      return;
+    terminalActions.closeTerminalSession(terminalId, target);
+    storeCloseTerminal(target, terminalId);
+    useRightPanelStore.getState().closeTerminal(target, surface.id, terminalId);
     const { surfaces, mainSurfaces } = selectThreadRightPanelState(
       useRightPanelStore.getState().byThreadKey,
-      activeThreadRef,
+      target,
     );
     const remaining = [...surfaces, ...mainSurfaces].find(
       (candidate) => candidate.id === surface.id,
     );
-    if (remaining?.kind === "terminal") focusTerminal(activeThreadRef, remaining.activeTerminalId);
-    else focusActivePanelTerminal(activeThreadRef);
+    if (remaining?.kind === "terminal") focusTerminal(target, remaining.activeTerminalId);
+    else focusActivePanelTerminal(target);
   };
-  const closePanelTerminal = (terminalId: string) => {
-    if (activeRightPanelSurface?.kind !== "terminal") return;
-    closeTerminalInSurface(activeRightPanelSurface, terminalId);
+  const closePanelTerminal = (terminalId: string, target = activeThreadRef) => {
+    if (!target) return;
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, target);
+    const surface = [...state.surfaces, ...state.mainSurfaces].find(
+      (entry) => entry.kind === "terminal" && entry.terminalIds.includes(terminalId),
+    );
+    if (surface) closeTerminalInSurface(surface, terminalId, target);
   };
   const closeSurfaceTerminals = (surface: RightPanelSurface) => {
     if (
@@ -378,7 +391,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     }
     for (const terminalId of surface.terminalIds) {
       storeCloseTerminal(activeThreadRef, terminalId);
-      terminalActions.closeTerminalSession(terminalId);
+      terminalActions.closeTerminalSession(terminalId, activeThreadRef);
     }
   };
   const requestCloseTerminal = (terminalId: string) => {

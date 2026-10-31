@@ -1,4 +1,4 @@
-import { type RunId } from "@t3tools/contracts";
+import { type OrchestrationV2CheckpointFileTotals, type RunId } from "@t3tools/contracts";
 import {
   type MouseEvent,
   type ReactNode,
@@ -9,11 +9,7 @@ import {
   useState,
 } from "react";
 import { type TurnDiffFileChange } from "../../types";
-import {
-  buildTurnDiffTree,
-  summarizeTurnDiffStats,
-  type TurnDiffTreeNode,
-} from "../../lib/turnDiffTree";
+import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../lib/turnDiffTree";
 import { ChevronRightIcon, FileDiffIcon } from "lucide-react";
 import { Folder, FolderClosed } from "lucide";
 import { cn } from "~/lib/utils";
@@ -34,11 +30,13 @@ interface ChangedFileRow {
   depth: number;
 }
 
-export type ChangedFileContextMenuHandler = (filePath: string, event: MouseEvent) => void;
+type ChangedFileContextMenuHandler = (filePath: string, event: MouseEvent) => void;
 
 export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   runId: RunId;
+  /** May be a prefix of the changed files; `totals` covers all of them. */
   files: ReadonlyArray<TurnDiffFileChange>;
+  totals: OrchestrationV2CheckpointFileTotals;
   expanded: boolean;
   resolvedTheme: "light" | "dark";
   onExpandedChange: (expanded: boolean) => void;
@@ -48,13 +46,14 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   const {
     runId,
     files,
+    totals,
     expanded,
     resolvedTheme,
     onExpandedChange,
     onOpenTurnDiff,
     onFileContextMenu,
   } = props;
-  const summaryStat = summarizeTurnDiffStats(files);
+  const hiddenFileCount = totals.count - files.length;
   const treeId = useId();
 
   return (
@@ -75,19 +74,19 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
           aria-controls={treeId}
           data-scroll-anchor-ignore
           onClick={() => onExpandedChange(!expanded)}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-foreground hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-foreground hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           <ChevronRightIcon
             aria-hidden
             className={cn("size-3.5 shrink-0", expanded && "rotate-90")}
           />
           <span className="truncate">
-            {files.length} changed file{files.length === 1 ? "" : "s"}
+            {totals.count} changed file{totals.count === 1 ? "" : "s"}
           </span>
-          {hasNonZeroStat(summaryStat) && (
+          {hasNonZeroStat(totals) && (
             <DiffStatLabel
-              additions={summaryStat.additions}
-              deletions={summaryStat.deletions}
+              additions={totals.additions}
+              deletions={totals.deletions}
               layout="inline"
               className="shrink-0 text-xs leading-4"
             />
@@ -122,6 +121,19 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
             onOpenTurnDiff={onOpenTurnDiff}
             onFileContextMenu={onFileContextMenu}
           />
+          {hiddenFileCount > 0 && (
+            <div className="px-3 pb-2">
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost-muted"
+                onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
+              >
+                {hiddenFileCount.toLocaleString()} more file{hiddenFileCount === 1 ? "" : "s"} in
+                the full diff
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -259,6 +271,7 @@ function ChangedFilesRows({
   const [range, setRange] = useState({ start: 0, end: 40, rowHeight: 28 });
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- observes scroll, window resize and ancestor resizes to compute the virtualized row range
   useLayoutEffect(() => {
     const container = containerRef.current;
     const rowSize = rowSizeRef.current;

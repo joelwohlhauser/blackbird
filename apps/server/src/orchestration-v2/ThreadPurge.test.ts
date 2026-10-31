@@ -1,6 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
+  EnvironmentId,
+  OrchestratorMcpFailure,
   OrchestrationV2ProviderThread,
   OrchestrationV2ProviderThreadJson,
   ProviderDriverKind,
@@ -20,6 +22,8 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import * as ServerConfig from "../config.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as PeerMcpClient from "../peer/PeerMcpClient.ts";
 import { ServerTraceFiles } from "../observability/Observability.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
@@ -46,6 +50,8 @@ interface Recorded {
   readonly forgotten: Array<string>;
   readonly gitCalls: Array<{ readonly args: ReadonlyArray<string>; readonly stdin?: string }>;
   traceFilter: ((line: string) => boolean) | null;
+  remoteFailure: OrchestratorMcpFailure["code"] | null;
+  readonly remoteDeleted: Array<{ readonly environmentId: string; readonly threadId: unknown }>;
 }
 
 const makeLayer = (
@@ -55,6 +61,28 @@ const makeLayer = (
   ThreadPurge.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
+        Layer.mock(ServerEnvironment.ServerEnvironment)({
+          getEnvironmentId: Effect.succeed(EnvironmentId.make("here")),
+        }),
+        Layer.succeed(PeerMcpClient.PeerMcpClient, {
+          call: (input) =>
+            recorded.remoteFailure !== null
+              ? Effect.fail(
+                  new OrchestratorMcpFailure({
+                    code: recorded.remoteFailure,
+                    message: "Peer deletion failed",
+                  }),
+                )
+              : Effect.sync(() => {
+                  assert.strictEqual(input.tool, "peer_delete_delegated_thread");
+                  assert.strictEqual(input.arguments.parentEnvironmentId, "here");
+                  recorded.remoteDeleted.push({
+                    environmentId: input.environmentId,
+                    threadId: input.arguments.threadId,
+                  });
+                  return { deleted: true };
+                }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(input.success)), Effect.orDie),
+        }),
         Layer.succeed(Orchestrator.OrchestratorV2, {
           dispatch: (command: OrchestrationV2ServerCommand) =>
             Effect.sync(() => recorded.dispatched.push(command)),
@@ -113,6 +141,8 @@ const newRecorded = (): Recorded => ({
   forgotten: [],
   gitCalls: [],
   traceFilter: null,
+  remoteFailure: null,
+  remoteDeleted: [],
 });
 
 const seedThread = Effect.fn(function* (input: {
@@ -406,6 +436,80 @@ it.effect("keeps a deleted thread's rows when its transcript could not be delete
     assert.strictEqual(yield* rowCount("orchestration_events", "stream_id", parent), 2);
   }).pipe(Effect.provide(makeLayer(recorded, { nativeDeleteFails: true })));
 });
+
+it.effect.each([
+  null,
+  "invalid_request",
+  "capability_denied",
+  "runtime_mode_escalation_denied",
+] as const)(
+  "retains local data through an outage then purges after peer result %s",
+  (remoteFailure) => {
+    const recorded = newRecorded();
+    recorded.remoteFailure = "orchestration_error";
+    return Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const checkpointCwd = yield* fs.makeTempDirectoryScoped();
+      const sql = yield* SqlClient.SqlClient;
+      for (const threadId of [parent, child]) {
+        yield* seedThread({
+          threadId,
+          parentThreadId: threadId === parent ? null : parent,
+          deleted: true,
+          nativeId: `native-${threadId}`,
+          checkpointCwd,
+        });
+        yield* sql`
+        INSERT INTO orchestration_v2_projection_subagents (
+          subagent_id, thread_id, parent_node_id, provider, origin, status, updated_at, payload_json
+        ) VALUES (
+          ${`task:${threadId}`}, ${threadId}, 'node', 'remote', 'app_owned', 'running', ${now},
+          ${JSON.stringify({ remoteChild: { environmentId: "there", threadId: `remote:${threadId}`, label: "There" } })}
+        )
+      `;
+      }
+      const purge = yield* ThreadPurge.ThreadPurge;
+      yield* purge.purgeDeletedThreads;
+      for (const threadId of [parent, child]) {
+        assert.strictEqual(
+          yield* rowCount("orchestration_v2_projection_threads", "thread_id", threadId),
+          1,
+        );
+        assert.strictEqual(
+          yield* rowCount("orchestration_v2_projection_subagents", "thread_id", threadId),
+          1,
+        );
+      }
+      assert.deepStrictEqual(recorded.nativeDeleted, []);
+
+      recorded.remoteFailure = remoteFailure;
+      yield* purge.purgeDeletedThreads;
+      assert.sameDeepMembers(
+        recorded.remoteDeleted,
+        remoteFailure === null
+          ? [parent, child].map((threadId) => ({
+              environmentId: "there",
+              threadId: `remote:${threadId}`,
+            }))
+          : [],
+      );
+      assert.sameMembers(
+        recorded.nativeDeleted,
+        [parent, child].map((threadId) => `native-${threadId}`),
+      );
+      for (const threadId of [parent, child]) {
+        assert.strictEqual(
+          yield* rowCount("orchestration_v2_projection_subagents", "thread_id", threadId),
+          0,
+        );
+        assert.strictEqual(
+          yield* rowCount("orchestration_v2_projection_threads", "thread_id", threadId),
+          0,
+        );
+      }
+    }).pipe(Effect.provide(makeLayer(recorded)));
+  },
+);
 
 it.effect(
   "keeps a deleted thread while a cleanup step failed or its provider session is live",

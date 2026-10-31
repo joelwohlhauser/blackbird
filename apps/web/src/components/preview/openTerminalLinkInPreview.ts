@@ -2,11 +2,7 @@ import type { ExternalLinkOpenMode, LocalApi, ScopedThreadRef } from "@t3tools/c
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
 
-import {
-  browserDefaultOpenProfileId,
-  browserDefaultOpenViewport,
-  resolveBrowserDefaults,
-} from "~/browser/browserDefaults";
+import { resolveBrowserDefaults } from "~/browser/browserDefaults";
 import { isWebUrl } from "~/browser/browserLinkTarget";
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
 import { isPreviewAvailableFor, previewRuntimeFor } from "~/browser/previewRuntime";
@@ -104,8 +100,8 @@ export async function openTerminalLinkInPreview<E>(
       input: {
         threadId: input.threadRef.threadId,
         url: input.url,
-        viewport: browserDefaultOpenViewport(defaults),
-        profileId: browserDefaultOpenProfileId(defaults),
+        viewport: defaults.viewport,
+        profileId: defaults.profileId,
         ...(runtime === undefined ? {} : { runtime }),
       },
     });

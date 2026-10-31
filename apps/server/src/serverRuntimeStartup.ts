@@ -245,8 +245,7 @@ const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
       title: path.basename(serverConfig.cwd) || "project",
       workspaceRoot: serverConfig.cwd,
     });
-    const shell = yield* threads.getShellSnapshot();
-    const existingThread = shell.threads.find(
+    const existingThread = (yield* threads.listActiveShellIndex()).find(
       (thread) =>
         thread.projectId === project.id && thread.lineage.relationshipToParent !== "subagent",
     );

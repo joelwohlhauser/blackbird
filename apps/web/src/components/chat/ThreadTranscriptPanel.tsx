@@ -17,7 +17,6 @@ import {
   deriveActiveWorkStartedAt,
   derivePhase,
   deriveTimelineEntriesFromVisibleTurnItemsWithState,
-  isLatestRunSettled,
 } from "../../session-logic";
 import {
   resolveThreadDetailRef,
@@ -118,7 +117,6 @@ export function ThreadTranscriptPanel(props: {
         <MessagesTimeline
           isWorking={isWorking}
           runlessWorkActive={runlessWorkStartedAt !== null}
-          activeTurnInProgress={isWorking || !isLatestRunSettled(activityRun, runtime)}
           activeTurnStartedAt={
             deriveActiveWorkStartedAt(activityRun, runtime, null) ?? runlessWorkStartedAt
           }
@@ -135,7 +133,6 @@ export function ThreadTranscriptPanel(props: {
           onOpenTurnDiff={noop}
           onOpenThread={onOpenThread}
           onForkFromRun={async () => {}}
-          onRollbackCheckpoint={noop}
           supportsConversationRollback={false}
           onRevertToTurnCount={noop}
           isRevertingCheckpoint={false}

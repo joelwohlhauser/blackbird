@@ -44,6 +44,7 @@ export function AssistantCitationChip({
   const commentPopupRef = useRef<HTMLDivElement>(null);
   const draftCommentRef = useRef<string | null>(null);
   const commentOpen = commentEditor?.open ?? false;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- clears the editor's uncommitted draft ref when the comment popup closes
   useEffect(() => {
     if (!commentOpen) draftCommentRef.current = null;
   }, [commentOpen]);
@@ -56,6 +57,7 @@ export function AssistantCitationChip({
     if (dismissal.kind === "commit") return commentEditor?.onSave(dismissal.comment) ?? true;
     return dismissal.kind !== "keep-open";
   };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- observes the cited DOM source for the open comment popup
   useEffect(() => {
     if (!commentOpen) return;
     const anchor = findAssistantCitationSourceAnchor(document, citation);
@@ -80,7 +82,7 @@ export function AssistantCitationChip({
   const composerSourceLink = (
     <Link
       {...sourceLinkProps}
-      className="inline-flex h-full min-w-0 items-center gap-[0.33em] rounded-sm text-inherit no-underline focus-visible:outline-2 focus-visible:outline-foreground"
+      className="inline-flex min-w-0 items-center gap-[0.2em] self-baseline text-inherit no-underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-current rounded-sm"
       aria-label={`View cited assistant text: ${label}`}
     >
       <QuoteIcon aria-hidden="true" />

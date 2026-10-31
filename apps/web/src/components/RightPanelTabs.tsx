@@ -20,10 +20,15 @@ import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { Kbd } from "~/components/ui/kbd";
+import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
-import { WorkspaceTabStrip, type WorkspacePullRequestTabStatus } from "./WorkspaceTabStrip";
+import {
+  WorkspaceTabStrip,
+  surfaceTitle,
+  type WorkspacePullRequestTabStatus,
+} from "./WorkspaceTabStrip";
 import { GitHubIcon, LinearIcon } from "./Icons";
 
 export interface RightPanelTabsProps {
@@ -103,17 +108,17 @@ const SURFACE_UNAVAILABLE_HINTS = {
 type SurfaceShortcutEvent = Pick<
   KeyboardEvent,
   "altKey" | "ctrlKey" | "defaultPrevented" | "isComposing" | "key" | "metaKey"
->;
+> &
+  Partial<Pick<KeyboardEvent, "code" | "getModifierState">>;
 
 export function surfaceShortcutActionForKey<
   const Action extends { available: boolean; shortcut: string },
 >(actions: readonly Action[], event: SurfaceShortcutEvent): Action | null {
   if (event.defaultPrevented || event.isComposing) return null;
   if (event.metaKey || event.ctrlKey || event.altKey) return null;
+  const key = surfaceShortcutKey(event);
   return (
-    actions.find(
-      (action) => action.available && action.shortcut.toLowerCase() === event.key.toLowerCase(),
-    ) ?? null
+    actions.find((action) => action.available && action.shortcut.toLowerCase() === key) ?? null
   );
 }
 
@@ -159,10 +164,6 @@ export function resolvePullRequestTabLink(
     }
   }
   return newest;
-}
-
-function focusOnMount(node: HTMLDivElement | null) {
-  node?.focus();
 }
 
 export function NewTabButton(props: { ariaLabel: string; onClick: () => void }) {
@@ -321,6 +322,7 @@ export function NewTabPage(props: {
     event.stopPropagation();
     action.onClick();
   });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes a capture-phase window keydown listener for surface shortcuts while the menu is mounted
   useEffect(() => {
     const handler = (event: KeyboardEvent) => handleShortcut(event);
     window.addEventListener("keydown", handler, true);
@@ -359,7 +361,7 @@ export function NewTabPage(props: {
 
   return (
     <div
-      ref={focusOnMount}
+      data-workspace-focus-default
       tabIndex={0}
       onKeyDown={handleKeyDown}
       aria-label="Open a surface"
@@ -428,10 +430,18 @@ export function NewTabPage(props: {
 }
 
 export function RightPanelTabs(props: RightPanelTabsProps) {
+  const focusedSurface = props.surfaces.find((surface) => surface.id === props.activeSurfaceId);
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
 
   return (
     <PreviewPanelShell
+      workspaceArea
+      workspaceFocusKey={`panel:${props.environmentId}:${props.activeSurfaceId ?? "empty"}`}
+      workspaceLabel={
+        focusedSurface
+          ? `Workspace panel: ${surfaceTitle(focusedSurface, props.previewSessions, props.terminalLabelsById)}`
+          : "Workspace panel"
+      }
       mode={props.mode}
       {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
       {...(props.open !== undefined ? { open: props.open } : {})}

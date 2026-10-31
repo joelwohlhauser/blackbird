@@ -1,6 +1,7 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import { AuthPreviewOperateScope, type ScopedThreadRef } from "@t3tools/contracts";
 
 import { ensureClientSettingsHydrated, getClientSettings } from "~/hooks/useSettings";
+import { readEnvironmentScope } from "~/state/session";
 import { isPreviewAvailableFor } from "./previewRuntime";
 
 export type BrowserLinkTarget = "system" | "app";
@@ -40,5 +41,9 @@ export async function resolveBrowserLinkTargetPreference(): Promise<BrowserLinkT
 }
 
 export function canOpenLinksInApp(threadRef: ScopedThreadRef | null | undefined): boolean {
-  return threadRef != null && isPreviewAvailableFor(threadRef.environmentId);
+  return (
+    threadRef != null &&
+    readEnvironmentScope(threadRef.environmentId, AuthPreviewOperateScope) &&
+    isPreviewAvailableFor(threadRef.environmentId)
+  );
 }

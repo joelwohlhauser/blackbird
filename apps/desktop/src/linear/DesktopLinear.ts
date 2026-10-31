@@ -49,7 +49,7 @@ export class DesktopLinear extends Context.Service<
   }
 >()("@t3tools/desktop/linear/DesktopLinear") {}
 
-export const make = Effect.gen(function* () {
+const make = Effect.gen(function* () {
   const clock = yield* Clock.Clock;
   const environment = yield* DesktopEnvironment;
   const fs = yield* FileSystem.FileSystem;

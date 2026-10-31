@@ -1,10 +1,5 @@
-/**
- * The shared, sortable tab strip used by both workspace tab containers: the
- * right panel (RightPanelTabs) and the main content area (ChatView). Tabs are
- * dnd-kit sortables inside the single workspace DndContext that ChatView owns;
- * the strip itself also registers a blank-space droppable so drops beside the
- * tabs append to the container.
- */
+// Both containers share the DndContext owned by ChatView. Blank strip space
+// is a drop target that appends tabs to its container.
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -37,7 +32,7 @@ import { readLocalApi } from "~/localApi";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { MorphIcon } from "~/components/MorphIcon";
-import { faviconUrlForOrigin } from "~/lib/favicon";
+import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
 import { useTheme } from "~/hooks/useTheme";
 import {
   MAIN_CHAT_TAB_ID,
@@ -292,6 +287,7 @@ export interface MainChatTabProps {
   onActivate: () => void;
   /** Enables double-click inline renaming of the chat title. */
   onRename?: (title: string) => Promise<void>;
+  onFind?: () => void;
 }
 
 /** Pinned, non-closable chat tab at the head of the main container. */
@@ -313,12 +309,6 @@ function MainChatTab(props: MainChatTabProps) {
     input.focus();
     input.select();
   };
-
-  useEffect(() => {
-    setIsRenaming(false);
-    setRenamePending(false);
-    renamePendingRef.current = false;
-  }, [props.renameKey]);
 
   const beginRename = () => {
     if (!onRename) return;
@@ -348,7 +338,7 @@ function MainChatTab(props: MainChatTabProps) {
         aria-label="Rename chat"
         value={renameTitle}
         disabled={renamePending}
-        className="h-6 w-56 shrink-0 rounded-md border border-border bg-background px-1.5 text-xs text-foreground outline-hidden [-webkit-app-region:no-drag] focus:border-ring focus:ring-1 focus:ring-ring disabled:opacity-60"
+        className="h-6 w-56 shrink-0 rounded-md border border-border bg-background px-1.5 text-xs text-foreground outline-hidden [-webkit-app-region:no-drag] focus:border-ring focus:ring-1 focus:ring-inset focus:ring-ring disabled:opacity-60"
         onChange={(event) => setRenameTitle(event.currentTarget.value)}
         onBlur={() => void commitRename()}
         onKeyDown={(event) => {
@@ -370,6 +360,18 @@ function MainChatTab(props: MainChatTabProps) {
     <div
       ref={setNodeRef}
       data-active-tab={props.active}
+      onContextMenu={(event) => {
+        const api = readLocalApi();
+        if (!api || (!onRename && !props.onFind)) return;
+        event.preventDefault();
+        const items: ContextMenuItem[] = [];
+        if (onRename) items.push({ id: "rename", label: "Rename chat" });
+        if (props.onFind) items.push({ id: "find", label: "Find in thread" });
+        void api.contextMenu.show(items, { x: event.clientX, y: event.clientY }).then((action) => {
+          if (action === "rename") beginRename();
+          if (action === "find") props.onFind?.();
+        });
+      }}
       className={cn(TAB_BASE_CLASS, "max-w-56", tabStateClass(props.active))}
     >
       <Tooltip>
@@ -686,9 +688,11 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     workspaceTabDragState.suppressClickAfterDrag = false;
   };
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- scrolls the active tab into the visible tab strip after selection
   useEffect(() => {
     const activeTab = tabListRef.current?.querySelector<HTMLElement>("[data-active-tab='true']");
     activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- tab selection changes which DOM node must be revealed
   }, [props.activeSurfaceId]);
 
   const sortableItems = [
@@ -744,7 +748,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       <SortableContext items={sortableItems} strategy={horizontalListSortingStrategy}>
         {/* The chat tab is pinned outside the scroll viewport so it stays
             visible however many tabs are open. */}
-        {props.chatTab ? <MainChatTab {...props.chatTab} /> : null}
+        {props.chatTab ? <MainChatTab key={props.chatTab.renameKey} {...props.chatTab} /> : null}
         {pinnedSurfaces.map(renderSurfaceTab)}
         <ScrollArea
           ref={tabListRef}

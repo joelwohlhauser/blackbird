@@ -21,6 +21,7 @@ import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { setLocalStorageItem } from "~/hooks/useLocalStorage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 import * as Schema from "effect/Schema";
+import { announceSidebarVisibility } from "~/lib/accessibilityAnnouncements";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -97,7 +98,7 @@ function useSidebarVisibility() {
   return isMobile ? openMobile : open;
 }
 
-// Same breakpoint as useIsMobile, also read when a shortcut fires.
+// The `max-md` breakpoint, also read when a shortcut fires.
 const SIDEBAR_MOBILE_QUERY = "(max-width: 767px)";
 
 function isMobileViewport(): boolean {
@@ -146,6 +147,7 @@ function createSidebarOpenStore(defaultOpen: boolean, onOpenChange?: (open: bool
       moveFocusOutOfCollapsingSidebar();
     }
     if (open !== state.open) {
+      if (!isMobileViewport()) announceSidebarVisibility(open);
       publish({ ...state, open });
       onOpenChange?.(open);
     }
@@ -328,7 +330,7 @@ function Sidebar({
             }
           >
             <SheetHeader className="sr-only">
-              <SheetTitle>Sidebar</SheetTitle>
+              <SheetTitle>{props["aria-label"] ?? "Sidebar"}</SheetTitle>
               <SheetDescription>Displays the mobile sidebar.</SheetDescription>
             </SheetHeader>
             <div
@@ -734,8 +736,8 @@ const sidebarMenuButtonVariants = cva(
         default:
           "h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm",
         icon: "size-8 justify-center rounded-[var(--control-radius)] p-0",
-        lg: "h-12 rounded-lg p-2 text-sm group-data-[collapsible=icon]:p-0!",
-        sm: "h-7 rounded-lg p-2 text-xs",
+        lg: "h-12 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-2 text-sm group-data-[collapsible=icon]:p-0!",
+        sm: "h-7 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-2 text-xs",
       },
       variant: {
         default: "font-medium text-sidebar-muted-foreground/80",
@@ -808,7 +810,7 @@ function SidebarMenuAction({
 }) {
   const defaultProps = {
     className: cn(
-      "absolute top-1.5 right-1 flex aspect-square w-5 cursor-pointer items-center justify-center rounded-lg p-0 text-sidebar-foreground outline-hidden ring-ring transition-transform hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-foreground [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0",
+      "absolute top-1.5 right-1 flex aspect-square w-5 cursor-pointer items-center justify-center rounded-lg p-0 text-sidebar-foreground outline-hidden ring-ring transition-transform hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset peer-hover/menu-button:text-sidebar-foreground [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0",
       "after:-inset-2 after:absolute md:after:hidden",
       "peer-data-[size=sm]/menu-button:top-1",
       "peer-data-[size=default]/menu-button:top-1.5",

@@ -2,12 +2,11 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 
 import type {
-  VcsDriverCapabilities,
   VcsError,
-  VcsListRemotesResult,
-  VcsListWorkspaceFilesResult,
   ReviewDiffPreviewInput,
   ReviewDiffPreviewResult,
+  VcsListRemotesResult,
+  VcsListWorkspaceFilesResult,
   VcsRepositoryIdentity,
 } from "@t3tools/contracts";
 import { CheckpointRef } from "@t3tools/contracts";
@@ -70,11 +69,10 @@ export interface VcsCheckpointOps {
 export class VcsDriver extends Context.Service<
   VcsDriver,
   {
-    readonly capabilities: VcsDriverCapabilities;
     readonly execute: (
       input: Omit<VcsProcess.VcsProcessInput, "command">,
     ) => Effect.Effect<VcsProcess.VcsProcessOutput, VcsError>;
-    readonly checkpoints?: VcsCheckpointOps;
+    readonly checkpoints: VcsCheckpointOps;
     readonly detectRepository: (
       cwd: string,
     ) => Effect.Effect<VcsRepositoryIdentity | null, VcsError>;

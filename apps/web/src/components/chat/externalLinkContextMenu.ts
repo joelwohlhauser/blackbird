@@ -1,6 +1,6 @@
 import type { ContextMenuItem, ExternalLinkOpenMode } from "@t3tools/contracts";
 
-export type ExternalLinkContextMenuAction =
+type ExternalLinkContextMenuAction =
   | "open-in-preview"
   | "open-external"
   | "copy-link"
@@ -11,7 +11,7 @@ type ExternalLinkOpenAction = Exclude<
   "copy-link" | "link-to-thread" | "unlink-from-thread"
 >;
 
-export type ExternalLinkContextMenuFailureOperation =
+type ExternalLinkContextMenuFailureOperation =
   | "show-link-context-menu"
   | "open-link-in-preview"
   | "open-link-external"

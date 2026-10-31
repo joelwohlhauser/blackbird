@@ -93,6 +93,7 @@ export function PreviewChromeRow({
   const [draft, setDraft] = useState(url);
   const [inputFocused, setInputFocused] = useState(false);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- focuses the address input when an empty preview becomes visible
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus();
   }, [autoFocus, inputRef]);
@@ -211,6 +212,8 @@ export function PreviewChromeRow({
                     }
                   }}
                   placeholder="Search or enter URL"
+                  aria-label="Search or enter URL"
+                  data-workspace-focus-default
                   spellCheck={false}
                   disabled={inputDisabled}
                   data-preview-url-input
