@@ -348,7 +348,7 @@ pnpm dev
 
 The web client is suitable for everyday UI development and browser testing. See [Development](docs/operations/development.md) for setup, isolated data, and desktop builds. Use focused tests and typechecks for the code being changed; `AGENTS.md` contains the repository's detailed safety and verification rules.
 
-Every push to `main` runs the **Blackbird release** GitHub Actions workflow. It builds macOS Apple Silicon installers, signs them with the same persistent certificate, checks that the packaged app opens an existing conversation, and publishes the DMG, update ZIP, checksums, and update metadata as one GitHub release. Versions are `0.2.<workflow run number>`. The workflow can also be started manually from GitHub's Actions tab. Failed builds never replace the latest release.
+Every push to `main` runs the **Blackbird release** GitHub Actions workflow. It builds macOS Apple Silicon installers, signs them with the same persistent certificate, checks that the packaged app opens an existing conversation, and publishes the DMG, update ZIP, checksums, and update metadata as one GitHub release. Versions are `0.3.<workflow run number>`. The workflow can also be started manually from GitHub's Actions tab. Failed builds never replace the latest release.
 
 Install the DMG from [GitHub Releases](https://github.com/joelwohlhauser/blackbird/releases) once. Subsequent versions appear in the left sidebar. Download the update there, then choose **Restart to update** when ready. Blackbird does not restart automatically. Existing locally deployed installations need this one-time installation to gain the release feed and persistent signing identity.
 

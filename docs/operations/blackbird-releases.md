@@ -1,6 +1,6 @@
 # Blackbird desktop releases
 
-The `Blackbird release` workflow owns macOS Apple Silicon releases. Push to `main`, or dispatch that workflow on `main`. Builds use versions `0.2.<run number>` and one serialized publication queue. Re-running a failed run keeps its version; re-running an older run cannot replace a newer published release. A failed upload leaves a draft that the same run can complete. Release assets are also retained as Actions artifacts for 14 days.
+The `Blackbird release` workflow owns macOS Apple Silicon releases. Push to `main`, or dispatch that workflow on `main`. Builds use versions `0.3.<run number>` and one serialized publication queue. Re-running a failed run keeps its version; re-running an older run cannot replace a newer published release. A failed upload leaves a draft that the same run can complete. Release assets are also retained as Actions artifacts for 14 days.
 
 ## Signing identity
 
