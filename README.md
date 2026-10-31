@@ -128,12 +128,12 @@ case the panel opens. Both tab bars have a Plus button that opens the full New
 Tab page in that container (Browser, Terminal, Diff, Linear, GitHub PR, and Pull
 request).
 Clicking a subagent in the chat always opens it as a read-only, live transcript tab in the right panel, with an Open chat button for the full conversation.
-Side chats (`/side` or `/btw` in the composer, or **Side chat** on the New Tab page) open as a right-panel tab with their own composer, beside the chat they started from. They stay out of the sidebar, are listed under Details, and closing one you never used deletes it.
+Side chats (`/side` or `/btw` in the composer, or **Side chat** on the New Tab page) open as a workspace tab with their own composer, placed like other new tabs, beside the chat they started from. They stay out of the sidebar, are listed under Details, and closing one you never used deletes it.
 A title-bar button toggles the normal right panel; there is no ⌥⌘B binding or
 maximize control.
 Control+Tab opens the tab switcher described above. Browser-backed tabs
 include navigation, refresh, URL, zoom, capture, and other appropriate
-browser controls. Right-clicking a link can open it in a new workspace tab,
+browser controls. Zoom shortcuts (Command+=, Command+-, Command+0) also work while the page itself has focus. The screenshot toast's **Paste in chat** adds the capture to the draft of the chat that owned the tab, without sending it. Right-clicking a link can open it in a new workspace tab,
 open it in the default browser, or copy it. Selected text and editable fields
 offer the usual copy, cut, paste, and select-all actions.
 Command+T opens a **New Tab** page with the available Browser, Terminal,
