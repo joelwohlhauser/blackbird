@@ -233,7 +233,7 @@ it.effect("counts memory.min as protection and names the first cgroup that grant
     "user-1000.slice",
     "user@1000.service",
     "app.slice",
-    "blackbird.service",
+    "blackbird-managed.service",
   ];
   const write = (depth: number, file: string, value: string) => {
     const directory = NodePath.join(root, ...controlGroup.slice(0, depth));

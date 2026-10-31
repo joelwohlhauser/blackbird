@@ -32,7 +32,8 @@ import {
   type ServiceState,
 } from "./serviceProtocol.ts";
 
-const BOOT_SERVICE_NAME = "blackbird";
+// Keep launcher-managed units separate from manually configured Blackbird services.
+const BOOT_SERVICE_NAME = "blackbird-managed";
 export const BOOT_SERVICE_UNIT_FILE = `${BOOT_SERVICE_NAME}.service`;
 // The service label is distinct from the app bundle so launchd and TCC records do not collide.
 export const BOOT_SERVICE_LAUNCHD_LABEL = "com.blackbird.app.service";
@@ -432,7 +433,7 @@ export function formatBootServiceProblem(problem: BootServiceProblem): string {
     case "service-disabled":
       return "The service is not enabled to start automatically. Run `t3 service install` to repair it.";
     case "service-stopped":
-      return "The service is not running. Check the service log and `systemctl --user status blackbird.service`, then run `blackbird service install`.";
+      return `The service is not running. Check the service log and \`systemctl --user status ${BOOT_SERVICE_UNIT_FILE}\`, then run \`blackbird service install\`.`;
     case "restart-pending":
       return "A newer version is installed but the service is still running the previous one. Run `t3 service restart` to switch.";
   }

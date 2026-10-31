@@ -31,6 +31,7 @@ const startBesideBootService = Effect.fn("test.startBesideBootService")(function
   readonly activeVersion?: string;
   readonly npmRuntime?: boolean;
   readonly missingServiceState?: boolean;
+  readonly unitFileName?: string;
   readonly environment?: NodeJS.ProcessEnv;
   readonly connected?: boolean;
 }) {
@@ -78,7 +79,13 @@ const startBesideBootService = Effect.fn("test.startBesideBootService")(function
           renderBootServicePlist(plan, { homeDir: root, environmentPath: "" }),
         ]
       : [
-          path.join(root, ".config", "systemd", "user", "blackbird.service"),
+          path.join(
+            root,
+            ".config",
+            "systemd",
+            "user",
+            input.unitFileName ?? "blackbird-managed.service",
+          ),
           renderBootServiceUnit(plan),
         ];
   yield* fs.makeDirectory(path.dirname(unitPath), { recursive: true });
@@ -439,6 +446,11 @@ describe("server ownership", () => {
         };
         for (const fixture of [
           { platform: "darwin", outputs, unitServesOtherHome: true },
+          {
+            platform: "linux",
+            unitFileName: "blackbird.service",
+            outputs: { "systemctl is-active": { code: 0, stdout: "active\n" } },
+          },
           {
             platform: "darwin",
             outputs,

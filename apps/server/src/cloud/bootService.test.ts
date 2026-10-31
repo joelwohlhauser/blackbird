@@ -26,7 +26,7 @@ it("reads the served T3 home back out of a rendered unit or plist", () => {
     program: [`${baseDir}/runtime/versions/1.2.3/t3`, "__service-launcher"],
     baseDir,
     logPath: `${baseDir}/userdata/logs/boot-service.log`,
-    unitPath: "/home/theo/.config/systemd/user/blackbird.service",
+    unitPath: "/home/theo/.config/systemd/user/blackbird-managed.service",
   });
 
   expect(
@@ -53,7 +53,7 @@ it("protects the server unit from agents under CPU and memory pressure", () => {
     program: ["/home/theo/.t3/runtime/versions/1.2.3/t3", "__service-launcher"],
     baseDir: "/home/theo/.t3",
     logPath: "/home/theo/.t3/userdata/logs/boot-service.log",
-    unitPath: "/home/theo/.config/systemd/user/blackbird.service",
+    unitPath: "/home/theo/.config/systemd/user/blackbird-managed.service",
   });
   const service = unit.slice(unit.indexOf("[Service]"), unit.indexOf("[Install]"));
   for (const line of [
@@ -127,15 +127,15 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
       const failed = command === control.failCommand;
       if (!failed && command === "loginctl enable-linger --no-ask-password 501")
         control.linger = "yes";
-      if (!failed && command === "systemctl --user enable blackbird.service")
+      if (!failed && command === "systemctl --user enable blackbird-managed.service")
         control.enabled = true;
-      if (!failed && command === "systemctl --user restart blackbird.service")
+      if (!failed && command === "systemctl --user restart blackbird-managed.service")
         control.active = true;
       // A timed-out stop may still stop the service.
-      if (command === "systemctl --user stop blackbird.service") control.active = false;
+      if (command === "systemctl --user stop blackbird-managed.service") control.active = false;
       if (
         control.stateAfterStop !== undefined &&
-        (command === "systemctl --user stop blackbird.service" ||
+        (command === "systemctl --user stop blackbird-managed.service" ||
           command.startsWith("launchctl bootout --wait "))
       ) {
         yield* fs.writeFileString(statePath, control.stateAfterStop).pipe(Effect.orDie);
@@ -202,7 +202,7 @@ const makeHarness = Effect.fn("test.make_boot_service_harness")(function* (
                 ...(environmentPath === undefined || environmentPath === ""
                   ? {}
                   : { PATH: environmentPath }),
-                ...(insideService ? { T3_BOOT_SERVICE_UNIT: "blackbird.service" } : {}),
+                ...(insideService ? { T3_BOOT_SERVICE_UNIT: "blackbird-managed.service" } : {}),
               },
             }),
           ),
@@ -276,7 +276,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         );
         expect(yield* fs.readFileString(statePath)).toBe(before);
         expect(yield* fs.readFileString(plan.unitPath)).toBe(unit);
-        expect(commands).not.toContain("systemctl --user stop blackbird.service");
+        expect(commands).not.toContain("systemctl --user stop blackbird-managed.service");
       }),
   );
 
@@ -349,7 +349,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       expect(yield* service.uninstall).toBe(true);
       expect((yield* service.status).installed).toBe(false);
       // systemd can take 90s to stop, exceeding the runner's 60s default.
-      expect(timeouts.get("systemctl --user disable --now blackbird.service")).toEqual(
+      expect(timeouts.get("systemctl --user disable --now blackbird-managed.service")).toEqual(
         Duration.seconds(120),
       );
     }),
@@ -423,8 +423,8 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         ).toEqual(
           platform === "linux"
             ? [
-                "systemctl --user stop blackbird.service",
-                "systemctl --user restart blackbird.service",
+                "systemctl --user stop blackbird-managed.service",
+                "systemctl --user restart blackbird-managed.service",
               ]
             : [
                 "launchctl bootout --wait gui/501/com.blackbird.app.service",
@@ -564,7 +564,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       expect(failure).toBe("repair failed");
       expect(control.active).toBe(true);
 
-      control.failCommand = "systemctl --user stop blackbird.service";
+      control.failCommand = "systemctl --user stop blackbird-managed.service";
       let ran = false;
       const stopFailure = yield* service
         .withStopped(
@@ -585,11 +585,11 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       commands.length = 0;
       yield* service.withStopped(Effect.sync(() => commands.push("repair")));
       expect(commands).toEqual([
-        "systemctl --user is-enabled blackbird.service",
-        "systemctl --user is-active blackbird.service",
-        "systemctl --user stop blackbird.service",
+        "systemctl --user is-enabled blackbird-managed.service",
+        "systemctl --user is-active blackbird-managed.service",
+        "systemctl --user stop blackbird-managed.service",
         "repair",
-        "systemctl --user restart blackbird.service",
+        "systemctl --user restart blackbird-managed.service",
       ]);
       expect(control.active).toBe(true);
       control.enabled = false;
@@ -599,8 +599,8 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       control.enabled = false;
       commands.length = 0;
       yield* service.withStopped(Effect.sync(() => commands.push("repair")));
-      expect(commands).toContain("systemctl --user stop blackbird.service");
-      expect(commands).not.toContain("systemctl --user restart blackbird.service");
+      expect(commands).toContain("systemctl --user stop blackbird-managed.service");
+      expect(commands).not.toContain("systemctl --user restart blackbird-managed.service");
       expect(control.active).toBe(false);
       control.enabled = true;
       control.active = true;
@@ -647,7 +647,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
 
       expect(yield* fs.readFileString(statePath)).toBe(state);
       expect(yield* fs.readFileString(plan.unitPath)).toBe(unit);
-      expect(commands).not.toContain("systemctl --user stop blackbird.service");
+      expect(commands).not.toContain("systemctl --user stop blackbird-managed.service");
       expect(result).toMatchObject({ handedOff: true, logPath: plan.logPath });
       const handoffs = invocations.filter(({ command }) => command === "systemd-run");
       expect(handoffs).toHaveLength(1);
@@ -673,7 +673,7 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
       expect(yield* fs.readFileString(statePath)).toBe(state);
       expect(yield* fs.readFileString(plan.unitPath)).toBe(unit);
       expect(control.active).toBe(true);
-      expect(commands).not.toContain("systemctl --user stop blackbird.service");
+      expect(commands).not.toContain("systemctl --user stop blackbird-managed.service");
     }),
   );
 
@@ -700,8 +700,8 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
         const outcome = yield* inside.restart;
         expect(commands).toEqual([
           "systemctl --user daemon-reload",
-          "systemctl --user enable blackbird.service",
-          "systemctl --user restart --no-block blackbird.service",
+          "systemctl --user enable blackbird-managed.service",
+          "systemctl --user restart --no-block blackbird-managed.service",
         ]);
         expect(outcome).toBe("queued");
         expect(yield* fs.readFileString(statePath)).toBe(state);
@@ -723,9 +723,9 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
           (command) => command.startsWith("systemctl ") && !command.includes("show-environment"),
         ),
       ).toEqual([
-        "systemctl --user stop blackbird.service",
+        "systemctl --user stop blackbird-managed.service",
         "systemctl --user daemon-reload",
-        "systemctl --user restart blackbird.service",
+        "systemctl --user restart blackbird-managed.service",
       ]);
     }),
   );
@@ -757,8 +757,8 @@ it.layer(NodeServices.layer)("boot service install", (it) => {
             (command) => command.startsWith("systemctl ") && !command.includes("show-environment"),
           ),
         ).toEqual([
-          "systemctl --user stop blackbird.service",
-          "systemctl --user restart blackbird.service",
+          "systemctl --user stop blackbird-managed.service",
+          "systemctl --user restart blackbird-managed.service",
         ]);
       }
     }),
