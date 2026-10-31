@@ -31,6 +31,7 @@ const RIGHT_PANEL_KINDS = [
   "pull-request",
   "pull-requests",
   "thread",
+  "side-chat",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -91,7 +92,8 @@ export type RightPanelSurface =
       detailTab?: PullRequestDetailTab;
     }
   | { id: "pull-requests"; kind: "pull-requests" }
-  | { id: `thread:${string}`; kind: "thread"; threadId: ThreadId; title?: string };
+  | { id: `thread:${string}`; kind: "thread"; threadId: ThreadId; title?: string }
+  | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 const RIGHT_PANEL_STORAGE_VERSION = 15;
@@ -173,7 +175,14 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request" | "thread"
+      | "file"
+      | "file-diff"
+      | "terminal"
+      | "linear"
+      | "github-pr"
+      | "pull-request"
+      | "thread"
+      | "side-chat"
     >,
   ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null, url?: string | null) => void;
@@ -190,6 +199,7 @@ interface RightPanelStoreState {
     options?: { pinned?: boolean },
   ) => void;
   pinDedicatedSurface: (ref: ScopedThreadRef, surfaceId: "linear" | "github-pr") => void;
+  openSideChat: (ref: ScopedThreadRef, threadId: ThreadId) => void;
   openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
   renameDevice: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
@@ -266,7 +276,14 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "file-diff" | "terminal" | "linear" | "github-pr" | "pull-request" | "thread"
+      | "file"
+      | "file-diff"
+      | "terminal"
+      | "linear"
+      | "github-pr"
+      | "pull-request"
+      | "thread"
+      | "side-chat"
     >,
   ) => void;
   setWorkspaceNavigatorTab: (ref: ScopedThreadRef, tab: WorkspaceNavigatorTab) => void;
@@ -293,6 +310,7 @@ const singletonSurface = (
     | "github-pr"
     | "pull-request"
     | "thread"
+    | "side-chat"
   >,
 ): RightPanelSurface => {
   switch (kind) {
@@ -820,11 +838,39 @@ const automaticUpdate = (
   byThreadKey: updateThread(state.byThreadKey, threadKey, updater),
 });
 
+// A side chat pane has no panel of its own, so its panel actions open in its parent's panel.
+const panelHosts = new Map<string, ScopedThreadRef>();
+
+/** Routes `guest`'s panel actions to `host`'s panel until the returned cleanup runs. */
+export function hostRightPanel(guest: ScopedThreadRef, host: ScopedThreadRef): () => void {
+  const guestKey = scopedThreadKey(guest);
+  panelHosts.set(guestKey, host);
+  return () => {
+    if (panelHosts.get(guestKey) === host) panelHosts.delete(guestKey);
+  };
+}
+
+/** The thread whose panel shows `ref`'s panel actions, so it also owns their browser tabs. */
+export function rightPanelHostRef(ref: ScopedThreadRef): ScopedThreadRef {
+  return panelHosts.get(scopedThreadKey(ref)) ?? ref;
+}
+
 const userAction = (
+  state: RightPanelStoreState,
+  guestKey: string,
+  updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
+  closesView = false,
+): Partial<RightPanelStoreState> => {
+  const host = panelHosts.get(guestKey);
+  const threadKey = host === undefined ? guestKey : scopedThreadKey(host);
+  return userActionOnThread(state, threadKey, updater, closesView);
+};
+
+const userActionOnThread = (
   state: RightPanelStoreState,
   threadKey: string,
   updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
-  closesView = false,
+  closesView: boolean,
 ): Partial<RightPanelStoreState> => ({
   byThreadKey: updateThread(state.byThreadKey, threadKey, (current) => {
     const next = updater(current);
@@ -962,6 +1008,25 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               },
               existing ?? surface,
             );
+          }),
+        })),
+      openSideChat: (ref, threadId) =>
+        set((state) => ({
+          ...userAction(state, scopedThreadKey(ref), (current) => {
+            const surface: RightPanelSurface = {
+              id: `side-chat:${threadId}`,
+              kind: "side-chat",
+              threadId,
+            };
+            if (findSurface(current, (entry) => entry.id === surface.id)) {
+              return upsertSurface(current, surface);
+            }
+            return {
+              ...current,
+              isOpen: true,
+              surfaces: [...current.surfaces, surface],
+              activeSurfaceId: surface.id,
+            };
           }),
         })),
       renameDevice: (ref, surfaceId, title) =>

@@ -1210,7 +1210,6 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
     return Effect.scoped(
       Effect.gen(function* () {
-        const path = yield* Path.Path;
         const fixture = yield* makeWindowsPayloadFixture({ copyUnpackedNatives: true });
         yield* validateWindowsPackagedPayload({
           stageDistDir: fixture.stageDistDir,
@@ -1222,7 +1221,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         assert.isFalse(
           commands.some(
             (command) =>
-              command.command === path.join(fixture.packagedAppDir, fixture.appExecutableName),
+              command.command === NodePath.join(fixture.packagedAppDir, fixture.appExecutableName),
           ),
         );
         assert.isTrue(

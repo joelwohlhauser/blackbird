@@ -4,7 +4,7 @@ import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
-import { FileDiff, Globe2, Plus, Smartphone, TerminalSquare } from "lucide-react";
+import { FileDiff, Globe2, MessagesSquare, Plus, Smartphone, TerminalSquare } from "lucide-react";
 import {
   type ElementType,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -62,6 +62,7 @@ export interface RightPanelTabsProps {
   onAddPullRequest?: () => void;
   onAddPullRequests?: () => void;
   onAddDevice?: () => void;
+  onAddSideChat?: (() => void) | undefined;
   browserAvailable: boolean;
   linearAvailable: boolean;
   githubPullRequestDetected: boolean;
@@ -72,6 +73,8 @@ export interface RightPanelTabsProps {
   pullRequestAvailable?: boolean;
   pullRequestsAvailable?: boolean;
   deviceAvailable?: boolean;
+  sideChatAvailable?: boolean;
+  sideChatDisabledReason?: string | null;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   pinnedSurfaceIds?: ReadonlySet<string>;
   reserveNativeControlsInset?: boolean;
@@ -103,6 +106,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
   device: "Available from a chat.",
+  sideChat: "Available after the first message.",
 } as const;
 
 type SurfaceShortcutEvent = Pick<
@@ -201,6 +205,7 @@ export function NewTabPage(props: {
   onAddPullRequest?: () => void;
   onAddPullRequests?: () => void;
   onAddDevice?: () => void;
+  onAddSideChat?: (() => void) | undefined;
   browserAvailable: boolean;
   linearAvailable: boolean;
   githubPullRequestDetected: boolean;
@@ -210,6 +215,8 @@ export function NewTabPage(props: {
   pullRequestAvailable?: boolean;
   pullRequestsAvailable?: boolean;
   deviceAvailable?: boolean;
+  sideChatAvailable?: boolean;
+  sideChatDisabledReason?: string | null;
 }) {
   const [highlight, setHighlight] = useState(-1);
   const actions: Array<{
@@ -293,6 +300,19 @@ export function NewTabPage(props: {
             available: props.deviceAvailable === true,
             disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
             onClick: props.onAddDevice,
+          },
+        ]
+      : []),
+    ...(props.onAddSideChat
+      ? [
+          {
+            label: "Side chat",
+            description: "Ask a side question while this chat keeps working.",
+            icon: MessagesSquare,
+            shortcut: "S",
+            available: props.sideChatAvailable === true && !props.sideChatDisabledReason,
+            disabledReason: props.sideChatDisabledReason ?? SURFACE_UNAVAILABLE_HINTS.sideChat,
+            onClick: props.onAddSideChat,
           },
         ]
       : []),
@@ -510,6 +530,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
               ? { onAddPullRequests: props.onAddPullRequests }
               : {})}
             {...(props.onAddDevice !== undefined ? { onAddDevice: props.onAddDevice } : {})}
+            {...(props.onAddSideChat !== undefined ? { onAddSideChat: props.onAddSideChat } : {})}
             browserAvailable={props.browserAvailable}
             linearAvailable={props.linearAvailable}
             githubPullRequestDetected={props.githubPullRequestDetected}
@@ -527,6 +548,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             {...(props.deviceAvailable !== undefined
               ? { deviceAvailable: props.deviceAvailable }
               : {})}
+            {...(props.sideChatAvailable !== undefined
+              ? { sideChatAvailable: props.sideChatAvailable }
+              : {})}
+            sideChatDisabledReason={props.sideChatDisabledReason ?? null}
           />
         ) : (
           props.children

@@ -11,6 +11,7 @@ import {
   Files,
   Globe2,
   MessageSquare,
+  MessagesSquare,
   Plus,
   Smartphone,
   TerminalSquare,
@@ -101,6 +102,8 @@ export function surfaceTitle(
       return surface.title ?? surface.target?.name ?? "Device";
     case "thread":
       return surface.title ?? "Subagent";
+    case "side-chat":
+      return "Side chat";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -203,6 +206,8 @@ export function SurfaceIcon({
       );
     case "thread":
       return <BotIcon className="size-3 shrink-0" />;
+    case "side-chat":
+      return <MessagesSquare className="size-3 shrink-0" />;
   }
 }
 
