@@ -12,7 +12,7 @@ Production stays read-only apart from three things: the merge, the data scripts 
 ## 1. Merge
 
 - If the user merged on GitHub ("merged"), skip to Rollout.
-- Otherwise check once more that the pull request is still ready (see `../autopilot-build/references/ready.md`). A late bot comment or a new commit on the default branch can change that.
+- Otherwise recheck Build's [Ready conditions](../autopilot-build/SKILL.md#8-ready) on the latest commit. A late bot comment or a new commit on the default branch can change that.
 - Merge with the repository's usual method and note the merge commit.
 
 ## 2. Rollout
@@ -67,8 +67,8 @@ When Verify or Watch shows that this change broke something, or doesn't fully do
 
 ## 6. Done
 
-- Move the issue to the done state (see `../autopilot-build/references/issues.md`). If the tracker's GitHub integration already did, just check.
-- Act on the sidequest choices the user made (see `../autopilot-build/references/sidequests.md`). Ignore the ones they didn't answer.
+- Move the issue to the team's done state. If the tracker's GitHub integration already did, just check. Skip this without a tracker.
+- Act on the user's sidequest choices: ignore, start a new thread in its own worktree with `thread_launch`, or create a backlog issue. If they chose to include a fix in this change and it's still unfinished, return to Build. Ignore unanswered items.
 - In the worktree, delete `node_modules` and other installed dependencies to save disk space. Keep the worktree and the branch. Never delete branches.
 - Call `unwatch_pull_request` and post a short summary: what shipped, the production evidence, and anything only the user still has to do.
 - Settle the thread (`thread_organize` with `settle`) when the change shipped, Verify found no regression or new error, and everything the brief set out to do is done. Reminders unrelated to this change, such as deploying another repository, don't keep it open. Leave it active only when something looks off or this change still needs the user.
