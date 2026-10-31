@@ -21,13 +21,19 @@ jobs:
       VERSION: 0.2.${{ github.run_number }}
       T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
     steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          sparse-checkout: |
-            /*
-            !/.repos/
-          sparse-checkout-cone-mode: false
+      # checkout's credential cleanup traverses orphaned upstream gitlinks in .repos.
+      - name: Checkout source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          authorization=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
+          echo "::add-mask::$authorization"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $authorization" fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
 
       - uses: ./.github/actions/setup-ci-deps
         with:
