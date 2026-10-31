@@ -5,7 +5,7 @@ to keep a terminal open.
 
 ## Manage the service
 
-Install the `t3` CLI first ([Install T3 Code](./install.md#command-line)), then
+Install the `t3` CLI first ([Install T3 Code](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md#command-line)), then
 run these commands on the machine that will host T3 Code:
 
 | Task                            | Command                |

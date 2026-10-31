@@ -116,9 +116,7 @@ of `main` for that work, never the tag-pinned diagnosis clone.
 
 ## 8. File the issue well
 
-- Match the structure of the `via-triage` issue template
-  (`.github/ISSUE_TEMPLATE/via-triage.yml` in the repo): what happened, diagnosis,
-  repro steps, environment, evidence, related issues.
+- Include what happened, diagnosis, repro steps, environment, evidence, and related issues.
 - Under Version, give the version the bug happened on from step 4, or say it is
   unknown. Name the triage CLI version only as the CLI's.
 - Label it `via-triage`. Use a plain, specific title with no prefix.

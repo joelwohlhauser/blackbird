@@ -1,8 +1,11 @@
-# T3 Code docs
+# Blackbird docs
 
-## Using T3 Code
+Start with [Install Blackbird](./user/install.md), [Updating Blackbird](./user/updating.md), the [FAQ](./user/faq.md), and the [Blackbird feature map](../README.md#what-is-custom-in-blackbird).
 
-- [Install T3 Code](./user/install.md)
+The guides below are inherited from T3 Code and remain useful for shared features and architecture. They may use T3 Code names, shortcuts, or service commands. Blackbird's README takes precedence for its custom behavior. T3 Connect, upstream app-store builds, and upstream CLI distribution are not Blackbird release channels.
+
+## Shared user guides
+
 - [Messages and context](./user/composer.md)
 - [Working with threads](./user/thread-sidebar.md)
 - [Permission modes](./user/permission-modes.md)
@@ -22,20 +25,16 @@
 - [T3 Connect troubleshooting](./user/t3-connect-troubleshooting.md)
 - [Outside agents (MCP)](./user/outside-agents.md)
 - [Running in the background](./user/background-service.md)
-- [Updating T3 Code](./user/updating.md)
 - [Triage an issue](./user/triage.md)
 - Provider guides: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md) · [OpenCode](./user/providers-opencode.md) · [Antigravity](./user/providers-antigravity.md) · [Pi](./user/providers-pi.md) · [Muse Code](./user/providers-muse.md) · [fx](./user/providers-fx.md)
 
 ---
 
-## Working on T3 Code
+## Working on Blackbird
 
-Start with the [development runbook](./operations/development.md) and
-[contribution policy](../CONTRIBUTING.md).
+Start with the [development runbook](./operations/development.md) and [desktop releases](./operations/blackbird-releases.md).
 
-Internal notes preserve architectural decisions, constraints, and implementation traps that the
-source alone does not explain. Most code changes do not need an internal documentation update. Follow the
-[documentation rules](../AGENTS.md#documentation) before adding one.
+Internal notes preserve architectural decisions, constraints, and implementation traps that the source alone does not explain. Most code changes do not need an internal documentation update. Follow the [documentation rules](../AGENTS.md#documentation) before adding one.
 
 - [Architecture overview](./internals/overview.md)
 - [Glossary](./internals/glossary.md)
@@ -56,11 +55,10 @@ source alone does not explain. Most code changes do not need an internal documen
 - [Devices](./internals/devices.md)
 - [Voice input](./internals/voice-input.md)
 
-### Runbooks
+### Upstream reference runbooks
 
-- [Development and local builds](./operations/development.md)
 - [T3 Connect setup](./operations/connect-setup.md)
-- [Release](./operations/release.md)
+- [Upstream release process](./operations/release.md)
 - [Observability](./operations/observability.md)
 - [Relay observability](./operations/relay-observability.md)
 - [Mobile app store screenshots](./operations/mobile-app-store-screenshots.md)

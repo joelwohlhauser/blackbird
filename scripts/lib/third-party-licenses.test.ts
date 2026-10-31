@@ -79,6 +79,22 @@ afterEach(async () => {
 });
 
 describe("third-party license generation", () => {
+  it("includes T3 Code's complete license in Blackbird's distributed notices", async () => {
+    const fixture = await createFixture();
+    const manifest = await generateThirdPartyLicenseManifest({
+      configFile: NodePath.join(REPOSITORY_ROOT, "third-party-licenses.config.json"),
+      packageManifests: [{ bundle: "server", path: fixture.appManifest }],
+    });
+
+    expect(manifest.entries.find((entry) => entry.name === "T3 Code")).toMatchObject({
+      license: "MIT",
+      sourceUrl: "https://github.com/pingdotgg/t3code",
+      noticeText: (
+        await NodeFSP.readFile(NodePath.join(REPOSITORY_ROOT, "LICENSE"), "utf8")
+      ).trim(),
+    });
+  });
+
   it.each(["web", "mobile"])(
     "uses installer pins for device tool notices in the %s manifest",
     async (bundle) => {

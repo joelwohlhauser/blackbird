@@ -343,7 +343,6 @@ export function showBootError(error: unknown) {
   );
 
   const issue = new URL(ISSUE_URL);
-  issue.searchParams.set("template", "bug_report.yml");
   issue.searchParams.set("title", "Blackbird failed to start");
   issue.searchParams.set("area", "apps/web");
   issue.searchParams.set("version", `${environment.version} (${environment.channel})`);

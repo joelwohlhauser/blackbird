@@ -2,13 +2,14 @@
 
 Blackbird is Joel Wohlhauser's personal IDE built on top of [T3 Code](https://github.com/pingdotgg/t3code), being prepared for public open-source distribution. It keeps T3 Code's architecture and updates while adding a different coding workflow and desktop experience. It is a hobby project with no guaranteed support or release schedule.
 
-Blackbird works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and
-Google Antigravity.
+Blackbird works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity.
+
+[Install Blackbird](docs/user/install.md) on an Apple Silicon Mac, or [run it from source](docs/operations/development.md#first-checkout). Blackbird preserves T3 Code's [MIT license](LICENSE), including the T3 Tools Inc. copyright notice.
 
 The repository has two remotes:
 
-- `origin` — the `joelwohlhauser/blackbird` repository
-- `upstream` — `pingdotgg/t3code`, which remains the base application
+- `origin`: the `joelwohlhauser/blackbird` repository
+- `upstream`: `pingdotgg/t3code`, which remains the base application
 
 ## What is custom in Blackbird?
 
@@ -338,16 +339,14 @@ Agents can request a link to another environment, subject to the destination's a
 
 ## Development and deployment
 
-Install dependencies and start development:
+Use the Node and pnpm versions pinned in `package.json` (currently Node 26.12.1 and pnpm 12.14.0). Install dependencies and start development:
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-The web client is suitable for everyday UI development and browser testing.
-Use focused tests and typechecks for the code being changed; the inherited
-`AGENTS.md` contains the repository's detailed safety and verification rules.
+The web client is suitable for everyday UI development and browser testing. See [Development](docs/operations/development.md) for setup, isolated data, and desktop builds. Use focused tests and typechecks for the code being changed; `AGENTS.md` contains the repository's detailed safety and verification rules.
 
 Every push to `main` runs the **Blackbird release** GitHub Actions workflow. It builds macOS Apple Silicon installers, signs them with the same persistent certificate, checks that the packaged app opens an existing conversation, and publishes the DMG, update ZIP, checksums, and update metadata as one GitHub release. Versions are `0.2.<workflow run number>`. The workflow can also be started manually from GitHub's Actions tab. Failed builds never replace the latest release.
 
@@ -367,8 +366,7 @@ git commit -m "type(scope): concise description"
 git push origin main
 ```
 
-Do not create a feature branch or pull request unless Joel explicitly asks for
-one. GitHub Actions are not part of the normal Blackbird workflow.
+Do not create a feature branch or pull request unless Joel explicitly asks for one. Every push to `main` runs the Blackbird release workflow; inherited upstream workflows stay disabled.
 
 ## Updating from T3 Code
 
@@ -390,15 +388,14 @@ the merge relationship is useful for the next update.
 
 ## Documentation
 
-Detailed user and contributor documentation lives in [docs/](./docs), including:
+Start with [Blackbird's installation and update guides](./docs). The remaining upstream guides explain shared features and internals; some still use T3 Code names or describe upstream services. The feature map above describes Blackbird's custom behavior.
 
 - [Keyboard shortcuts](./docs/user/keybindings.md)
 - [Project settings](./docs/user/project-settings.md)
 - [Appearance preferences](./docs/user/appearance.md)
 - [Remote access](./docs/user/remote-access.md)
 - [Connect Claude Code, Codex, ChatGPT and other agents over MCP](./docs/user/outside-agents.md)
-- [Keeping app and server in sync](./docs/user/updating.md)
+- [Updating Blackbird](./docs/user/updating.md)
 - [Source control integrations](./docs/user/source-control.md)
 - [Internal architecture overview](./docs/internals/overview.md)
 - Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- [Run the Blackbird server as a background service](./docs/user/background-service.md)
