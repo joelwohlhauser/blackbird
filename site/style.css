@@ -228,7 +228,8 @@ footer p {
   background: rgb(255 255 255 / 0.03);
 }
 
-.timeline button:focus-visible {
+.timeline button:focus-visible,
+.panel:focus-visible {
   outline: 2px solid var(--muted);
   outline-offset: 2px;
 }
