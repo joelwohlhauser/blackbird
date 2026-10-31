@@ -8,7 +8,7 @@ Install a release DMG once to get the release feed and persistent signing identi
 
 When public releases are available, Blackbird shows available updates at the bottom of the left sidebar. Download the update, then choose **Restart to update** when you are ready. Blackbird waits for that explicit action before restarting. You can also check for updates in **Settings → About**.
 
-While the repository is private, the app cannot discover its releases anonymously. Authorized maintainers can download the latest DMG through GitHub and replace the installed app manually. Do not put a GitHub token in the app to work around this.
+Blackbird checks public GitHub releases automatically. No GitHub account or token is required to receive updates.
 
 Releases are self-signed and not notarized by Apple. macOS may require approval in **System Settings → Privacy & Security** on first installation, and may ask for Keychain access after an update.
 
@@ -30,4 +30,4 @@ Provider updates are separate from desktop and remote-service updates. **Setting
 
 ## If an update fails
 
-Retry the offered action after reading its error. If the app cannot apply the update, quit Blackbird and install the latest release DMG manually. Keep the existing data directory. A missing release while the repository is private is an access limitation, not a reason to delete application data.
+Retry the offered action after reading its error. If the app cannot apply the update, quit Blackbird and install the latest release DMG manually. Keep the existing data directory.

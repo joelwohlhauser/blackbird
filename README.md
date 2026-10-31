@@ -1,6 +1,6 @@
 # Blackbird
 
-Blackbird is Joel Wohlhauser's personal IDE built on top of [T3 Code](https://github.com/pingdotgg/t3code), being prepared for public open-source distribution. It keeps T3 Code's architecture and updates while adding a different coding workflow and desktop experience. It is a hobby project with no guaranteed support or release schedule.
+Blackbird is Joel Wohlhauser's personal IDE built on top of [T3 Code](https://github.com/pingdotgg/t3code), available as open source under the MIT license. It keeps T3 Code's architecture and updates while adding a different coding workflow and desktop experience. It is a hobby project with no guaranteed support or release schedule.
 
 Blackbird works with Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity.
 
@@ -352,7 +352,7 @@ Every push to `main` runs the **Blackbird release** GitHub Actions workflow. It 
 
 Install the DMG from [GitHub Releases](https://github.com/joelwohlhauser/blackbird/releases) once. Subsequent versions appear in the left sidebar. Download the update there, then choose **Restart to update** when ready. Blackbird does not restart automatically. Existing locally deployed installations need this one-time installation to gain the release feed and persistent signing identity.
 
-These builds use a self-signed certificate and are not notarized by Apple. macOS may require approval in **System Settings > Privacy & Security** on first installation. It may also ask for Keychain access after an update. Release downloads and automatic update discovery require the release repository to be public; while it remains private, authorized maintainers can download releases through GitHub.
+These builds use a self-signed certificate and are not notarized by Apple. macOS may require approval in **System Settings > Privacy & Security** on first installation. It may also ask for Keychain access after an update. Release downloads are public, and Blackbird checks GitHub for updates automatically.
 
 Signing setup and recovery are documented in [Desktop releases](docs/operations/blackbird-releases.md). The personal deployment script has been removed. Desktop releases do not deploy remote services; migration of existing remote services to GitHub releases is separate work. Keep remote versions in mind when testing new desktop features against an older server.
 

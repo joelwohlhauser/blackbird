@@ -1,6 +1,6 @@
 # Blackbird
 
-Blackbird is Joel Wohlhauser's IDE and a long-lived, MIT-licensed fork of [T3 Code](https://github.com/pingdotgg/t3code), being prepared for public open-source distribution. It is a personal hobby project. It does not operate critical infrastructure, does not need product-scale process, and should optimize for clarity and maintainability.
+Blackbird is Joel Wohlhauser's IDE and a long-lived, MIT-licensed fork of [T3 Code](https://github.com/pingdotgg/t3code). It is a personal hobby project. It does not operate critical infrastructure, does not need product-scale process, and should optimize for clarity and maintainability.
 
 T3 Code must remain the base of the application. Preserve Blackbird's custom behavior while keeping the delta understandable enough to merge upstream regularly. `origin` is `joelwohlhauser/blackbird`; `upstream` is `pingdotgg/t3code`.
 

@@ -10,7 +10,7 @@ Blackbird is a separate desktop app built on T3 Code. Published installers curre
 
 Releases use a persistent self-signed certificate and are not notarized by Apple. If macOS blocks the first launch, review the download and approve it in **System Settings → Privacy & Security**. macOS may also ask for Keychain access after an update.
 
-While the repository is private, downloads require a GitHub account with repository access. The app's update feed becomes available when releases are public. See [Updating Blackbird](./updating.md).
+Downloads are public and do not require a GitHub account. Blackbird checks for new releases automatically. See [Updating Blackbird](./updating.md).
 
 ## Existing T3 Code users
 
