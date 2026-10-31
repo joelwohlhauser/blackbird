@@ -34,8 +34,6 @@ import {
   waitForUpdateRestart,
 } from "./updateEverythingRun";
 
-const UPDATE_RESTART_DELAY_MS = 5_000;
-
 /** Servers this desktop app runs; they update with it. */
 export function isHostedByThisApp(
   environment: ReturnType<typeof useEnvironments>["environments"][number],
@@ -161,7 +159,6 @@ export function useUpdateEverything(
         ...(channelSwitch ? { trackSwitch: true } : {}),
         localVersion,
         phase: "providers",
-        restartAt: null,
         machines: Array.from(machinesById.values()),
       }));
       const providerFailures = new Map<UpdateRunMachine["environmentId"], string>();
@@ -235,10 +232,8 @@ export function useUpdateEverything(
             providers: outcome.providers,
           });
         if (outcome.localReady && installLocal) {
-          if (await waitForUpdateRestart(UPDATE_RESTART_DELAY_MS)) {
-            setUpdateEverythingRun(
-              (run) => run && { ...run, phase: "installing", restartAt: null },
-            );
+          if (await waitForUpdateRestart()) {
+            setUpdateEverythingRun((run) => run && { ...run, phase: "installing" });
             saveUpdateEverythingResult({ ...result(finishedServers), localVersion });
             if (await installLocal(reportLocalError)) return;
             clearSavedUpdateEverythingResult();
@@ -250,7 +245,6 @@ export function useUpdateEverything(
             closeFinishedUpdateRun({
               ...run,
               phase: "servers",
-              restartAt: null,
               localVersion: null,
             }),
         );

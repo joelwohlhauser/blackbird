@@ -580,6 +580,41 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect("requires the signing hook for self-signed macOS releases", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dmg",
+        "1.2.3",
+        true,
+        false,
+        undefined,
+        undefined,
+      );
+      const mac = config.mac as Record<string, unknown>;
+      assert.equal(config.forceCodeSigning, true);
+      assert.equal(mac.identity, "-");
+      assert.equal(mac.notarize, false);
+      assert.match(mac.sign as string, /scripts[\\/]sign-macos\.ts$/);
+
+      const unsigned = yield* createBuildConfig(
+        "mac",
+        "dmg",
+        "1.2.3",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+      assert.notProperty(unsigned.mac as Record<string, unknown>, "identity");
+      assert.notProperty(unsigned, "forceCodeSigning");
+    }).pipe(
+      Effect.provide(
+        ConfigProvider.layer(ConfigProvider.fromEnv({ env: { BLACKBIRD_SELF_SIGNED: "true" } })),
+      ),
+    ),
+  );
+
   // pnpm writes "set this to true or false" placeholders into allowBuilds when a
   // tarball changes. pnpm ignores them, but the release build decode rejects them.
   it.effect("decodes the repo allowBuilds and every file: tarball it names exists", () =>

@@ -17,10 +17,10 @@ T3 Code must remain the base of the application. Preserve Blackbird's custom beh
 
 - Work directly on `main`. When a change is complete and verified, commit and push it directly to `origin/main` without asking; do not create a branch or pull request unless explicitly asked.
 - This is a personal hobby app. Prefer the smallest safe solution over enterprise process, compatibility machinery with no concrete use, or abstractions intended for hypothetical teams.
-- Browser development is supported and is often the quickest way to test UI. **"Deploy it" has a specific meaning:** `pnpm deploy:desktop` builds and installs the latest Blackbird macOS desktop app and updates its configured remote servers. It is not a request for web hosting. The deploy script builds first, updates each existing remote `blackbird.service` from the bundled archive (hosts are listed in `REMOTE_SERVERS` in `scripts/install-desktop-macos.ts`), then closes, replaces, and relaunches the local app. Routine deploys do not require database backups.
-- When running inside Blackbird, never run `pnpm deploy:desktop` or a desktop build that restarts it, because that ends your own session. Tell Joel to run the deploy. An agent running outside Blackbird can build, deploy, restart, and verify the app when Joel requests it.
+- Browser development is supported and is often the quickest way to test UI. Desktop releases are built, signed, checked, and published by the Blackbird release workflow on GitHub. Do not recreate a personal deployment script or put deployment hosts in the repository.
+- When running inside Blackbird, never restart or replace its installed app because that ends your own session. An agent running outside Blackbird can install, restart, and verify the app when Joel requests it.
 - Keep `README.md` up to date: when a bigger feature is added or user-visible behavior changes meaningfully, update the feature map in `README.md` as part of the same change. Plain bug fixes do not need README updates.
-- Keep GitHub Actions disabled/unnecessary for Blackbird's personal workflow, even when merging upstream workflow changes.
+- Keep the Blackbird release workflow enabled and inherited upstream workflows disabled in this repository, including after upstream merges.
 - Keep the name and identity **Blackbird**. The project was originally called Blackboard; `blackboard` identifiers should only remain where needed for migration/backward compatibility.
 
 ## Blackbird product invariants
@@ -45,7 +45,7 @@ These customizations are intentional and must survive upstream merges:
 
 Local and remote settings are environment-scoped. Preserve user-chosen environment labels instead of replacing them with internal hostnames. New remote worktrees default to `~/repositories/.worktrees`; expand `~`, link `.env` files to the owning main checkout, and run setup scripts on the owning environment.
 
-`pnpm deploy:desktop` updates existing remote `blackbird.service` instances with the server archive bundled with the desktop app. Desktop and mobile share each existing service through its Remote link. Do not use the generic `npx t3@…` update command or start a second SSH-managed backend against an existing database. When a feature works locally but not remotely, check environment version drift first.
+Desktop releases do not update existing remote services. Remote service migration to GitHub releases is deferred. Desktop and mobile share each existing service through its Remote link. Do not use the generic `npx t3@…` update command or start a second SSH-managed backend against an existing database. When a feature works locally but not remotely, check environment version drift first.
 
 ## Keeping the fork current
 

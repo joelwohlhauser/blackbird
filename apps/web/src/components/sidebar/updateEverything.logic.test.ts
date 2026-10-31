@@ -353,7 +353,7 @@ describe("describeUpdateCapsule", () => {
       },
       status: "failed" as const,
     };
-    const run = { localVersion: null, phase: "servers" as const, restartAt: null, machines: [] };
+    const run = { localVersion: null, phase: "servers" as const, machines: [] };
 
     expect(describeUpdateCapsule(run, [failed], null, 0).action).toBe("retry");
     expect(describeUpdateCapsule({ ...run, trackSwitch: true }, [failed], null, 0).action).toBe(

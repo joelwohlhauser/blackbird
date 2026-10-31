@@ -2896,6 +2896,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "mac") {
     const path = yield* Path.Path;
     const repoRoot = yield* RepoRoot;
+    const selfSigned =
+      signed &&
+      (yield* Config.String("BLACKBIRD_SELF_SIGNED").pipe(Config.withDefault("false"))) === "true";
+    if (signed) buildConfig.forceCodeSigning = true;
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
@@ -2931,6 +2935,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         },
       ],
       ...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
+      // Builder only discovers trusted identities. The hook replaces this sentinel with CSC_NAME.
+      ...(selfSigned ? { identity: "-", notarize: false } : {}),
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,
@@ -3873,7 +3879,12 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   const configuredMacPasskeySigning =
     options.platform === "mac" && options.signed
       ? yield* Effect.try({
-          try: () => resolveMacPasskeySigningConfiguration(loadRepoEnv({ repoRoot })),
+          try: () => {
+            const env = loadRepoEnv({ repoRoot });
+            return env.BLACKBIRD_SELF_SIGNED === "true"
+              ? undefined
+              : resolveMacPasskeySigningConfiguration(env);
+          },
           catch: MacPasskeySigningConfigurationResolutionError.fromCause,
         })
       : undefined;

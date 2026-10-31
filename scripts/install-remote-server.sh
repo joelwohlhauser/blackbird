@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Invoked over SSH by deploy:desktop for each remote host. Updates the existing shared service only.
+# Updates an existing shared service from a supplied server archive.
 # Usage: install-remote-server.sh <server-root> <archive-sha256> <upload-name> <host-label> <public-url>
 set -euo pipefail
 

@@ -1,0 +1,148 @@
+name: Blackbird release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: blackbird-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.repository == 'joelwohlhauser/blackbird' && github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      VERSION: 0.2.${{ github.run_number }}
+      T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --frozen-lockfile --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin
+
+      - name: Check packaging and update behavior
+        run: vp test run scripts/build-desktop-artifact.test.ts scripts/sign-macos.test.ts apps/web/src/components/sidebar/updateEverything.logic.test.ts apps/web/src/components/sidebar/updateEverythingRun.test.ts
+
+      - name: Import persistent signing identity
+        env:
+          CERTIFICATE: ${{ secrets.BLACKBIRD_MAC_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.BLACKBIRD_MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$CERTIFICATE"
+          test -n "$CERTIFICATE_PASSWORD"
+          keychain="$RUNNER_TEMP/blackbird-signing.keychain-db"
+          password="$(openssl rand -hex 32)"
+          echo "::add-mask::$password"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
+          rm "$RUNNER_TEMP/signing.p12"
+          echo "CSC_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          fingerprint=$(security find-certificate -c "Blackbird Release" -p "$keychain" | openssl x509 -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)
+          test -n "$fingerprint"
+          echo "SIGNING_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+
+      - name: Build signed DMG and update ZIP
+        env:
+          BLACKBIRD_SELF_SIGNED: "true"
+          CSC_NAME: Blackbird Release
+        run: node scripts/build-desktop-artifact.ts --platform mac --target dmg --arch arm64 --build-version "$VERSION" --output-dir release --signed
+
+      - name: Verify and launch packaged app
+        run: |
+          set -euo pipefail
+          test -s "release/Blackbird-$VERSION-arm64.dmg"
+          test -s "release/Blackbird-$VERSION-arm64.zip"
+          test -s release/latest-mac.yml
+          ditto -x -k "release/Blackbird-$VERSION-arm64.zip" "$RUNNER_TEMP/launch"
+          app="$RUNNER_TEMP/launch/Blackbird.app"
+          codesign --verify --deep --strict -R="certificate leaf = H\"$SIGNING_FINGERPRINT\"" "$app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$VERSION"
+          node scripts/smoke-desktop-app.ts --executable "$app/Contents/MacOS/Blackbird" --artifacts-dir "$RUNNER_TEMP/launch-check"
+
+      - name: Collect release assets
+        run: |
+          mkdir release-publish
+          cp release/*.dmg release/*.zip release/*.blockmap release/latest-mac.yml release-publish/
+          (cd release-publish && shasum -a 256 * > SHA256SUMS)
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: blackbird-mac-arm64
+          path: release-publish/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload failed launch diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: launch-diagnostics
+          path: ${{ runner.temp }}/launch-check/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Remove signing identity
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/blackbird-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/signing.p12"
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: 0.2.${{ github.run_number }}
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: blackbird-mac-arm64
+          path: release
+
+      - name: Publish complete release
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum --check SHA256SUMS
+          latest=$(gh api "repos/$GH_REPO/releases?per_page=100" --jq '[.[] | select(.draft == false) | .tag_name | select(test("^v0\\.2\\.[0-9]+$")) | split(".")[-1] | tonumber] | max // 0')
+          if (( latest >= GITHUB_RUN_NUMBER )); then
+            echo "A release at least this new is already published."
+            exit 0
+          fi
+          tag="v$VERSION"
+          if gh release view "$tag" --json isDraft --jq .isDraft > "$RUNNER_TEMP/release-draft" 2>/dev/null; then
+            test "$(cat "$RUNNER_TEMP/release-draft")" = true
+          else
+            printf 'Blackbird for macOS Apple Silicon.\n\nBuilt from commit `%s`.\n\nDownload the DMG for the first installation. Existing release installations can download updates from the sidebar and restart when ready.\n\nThis build is self-signed and is not notarized by Apple. macOS may require approval in Privacy & Security on first installation and may ask for Keychain access after an update.\n' "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes"
+            gh release create "$tag" --draft --target "$SOURCE_SHA" --title "Blackbird $VERSION" --notes-file "$RUNNER_TEMP/release-notes"
+          fi
+          gh release upload "$tag" ./* --clobber
+          gh release edit "$tag" --draft=false --latest

@@ -41,6 +41,7 @@ The left sidebar includes:
 - consistent full-width folder and chat rows;
 - an optional compact mode (Settings → General → Thread details) that hides
   each chat's third row with the worktree, branch, PR, and agent;
+- a desktop update indicator with download progress and an explicit restart action;
 - persistent open/closed state;
 - resizing while docked or while temporarily overlaid; and
 - edge-hover reveal when the sidebar is hidden, without reflowing the app.
@@ -55,8 +56,7 @@ waiting for approval or input — while Blackbird is not the active window.
 Every chat starts silent; the bell in the chat header turns notifications on
 for that chat. Each chat's choice is saved locally.
 Clicking the notification opens that chat. The
-installer's code-signing step makes this possible; see Development and
-deployment.
+release workflow's code-signing step makes this possible; see Development and deployment.
 
 ### Shared project settings and multiple machines
 
@@ -349,23 +349,13 @@ The web client is suitable for everyday UI development and browser testing.
 Use focused tests and typechecks for the code being changed; the inherited
 `AGENTS.md` contains the repository's detailed safety and verification rules.
 
-The maintainer deployment command updates the local macOS app and the remote servers configured in the installer:
+Every push to `main` runs the **Blackbird release** GitHub Actions workflow. It builds macOS Apple Silicon installers, signs them with the same persistent certificate, checks that the packaged app opens an existing conversation, and publishes the DMG, update ZIP, checksums, and update metadata as one GitHub release. Versions are `0.2.<workflow run number>`. The workflow can also be started manually from GitHub's Actions tab. Failed builds never replace the latest release.
 
-```bash
-pnpm deploy:desktop
-```
+Install the DMG from [GitHub Releases](https://github.com/joelwohlhauser/blackbird/releases) once. Subsequent versions appear in the left sidebar. Download the update there, then choose **Restart to update** when ready. Blackbird does not restart automatically. Existing locally deployed installations need this one-time installation to gain the release feed and persistent signing identity.
 
-The installer code-signs the staged app before installing it. Notification
-Center refuses apps that only carry Electron's raw linker signature, which is
-what an unsigned electron-builder build ships, so the agent notifications
-feature depends on this step. The installer prefers a Developer ID or Apple
-Development identity from the login keychain, whose stable identity lets the
-notification permission survive redeploys, and otherwise signs ad-hoc, which
-works but resets the permission on every deploy.
+These builds use a self-signed certificate and are not notarized by Apple. macOS may require approval in **System Settings > Privacy & Security** on first installation. It may also ask for Keychain access after an update. Release downloads and automatic update discovery require the release repository to be public; while it remains private, authorized maintainers can download releases through GitHub.
 
-The deployment script builds and signs the replacement first, uploads its bundled server to configured remote environments, installs dependencies, and restarts the existing service. A failed server health check restores the previous server build. Once those servers respond, the script replaces and relaunches the local app. Finish active remote turns before deploying; desktop and mobile briefly reconnect during the server restart.
-
-Routine deployments do not back up the database. The previous server build remains available, but restoring that build does not undo database migrations. Take a database backup separately when a migration needs one.
+Signing setup and recovery are documented in [Desktop releases](docs/operations/blackbird-releases.md). The personal deployment script has been removed. Desktop releases do not deploy remote services; migration of existing remote services to GitHub releases is separate work. Keep remote versions in mind when testing new desktop features against an older server.
 
 ## Git workflow
 

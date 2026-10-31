@@ -133,19 +133,19 @@ export function waitForServerUpdateHandoff(
 
 let decideRestart: ((restart: boolean) => void) | null = null;
 
-export function waitForUpdateRestart(delayMs: number): Promise<boolean> {
+export function waitForUpdateRestart(): Promise<boolean> {
   return new Promise((resolve) => {
     const decide = (restart: boolean) => {
-      clearTimeout(timer);
       decideRestart = null;
       resolve(restart);
     };
-    const timer = setTimeout(() => decide(true), delayMs);
     decideRestart = decide;
-    setUpdateEverythingRun(
-      (run) => run && { ...run, phase: "countdown", restartAt: Date.now() + delayMs },
-    );
+    setUpdateEverythingRun((run) => run && { ...run, phase: "awaiting-restart" });
   });
+}
+
+export function confirmUpdateRestart(): void {
+  decideRestart?.(true);
 }
 
 export function postponeUpdateRestart(): void {
@@ -250,7 +250,6 @@ function followHandedOffServers(servers: ReadonlyArray<HandedOffServer>): void {
   setUpdateEverythingRun(() => ({
     localVersion: null,
     phase: "servers",
-    restartAt: null,
     machines: servers.map((server) => ({
       environmentId: server.environmentId,
       label: server.label,
