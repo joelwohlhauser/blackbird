@@ -152,6 +152,22 @@ export const install = Effect.gen(function* () {
       yield* fs.rename(staging, shimPath);
       yield* logInfo("installed blackbird launcher", { shimPath });
     }
+    if (windows) {
+      const aliasPath = path.join(path.dirname(shimPath), "bb.cmd");
+      const aliasContent = `@echo off\r\nrem ${MARKER}\r\n"%~dp0blackbird.cmd" %*\r\n`;
+      const isLink = Option.isSome(yield* fs.readLink(aliasPath).pipe(Effect.option));
+      const existingAlias = yield* fs.readFileString(aliasPath).pipe(Effect.option);
+      const absent =
+        !isLink &&
+        Option.isNone(existingAlias) &&
+        !(yield* fs.exists(aliasPath).pipe(Effect.orElseSucceed(() => true)));
+      const outdated =
+        !isLink &&
+        Option.isSome(existingAlias) &&
+        existingAlias.value.includes(MARKER) &&
+        existingAlias.value !== aliasContent;
+      if (absent || outdated) yield* fs.writeFileString(aliasPath, aliasContent);
+    }
     return Option.some(shimPath);
   }).pipe(
     Effect.catchCause((cause) =>

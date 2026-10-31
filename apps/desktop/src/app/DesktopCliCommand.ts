@@ -61,6 +61,8 @@ export class DesktopCliCommand extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopCliCommand") {}
 
+const ALIAS = "bb";
+
 /** @public */
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -143,19 +145,32 @@ export const make = Effect.gen(function* () {
     Effect.orElseSucceed(() => false),
   );
 
-  const firstOnPath = Effect.gen(function* () {
+  const firstOnPath = Effect.fn("DesktopCliCommand.firstOnPath")(function* (name: string) {
     for (const directory of pathEntries(process.env.PATH, ":")) {
-      const candidate = path.join(directory, "blackbird");
+      const candidate = path.join(directory, name);
       if (yield* isExecutableFile(candidate)) return Option.some(candidate);
     }
     return Option.none<string>();
   });
 
-  const foreignFirstOnPath = Effect.gen(function* () {
+  const foreignFirstOnPath = Effect.fn("DesktopCliCommand.foreignFirstOnPath")(function* (
+    name: string,
+  ) {
     if (windows) return Option.none<string>();
-    const first = yield* firstOnPath;
+    const first = yield* firstOnPath(name);
     if (Option.isNone(first) || (yield* runsOurLauncher(first.value))) return Option.none<string>();
     return first;
+  });
+
+  const linkAlias = Effect.fn("DesktopCliCommand.linkAlias")(function* (directory: string) {
+    const alias = path.join(directory, ALIAS);
+    if (yield* isOurLink(alias)) {
+      if (Option.getOrUndefined(yield* fs.readLink(alias).pipe(Effect.option)) === launcher) return;
+      yield* fs.remove(alias).pipe(Effect.ignore);
+    } else if ((yield* exists(alias)) || Option.isSome(yield* foreignFirstOnPath(ALIAS))) {
+      return;
+    }
+    yield* fs.symlink(launcher, alias).pipe(Effect.ignore);
   });
 
   const installedAt = Effect.gen(function* () {
@@ -179,9 +194,9 @@ export const make = Effect.gen(function* () {
     }
     const launcherPath = (yield* exists(launcher)) ? launcher : null;
     const installed = yield* installedAt;
-    const shadowedBy = yield* foreignFirstOnPath;
+    const shadowedBy = yield* foreignFirstOnPath("blackbird");
     const shadow = Option.isSome(shadowedBy) ? { shadowedBy: shadowedBy.value } : {};
-    const first = yield* firstOnPath;
+    const first = yield* firstOnPath("blackbird");
     const onPath = windows
       ? Option.isSome(installed)
       : Option.isSome(first) && (yield* runsOurLauncher(first.value));
@@ -231,12 +246,15 @@ export const make = Effect.gen(function* () {
     const existing = yield* installedAt;
     if (Option.isSome(existing)) {
       const target = yield* fs.readLink(existing.value).pipe(Effect.option);
-      if (Option.getOrUndefined(target) === launcher) return yield* state;
+      if (Option.getOrUndefined(target) === launcher) {
+        yield* linkAlias(path.dirname(existing.value));
+        return yield* state;
+      }
       yield* fs
         .remove(existing.value)
         .pipe(Effect.mapError(() => fail(`Could not replace ${existing.value}.`)));
     }
-    const shadowedBy = yield* foreignFirstOnPath;
+    const shadowedBy = yield* foreignFirstOnPath("blackbird");
     if (Option.isSome(shadowedBy)) {
       return yield* fail(
         `Another blackbird at ${shadowedBy.value} runs first in a new terminal. Remove it, or run the launcher directly at ${launcher}.`,
@@ -260,7 +278,10 @@ export const make = Effect.gen(function* () {
         Effect.as(true),
         Effect.orElseSucceed(() => false),
       );
-      if (linked) return yield* state;
+      if (linked) {
+        yield* linkAlias(directory);
+        return yield* state;
+      }
     }
     return yield* fail(
       `Another blackbird command is already installed, or no folder on your PATH is writable. Run the launcher directly at ${launcher}.`,
@@ -278,9 +299,10 @@ export const make = Effect.gen(function* () {
       return yield* state;
     }
     for (const directory of unixCandidates(environment.homeDirectory, environment.platform)) {
-      const link = path.join(directory, "blackbird");
-      if (yield* isOurLink(link)) {
-        yield* fs.remove(link).pipe(Effect.mapError(() => fail(`Could not remove ${link}.`)));
+      for (const link of [path.join(directory, "blackbird"), path.join(directory, ALIAS)]) {
+        if (yield* isOurLink(link)) {
+          yield* fs.remove(link).pipe(Effect.mapError(() => fail(`Could not remove ${link}.`)));
+        }
       }
     }
     return yield* state;

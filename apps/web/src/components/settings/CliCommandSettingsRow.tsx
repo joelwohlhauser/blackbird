@@ -40,7 +40,7 @@ export function CliCommandSettingsRow() {
   const description = state.shadowedBy
     ? `Another blackbird at ${state.shadowedBy} runs first in a new terminal. Remove it to use Blackbird's.`
     : !installed
-      ? "Run Blackbird's CLI as `blackbird` from any terminal."
+      ? "Open a folder in Blackbird with `blackbird .` or `bb .` from any terminal."
       : state.onPath
         ? `Installed at ${state.installedPath}. Open a new terminal to use it.`
         : `Installed at ${state.installedPath}, which is not on your PATH yet. Add its folder to your PATH to run \`blackbird\`.`;

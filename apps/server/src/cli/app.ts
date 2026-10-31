@@ -269,6 +269,22 @@ const runAppCommand = Effect.fn("cli.app")(function* (flags: {
   yield* Console.log(`Opened ${workspaceRoot} in T3 Code.`);
 });
 
+export function withImplicitAppCommand(
+  args: ReadonlyArray<string>,
+  commandNames: ReadonlySet<string>,
+  isDirectory: (path: string) => boolean,
+): ReadonlyArray<string> {
+  const first = args[0];
+  if (
+    first === undefined ||
+    first.startsWith("-") ||
+    commandNames.has(first) ||
+    !isDirectory(first)
+  )
+    return args;
+  return ["app", ...args];
+}
+
 export const appCommand = Command.make("app", {
   baseDir: baseDirFlag,
   workspaceRoot: Argument.String("path").pipe(

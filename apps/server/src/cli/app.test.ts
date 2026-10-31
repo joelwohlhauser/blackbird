@@ -20,6 +20,7 @@ import { Command } from "effect/cli";
 import { describe, expect } from "vite-plus/test";
 
 import { makeCli } from "../binCli.ts";
+import { withImplicitAppCommand } from "./app.ts";
 import { PersistedServerRuntimeState } from "../serverRuntimeState.ts";
 
 const liveProcess = Effect.acquireRelease(
@@ -217,6 +218,24 @@ describe("t3 server command safety", () => {
 });
 
 describe("t3 app", () => {
+  it("runs a bare directory argument as the app command", () => {
+    const commandNames = new Set(["app", "project"]);
+    const isDirectory = (path: string) => [".", "project", "../site"].includes(path);
+    const rewrite = (args: ReadonlyArray<string>) =>
+      withImplicitAppCommand(args, commandNames, isDirectory);
+    assert.deepStrictEqual(rewrite(["."]), ["app", "."]);
+    assert.deepStrictEqual(rewrite(["../site", "--base-dir", "/tmp/x"]), [
+      "app",
+      "../site",
+      "--base-dir",
+      "/tmp/x",
+    ]);
+    assert.deepStrictEqual(rewrite(["project", "list"]), ["project", "list"]);
+    assert.deepStrictEqual(rewrite(["--version"]), ["--version"]);
+    assert.deepStrictEqual(rewrite(["missing"]), ["missing"]);
+    assert.deepStrictEqual(rewrite([]), []);
+  });
+
   it.live.each(["permissions", "owner", "symlink", "missing owner"] as const)(
     "rejects unsafe %s on the socket directory before sending",
     (unsafe) =>

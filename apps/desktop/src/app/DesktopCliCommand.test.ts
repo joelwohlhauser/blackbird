@@ -119,13 +119,34 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       expect(installed.installedPath).toBe(link);
       expect(installed.launcherPath).toBe(path.join(home, ".blackbird", "bin", "blackbird"));
       expect(yield* fs.readLink(link)).toBe(path.join(home, ".blackbird", "bin", "blackbird"));
+      const alias = path.join(home, ".local", "bin", "bb");
+      expect(yield* fs.readLink(alias)).toBe(path.join(home, ".blackbird", "bin", "blackbird"));
       expect((yield* command.install).installedPath).toBe(link);
 
       expect((yield* command.uninstall).installedPath).toBeNull();
       expect(yield* fs.exists(link)).toBe(false);
+      expect(yield* fs.exists(alias)).toBe(false);
       expect(yield* fs.exists(path.join(home, ".blackbird", "bin", "blackbird"))).toBe(true);
       expect(yield* fs.readLink(upstream)).toBe(upstreamTarget);
       expect(yield* fs.readFileString(upstreamTarget)).toBe(upstreamLauncher);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("leaves a bb command that runs first in a new terminal alone", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped();
+      const command = yield* commandIn({ home });
+      const theirs = path.join(home, "tools", "bb");
+      yield* fs.makeDirectory(path.dirname(theirs), { recursive: true });
+      yield* fs.writeFileString(theirs, "#!/bin/sh\necho babashka\n", { mode: 0o755 });
+      process.env.PATH = path.dirname(theirs);
+
+      yield* command.install;
+      expect(yield* fs.exists(path.join(home, ".local", "bin", "bb"))).toBe(false);
+      yield* command.uninstall;
+      expect(yield* fs.readFileString(theirs)).toBe("#!/bin/sh\necho babashka\n");
     }).pipe(Effect.scoped),
   );
 
@@ -169,6 +190,9 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       expect((yield* after.state).installedPath).toBe(link);
       expect((yield* after.install).installedPath).toBe(link);
       expect(yield* fs.readLink(link!)).toBe(path.join(home, "new-blackbird", "bin", "blackbird"));
+      expect(yield* fs.readLink(path.join(path.dirname(link!), "bb"))).toBe(
+        path.join(home, "new-blackbird", "bin", "blackbird"),
+      );
       yield* after.uninstall;
       expect(yield* fs.exists(path.join(home, ".local", "bin", "blackbird"))).toBe(false);
       expect(yield* fs.exists(path.join(home, "bin", "blackbird"))).toBe(false);
