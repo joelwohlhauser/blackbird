@@ -68,7 +68,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   return (
     <div
       className={cn(
-        "relative flex h-[var(--workspace-topbar-height)] shrink-0 flex-row items-center gap-2 pr-3",
+        "relative flex h-[var(--workspace-topbar-height)] shrink-0 flex-row items-center gap-2 pr-2",
         isElectron && "drag-region",
       )}
     >
@@ -81,18 +81,10 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
         />
       </div>
       <div className="relative z-10 flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden py-0.5">
-        <div className="flex shrink-0 items-center gap-1">
-          <SidebarBrand
-            onBackdrop={backdropVariant !== null}
-            {...(onBrandClick ? { onClick: onBrandClick } : {})}
-          />
-          {isElectron ? (
-            <div className="hidden items-center md:flex">
-              <HistoryNavigationButton direction="back" onBackdrop={backdropVariant !== null} />
-              <HistoryNavigationButton direction="forward" onBackdrop={backdropVariant !== null} />
-            </div>
-          ) : null}
-        </div>
+        <SidebarBrand
+          onBackdrop={backdropVariant !== null}
+          {...(onBrandClick ? { onClick: onBrandClick } : {})}
+        />
         {pillLabel ? (
           <div className="ml-1 flex h-7 items-center">
             <Badge data-environment-identification="pill" size="sm" variant="secondary">
@@ -101,6 +93,12 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
           </div>
         ) : null}
       </div>
+      {isElectron ? (
+        <div className="relative z-10 hidden shrink-0 items-center md:flex">
+          <HistoryNavigationButton direction="back" onBackdrop={backdropVariant !== null} />
+          <HistoryNavigationButton direction="forward" onBackdrop={backdropVariant !== null} />
+        </div>
+      ) : null}
     </div>
   );
 });
@@ -121,13 +119,13 @@ export function SidebarBrandWidthProbe({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none invisible fixed top-0 left-0 flex w-max border-r border-transparent pr-3"
+      className="pointer-events-none invisible fixed top-0 left-0 flex w-max gap-2 border-r border-transparent pr-2"
       ref={observeWidth}
     >
-      <div className="ml-[var(--workspace-titlebar-content-left)] flex gap-1">
+      <div className="ml-[var(--workspace-titlebar-content-left)] flex">
         <SidebarBrandMark onBackdrop={false} />
-        {isElectron ? <div className="w-[calc(2*var(--workspace-titlebar-control-size))]" /> : null}
       </div>
+      {isElectron ? <div className="w-[calc(2*var(--workspace-titlebar-control-size))]" /> : null}
     </div>
   );
 }
