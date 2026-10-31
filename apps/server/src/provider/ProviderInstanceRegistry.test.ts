@@ -55,7 +55,9 @@ vi.mock("@anthropic-ai/claude-agent-sdk", { spy: true });
 const layerTestHttpClient = Layer.succeed(
   HttpClient.HttpClient,
   HttpClient.make((request) =>
-    Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ version: "0.0.0" }))),
+    Effect.succeed(
+      HttpClientResponse.fromWeb(request, Response.json({ "dist-tags": { latest: "0.0.0" } })),
+    ),
   ),
 );
 
@@ -613,7 +615,10 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
             yield* fs.writeFileString(marker, "redeemed").pipe(Effect.orDie);
             return HttpClientResponse.fromWeb(request, Response.json({ result: claim.result }));
           }
-          return HttpClientResponse.fromWeb(request, Response.json({ version: "0.0.0" }));
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ "dist-tags": { latest: "0.0.0" } }),
+          );
         }),
       );
       const instanceId = ProviderInstanceId.make("claude_reset");

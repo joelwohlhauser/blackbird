@@ -95,7 +95,7 @@ export interface PackageManagedProviderMaintenanceDefinition {
 }
 
 const NpmLatestVersionResponse = Schema.Struct({
-  version: Schema.optional(Schema.String),
+  "dist-tags": Schema.Struct({ latest: Schema.optional(Schema.String) }),
 });
 
 function nonEmptyString(value: unknown): string | null {
@@ -826,8 +826,8 @@ export function createProviderVersionAdvisory(input: {
 const fetchNpmLatestVersion = Effect.fn("fetchNpmLatestVersion")(function* (packageName: string) {
   const client = yield* HttpClient.HttpClient;
   const request = HttpClientRequest.get(
-    `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`,
-  ).pipe(HttpClientRequest.setHeader("accept", "application/json"));
+    `https://registry.npmjs.org/${encodeURIComponent(packageName)}`,
+  ).pipe(HttpClientRequest.setHeader("accept", "application/vnd.npm.install-v1+json"));
   // The deadline covers the body too: headers can arrive before the JSON stalls.
   const payload = yield* client.execute(request).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
@@ -835,7 +835,7 @@ const fetchNpmLatestVersion = Effect.fn("fetchNpmLatestVersion")(function* (pack
     Effect.timeoutOption(LATEST_VERSION_TIMEOUT_MS),
     Effect.orElseSucceed(() => Option.none()),
   );
-  return Option.isSome(payload) ? nonEmptyString(payload.value.version) : null;
+  return Option.isSome(payload) ? nonEmptyString(payload.value["dist-tags"].latest) : null;
 });
 
 /** The installer's own answer is cached apart from the npm registry entry. */

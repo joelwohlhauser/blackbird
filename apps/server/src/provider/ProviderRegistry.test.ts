@@ -113,7 +113,9 @@ const layerUnusedMutator = Layer.mock(
 const layerTestHttpClient = Layer.succeed(
   HttpClient.HttpClient,
   HttpClient.make((request) =>
-    Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ version: "0.0.0" }))),
+    Effect.succeed(
+      HttpClientResponse.fromWeb(request, Response.json({ "dist-tags": { latest: "0.0.0" } })),
+    ),
   ),
 ).pipe(Layer.provideMerge(ModelManifest.layerTest));
 

@@ -143,17 +143,33 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
     ),
   );
 
-  it.effect("reads the latest version from the npm registry", () =>
-    resolveLatestProviderVersion(manualPackageTool).pipe(
+  it.effect("uses npm's latest tag when the version endpoint disagrees", () =>
+    enrichProviderSnapshotWithVersionAdvisory(
+      { ...installedPackageToolProvider, version: "1.2.3" },
+      manualPackageTool,
+    ).pipe(
       Effect.provide(ProviderLatestVersions.layer),
       Effect.provideService(
         HttpClient.HttpClient,
         HttpClient.make((request) =>
-          Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ version: "1.2.3" }))),
+          Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              Response.json(
+                request.url.endsWith("/latest")
+                  ? { version: "1.2.4" }
+                  : { "dist-tags": { latest: "1.2.3", next: "1.2.4" } },
+              ),
+            ),
+          ),
         ),
       ),
-      Effect.map((version) => {
-        expect(version).toBe("1.2.3");
+      Effect.map((provider) => {
+        expect(provider.versionAdvisory).toMatchObject({
+          status: "current",
+          currentVersion: "1.2.3",
+          latestVersion: "1.2.3",
+        });
       }),
     ),
   );

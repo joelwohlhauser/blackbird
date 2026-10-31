@@ -97,7 +97,10 @@ const layerLatestVersionHttpClient = (version: string) =>
       Effect.succeed(
         HttpClientResponse.fromWeb(
           request,
-          Response.json({ version }, { headers: { "content-type": "application/json" } }),
+          Response.json(
+            { "dist-tags": { latest: version } },
+            { headers: { "content-type": "application/json" } },
+          ),
         ),
       ),
     ),
