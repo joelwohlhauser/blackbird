@@ -304,6 +304,13 @@ export const make = Effect.gen(function* () {
   const projectScripts = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
   // Repeated thread.settled retains settledAt; run the action only once per settlement.
   const settleActionRunAt = new Map<ThreadId, number>();
+  const pendingAutoSettlements = new Map<ThreadId, number>();
+  const fullyClosedSettlements = new Map<ThreadId, number>();
+  const adjustPendingAutoSettlements = (threadId: ThreadId, delta: 1 | -1) => {
+    const count = (pendingAutoSettlements.get(threadId) ?? 0) + delta;
+    if (count > 0) pendingAutoSettlements.set(threadId, count);
+    else pendingAutoSettlements.delete(threadId);
+  };
 
   const sweep = Effect.fn("ThreadSettlementServiceV2.sweep")(function* (
     mergedPullRequest: PullRequestService.PullRequestMergeEvent | null,
@@ -340,13 +347,18 @@ export const make = Effect.gen(function* () {
         });
         if (settledAt === null) return thread;
         const uuid = yield* crypto.randomUUIDv4();
-        yield* orchestrator.dispatch({
-          type: "thread.auto-settle",
-          commandId: CommandId.make(`server:auto-settle:${thread.id}:${uuid}`),
-          threadId: thread.id,
-          snapshotAt: thread.updatedAt,
-          settledAt,
-        });
+        adjustPendingAutoSettlements(thread.id, 1);
+        yield* orchestrator
+          .dispatch({
+            type: "thread.auto-settle",
+            commandId: CommandId.make(`server:auto-settle:${thread.id}:${uuid}`),
+            threadId: thread.id,
+            snapshotAt: thread.updatedAt,
+            settledAt,
+          })
+          .pipe(
+            Effect.onError(() => Effect.sync(() => adjustPendingAutoSettlements(thread.id, -1))),
+          );
         return null;
       },
       (effect, thread) =>
@@ -567,10 +579,15 @@ export const make = Effect.gen(function* () {
 
   // Skip settle scripts in shared checkouts where other threads may still work.
   const cleanUpSettledThread = Effect.fn("ThreadSettlementServiceV2.cleanUpSettledThread")(
-    function* (threadId: ThreadId) {
+    function* (threadId: ThreadId, automatic: boolean) {
       const settled = yield* projections.getThread(threadId);
       if (settled.settledOverride !== "settled") return;
-      yield* terminals.closeIdle({ threadId });
+      const settlementMs = toMillis(settled.settledAt);
+      const closeAll = !automatic && fullyClosedSettlements.get(threadId) !== settlementMs;
+      if (closeAll && settlementMs !== null) fullyClosedSettlements.set(threadId, settlementMs);
+      yield* closeAll
+        ? terminals.close({ threadId, deleteHistory: true })
+        : terminals.closeIdle({ threadId });
       const worktreePath = settled.worktreePath;
       if (worktreePath === null || !(yield* fileSystem.exists(worktreePath))) return;
       // Recheck after closing and worktree I/O; re-engaged threads must not be cleaned up.
@@ -605,8 +622,11 @@ export const make = Effect.gen(function* () {
 
   const processEvent = (event: OrchestrationV2DomainEvent) => {
     switch (event.type) {
-      case "thread.settled":
-        return cleanUpSettledThread(event.threadId);
+      case "thread.settled": {
+        const automatic = pendingAutoSettlements.has(event.threadId);
+        if (automatic) adjustPendingAutoSettlements(event.threadId, -1);
+        return cleanUpSettledThread(event.threadId, automatic);
+      }
       case "thread.pull-request-link-updated":
       case "thread.pull-request-synced":
       case "provider-session.detached":

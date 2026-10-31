@@ -546,7 +546,7 @@ interface HarnessOptions {
   readonly onScriptRun?: (
     input: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput,
   ) => Effect.Effect<void>;
-  readonly onCloseIdle?: () => Effect.Effect<void>;
+  readonly onCloseTerminals?: () => Effect.Effect<void>;
   readonly currentThreads?: ReadonlyArray<OrchestrationV2AppThread>;
 }
 
@@ -573,7 +573,10 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
   const summaryRecovery = yield* Ref.make<ReadonlyArray<boolean | undefined>>([]);
   const invalidatedCwds = yield* Ref.make<ReadonlyArray<string>>([]);
   const domainEvents = yield* PubSub.unbounded<OrchestrationV2DomainEvent>();
-  const closedIdle = yield* Queue.unbounded<{ readonly threadId: string }>();
+  const closedTerminals = yield* Queue.unbounded<{
+    readonly threadId: string;
+    readonly idleOnly: boolean;
+  }>();
   const scriptRuns =
     yield* Queue.unbounded<ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput>();
 
@@ -664,8 +667,14 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
       dispatch,
     }),
     Layer.mock(TerminalManager.TerminalManager)({
-      closeIdle: (input) =>
-        Queue.offer(closedIdle, input).pipe(Effect.andThen(options.onCloseIdle?.() ?? Effect.void)),
+      closeIdle: ({ threadId }) =>
+        Queue.offer(closedTerminals, { threadId, idleOnly: true }).pipe(
+          Effect.andThen(options.onCloseTerminals?.() ?? Effect.void),
+        ),
+      close: ({ threadId }) =>
+        Queue.offer(closedTerminals, { threadId, idleOnly: false }).pipe(
+          Effect.andThen(options.onCloseTerminals?.() ?? Effect.void),
+        ),
     }),
     Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
       runForThread: (input) =>
@@ -703,7 +712,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
     summaryCalls,
     summaryRecovery,
     invalidatedCwds,
-    closedIdle,
+    closedTerminals,
     scriptRuns,
     publishEvent: (event: OrchestrationV2DomainEvent) => PubSub.publish(domainEvents, event),
     updateSettings,
@@ -1300,7 +1309,68 @@ describe("ThreadSettlementServiceV2 terminals", () => {
           yield* startHarness(service, fixture.activation, fixture.snapshotReads);
           yield* fixture.publishEvent(settledEvent(settled));
           yield* fixture.publishEvent(settledEvent(marker));
-          assert.deepStrictEqual(yield* Queue.take(fixture.closedIdle), { threadId: marker.id });
+          assert.deepStrictEqual(yield* Queue.take(fixture.closedTerminals), {
+            threadId: marker.id,
+            idleOnly: false,
+          });
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
+
+  it.effect("closes only idle terminals of a thread it settled automatically", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(NOW));
+        const idle = makeThread("auto-settled-thread", {
+          pullRequests: [persistedLink("open", DateTime.makeUnsafe("2026-08-20T00:00:00.000Z"))],
+        });
+        const settled = appThread("auto-settled-thread", "settled");
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot([idle]),
+          currentThreads: [settled],
+          settings: {
+            ...DEFAULT_SERVER_SETTINGS,
+            sidebarAutoSettleAfterDays: 3,
+            sidebarAutoSettleKeepPullRequests: false,
+          },
+        });
+
+        yield* Effect.gen(function* () {
+          const service = yield* ThreadSettlementService.ThreadSettlementServiceV2;
+          yield* startHarness(service, fixture.activation, fixture.snapshotReads);
+          yield* fixture.publishEvent(settledEvent(settled));
+          assert.deepStrictEqual(yield* Queue.take(fixture.closedTerminals), {
+            threadId: settled.id,
+            idleOnly: true,
+          });
+        }).pipe(Effect.provide(fixture.layer));
+      }),
+    ),
+  );
+
+  it.effect("closes every terminal only once per explicit settlement", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const settled = appThread("resettled-thread", "settled");
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot([]),
+          currentThreads: [settled],
+        });
+
+        yield* Effect.gen(function* () {
+          const service = yield* ThreadSettlementService.ThreadSettlementServiceV2;
+          yield* startHarness(service, fixture.activation, fixture.snapshotReads);
+          yield* fixture.publishEvent(settledEvent(settled));
+          yield* fixture.publishEvent(settledEvent(settled));
+          assert.deepStrictEqual(yield* Queue.take(fixture.closedTerminals), {
+            threadId: settled.id,
+            idleOnly: false,
+          });
+          assert.deepStrictEqual(yield* Queue.take(fixture.closedTerminals), {
+            threadId: settled.id,
+            idleOnly: true,
+          });
         }).pipe(Effect.provide(fixture.layer));
       }),
     ),
@@ -1343,7 +1413,7 @@ describe("ThreadSettlementServiceV2 terminals", () => {
           snapshot: makeSnapshot([]),
           currentThreads,
           existingWorktreePaths: ["/worktrees/reengaging", "/worktrees/marker"],
-          onCloseIdle: () =>
+          onCloseTerminals: () =>
             Effect.sync(() => {
               currentThreads[0] = { ...settled, settledOverride: "active" };
             }),

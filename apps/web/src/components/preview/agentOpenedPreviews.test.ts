@@ -27,8 +27,11 @@ import {
   startAgentOpenedPreviews,
 } from "./agentOpenedPreviews";
 
+const threadShell = vi.hoisted(() => ({ settled: false }));
+
 vi.mock("../../state/entities", () => ({
   readEnvironmentSupportsServerBrowser: () => true,
+  readThreadShell: () => (threadShell.settled ? { settledOverride: "settled" } : null),
 }));
 
 const ref = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-1"));
@@ -73,6 +76,7 @@ const deviceState = (input: {
 const floating = { sheetLayout: false, autoShowFloatingPreview: true };
 
 function setup() {
+  threadShell.settled = false;
   resetPreviewStateForTests();
   resetDeviceSessionBaselinesForTests();
   usePreviewMiniPlayerStore.setState({ byThreadKey: {} });
@@ -275,6 +279,14 @@ describe("followPreviewSessions", () => {
 
     followPreviewSessions(ref, previewState([snapshot("tab_saved"), snapshot("tab_a")]));
     expect(browserTabs()).toEqual(["browser:tab_saved", "browser:tab_a"]);
+  });
+
+  it("drops saved tabs of a settled thread instead of restoring them", () => {
+    setup();
+    useRightPanelStore.getState().openBrowser(ref, "tab_saved");
+    threadShell.settled = true;
+    followPreviewSessions(ref, previewState([snapshot("tab_a")]));
+    expect(browserTabs()).toEqual(["browser:tab_a"]);
   });
 
   it("waits for the first server list before treating missing sessions as closed", () => {

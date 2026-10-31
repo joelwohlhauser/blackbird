@@ -27,6 +27,7 @@ import { selectThreadRightPanelState, useRightPanelStore } from "../../rightPane
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../../rightPanelLayout";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { deviceEnvironment } from "../../state/device";
+import { readThreadShell } from "../../state/entities";
 import { readEnvironmentSupportsServerBrowser } from "../../state/entities";
 import { environmentSummaries } from "../../state/presentation";
 
@@ -63,11 +64,14 @@ export function revealServerTabs(
 export function followPreviewSessions(threadRef: ScopedThreadRef, state: ThreadPreviewState): void {
   if (readEnvironmentSupportsServerBrowser(threadRef.environmentId) && !state.listLoaded) return;
   const panel = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, threadRef);
-  const restoring = [...panel.surfaces, ...panel.mainSurfaces].some(
-    (surface) =>
-      (surface.kind === "preview" || surface.kind === "linear" || surface.kind === "github-pr") &&
-      (surface.resourceId === null || !state.sessions[surface.resourceId]),
-  );
+  const settled = readThreadShell(threadRef)?.settledOverride === "settled";
+  const restoring =
+    !settled &&
+    [...panel.surfaces, ...panel.mainSurfaces].some(
+      (surface) =>
+        (surface.kind === "preview" || surface.kind === "linear" || surface.kind === "github-pr") &&
+        (surface.resourceId === null || !state.sessions[surface.resourceId]),
+    );
   const sessions = Object.values(state.sessions);
   if (!restoring) {
     useRightPanelStore.getState().reconcileBrowserSurfaces(

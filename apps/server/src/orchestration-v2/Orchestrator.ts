@@ -12971,9 +12971,20 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           effects: plans.flatMap((plan) => plan.effects),
         };
       }
+      case "thread.settle":
+        yield* dispatchThreadMutation(command, events, effects);
+        yield* Ref.update(effects, (existing) => [
+          ...existing,
+          {
+            id: `effect:${command.commandId}:preview.cleanup`,
+            commandId: command.commandId,
+            threadId: command.threadId,
+            request: { type: "preview.cleanup" },
+          } satisfies PendingOrchestrationEffectV2,
+        ]);
+        break;
       case "thread.archive":
       case "thread.unarchive":
-      case "thread.settle":
       case "thread.unsettle":
       case "thread.snooze":
       case "thread.unsnooze":

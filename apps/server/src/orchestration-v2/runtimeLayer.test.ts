@@ -2621,6 +2621,23 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         archivedShell.archivedThreads.map((thread) => thread.id),
         threadId,
       );
+      const outbox = yield* EffectOutbox.EffectOutboxV2;
+      const workspaceCleanups = (commandId: string) =>
+        outbox.listByCommandId(CommandId.make(commandId)).pipe(
+          Effect.map((effects) =>
+            effects
+              .map((effect) => effect.request.type)
+              .filter((type) => type === "terminal.cleanup" || type === "preview.cleanup")
+              .toSorted(),
+          ),
+        );
+      assert.deepEqual(yield* workspaceCleanups("runtime-layer-lifecycle-settle"), [
+        "preview.cleanup",
+      ]);
+      assert.deepEqual(yield* workspaceCleanups("runtime-layer-lifecycle-archive"), [
+        "terminal.cleanup",
+      ]);
+      assert.deepEqual(yield* workspaceCleanups("runtime-layer-lifecycle-auto-settle"), []);
       const activeOnlyShell = yield* orchestrator.getShellSnapshot({ location: "active" });
       assert.notInclude(
         activeOnlyShell.threads.map((thread) => thread.id),

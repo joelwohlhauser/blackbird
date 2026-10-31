@@ -1272,6 +1272,8 @@ export default function ChatView(props: ChatViewProps) {
       (surface.kind === "preview" || surface.kind === "linear" || surface.kind === "github-pr") &&
       (surface.resourceId === null || !activePreviewState.sessions[surface.resourceId]),
   );
+  const activeThreadSettled = serverThread?.settledOverride === "settled";
+  const restorablePreviewSurfaces = activeThreadSettled ? [] : missingPreviewSurfaces;
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- marks restored browser surfaces ready only after their server sessions arrive
   useEffect(() => {
@@ -1279,7 +1281,7 @@ export default function ChatView(props: ChatViewProps) {
       !activeThreadRef ||
       !previewSessionsReady ||
       activePreviewState.serverEpoch === null ||
-      missingPreviewSurfaces.length > 0
+      restorablePreviewSurfaces.length > 0
     ) {
       return;
     }
@@ -1299,7 +1301,7 @@ export default function ChatView(props: ChatViewProps) {
     activePreviewState.serverEpoch,
     activePreviewState.sessions,
     activeThreadRef,
-    missingPreviewSurfaces.length,
+    restorablePreviewSurfaces.length,
     previewSessionsReady,
   ]);
 
@@ -1321,7 +1323,7 @@ export default function ChatView(props: ChatViewProps) {
     ) {
       return;
     }
-    for (const surface of missingPreviewSurfaces) {
+    for (const surface of restorablePreviewSurfaces) {
       if (previewSurfaceRestoreInFlightRef.current.has(surface.id)) continue;
       previewSurfaceRestoreInFlightRef.current.add(surface.id);
       void openPreviewSession({
@@ -1343,7 +1345,7 @@ export default function ChatView(props: ChatViewProps) {
     activePreviewState.serverEpoch,
     activeThreadRef,
     browserAvailable,
-    missingPreviewSurfaces,
+    restorablePreviewSurfaces,
     openPreview,
     previewSessionsReady,
   ]);
@@ -2276,7 +2278,13 @@ export default function ChatView(props: ChatViewProps) {
   const createGitHubPullRequestSurfaceStable = useStableCallback(createGitHubPullRequestSurface);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens and pins the attached issue in the preview server
   useEffect(() => {
-    if (!activeThreadRef || !attachedLinearIssueId || !canOperatePreview || !browserAvailable) {
+    if (
+      !activeThreadRef ||
+      !attachedLinearIssueId ||
+      activeThreadSettled ||
+      !canOperatePreview ||
+      !browserAvailable
+    ) {
       return;
     }
 
@@ -2303,6 +2311,7 @@ export default function ChatView(props: ChatViewProps) {
     });
   }, [
     activeThreadRef,
+    activeThreadSettled,
     attachedBranch,
     attachedLinearIssueId,
     browserAvailable,
