@@ -44,6 +44,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/sql/SqlClient";
+import { HttpClient } from "effect/http";
 
 import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
@@ -123,6 +124,23 @@ export class ScheduledTaskWebhookOrigin extends Context.Reference<Effect.Effect<
     defaultValue: () => Effect.succeed({ relayHookBaseUrl: null }),
   },
 ) {}
+
+export class ScheduledTaskNetworkCheck extends Context.Reference<Effect.Effect<boolean>>(
+  "t3/scheduledTasks/ScheduledTaskNetworkCheck",
+  { defaultValue: () => Effect.succeed(true) },
+) {}
+
+export const layerNetworkCheck = Layer.effect(
+  ScheduledTaskNetworkCheck,
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return client.head("https://api.anthropic.com").pipe(
+      Effect.timeout("5 seconds"),
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+  }),
+);
 
 class WebhookDeliverySkipped extends Data.TaggedError("WebhookDeliverySkipped")<{
   readonly reason: string;
@@ -427,6 +445,7 @@ export const layer = Layer.effect(
     const scheduler = yield* Scheduler.Scheduler;
     const serverSettings = yield* ServerSettings.ServerSettingsService;
     const readWebhookOrigin = yield* ScheduledTaskWebhookOrigin;
+    const isOnline = yield* ScheduledTaskNetworkCheck;
     const webhookPermits = yield* Ref.make<ReadonlyMap<ScheduledTaskId, Semaphore.Semaphore>>(
       new Map(),
     );
@@ -1102,6 +1121,7 @@ export const layer = Layer.effect(
         }
         return;
       }
+      if (!(yield* isOnline)) return;
       const tasks = yield* listDueTasks(now).pipe(
         Effect.mapError((cause) => taskError("Could not list schedule tasks.", { cause })),
       );

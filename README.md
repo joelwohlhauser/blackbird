@@ -308,6 +308,8 @@ Agents drive the same browser tabs you see with upstream T3 Code's `preview_*` M
 
 **Catch up missed automations**, next to Scheduled tasks in Settings, is off by default. It is set per environment, with an on/off override per project. When it is on, a fixed-time task that was missed while the Mac slept or Blackbird was closed runs once when the app wakes, then returns to its normal schedule. Missed days aren't replayed one by one, and time a task spent paused doesn't count as missed. The task row says what happened, for example "Caught up at 10:27 AM · 11 missed runs since Thu, Oct 15". When it is off, a fixed-time run more than 10 minutes late is skipped.
 
+Scheduled tasks don't start while the machine is offline, because their runs would only fail. A due task waits until a request to `api.anthropic.com` gets an answer, checked every 5 seconds, and then starts. Time spent waiting counts as late for fixed-time tasks. Run now and webhook deliveries start without this check.
+
 ### Linear, GitHub, and links
 
 The normal right panel has browser-backed integration tabs:

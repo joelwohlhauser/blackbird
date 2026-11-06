@@ -142,6 +142,7 @@ import * as HeldHooksWaker from "./relay/HeldHooksWaker.ts";
 import * as McpOAuth from "./auth/McpOAuth.ts";
 import * as McpOAuthHttp from "./auth/mcpOAuthHttp.ts";
 import {
+  layerNetworkCheck as layerScheduledTaskNetworkCheck,
   relayHookBaseUrl,
   ScheduledTaskWebhookOrigin,
 } from "./scheduledTasks/ScheduledTaskService.ts";
@@ -527,6 +528,7 @@ const layerScheduledTaskWebhookOrigin = Layer.effect(
 const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
   Layer.provide(AgentInstructions.layer),
   Layer.provide(layerScheduledTaskWebhookOrigin),
+  Layer.provide(layerScheduledTaskNetworkCheck.pipe(Layer.provide(FetchHttpClient.layer))),
   Layer.provide(layerCheckpointStore),
   Layer.provide(layerGitWorkflow),
   Layer.provide(

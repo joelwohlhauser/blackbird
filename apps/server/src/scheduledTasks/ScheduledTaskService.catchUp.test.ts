@@ -95,6 +95,7 @@ const build = (
   settings: Effect.Effect<ServerSettingsValue>,
   launch: ThreadLaunchService.ThreadLaunchService["Service"]["launch"],
   sendToThread?: ThreadManagementService.ThreadManagementService["Service"]["sendToThread"],
+  online = true,
 ) =>
   Layer.build(
     ScheduledTaskService.layer.pipe(
@@ -112,6 +113,7 @@ const build = (
             isScratchProject: () => Effect.succeed(false),
           }),
           Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.succeed(ScheduledTaskService.ScheduledTaskNetworkCheck, Effect.succeed(online)),
         ),
       ),
     ),
@@ -215,6 +217,29 @@ it.effect("keeps paused, interval and interrupted-run recovery behavior", () =>
     expect(row?.last_run_status).toBe("failed");
     expect(row?.run_count).toBe(1);
     expect(Date.parse(row!.next_run_at)).toBeGreaterThan(Date.parse(now));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);
+
+it.effect("leaves due tasks waiting until the network check passes", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(Date.parse(now));
+    yield* seed("follow-up", { schedule: '{"type":"interval","everyMs":60000}' });
+    const launched = yield* Ref.make(0);
+    const launch = () =>
+      Ref.update(launched, (count) => count + 1).pipe(
+        Effect.as({ threadId, projection, resumed: false }),
+      );
+    const settings = Effect.succeed(DEFAULT_SERVER_SETTINGS);
+    const sql = yield* SqlClient.SqlClient;
+    yield* poll(settings, launch, undefined, false);
+    expect(yield* Ref.get(launched)).toBe(0);
+    const [waiting] = yield* sql<{
+      next_run_at: string;
+      run_count: number;
+    }>`SELECT * FROM scheduled_tasks WHERE task_id = 'follow-up'`;
+    expect(waiting).toMatchObject({ next_run_at: "2026-10-15T07:00:00.000Z", run_count: 0 });
+    yield* poll(settings, launch);
+    expect(yield* Ref.get(launched)).toBe(1);
   }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
 
