@@ -203,8 +203,10 @@ if [ -f "$ENTRY_PATH" ]; then select_package; fi
 export function buildRemotePackageInstallScript(input: {
   readonly archiveBase64: string;
   readonly archiveId: string;
+  readonly nodeEngineRange?: string | null;
 }): string {
   return `${remotePackageCacheScript(input.archiveId)}
+${buildRemoteNodeEnvScript({ nodeEngineRange: input.nodeEngineRange ?? null })}
 if [ -f "$ENTRY_PATH" ]; then
   select_package
   exit 0
@@ -219,17 +221,19 @@ mkdir -p "$TEMP_ROOT"
 cat >"$BASE64_PATH" <<'BLACKBIRD_REMOTE_SERVER_ARCHIVE'
 ${input.archiveBase64}
 BLACKBIRD_REMOTE_SERVER_ARCHIVE
-if base64 --decode "$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
+# macOS base64 reads only stdin or -i, not a file operand.
+if base64 --decode <"$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
   :
-elif base64 -d "$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
+elif base64 -d <"$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
   :
-elif base64 -D "$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
+elif base64 -D <"$BASE64_PATH" >"$ARCHIVE_PATH" 2>/dev/null; then
   :
 else
   printf '%s\\n' 'Could not decode the Blackbird remote server archive.' >&2
   exit 1
 fi
 rm -f "$BASE64_PATH"
+ensure_remote_node_path || true
 npm install --omit=dev --no-audit --no-fund --prefix "$TEMP_ROOT" "$ARCHIVE_PATH"
 rm -f "$ARCHIVE_PATH"
 rm -rf "$INSTALL_ROOT"
@@ -1697,6 +1701,7 @@ const makeSshEnvironmentManager = Effect.fn("ssh/tunnel.SshEnvironmentManager.ma
             stdin: buildRemotePackageInstallScript({
               archiveBase64: Base64.encode(archive),
               archiveId,
+              nodeEngineRange: input.runner.nodeEngineRange ?? null,
             }),
             timeoutMs: REMOTE_PACKAGE_INSTALL_TIMEOUT_MS,
           }),

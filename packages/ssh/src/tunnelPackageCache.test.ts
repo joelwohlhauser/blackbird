@@ -163,3 +163,22 @@ if install_package; then exit 1; fi
     );
   },
 );
+
+describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("remote server install", () => {
+  it.effect("decodes the archive with the host's base64 and installs it", () => {
+    return runFixture(`
+mkdir -p "$work/bin"
+cat > "$work/bin/npm" <<'FAKE_NPM'
+#!/bin/sh
+set -eu
+for archive; do :; done
+[ "$(cat "$archive")" = cache ]
+while [ "$1" != --prefix ]; do shift; done
+mkdir -p "$2/node_modules/t3/dist"
+touch "$2/node_modules/t3/dist/bin.mjs"
+FAKE_NPM
+chmod +x "$work/bin/npm"
+[ "$(install_package)" = "$cache/${current}/node_modules/t3/dist/bin.mjs" ]
+`);
+  });
+});
