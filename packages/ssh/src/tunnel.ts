@@ -373,6 +373,8 @@ function canBind(port) {
 
 // macOS lets the bind above succeed while another process listens on
 // *:<port>, so also skip any port that already answers on loopback.
+// Stealth mode can silently drop probes to unused ports, so a timeout isn't
+// proof of a listener.
 function answersOnLoopback(port) {
   return new Promise((resolve) => {
     const socket = net.connect({ port, host: "127.0.0.1" });
@@ -383,7 +385,7 @@ function answersOnLoopback(port) {
     });
     socket.once("timeout", () => {
       socket.destroy();
-      resolve(true);
+      resolve(false);
     });
     socket.once("error", () => resolve(false));
   });
