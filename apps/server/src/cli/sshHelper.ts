@@ -19,7 +19,6 @@ const canBind = (port: number) =>
   });
 
 // macOS permits this bind over a wildcard listener, so also check loopback connectivity.
-// Stealth mode can silently drop probes to unused ports, so a timeout isn't proof of a listener.
 const answersOnLoopback = (port: number) =>
   new Promise<boolean>((resolve) => {
     const socket = NodeNet.connect({ port, host: "127.0.0.1" });
@@ -30,7 +29,7 @@ const answersOnLoopback = (port: number) =>
     });
     socket.once("timeout", () => {
       socket.destroy();
-      resolve(false);
+      resolve(true);
     });
     socket.once("error", () => resolve(false));
   });
