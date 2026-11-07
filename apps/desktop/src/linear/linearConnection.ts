@@ -196,7 +196,11 @@ const STATUSES_QUERY = `
     }
   `;
 
-class LinearAuthorizationRejected extends Error {}
+class LinearAuthorizationRejected extends Schema.TaggedError<LinearAuthorizationRejected>()(
+  "LinearAuthorizationRejected",
+  { message: Schema.String },
+) {}
+const isLinearAuthorizationRejected = Schema.is(LinearAuthorizationRejected);
 
 const unreachable = () => new Error("Couldn't reach Linear. Try again.");
 
@@ -261,7 +265,7 @@ export function createLinearConnection(dependencies: LinearConnectionDependencie
       body: new URLSearchParams({ client_id: dependencies.clientId, ...body }),
     });
     if (response.status === 400 || response.status === 401) {
-      throw new LinearAuthorizationRejected("Linear rejected the sign-in. Try again.");
+      throw new LinearAuthorizationRejected({ message: "Linear rejected the sign-in. Try again." });
     }
     if (!response.ok) throw failure(response);
     const json: unknown = await response.json().catch(() => null);
@@ -274,7 +278,7 @@ export function createLinearConnection(dependencies: LinearConnectionDependencie
       body: JSON.stringify({ query, variables }),
     });
     if (response.status === 401) {
-      throw new LinearAuthorizationRejected("Linear rejected the sign-in. Try again.");
+      throw new LinearAuthorizationRejected({ message: "Linear rejected the sign-in. Try again." });
     }
     if (!response.ok) throw failure(response);
     const json: unknown = await response.json().catch(() => null);
@@ -301,7 +305,7 @@ export function createLinearConnection(dependencies: LinearConnectionDependencie
         }
         return await run(credential.accessToken);
       } catch (error) {
-        if (!(error instanceof LinearAuthorizationRejected)) throw error;
+        if (!isLinearAuthorizationRejected(error)) throw error;
         await clear();
         return null;
       }

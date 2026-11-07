@@ -18,11 +18,7 @@ import {
   threadUndoClaimsShortcut,
   undoLatestThreadAction,
 } from "../hooks/showThreadUndoNotice";
-import {
-  getLocalStorageItem,
-  removeLocalStorageItem,
-  setLocalStorageItem,
-} from "../hooks/useLocalStorage";
+import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
 import {
   isRichTextBoldShortcut,
   resolveShortcutCommand,
@@ -59,10 +55,7 @@ import {
   THREAD_MAIN_CONTENT_MIN_WIDTH,
   THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
 } from "./threadSidebarWidth";
-import {
-  resolveInitialThreadSidebarOpen,
-  THREAD_SIDEBAR_OPEN_STORAGE_KEY,
-} from "./threadSidebarVisibility";
+import { THREAD_SIDEBAR_OPEN_STORAGE_KEY } from "./threadSidebarVisibility";
 import {
   Sidebar,
   SidebarProvider,
@@ -136,25 +129,6 @@ function readInitialThreadSidebarWidth(): number {
   } catch (error) {
     console.error("Could not read persisted thread sidebar width.", error);
     return resolveInitialThreadSidebarWidth(null, window.innerWidth);
-  }
-}
-
-function readInitialThreadSidebarOpen(): boolean {
-  try {
-    return resolveInitialThreadSidebarOpen(
-      getLocalStorageItem(THREAD_SIDEBAR_OPEN_STORAGE_KEY, Schema.Boolean),
-    );
-  } catch (error) {
-    console.error("Could not read persisted thread sidebar visibility.", error);
-    return true;
-  }
-}
-
-function persistThreadSidebarOpen(open: boolean) {
-  try {
-    setLocalStorageItem(THREAD_SIDEBAR_OPEN_STORAGE_KEY, open, Schema.Boolean);
-  } catch (error) {
-    console.error("Could not persist thread sidebar visibility.", error);
   }
 }
 
@@ -534,7 +508,6 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
-  const [initialSidebarOpen] = useState(readInitialThreadSidebarOpen);
   const [sidebarTransientOpen, setSidebarTransientOpen] = useState(false);
   // A clamped drag may not change width, so viewport changes need a separate subscription.
   const viewportWidth = useSyncExternalStore(subscribeToViewportWidth, readViewportWidth);
@@ -571,8 +544,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
         // Blackbird's sidebar motion stays enabled independently of optional panel animations.
         data-sidebar-animations={panelAnimationsSuppressed ? "false" : "true"}
-        defaultOpen={initialSidebarOpen}
-        onOpenChange={persistThreadSidebarOpen}
+        storageKey={THREAD_SIDEBAR_OPEN_STORAGE_KEY}
         style={sidebarProviderStyle}
       >
         <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />

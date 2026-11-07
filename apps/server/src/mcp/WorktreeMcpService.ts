@@ -1,5 +1,6 @@
 import {
   CommandId,
+  type GitCommandError,
   isQuickChatsProjectId,
   MessageId,
   ProjectId,
@@ -15,15 +16,19 @@ import {
   type WorktreeMcpStatusResult,
   type WorktreeMcpSwitchDirectoryInput,
   type WorktreeMcpSwitchDirectoryResult,
+  type VcsListRefsInput,
+  type VcsListRefsResult,
 } from "@t3tools/contracts";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
@@ -54,6 +59,12 @@ export class WorktreeMcpService extends Context.Service<
     readonly status: (
       scope: McpInvocationScope,
     ) => Effect.Effect<WorktreeMcpStatusResult, WorktreeMcpFailure>;
+    readonly listRefs: (
+      input: Omit<VcsListRefsInput, "cwd"> & {
+        readonly worktreePath: string | null;
+        readonly workspaceRoot: string;
+      },
+    ) => Effect.Effect<VcsListRefsResult, GitCommandError | PlatformError.PlatformError>;
   }
 >()("t3/mcp/WorktreeMcpService") {}
 
@@ -92,7 +103,7 @@ const asOperationFailed = (prefix: string) =>
   );
 
 const make = Effect.gen(function* () {
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const path = yield* Path.Path;
   const home = yield* HostProcess.HomeDirectory;
   const fileSystem = yield* FileSystem.FileSystem;
@@ -157,13 +168,17 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const readDefaultStartFromOrigin = serverSettings.getSettings.pipe(
-    Effect.map((settings) => settings.newWorktreesStartFromOrigin),
-    asOperationFailed("Unable to read server settings"),
-  );
+  const readDefaultStartFromOrigin = (projectId: ProjectId) =>
+    serverSettings.getSettings.pipe(
+      Effect.map(
+        (settings) =>
+          resolveProjectSettings(settings, projectId).settings.newWorktreesStartFromOrigin,
+      ),
+      asOperationFailed("Unable to read server settings"),
+    );
 
   const handoffIds = (scope: McpThreadInvocationScope) =>
-    crypto.randomUUIDv4().pipe(
+    random.uuidV4().pipe(
       Effect.map((uuid) => {
         const part = (kind: string, operation: string) =>
           [kind, "mcp", encodeURIComponent(scope.thread.providerSessionId), operation, uuid].join(
@@ -272,16 +287,17 @@ const make = Effect.gen(function* () {
       .localStatus({ cwd: input.branch === undefined ? destination.folder : projectCwd })
       .pipe(asOperationFailed("Unable to read git status"));
 
-    const plan = yield* planWorktree(projectCwd, destination.folder, localStatus, input);
+    const plan = yield* planWorktree(project, destination.folder, localStatus, input);
     return { ids, project, projectCwd, localStatus, plan };
   });
 
   const planWorktree = Effect.fn("WorktreeMcpService.planWorktree")(function* (
-    projectCwd: string,
+    project: Project,
     folder: string,
     localStatus: { readonly isRepo: boolean; readonly refName: string | null },
     input: WorkspaceTarget,
   ) {
+    const projectCwd = project.workspaceRoot;
     const branch = input.branch;
     if (branch === undefined) return { type: "reuse", path: folder } satisfies WorktreePlan;
     if (!localStatus.isRepo) {
@@ -354,7 +370,7 @@ const make = Effect.gen(function* () {
       );
     }
     const remoteBase =
-      (input.startFromOrigin ?? (yield* readDefaultStartFromOrigin))
+      (input.startFromOrigin ?? (yield* readDefaultStartFromOrigin(project.id)))
         ? yield* gitWorkflow
             .fetchWorktreeBaseCommit({ cwd: projectCwd, refName: baseRef })
             .pipe(asOperationFailed(`Unable to fetch the remote base of '${baseRef}'`))
@@ -662,7 +678,7 @@ const make = Effect.gen(function* () {
       const projection = yield* loadThread(scope);
       const project = yield* loadProject(scope, projection.thread.projectId);
 
-      const defaultStartFromOrigin = yield* readDefaultStartFromOrigin;
+      const defaultStartFromOrigin = yield* readDefaultStartFromOrigin(project.id);
 
       const result: WorktreeMcpStatusResult = {
         attached: projection.thread.worktreePath !== null,
@@ -675,13 +691,24 @@ const make = Effect.gen(function* () {
     },
   );
 
-  return WorktreeMcpService.of({ handoff, createWorktree, switchDirectory, status });
+  const listRefs: WorktreeMcpService["Service"]["listRefs"] = Effect.fn(
+    "WorktreeMcpService.listRefs",
+  )(function* ({ worktreePath, workspaceRoot, ...refs }) {
+    // Storage cleanup removes a worktree but keeps its path on the thread.
+    const cwd =
+      worktreePath !== null && (yield* fileSystem.exists(worktreePath))
+        ? worktreePath
+        : workspaceRoot;
+    return yield* gitWorkflow.listRefs({ ...refs, cwd });
+  });
+
+  return WorktreeMcpService.of({ handoff, createWorktree, switchDirectory, status, listRefs });
 });
 
 export const layer: Layer.Layer<
   WorktreeMcpService,
   never,
-  | Crypto.Crypto
+  | SecureRandom.SecureRandom
   | Path.Path
   | FileSystem.FileSystem
   | VcsDriverRegistry.VcsDriverRegistry

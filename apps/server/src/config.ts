@@ -20,6 +20,8 @@ import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import { releaseChannelOf, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
 import packageJson from "../package.json" with { type: "json" };
 
+export const releaseChannel = releaseChannelOf(packageJson.version);
+
 export const DEFAULT_PORT = 3773;
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
@@ -121,10 +123,7 @@ export const otlpResource = (
     "service.runtime": "t3-server",
     "t3code.server.managed_by": config.mode === "desktop" ? "desktop" : "standalone",
     "service.instance.id": processServiceInstanceId(config.otelEnvironment.resourceAttributes),
-    ...releaseResourceAttributes(
-      releaseChannelOf(packageJson.version),
-      config.otelEnvironment.resourceAttributes,
-    ),
+    ...releaseResourceAttributes(releaseChannel, config.otelEnvironment.resourceAttributes),
     "host.name": config.otelEnvironment.resourceAttributes["host.name"] || hostName,
     ...nodeProcessRuntimeAttributes(),
   },

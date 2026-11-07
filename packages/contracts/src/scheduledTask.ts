@@ -46,20 +46,32 @@ const ScheduledTaskFixedTimeSchedule = Schema.Struct({
   ),
 });
 
-function isScheduledTaskOnceAt(value: string): boolean {
-  return (
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(value) &&
-    Number.isFinite(Date.parse(value))
-  );
+const ISO_WITH_OFFSET =
+  /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+const YEAR_0000 = Date.parse("0000-01-01T00:00:00Z");
+const YEAR_10000 = Date.parse("+010000-01-01T00:00:00Z");
+
+/** Date.parse rolls impossible days like Feb 30 into the next month, so check the day too. */
+function isIsoWithOffset(value: string): boolean {
+  const match = ISO_WITH_OFFSET.exec(value);
+  // The server stores UTC, which must stay a four-digit year to decode again.
+  const time = Date.parse(value);
+  if (!match || !(time >= YEAR_0000 && time < YEAR_10000)) return false;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  return days !== undefined && day >= 1 && day <= days;
 }
 
+// Checked by filter, not pattern, to keep the MCP tool schema small.
 const ScheduledTaskOnceSchedule = Schema.Struct({
   type: Schema.Literal("once"),
-  at: Schema.String.check(Schema.makeFilter(isScheduledTaskOnceAt)).annotate({
-    description: "ISO time with offset, such as 2026-10-30T09:00:00+01:00.",
-  }),
-}).annotate({
-  description: "Runs once, even if the server was offline then, and deletes itself after.",
+  runAt: TrimmedNonEmptyString.check(
+    Schema.makeFilter(
+      (value) => isIsoWithOffset(value) || "Expected an ISO date and time with an offset.",
+    ),
+  ),
 });
 
 const ScheduledTaskWebhookSignatureFields = {
@@ -219,6 +231,20 @@ export const ScheduledTaskWebhookEndpoint = Schema.Struct({
 });
 export type ScheduledTaskWebhookEndpoint = typeof ScheduledTaskWebhookEndpoint.Type;
 
+/**
+ * Where runs go. One-thread modes launch their thread on the first run and keep it; `fresh_session`
+ * starts each later run in a new provider session there.
+ */
+export const ScheduledTaskThreadMode = Schema.Literals(["new_thread", "continue", "fresh_session"]);
+export type ScheduledTaskThreadMode = typeof ScheduledTaskThreadMode.Type;
+
+/** Servers before thread modes omit it; their bound tasks continue the conversation. */
+export function scheduledTaskThreadMode(
+  task: Pick<ScheduledTask, "threadId" | "threadMode">,
+): ScheduledTaskThreadMode {
+  return task.threadMode ?? (task.threadId === null ? "new_thread" : "continue");
+}
+
 export const ScheduledTask = Schema.Struct({
   id: ScheduledTaskId,
   title: TrimmedNonEmptyString,
@@ -227,6 +253,7 @@ export const ScheduledTask = Schema.Struct({
   schedule: ScheduledTaskSchedule,
   projectId: ProjectId,
   threadId: Schema.NullOr(ThreadId),
+  threadMode: Schema.optional(ScheduledTaskThreadMode),
   workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy,
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
@@ -242,6 +269,8 @@ export const ScheduledTask = Schema.Struct({
   runCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   lastRunCatchUp: Schema.optional(ScheduledTaskRunCatchUp),
   webhook: Schema.optional(ScheduledTaskWebhookEndpoint),
+  /** Why the task cannot run regardless of `enabled`, such as a managed policy refusing webhooks. */
+  blockedByPolicy: Schema.optionalKey(Schema.String),
 });
 export type ScheduledTask = typeof ScheduledTask.Type;
 
@@ -265,6 +294,8 @@ export const ScheduledTaskUpsertInput = Schema.Struct({
   schedule: ScheduledTaskUpsertSchedule,
   projectId: ProjectId,
   threadId: Schema.optional(Schema.NullOr(ThreadId)),
+  /** Omitted: keep the stored mode, or derive it from `threadId` for a new or rebound task. */
+  threadMode: Schema.optional(ScheduledTaskThreadMode),
   workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy,
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,

@@ -88,7 +88,7 @@ const PMSET_SETTINGS = {
   lowPower: { pmset: "lowpowermode", flag: "lowpowermode" },
 } as const;
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const fs = yield* FileSystem.FileSystem;
@@ -252,14 +252,16 @@ export const make = Effect.gen(function* () {
     lidClosed = closed;
   });
 
-  const isOnline = Effect.tryPromise(() =>
-    Electron.net.fetch(CONNECTIVITY_URL, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(4_000),
-    }),
-  ).pipe(
-    Effect.map((response) => response.ok),
-    Effect.orElseSucceed(() => false),
+  const isOnline = Effect.promise(() =>
+    Electron.net
+      .fetch(CONNECTIVITY_URL, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(4_000),
+      })
+      .then(
+        (response) => response.ok,
+        () => false,
+      ),
   );
 
   const hotspotApp = Effect.gen(function* () {

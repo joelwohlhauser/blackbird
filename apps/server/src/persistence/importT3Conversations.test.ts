@@ -31,14 +31,15 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { attachmentRelativePath, createAttachmentId } from "../attachmentStore.ts";
 import * as ContextHandoffService from "../orchestration-v2/ContextHandoffService.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as EventStore from "../orchestration-v2/EventStore.ts";
-import * as ProjectionMaintenance from "../orchestration-v2/ProjectionMaintenance.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ProjectionReplay from "../orchestration-v2/testkit/ProjectionReplay.ts";
 import { runMigrations } from "./Migrations.ts";
 import { importT3Conversations } from "./importT3Conversations.ts";
 import * as Sqlite from "./Sqlite.ts";
@@ -48,11 +49,18 @@ function databaseLayer(databasePath: string) {
   const stores = Layer.mergeAll(EventStore.layer, ProjectionStore.layer).pipe(
     Layer.provideMerge(database),
   );
-  return Layer.mergeAll(EventSink.layer, ProjectionMaintenance.layer).pipe(
+  return Layer.mergeAll(EventSink.layer, ProjectionReplay.layer).pipe(
     Layer.provideMerge(stores),
     Layer.provide(NodeServices.layer),
   );
 }
+
+class ImportFailed extends Schema.TaggedError<ImportFailed>()("ImportFailed", {
+  cause: Schema.Defect(),
+}) {}
+
+const awaitImport = <A>(importing: Promise<A>) =>
+  Effect.tryPromise({ try: () => importing, catch: (cause) => new ImportFailed({ cause }) });
 
 const now = DateTime.makeUnsafe("2026-01-01T00:00:00.000Z");
 const projectId = ProjectId.make("source-project");
@@ -315,7 +323,7 @@ it.effect(
           .run("Changed after import began", sourceMessageId);
         const originalDatabase = NodeFS.readFileSync(sourcePath);
         const originalWal = NodeFS.readFileSync(`${sourcePath}-wal`);
-        const result = yield* Effect.tryPromise(() => importing);
+        const result = yield* awaitImport(importing);
         assert.deepStrictEqual(result, {
           importedProjectCount: 1,
           importedThreadCount: 2,
@@ -462,7 +470,7 @@ it.effect(
           });
         assert.include(handoff.summaryText, "Question committed in WAL");
         assert.deepStrictEqual(handoff.fromProviderThreadIds, []);
-        yield* (yield* ProjectionMaintenance.ProjectionMaintenanceV2).rebuild;
+        yield* (yield* ProjectionReplay.ProjectionReplay).rebuild;
         const rebuilt = yield* projections.getThreadProjection(conversation.thread.id);
         assert.equal(rebuilt.messages[0]?.text, "Question committed in WAL");
         assert.isEmpty(rebuilt.providerThreads);
@@ -475,7 +483,7 @@ it.effect(
         ),
       );
       const before = NodeFS.readFileSync(NodePath.join(targetDirectory, "statev2.sqlite"));
-      const retry = yield* Effect.tryPromise(() =>
+      const retry = yield* awaitImport(
         importT3Conversations(sourceDirectory, targetDirectory),
       ).pipe(Effect.flip);
       assert.include(String(retry.cause), "already has conversation data");
@@ -576,7 +584,7 @@ it.effect("keeps automated messages in chronology with their original attributio
         ],
       });
     }).pipe(Effect.provide(databaseLayer(NodePath.join(sourceDirectory, "statev2.sqlite"))));
-    yield* Effect.tryPromise(() => importT3Conversations(sourceDirectory, targetDirectory));
+    yield* awaitImport(importT3Conversations(sourceDirectory, targetDirectory));
     yield* Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const [row] = yield* sql<{
@@ -614,7 +622,7 @@ it.effect("keeps automated messages in chronology with their original attributio
         assert.equal(tasks!.count, 0);
       });
       yield* check;
-      yield* (yield* ProjectionMaintenance.ProjectionMaintenanceV2).rebuild;
+      yield* (yield* ProjectionReplay.ProjectionReplay).rebuild;
       yield* check;
     }).pipe(Effect.provide(databaseLayer(NodePath.join(targetDirectory, "statev2.sqlite"))));
   }).pipe(
@@ -646,7 +654,7 @@ it.effect(
         ),
       );
       assert.equal(
-        (yield* Effect.tryPromise(() => importT3Conversations(sourceDirectory, targetDirectory)))
+        (yield* awaitImport(importT3Conversations(sourceDirectory, targetDirectory)))
           .importedMessageCount,
         1,
       );
@@ -660,7 +668,7 @@ it.effect(
       NodeFS.symlinkSync(NodePath.join(sourceDirectory, "state.sqlite"), attachmentPath);
       const rejectedTarget = NodePath.join(directory, "rejected-target");
       const rejectedProgress: ConversationImportProgress[] = [];
-      yield* Effect.tryPromise(() =>
+      yield* awaitImport(
         importT3Conversations(sourceV2, rejectedTarget, (update) => rejectedProgress.push(update)),
       ).pipe(Effect.flip);
       assert.isFalse(rejectedProgress.some((update) => update.stage === "complete"));

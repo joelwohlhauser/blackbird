@@ -201,7 +201,8 @@ describe("ConnectionResolver", () => {
         environmentId: ENVIRONMENT_ID,
         label: "Primary",
         httpBaseUrl: "http://127.0.0.1:3777",
-        socketUrl: "ws://127.0.0.1:3777/ws?clientSurface=web&orchestrationProtocol=2",
+        socketUrl:
+          "ws://127.0.0.1:3777/ws?clientSurface=web&orchestrationProtocol=2&clientCapabilities=settingsSecretReferences",
         httpAuthorization: null,
         target,
       });

@@ -306,6 +306,7 @@ function MainChatTab(props: MainChatTabProps) {
   });
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameTitle, setRenameTitle] = useState(props.label);
+  const [renameStartTitle, setRenameStartTitle] = useState(props.label);
   const [renamePending, setRenamePending] = useState(false);
   const renamePendingRef = useRef(false);
   const { onRename } = props;
@@ -318,6 +319,7 @@ function MainChatTab(props: MainChatTabProps) {
   const beginRename = () => {
     if (!onRename) return;
     setRenameTitle(props.label);
+    setRenameStartTitle(props.label);
     setIsRenaming(true);
   };
   const cancelRename = () => {
@@ -326,6 +328,10 @@ function MainChatTab(props: MainChatTabProps) {
   };
   const commitRename = async () => {
     if (!onRename || renamePendingRef.current) return;
+    if (renameTitle.trim() === renameStartTitle) {
+      setIsRenaming(false);
+      return;
+    }
     renamePendingRef.current = true;
     setRenamePending(true);
     await onRename(renameTitle);

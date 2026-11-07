@@ -44,6 +44,7 @@ Open **Settings → Providers** in the web or desktop app, select the environmen
 | Claude      | Install [Claude Code](https://claude.com/product/claude-code), then run `claude auth login`.                                                              |
 | Cursor      | Install [Cursor CLI](https://cursor.com/cli), then run `agent login`.                                                                                     |
 | Grok Build  | Install [Grok Build CLI](https://x.ai/cli), then run `grok login`.                                                                                        |
+| Kiro        | Install [Kiro CLI](https://kiro.dev/docs/cli/), then run `kiro-cli login`.                                                                                |
 | OpenCode    | Install [OpenCode](https://opencode.ai), then run `opencode auth login`.                                                                                  |
 | Antigravity | Install and sign in with Google from Blackbird's provider settings.                                                                                       |
 | Pi          | Install [Pi](./providers-pi.md#set-up-pi) with Node.js 22.19 or newer, then run `pi` and `/login`.                                                        |
@@ -54,14 +55,15 @@ Provider CLIs must be on the server's `PATH`. If Blackbird cannot find one, set 
 
 Blackbird warns when a provider version has known compatibility problems with your release. Check **Settings → Providers** on that environment for the recommended version or range. When its package manager supports installing a specific version, you can install the recommendation there. Otherwise use the provider's installer on the environment's machine. An unlisted version is unverified.
 
-When a provider CLI is behind its latest release, its provider card shows the available version. **Update now** runs the installer that owns the CLI (Homebrew, or a global npm, pnpm, Yarn, Bun, Volta, or Vite+ install), or the CLI's own update command when Blackbird cannot tell. Update a CLI installed with mise through mise. Cursor and Antigravity update with Blackbird. Homebrew installs compare against the version Homebrew offers, which can trail the npm release by a few hours.
+When a provider CLI is behind its latest release, its provider card shows the available version. **Update now** runs the installer that owns the CLI (Homebrew, or a global npm, pnpm, Yarn, Bun, Volta, or Vite+ install), or the CLI's own update command when Blackbird cannot tell. Update a CLI installed with mise through mise. Cursor and Antigravity update with Blackbird. Homebrew and Chocolatey installs compare against the version their package manager offers, which can trail the npm release; update Claude installed with Chocolatey through Chocolatey.
 
 Add another provider instance for a separate account or configuration. Each instance can have its own environment variables, such as API keys or a custom base URL. Mark secret values as sensitive; after saving, Blackbird does not display their original values.
 
-For provider-specific setup and accounts, see [Codex](./providers-codex.md), [Claude](./providers-claude.md), [OpenCode](./providers-opencode.md), [Antigravity](./providers-antigravity.md), [Pi](./providers-pi.md), [Muse Code](./providers-muse.md), and [fx](./providers-fx.md).
+For provider-specific setup and accounts, see [Codex](./providers-codex.md), [Claude](./providers-claude.md), [OpenCode](./providers-opencode.md), [Antigravity](./providers-antigravity.md), [Kiro](./providers-kiro.md), [Pi](./providers-pi.md), [Muse Code](./providers-muse.md), and [fx](./providers-fx.md).
 
 ## Next steps
 
 - [Blackbird's feature map](../../README.md#what-is-custom-in-blackbird): workspace tabs, Quick chats, integrations, and shortcuts.
 - [Permission modes](./permission-modes.md): choose when agents ask before acting.
 - [Updating Blackbird](./updating.md): install a newer desktop release and understand remote-service limits.
+- [Managed policy](./managed-policy.md): configure Blackbird for everyone on a machine.

@@ -14,14 +14,19 @@ import {
   matchesKeybindingShortcut,
   normalizeEventKey,
   resolveEventKeys,
-  type ShortcutEventLike,
+  type ShortcutEventLike as SharedShortcutEventLike,
 } from "@t3tools/shared/keybindings";
 import { resolvePreviewShortcut } from "@t3tools/shared/preview";
 import { isElectron } from "./env";
+import { isEditableFocused } from "./lib/editableFocus";
 import { projectScriptIdFromCommand } from "./projectScripts";
 
-export type { ShortcutEventLike, ShortcutModifierStateLike } from "@t3tools/shared/keybindings";
+export type { ShortcutModifierStateLike } from "@t3tools/shared/keybindings";
 export { shortcutKeyFromEvent } from "@t3tools/shared/keybindings";
+
+export interface ShortcutEventLike extends SharedShortcutEventLike {
+  target?: EventTarget | null;
+}
 
 export interface ShortcutMatchContext {
   terminalFocus: boolean;
@@ -185,6 +190,9 @@ export function resolveShortcutCommand(
     resolvePreviewShortcut(event)
   ) {
     return null;
+  }
+  if (options?.context?.editableFocus === undefined && typeof document !== "undefined") {
+    context.editableFocus = isEditableFocused(event.target ?? document.activeElement);
   }
 
   for (let index = keybindings.length - 1; index >= 0; index -= 1) {

@@ -1,7 +1,7 @@
 import { CommandId, ProjectId, QUICK_CHATS_PROJECT_ID } from "@t3tools/contracts";
 import { newProjectFolderName } from "@t3tools/shared/path";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -155,7 +155,7 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const git = yield* GitVcsDriver.GitVcsDriver;
   const projects = yield* ProjectService.ProjectService;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
 
   // Non-recursive mkdir atomically claims a name; racers move on after AlreadyExists.
   const claimFreeFolder = Effect.fnUntraced(function* <E>(
@@ -185,7 +185,7 @@ const make = Effect.gen(function* () {
     scratchProjectLock.withPermits(1)(
       Effect.gen(function* () {
         const workspaceRoot = quickChatsRoot;
-        const id = yield* crypto.randomUUIDv4();
+        const id = yield* random.uuidV4();
         const bootstrapped = yield* projects
           .bootstrap({
             commandId: CommandId.make(`quick-chats-project:${id}`),
@@ -276,11 +276,12 @@ const make = Effect.gen(function* () {
       path.join(cwd, "assets", "icon.svg"),
       namedProjectIconSvg(name),
     );
-    // Force explicit filenames so global ignore rules cannot drop them.
+    // Force explicit filenames so global ignore rules cannot drop them, and keep
+    // core.safecrlf=true from refusing the LF files under CRLF conversion.
     yield* git.execute({
       operation: "ManagedProjectFolders.add",
       cwd,
-      args: ["add", "--force", "--", "README.md", "assets/icon.svg"],
+      args: ["-c", "core.safecrlf=false", "add", "--force", "--", "README.md", "assets/icon.svg"],
       timeoutMs: 10_000,
     });
     return yield* git
@@ -308,8 +309,8 @@ const make = Effect.gen(function* () {
       scaffoldRepository(workspaceRoot, input.name).pipe(
         Effect.mapError((cause) => new NamedProjectFolderError({ folder: workspaceRoot, cause })),
       ),
-      crypto
-        .randomUUIDv4()
+      random
+        .uuidV4()
         .pipe(Effect.mapError((cause) => new NamedProjectCreateError({ workspaceRoot, cause }))),
     ]).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : removeFolder)));
     const [commitError, id] = prepared;

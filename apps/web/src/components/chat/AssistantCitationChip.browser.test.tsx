@@ -91,3 +91,22 @@ describe("citation comment copy shortcut", () => {
     expect(textarea()?.value).toBe("keep this");
   });
 });
+
+describe("citation comment popup position", () => {
+  it("opens at its anchor instead of sliding in from the window corner", async () => {
+    setup();
+    await using _screen = await mount(() => true);
+    const positioner = () =>
+      document.querySelector<HTMLElement>('[data-slot="popover-positioner"]');
+    await vi.waitFor(() => expect(positioner()?.style.opacity).not.toBe("0"));
+
+    const moves = positioner()!
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation instanceof CSSTransition &&
+          ["transform", "top", "left"].includes(animation.transitionProperty),
+      );
+    expect(moves).toEqual([]);
+  });
+});

@@ -21,7 +21,7 @@ describe("scheduleDraftForTask", () => {
   });
 
   it("keeps a one-time task's run time on save", () => {
-    const schedule = { type: "once", at: "2026-10-30T09:00:00+01:00" } as const;
+    const schedule = { type: "once", runAt: "2026-10-30T08:00:00.000Z" } as const;
     expect(scheduleFromDraft(scheduleDraftForTask({ schedule }))).toEqual(schedule);
   });
 

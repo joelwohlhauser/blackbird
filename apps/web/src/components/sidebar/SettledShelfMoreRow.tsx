@@ -35,8 +35,6 @@ export function SettledShelfMoreRow(props: {
       <button
         ref={rowRef}
         type="button"
-        role="treeitem"
-        tabIndex={-1}
         data-sidebar-row="settled:more"
         data-sidebar-parent="shelf:settled"
         disabled={!props.failed}

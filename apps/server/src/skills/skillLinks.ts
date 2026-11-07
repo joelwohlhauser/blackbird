@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Hex from "effect/encoding/Hex";
 import * as FileSystem from "effect/FileSystem";
@@ -211,13 +211,13 @@ export const installSkillDependencies = Effect.fn("skillLinks.installSkillDepend
 >(skillDirectory: string, install: (directory: string) => Effect.Effect<void, E, R>) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const crypto = yield* Crypto.Crypto;
+  const digest = yield* Digest.Digest;
   const lockfile = yield* fileSystem
     .readFile(path.join(skillDirectory, "package-lock.json"))
     .pipe(Effect.option);
   if (Option.isNone(lockfile))
     return "none" satisfies DependencyInstallOutcome as DependencyInstallOutcome;
-  const hash = Hex.encode(yield* crypto.digest("SHA-256", lockfile.value));
+  const hash = Hex.encode(yield* digest.digest(Digest.sha256, lockfile.value));
   const stamp = path.join(skillDirectory, "node_modules", ".lockfile-hash");
   const installed = yield* fileSystem.readFileString(stamp).pipe(Effect.option);
   if (Option.isSome(installed) && installed.value === hash) return "current";

@@ -156,7 +156,7 @@ it.effect.each(cases)(
         McpHttpServer.toolkitRegistration(
           PeerThreadDeletion.PeerThreadDeletionToolkit,
           PeerThreadDeletion.layer,
-        ).pipe(Layer.provideMerge(McpServer.McpServer.layer), Layer.provide(threads)),
+        ).pipe(Layer.provideMerge(McpHttpServer.layerInProcessMcpServer), Layer.provide(threads)),
       ),
     );
   },

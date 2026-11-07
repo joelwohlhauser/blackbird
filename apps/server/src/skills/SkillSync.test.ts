@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import type { SkillSourceConfig } from "@t3tools/contracts";
@@ -13,6 +14,7 @@ import { runSkillSyncPass } from "./SkillSync.ts";
 
 const TestLayer = Layer.mergeAll(
   NodeServices.layer,
+  NodeCrypto.layer,
   ProcessRunner.layer.pipe(Layer.provide(NodeServices.layer)),
 );
 

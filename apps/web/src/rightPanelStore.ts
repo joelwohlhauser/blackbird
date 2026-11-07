@@ -247,6 +247,8 @@ interface RightPanelStoreState {
   activateTerminal: (ref: ScopedThreadRef, surfaceId: string, terminalId: string) => void;
   closeTerminal: (ref: ScopedThreadRef, surfaceId: string, terminalId: string) => void;
   activateSurface: (ref: ScopedThreadRef, surfaceId: string) => void;
+  /** Agent-driven activation. Not a user action, so it does not move keyboard focus. */
+  revealSurface: (ref: ScopedThreadRef, surfaceId: string) => void;
   activateMainChat: (ref: ScopedThreadRef) => void;
   moveSurface: (
     ref: ScopedThreadRef,
@@ -904,6 +906,13 @@ const userActionOnThread = (
     : {}),
 });
 
+const activated = (current: ThreadRightPanelState, surfaceId: string): ThreadRightPanelState => {
+  const container = surfaceContainer(current, surfaceId);
+  if (container === "main") return { ...current, activeMainSurfaceId: surfaceId };
+  if (container === "panel") return { ...current, isOpen: true, activeSurfaceId: surfaceId };
+  return current;
+};
+
 const closeAction = (
   state: RightPanelStoreState,
   threadKey: string,
@@ -1417,16 +1426,13 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           }),
         })),
       activateSurface: (ref, surfaceId) =>
-        set((state) => ({
-          ...userAction(state, scopedThreadKey(ref), (current) => {
-            const container = surfaceContainer(current, surfaceId);
-            if (container === "main") return { ...current, activeMainSurfaceId: surfaceId };
-            if (container === "panel") {
-              return { ...current, isOpen: true, activeSurfaceId: surfaceId };
-            }
-            return current;
-          }),
-        })),
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) => activated(current, surfaceId)),
+        ),
+      revealSurface: (ref, surfaceId) =>
+        set((state) =>
+          automaticUpdate(state, scopedThreadKey(ref), (current) => activated(current, surfaceId)),
+        ),
       activateMainChat: (ref) =>
         set((state) => ({
           ...userAction(state, scopedThreadKey(ref), (current) =>
