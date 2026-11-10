@@ -79,6 +79,7 @@ import { useStableCallback } from "../hooks/useStableCallback";
 import { useArchivedThreadSnapshots } from "../lib/archivedThreadsState";
 import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
 import { isTerminalFocused } from "../lib/terminalFocus";
+import { isPreviewFocused } from "../lib/previewFocus";
 import { cn, isMacPlatform } from "../lib/utils";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
@@ -90,6 +91,7 @@ import {
   waitForProjectRemoval,
 } from "../state/entities";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { useThreadDiscoveredPorts } from "../portDiscoveryState";
 import { openDiscoveredPort } from "./preview/openDiscoveredPort";
@@ -3390,6 +3392,9 @@ export default function LegacySidebar({ routeReveal }: { routeReveal: SidebarRou
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
       : false,
   );
+  const routePreviewOpen = useRightPanelStore(
+    (state) => selectActiveRightPanel(state.byThreadKey, routeThreadRef) === "preview",
+  );
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<string>
@@ -3527,6 +3532,8 @@ export default function LegacySidebar({ routeReveal }: { routeReveal: SidebarRou
     const shortcutContext = {
       terminalFocus: isTerminalFocused(),
       terminalOpen: routeTerminalOpen,
+      previewFocus: isPreviewFocused(),
+      previewOpen: routePreviewOpen,
       modelPickerOpen: isModelPickerOpen(),
     };
 

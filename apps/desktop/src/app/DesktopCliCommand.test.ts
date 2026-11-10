@@ -24,6 +24,7 @@ const environmentFor = (
     homeDirectory: input.home,
     baseDir: input.baseDir,
     stateDir: path.join(input.baseDir, "userdata"),
+    desktopSettingsPath: path.join(input.baseDir, "userdata", "desktop-settings.json"),
     serverRoot: "/opt/Blackbird/resources/app.asar",
     appImagePath: Option.none(),
   } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]);
@@ -48,21 +49,22 @@ const commandIn = (
         DesktopEnvironment.DesktopEnvironment,
         environmentFor(path, { ...input, baseDir }),
       ),
-      Effect.provideService(HostProcess.Environment, input.env ?? { PATH: "" }),
+      Effect.provideService(HostProcess.Environment, input.env ?? { PATH: "", SHELL: "/bin/zsh" }),
     );
     return yield* spawner
       ? make.pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
       : make;
   });
 
-const fakePowerShell = (initial: string) => {
+/** `inherited` stands in for the app's own environment, which `extendEnv` passes on. */
+const fakePowerShell = (initial: string, inherited: Record<string, string> = {}) => {
   const registry = { path: initial, failReads: false, writes: 0 };
   const spawner = ChildProcessSpawner.make((command) =>
     Effect.sync(() => {
       const { options } = command as unknown as {
-        readonly options: { readonly env?: Record<string, string> };
+        readonly options: { readonly env?: Record<string, string>; readonly extendEnv?: boolean };
       };
-      const env = options.env ?? {};
+      const env = { ...(options.extendEnv ? inherited : {}), ...options.env };
       let exitCode = 0;
       let stdout = "";
       if (env.T3_SET === "1") {
@@ -94,10 +96,10 @@ const fakePowerShell = (initial: string) => {
 it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
   it.effect("links the launcher onto PATH and removes only that link", () =>
     Effect.gen(function* () {
+      const env: NodeJS.ProcessEnv = { PATH: "", SHELL: "/bin/zsh" };
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const env: NodeJS.ProcessEnv = { PATH: "" };
       const command = yield* commandIn({ home, env });
       const upstream = path.join(home, ".local", "bin", "t3");
       yield* fs.makeDirectory(path.dirname(upstream), { recursive: true });
@@ -106,7 +108,6 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       const upstreamTarget = path.join(home, "upstream-launcher");
       yield* fs.writeFileString(upstreamTarget, upstreamLauncher, { mode: 0o755 });
       yield* fs.symlink(upstreamTarget, upstream);
-      env.PATH = path.dirname(upstream);
       const link = path.join(home, ".local", "bin", "blackbird");
 
       expect(yield* command.state).toEqual({
@@ -115,13 +116,30 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
         onPath: false,
         launcherPath: null,
       });
+      yield* command.installOnFirstLaunch;
+      expect((yield* command.state).installedPath).toBe(link);
       const installed = yield* command.install;
       expect(installed.installedPath).toBe(link);
       expect(installed.launcherPath).toBe(path.join(home, ".blackbird", "bin", "blackbird"));
+      expect(installed.pathSetup).toEqual({ file: "~/.zshrc", added: false });
       expect(yield* fs.readLink(link)).toBe(path.join(home, ".blackbird", "bin", "blackbird"));
       const alias = path.join(home, ".local", "bin", "bb");
       expect(yield* fs.readLink(alias)).toBe(path.join(home, ".blackbird", "bin", "blackbird"));
       expect((yield* command.install).installedPath).toBe(link);
+
+      // Add to PATH appends one line, once, and keeps a final line with no newline intact.
+      const zshrc = path.join(home, ".zshrc");
+      yield* fs.writeFileString(zshrc, "# mine");
+      // A folder already on PATH needs nothing.
+      env.PATH = path.join(home, ".local", "bin");
+      yield* command.addToPath;
+      expect(yield* fs.readFileString(zshrc)).toBe("# mine");
+      env.PATH = "";
+      yield* Effect.all([command.addToPath, command.addToPath], { concurrency: "unbounded" });
+      expect((yield* command.addToPath).pathSetup).toEqual({ file: "~/.zshrc", added: true });
+      expect(yield* fs.readFileString(zshrc)).toBe(
+        '# mine\n# Added by Blackbird\nexport PATH="$PATH:$HOME/.local/bin"\n',
+      );
 
       expect((yield* command.uninstall).installedPath).toBeNull();
       expect(yield* fs.exists(link)).toBe(false);
@@ -129,6 +147,31 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       expect(yield* fs.exists(path.join(home, ".blackbird", "bin", "blackbird"))).toBe(true);
       expect(yield* fs.readLink(upstream)).toBe(upstreamTarget);
       expect(yield* fs.readFileString(upstreamTarget)).toBe(upstreamLauncher);
+      // Removed stays removed: first launch never installs again.
+      yield* command.installOnFirstLaunch;
+      expect(yield* fs.exists(link)).toBe(false);
+
+      // Also when first launch was put off (no shell PATH yet) and the user removed it meanwhile.
+      const laterHome = yield* fs.makeTempDirectoryScoped();
+      const later = yield* commandIn({ home: laterHome, env });
+      yield* later.install;
+      yield* later.uninstall;
+      yield* later.installOnFirstLaunch;
+      expect(yield* fs.exists(path.join(laterHome, ".local", "bin", "blackbird"))).toBe(false);
+
+      // An app that ran before left its settings or launcher. Its user may have removed blackbird or
+      // chosen another, so first launch leaves it to Settings, where Install still works.
+      for (const left of ["userdata/desktop-settings.json", "bin/blackbird"]) {
+        const upgradedHome = yield* fs.makeTempDirectoryScoped();
+        const leftFile = path.join(upgradedHome, ".blackbird", left);
+        yield* fs.makeDirectory(path.dirname(leftFile), { recursive: true });
+        yield* fs.writeFileString(leftFile, `#!/bin/sh\n# ${DesktopCliShim.MARKER}\n`);
+        const upgraded = yield* commandIn({ home: upgradedHome, env });
+        yield* upgraded.installOnFirstLaunch;
+        const upgradedLink = path.join(upgradedHome, ".local", "bin", "blackbird");
+        expect(yield* fs.exists(upgradedLink)).toBe(false);
+        expect((yield* upgraded.install).installedPath).toBe(upgradedLink);
+      }
     }).pipe(Effect.scoped),
   );
 
@@ -137,7 +180,7 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const env: NodeJS.ProcessEnv = { PATH: "" };
+      const env: NodeJS.ProcessEnv = { PATH: "", SHELL: "/bin/zsh" };
       const command = yield* commandIn({ home, env });
       const theirs = path.join(home, "tools", "bb");
       yield* fs.makeDirectory(path.dirname(theirs), { recursive: true });
@@ -153,10 +196,10 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
 
   it.effect("never replaces or removes a blackbird it did not create", () =>
     Effect.gen(function* () {
+      const env: NodeJS.ProcessEnv = { PATH: "", SHELL: "/bin/zsh" };
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const env: NodeJS.ProcessEnv = { PATH: "" };
       const command = yield* commandIn({ home, env });
       const theirs = path.join(home, ".local", "bin", "blackbird");
       yield* fs.makeDirectory(path.dirname(theirs), { recursive: true });
@@ -165,10 +208,23 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       yield* fs.symlink(path.join(home, "gone"), path.join(home, "bin", "blackbird"));
 
       const error = yield* Effect.flip(command.install);
-      expect(error.message).toContain("Another blackbird command is already installed");
+      expect(error.message).toContain("Another blackbird command is already in");
       yield* command.uninstall;
       expect(yield* fs.readFileString(theirs)).toBe("npm's blackbird\n");
       expect(yield* fs.readLink(path.join(home, "bin", "blackbird"))).toBe(path.join(home, "gone"));
+
+      // A fresh install beside someone else's blackbird (even off PATH or a dangling link) adds no second
+      // blackbird in ~/bin.
+      for (const dangling of [false, true]) {
+        const besideHome = yield* fs.makeTempDirectoryScoped();
+        const other = path.join(besideHome, ".local", "bin", "blackbird");
+        yield* fs.makeDirectory(path.dirname(other), { recursive: true });
+        yield* dangling
+          ? fs.symlink(path.join(besideHome, "gone"), other)
+          : fs.writeFileString(other, "npm's blackbird\n");
+        yield* (yield* commandIn({ home: besideHome })).installOnFirstLaunch;
+        expect(yield* fs.exists(path.join(besideHome, "bin", "blackbird"))).toBe(false);
+      }
 
       const launcher = path.join(home, ".blackbird", "bin", "blackbird");
       yield* fs.writeFileString(launcher, "npm's blackbird\n");
@@ -182,43 +238,108 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
 
   it.effect("finds and removes a link left by a previous Blackbird home", () =>
     Effect.gen(function* () {
+      const env: NodeJS.ProcessEnv = { PATH: "", SHELL: "/bin/zsh" };
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
-      const before = yield* commandIn({ home, baseDir: path.join(home, "old-blackbird") });
+      const before = yield* commandIn({ home, baseDir: path.join(home, "old-blackbird"), env });
       const link = (yield* before.install).installedPath;
 
-      const after = yield* commandIn({ home, baseDir: path.join(home, "new-blackbird") });
-      expect((yield* after.state).installedPath).toBe(link);
+      const after = yield* commandIn({ home, baseDir: path.join(home, "new-blackbird"), env });
+      // A first launch leaves another home's command alone; only Install takes it over.
+      yield* after.installOnFirstLaunch;
+      expect(yield* fs.readLink(link!)).toBe(path.join(home, "old-blackbird", "bin", "blackbird"));
+      // On PATH, it runs the other home's launcher. Settings offers Install (not Remove, and not
+      // "another blackbird runs first"), which updates that link in place.
+      env.PATH = path.dirname(link!);
+      expect(yield* after.state).toMatchObject({ installedPath: null, onPath: false });
+      expect((yield* after.state).shadowedBy).toBeUndefined();
+      env.PATH = "";
+      // Off PATH, Add to PATH would expose the other home's command, not this one.
+      expect((yield* after.state).pathSetup).toBeUndefined();
+      yield* Effect.flip(after.addToPath);
+      expect(yield* fs.exists(path.join(home, ".zshrc"))).toBe(false);
+      // Behind another blackbird the install fails, and the old link still works.
+      const shadow = path.join(home, "shadow");
+      yield* fs.makeDirectory(shadow);
+      yield* fs.writeFileString(path.join(shadow, "blackbird"), "#!/bin/sh\n", { mode: 0o755 });
+      env.PATH = shadow;
+      yield* Effect.flip(after.install);
+      expect(yield* fs.readLink(link!)).toBe(path.join(home, "old-blackbird", "bin", "blackbird"));
+      // Install takes it over, also with its folder first on PATH.
+      env.PATH = path.dirname(link!);
       expect((yield* after.install).installedPath).toBe(link);
       expect(yield* fs.readLink(link!)).toBe(path.join(home, "new-blackbird", "bin", "blackbird"));
       expect(yield* fs.readLink(path.join(path.dirname(link!), "bb"))).toBe(
         path.join(home, "new-blackbird", "bin", "blackbird"),
       );
+      env.PATH = "";
       yield* after.uninstall;
       expect(yield* fs.exists(path.join(home, ".local", "bin", "blackbird"))).toBe(false);
       expect(yield* fs.exists(path.join(home, "bin", "blackbird"))).toBe(false);
+
+      // A folder already on PATH wins, even written with a trailing slash.
+      env.PATH = `${path.join(home, "bin")}/`;
+      expect((yield* after.install).installedPath).toBe(path.join(home, "bin", "blackbird"));
+
+      // An old link of ours is updated where it is, not moved to a folder that may be off PATH.
+      yield* fs.writeFileString(path.join(home, "bin", "blackbird.staging"), "mine");
+      yield* fs.remove(path.join(home, "bin", "blackbird"));
+      yield* fs.symlink(
+        path.join(home, "old-blackbird", "bin", "blackbird"),
+        path.join(home, "bin", "blackbird"),
+      );
+      env.PATH = "";
+      expect((yield* after.install).installedPath).toBe(path.join(home, "bin", "blackbird"));
+      expect(yield* fs.readLink(path.join(home, "bin", "blackbird"))).toBe(
+        path.join(home, "new-blackbird", "bin", "blackbird"),
+      );
+      expect(yield* fs.exists(path.join(home, ".local", "bin", "blackbird"))).toBe(false);
+      expect(yield* fs.readFileString(path.join(home, "bin", "blackbird.staging"))).toBe("mine");
     }).pipe(Effect.scoped),
   );
 
   it.effect("refuses to install behind another blackbird that runs first", () =>
     Effect.gen(function* () {
+      const env: NodeJS.ProcessEnv = { PATH: "", SHELL: "/bin/zsh" };
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped();
       const shadow = path.join(home, "shadow");
       yield* fs.makeDirectory(shadow);
       yield* fs.writeFileString(path.join(shadow, "blackbird"), "#!/bin/sh\n", { mode: 0o755 });
-      const env = { PATH: [shadow, path.join(home, ".local", "bin")].join(":") };
+      env.PATH = [shadow, `${path.join(home, ".local", "bin")}/`].join(":");
 
       const command = yield* commandIn({ home, env });
       const theirs = path.join(shadow, "blackbird");
       expect((yield* command.state).shadowedBy).toBe(theirs);
       const error = yield* Effect.flip(command.install);
       expect(error.message).toContain(theirs);
+      yield* command.installOnFirstLaunch;
       expect(yield* fs.exists(path.join(home, ".local", "bin", "blackbird"))).toBe(false);
+      expect(yield* fs.readFileString(theirs)).toBe("#!/bin/sh\n");
 
+      // Its folder is already on PATH behind theirs; adding it again would change which blackbird runs.
+      yield* fs.makeDirectory(path.join(home, ".local", "bin"), { recursive: true });
+      yield* fs.symlink(
+        path.join(home, ".blackbird", "bin", "blackbird"),
+        path.join(home, ".local", "bin", "blackbird"),
+      );
+      const behind = yield* command.state;
+      expect(behind.installedPath).toBe(path.join(home, ".local", "bin", "blackbird"));
+      expect(behind.pathSetup).toBeUndefined();
+      // Off PATH behind theirs, adding the folder would still put ours first.
+      env.PATH = shadow;
+      expect((yield* command.state).pathSetup).toBeUndefined();
+      yield* Effect.flip(command.addToPath);
+      expect(yield* fs.exists(path.join(home, ".zshrc"))).toBe(false);
+      env.PATH = [shadow, `${path.join(home, ".local", "bin")}/`].join(":");
+      yield* fs.remove(path.join(home, ".local", "bin", "blackbird"));
+
+      // A first-launch install that failed is not retried behind the user's back.
       yield* fs.remove(theirs);
+      yield* command.installOnFirstLaunch;
+      expect(yield* fs.exists(path.join(home, ".local", "bin", "blackbird"))).toBe(false);
       const installed = yield* command.install;
       expect(installed).toMatchObject({
         onPath: true,
@@ -232,6 +353,7 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
     "skips a blackbird directory or a file this user cannot execute",
     () =>
       Effect.gen(function* () {
+        const env: NodeJS.ProcessEnv = { PATH: "", SHELL: "/bin/zsh" };
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const home = yield* fs.makeTempDirectoryScoped();
@@ -245,7 +367,7 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
         yield* fs.chmod(path.join(plain, "blackbird"), process.getuid?.() === 0 ? 0o600 : 0o601);
         yield* fs.makeDirectory(shadow);
         yield* fs.writeFileString(path.join(shadow, "blackbird"), "#!/bin/sh\n", { mode: 0o755 });
-        const env = { PATH: [folder, plain, shadow, path.join(home, ".local", "bin")].join(":") };
+        env.PATH = [folder, plain, shadow, path.join(home, ".local", "bin")].join(":");
 
         const command = yield* commandIn({ home, env });
         expect((yield* command.state).shadowedBy).toBe(path.join(shadow, "blackbird"));
@@ -265,11 +387,12 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
     "does not treat its own launcher as another blackbird when its folder is first on PATH",
     () =>
       Effect.gen(function* () {
+        const env: NodeJS.ProcessEnv = { PATH: "", SHELL: "/bin/zsh" };
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const home = yield* fs.makeTempDirectoryScoped();
         const launcher = path.join(home, ".blackbird", "bin", "blackbird");
-        const env = { PATH: [path.dirname(launcher), path.join(home, ".local", "bin")].join(":") };
+        env.PATH = [path.dirname(launcher), path.join(home, ".local", "bin")].join(":");
 
         const command = yield* commandIn({ home, env });
         const installed = yield* command.install;
@@ -316,6 +439,21 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       expect(registry.path).toBe(`${userPath};${launcherDir}`);
       yield* command.uninstall;
       expect(registry.path).toBe(userPath);
+
+      // A `;` in the folder would split it into two PATH entries, so nothing is written.
+      const split = fakePowerShell(userPath);
+      const semicolon = yield* commandIn(
+        { home, baseDir: `${home}\\T3;Home`, platform: "win32" },
+        split.spawner,
+      );
+      expect((yield* Effect.flip(semicolon.install)).message).toContain('has a ";"');
+      expect(split.registry).toMatchObject({ path: userPath, writes: 0 });
+
+      // An inherited T3_SET=1 never turns a read into a write of the whole PATH.
+      const inherited = fakePowerShell(userPath, { T3_SET: "1", T3_PATH: "C:\\other" });
+      const reader = yield* commandIn({ home, platform: "win32" }, inherited.spawner);
+      yield* reader.install;
+      expect(inherited.registry).toMatchObject({ path: `${userPath};${launcherDir}`, writes: 1 });
     }).pipe(Effect.scoped),
   );
 
@@ -336,6 +474,19 @@ it.layer(NodeServices.layer)("DesktopCliCommand", (it) => {
       expect((yield* command.state).installedPath).toBeNull();
       yield* command.uninstall;
       expect(registry.path).toBe(userPath);
+
+      // A fresh install beside a standalone blackbird.cmd (from `blackbird install`), even off PATH, leaves
+      // PATH alone.
+      const besideHome = yield* fs.makeTempDirectoryScoped();
+      yield* fs.makeDirectory(path.join(besideHome, ".local", "bin"), { recursive: true });
+      yield* fs.writeFileString(
+        path.join(besideHome, ".local", "bin", "blackbird.cmd"),
+        "@echo off\r\n",
+      );
+      const beside = fakePowerShell("C:\\Tools");
+      yield* (yield* commandIn({ home: besideHome, platform: "win32" }, beside.spawner))
+        .installOnFirstLaunch;
+      expect(beside.registry).toMatchObject({ path: "C:\\Tools", writes: 0 });
     }).pipe(Effect.scoped),
   );
 });

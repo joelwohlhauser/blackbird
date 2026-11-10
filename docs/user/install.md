@@ -20,7 +20,7 @@ On first launch with an empty Blackbird profile, **Import conversations from T3 
 
 ## Terminal command
 
-In **Settings → About**, choose **Install** next to **blackbird command**, then open a new terminal. **Remove** removes the launcher again. It does not replace an existing `t3` command.
+A new install sets up the `blackbird` command (and its `bb` alias) on first launch. After an update, or any time, choose **Install** next to **blackbird command** in **Settings → About**. On macOS and Linux it adds a link in `~/.local/bin` (or `~/bin`). Open a new terminal afterwards. If that folder is not on your `PATH`, **Add to PATH** in **Settings → About** adds one line to your shell's startup file. **Remove** takes it off, and the app does not add it again. It never replaces an existing `t3` command or another `blackbird`.
 
 With Blackbird running on the same machine, open a chat for the current directory:
 
@@ -55,7 +55,7 @@ Provider CLIs must be on the server's `PATH`. If Blackbird cannot find one, set 
 
 Blackbird warns when a provider version has known compatibility problems with your release. Check **Settings → Providers** on that environment for the recommended version or range. When its package manager supports installing a specific version, you can install the recommendation there. Otherwise use the provider's installer on the environment's machine. An unlisted version is unverified.
 
-When a provider CLI is behind its latest release, its provider card shows the available version. **Update now** runs the installer that owns the CLI (Homebrew, or a global npm, pnpm, Yarn, Bun, Volta, or Vite+ install), or the CLI's own update command when Blackbird cannot tell. Update a CLI installed with mise through mise. Cursor and Antigravity update with Blackbird. Homebrew and Chocolatey installs compare against the version their package manager offers, which can trail the npm release; update Claude installed with Chocolatey through Chocolatey.
+When a provider CLI is behind its latest release, its provider card shows the available version. **Update now** runs the installer that owns the CLI (Homebrew, mise, or a global npm, pnpm, Yarn, Bun, Volta, or Vite+ install), or the CLI's own update command when Blackbird cannot tell. Blackbird runs `mise upgrade` only for a tool your mise config requests as `latest` when the provider's binary path is a mise shim or under the tool's `installs/<tool>/latest` link; update a pinned version, or a path into one version's directory, through mise yourself. Cursor and Antigravity update with Blackbird. Homebrew and Chocolatey installs compare against the version their package manager offers, which can trail the npm release; update Claude installed with Chocolatey through Chocolatey.
 
 Add another provider instance for a separate account or configuration. Each instance can have its own environment variables, such as API keys or a custom base URL. Mark secret values as sensitive; after saving, Blackbird does not display their original values.
 

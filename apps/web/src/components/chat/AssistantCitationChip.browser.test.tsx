@@ -1,4 +1,4 @@
-import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
+import { type AssistantCitation, EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
@@ -37,12 +37,12 @@ function setup() {
   mocks.dispose.mockClear();
 }
 
-function mount(onSave: () => boolean) {
+function mount(onSave: () => boolean, chipCitation: AssistantCitation = citation) {
   function Composer() {
     const [open, setOpen] = useState(true);
     return (
       <AssistantCitationChip
-        citation={citation}
+        citation={chipCitation}
         composer
         commentEditor={{ open, onOpenChange: setOpen, onSave }}
       />
@@ -89,6 +89,24 @@ describe("citation comment copy shortcut", () => {
 
     expect(writeText).not.toHaveBeenCalled();
     expect(textarea()?.value).toBe("keep this");
+  });
+});
+
+describe("citation comment caret", () => {
+  it("opens a saved comment with the caret after its end, scrolled into view", async () => {
+    setup();
+    const comment = `${"line\n".repeat(40)}end`;
+    await using _screen = await mount(
+      vi.fn(() => true),
+      { ...citation, comment },
+    );
+    await vi.waitFor(() => expect(document.activeElement).toBe(textarea()));
+    const input = textarea()!;
+
+    expect(input.scrollHeight).toBeGreaterThan(input.clientHeight);
+    expect(input.scrollTop).toBe(input.scrollHeight - input.clientHeight);
+    await userEvent.keyboard("!");
+    expect(input.value).toBe(`${comment}!`);
   });
 });
 

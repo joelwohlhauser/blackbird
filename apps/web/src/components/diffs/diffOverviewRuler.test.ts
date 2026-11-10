@@ -20,7 +20,7 @@ index 1111111..2222222 100644
 
 describe("buildDiffOverviewMarkers", () => {
   it("creates proportionally positioned addition and deletion markers", () => {
-    const [parsedFile] = parsePatchFiles(PATCH, "diff-overview-test")[0]!.files;
+    const [parsedFile] = parsePatchFiles(PATCH, { cacheKeyPrefix: "diff-overview-test" })[0]!.files;
     expect(parsedFile).toBeDefined();
     const fileDiff = compactPartialHunkOffsets(parsedFile!);
 
@@ -33,7 +33,7 @@ describe("buildDiffOverviewMarkers", () => {
   });
 
   it("does not show markers for collapsed files", () => {
-    const [parsedFile] = parsePatchFiles(PATCH, "diff-overview-test")[0]!.files;
+    const [parsedFile] = parsePatchFiles(PATCH, { cacheKeyPrefix: "diff-overview-test" })[0]!.files;
     expect(parsedFile).toBeDefined();
 
     expect(buildDiffOverviewMarkers([{ fileDiff: parsedFile!, collapsed: true }])).toEqual([]);
