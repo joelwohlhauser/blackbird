@@ -68,7 +68,7 @@ When Verify or Watch shows that this change broke something, or doesn't fully do
 
 ## 6. Done
 
-- Move the issue to the team's done state. If the tracker's GitHub integration already did, just check. Skip this without a tracker.
+- Move the issue to the team's done state once the change runs in production and Verify found no regression. Don't wait for Watch, even when the change is still unproven. If the tracker's GitHub integration already did, just check. Skip this without a tracker. If Watch later finds a regression, move the issue back to the team's in-progress state.
 - Act on the user's sidequest choices: ignore, start a new thread in its own worktree with `thread_launch`, or create a backlog issue. If they chose to include a fix in this change and it's still unfinished, return to Build. Ignore unanswered items.
 - In the worktree, delete `node_modules` and other installed dependencies to save disk space. Keep the worktree and the branch. Never delete branches.
 - Post a short summary: what shipped, the production evidence, anything only the user still has to do, and the unrelated findings with what happened to each, for reference.
