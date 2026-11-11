@@ -165,8 +165,39 @@ describe("CDP relay extra sessions", () => {
     await settle();
     expect(send).toHaveBeenLastCalledWith("Page.startScreencast", {}, undefined, extra);
     written.length = 0;
-    relay.event("Page.screencastFrame", { data: "x" }, undefined);
-    expect(written.map((m) => m["sessionId"])).toEqual(["t3-preview-page", extra]);
+    for (const data of ["a", "b", "c", "d", "e"]) {
+      relay.event("Page.screencastFrame", { data, sessionId: 1 }, undefined);
+    }
+    relay.event("Page.loadEventFired", {}, undefined);
+    expect(written.map((m) => [m["sessionId"], (m["params"] as { data?: string }).data])).toEqual([
+      [extra, "a"],
+      [extra, "b"],
+      [extra, "c"],
+      ["t3-preview-page", undefined],
+      [extra, undefined],
+    ]);
+    written.length = 0;
+    send.mockClear();
+    relay.receive(
+      JSON.stringify({
+        id: 6,
+        method: "Page.screencastFrameAck",
+        params: { sessionId: 1 },
+        sessionId: extra,
+      }),
+    );
+    await settle();
+    expect(send).not.toHaveBeenCalled();
+    expect(written).toEqual([
+      { method: "Page.screencastFrame", params: { data: "e", sessionId: 1 }, sessionId: extra },
+      { id: 6, result: {}, sessionId: extra },
+    ]);
+    relay.receive(JSON.stringify({ id: 7, method: "Page.stopScreencast", sessionId: extra }));
+    await settle();
+    expect(send).toHaveBeenLastCalledWith("Page.stopScreencast", {}, undefined, extra);
+    written.length = 0;
+    relay.event("Page.screencastFrame", { data: "f", sessionId: 1 }, undefined);
+    expect(written).toEqual([]);
   });
 });
 

@@ -59,6 +59,8 @@ const fitsPayloadBudget = (message: unknown) => {
   return visit(message);
 };
 
+const MAX_UNACKED_SCREENCAST_FRAMES = 3;
+
 const BROWSER_CONTEXT_ID = "t3-preview";
 const ANNOUNCE = Symbol("announce");
 const PAGE_SESSION_ID = "t3-preview-page";
@@ -106,6 +108,18 @@ export function createCdpRelayConnection(
     const sessionId = `t3-preview-${kind}-${++sessionSequence}`;
     sessions.set(sessionId, kind);
     return sessionId;
+  };
+  const screencasts = new Map<string, { unacked: number; newestWaiting: unknown }>();
+  const sendScreencastFrame = (sessionId: string, params: unknown) => {
+    const screencast = screencasts.get(sessionId);
+    if (!screencast) return;
+    if (screencast.unacked >= MAX_UNACKED_SCREENCAST_FRAMES) {
+      screencast.newestWaiting = params;
+      return;
+    }
+    screencast.unacked += 1;
+    screencast.newestWaiting = undefined;
+    send({ method: "Page.screencastFrame", params, sessionId });
   };
   const frameTargets = new Map<string, string>();
   const frameSessions = new Map<
@@ -213,6 +227,7 @@ export function createCdpRelayConnection(
         const sessionId = command.params?.["sessionId"];
         if (typeof sessionId === "string" && sessionId !== PAGE_SESSION_ID) {
           sessions.delete(sessionId);
+          screencasts.delete(sessionId);
           frameSessions.delete(sessionId);
           target.sessionDetached?.(sessionId);
         }
@@ -246,6 +261,23 @@ export function createCdpRelayConnection(
     }
     // Playwright asks for this on every page; the host emulates focus only while it is in use.
     if (command.method === "Emulation.setFocusEmulationEnabled") return Promise.resolve({});
+    if (child === undefined) {
+      const sessionId = command.sessionId!;
+      if (command.method === "Page.startScreencast" && !screencasts.has(sessionId)) {
+        screencasts.set(sessionId, { unacked: 0, newestWaiting: undefined });
+      } else if (command.method === "Page.stopScreencast") {
+        screencasts.delete(sessionId);
+      } else if (command.method === "Page.screencastFrameAck") {
+        const screencast = screencasts.get(sessionId);
+        if (screencast && screencast.unacked > 0) {
+          screencast.unacked -= 1;
+          if (screencast.newestWaiting !== undefined) {
+            sendScreencastFrame(sessionId, screencast.newestWaiting);
+          }
+        }
+        return Promise.resolve({});
+      }
+    }
     return target.send(command.method, command.params ?? {}, child, owner);
   };
 
@@ -299,6 +331,10 @@ export function createCdpRelayConnection(
         send({ method, params, sessionId });
         for (const [alias, frame] of frameSessions)
           if (frame.childSessionId === sessionId) send({ method, params, sessionId: alias });
+        return;
+      }
+      if (method === "Page.screencastFrame") {
+        for (const id of screencasts.keys()) sendScreencastFrame(id, params);
         return;
       }
       for (const [id, kind] of sessions)
