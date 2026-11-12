@@ -52,7 +52,7 @@ function SlackInboxRow({
             <SlackConversationIcon conversation={conversation} className="size-3 shrink-0" />
           )}
           <span className="min-w-0 flex-1 truncate">
-            {item.rootTs === undefined ? label : `Thread in ${label}`}
+            {item.replyCount ? `Thread in ${label}` : label}
           </span>
           {item.mentionsSelf ? (
             <AtSignIcon

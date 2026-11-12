@@ -2,6 +2,7 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import type { SlackConnectionStatus } from "@t3tools/contracts";
 import { useState } from "react";
 
+import { readLocalApi } from "../../localApi";
 import { slackEnvironment, useSlackSnapshot } from "../../state/slack";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsRow, SettingsSection } from "../settings/settingsLayout";
@@ -46,6 +47,11 @@ export function SlackSettingsSection() {
     setConnectError(failure instanceof Error ? failure.message : "Could not connect to Slack.");
   };
   const remove = async () => {
+    const confirmed = await readLocalApi()?.dialogs.confirm(
+      "Disconnect Slack? This removes the stored tokens and the Slack inbox.",
+      { variant: "destructive" },
+    );
+    if (!confirmed) return;
     setBusy(true);
     await disconnect({ environmentId, input: {} });
     setBusy(false);

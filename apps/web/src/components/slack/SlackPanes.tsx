@@ -1,6 +1,7 @@
 import type { SlackConversation, SlackInboxItem, SlackInboxMode } from "@t3tools/contracts";
 import {
   BellIcon,
+  BotIcon,
   CheckIcon,
   ClockIcon,
   ExternalLinkIcon,
@@ -48,6 +49,7 @@ export function SlackConversationIcon({
   if (conversation.kind === "channel") return <HashIcon className={className} />;
   if (conversation.kind === "private_channel") return <LockIcon className={className} />;
   if (conversation.kind === "mpim") return <UsersIcon className={className} />;
+  if (conversation.isBot) return <BotIcon className={className} />;
   const presence =
     conversation.userId === undefined ? undefined : users.get(conversation.userId)?.presence;
   return (
@@ -235,7 +237,7 @@ function SlackMessagePane({
       <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto">
         <div className="flex flex-col py-2">
           {hasMore ? (
-            <div className="flex justify-center py-1">
+            <div className="flex justify-center py-1 [overflow-anchor:none]">
               <Button disabled={isLoadingOlder} size="sm" variant="ghost-muted" onClick={loadOlder}>
                 Load older messages
               </Button>

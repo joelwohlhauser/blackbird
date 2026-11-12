@@ -141,7 +141,9 @@ describe("newlyUnreadSlackItems", () => {
 
 describe("groupSlackConversations", () => {
   it("splits starred, channels, and direct messages, sorted by shown name", () => {
-    const users = new Map<string, SlackUser>([["U002", { id: "U002", name: "Ada", isBot: false }]]);
+    const users = new Map<string, SlackUser>([
+      ["U002", { id: "U002", name: "Ada", isBot: false, isDeleted: false }],
+    ]);
     const groups = groupSlackConversations(
       [
         conversation("C002", "random"),

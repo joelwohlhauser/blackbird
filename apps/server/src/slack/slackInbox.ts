@@ -52,12 +52,18 @@ export type SlackInboxInput =
   | { readonly type: "tick"; readonly now: number };
 
 const PREVIEW_MAX_LENGTH = 200;
+const SEED_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const BROADCAST_MENTION = /<!(?:channel|here|everyone)(?:\|[^>]*)?>/;
 
 export function compareSlackTs(left: string, right: string): number {
   const [leftSeconds = "0", leftMicros = "0"] = left.split(".");
   const [rightSeconds = "0", rightMicros = "0"] = right.split(".");
   return Number(leftSeconds) - Number(rightSeconds) || Number(leftMicros) - Number(rightMicros);
+}
+
+export function slackSeedThreshold(lastRead: string, startedAt: string): string {
+  const floor = (Number(startedAt) - SEED_MAX_AGE_SECONDS).toFixed(6);
+  return compareSlackTs(lastRead, floor) > 0 ? lastRead : floor;
 }
 
 export const isSlackDirectKind = (kind: SlackConversationKind) => kind === "im" || kind === "mpim";
@@ -252,6 +258,7 @@ export function slackPlainPreview(
   },
 ): string {
   const plain = text
+    .replace(/^&gt; ?/gm, "")
     .replace(/<([^<>]*)>/g, (_match, body: string) => {
       const separator = body.indexOf("|");
       const target = separator === -1 ? body : body.slice(0, separator);

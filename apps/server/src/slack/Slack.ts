@@ -62,6 +62,7 @@ import {
   type SlackInboxInput,
   slackInboxItemKey,
   slackPlainPreview,
+  slackSeedThreshold,
   unreadItemCounts,
   visibleSlackInboxItems,
 } from "./slackInbox.ts";
@@ -186,9 +187,18 @@ const toSnapshot = (state: State): SlackSnapshot => {
   };
 };
 
+interface GroupMember {
+  readonly id: string;
+  readonly name: string;
+}
+
 const toDirectoryConversation = (
   raw: SlackApi.RawSlackConversation,
   previous: DirectoryConversation | undefined,
+  group?: {
+    readonly selfUserId: string;
+    readonly membersByHandle: ReadonlyMap<string, GroupMember>;
+  },
 ): DirectoryConversation => {
   const kind: SlackConversationKind = raw.is_im
     ? "im"
@@ -203,6 +213,11 @@ const toDirectoryConversation = (
           .replace(/^mpdm-/, "")
           .replace(/-\d+$/, "")
           .split("--")
+          .flatMap((handle) => {
+            const member = group?.membersByHandle.get(handle);
+            if (member === undefined) return [handle];
+            return member.id === group?.selfUserId ? [] : [member.name];
+          })
           .join(", ")
       : (raw.name ?? raw.id);
   return {
@@ -299,6 +314,7 @@ const make = Effect.gen(function* () {
   const snoozeWake = yield* Queue.sliding<void>(1);
   const inboxLock = yield* Semaphore.make(1);
   const connectionLock = yield* Semaphore.make(1);
+  const syncLock = yield* Semaphore.make(1);
   const files = new Map<string, RememberedFile>();
   const activity = new Map<string, string>();
 
@@ -453,35 +469,46 @@ const make = Effect.gen(function* () {
     );
     const emoji = yield* call(session, "emoji.list", SlackApi.SlackResponses.emoji);
     yield* Ref.set(emojiRef, emoji.emoji);
+    const people = members.map((member) => ({
+      ...member,
+      displayName:
+        member.profile?.display_name ||
+        member.profile?.real_name ||
+        member.real_name ||
+        member.name ||
+        member.id,
+    }));
+    const group = {
+      selfUserId: session.selfUserId,
+      membersByHandle: new Map(
+        people.flatMap((member) =>
+          member.name ? [[member.name, { id: member.id, name: member.displayName }] as const] : [],
+        ),
+      ),
+    };
     yield* update((state) => ({
       ...state,
       conversations: new Map(
         conversations.map((raw) => [
           raw.id,
-          toDirectoryConversation(raw, state.conversations.get(raw.id)),
+          toDirectoryConversation(raw, state.conversations.get(raw.id), group),
         ]),
       ),
       users: new Map(
-        members
-          .filter((member) => !member.deleted)
-          .map((member) => {
-            const presence = state.users.get(member.id)?.presence;
-            return [
-              member.id,
-              {
-                id: member.id,
-                name:
-                  member.profile?.display_name ||
-                  member.profile?.real_name ||
-                  member.real_name ||
-                  member.name ||
-                  member.id,
-                ...(member.profile?.image_72 ? { avatarUrl: member.profile.image_72 } : {}),
-                isBot: member.is_bot === true || member.id === "USLACKBOT",
-                ...(presence === undefined ? {} : { presence }),
-              } satisfies SlackUser,
-            ];
-          }),
+        people.map((member) => {
+          const presence = state.users.get(member.id)?.presence;
+          return [
+            member.id,
+            {
+              id: member.id,
+              name: member.displayName,
+              ...(member.profile?.image_72 ? { avatarUrl: member.profile.image_72 } : {}),
+              isBot: member.is_bot === true || member.id === "USLACKBOT",
+              isDeleted: member.deleted === true,
+              ...(presence === undefined ? {} : { presence }),
+            } satisfies SlackUser,
+          ];
+        }),
       ),
     }));
   });
@@ -519,7 +546,12 @@ const make = Effect.gen(function* () {
         }),
       }));
     }
-    const threshold = since ?? info.channel.last_read ?? startedAt;
+    const isDirect = isSlackDirectKind(conversation.kind);
+    const threshold =
+      since ??
+      (isDirect
+        ? (info.channel.last_read ?? startedAt)
+        : slackSeedThreshold(info.channel.last_read ?? startedAt, startedAt));
     const history = yield* call(
       session,
       "conversations.history",
@@ -529,7 +561,6 @@ const make = Effect.gen(function* () {
     const newest = history.messages[0];
     if (newest !== undefined) recordActivity(conversation.id, newest.latest_reply ?? newest.ts);
 
-    const isDirect = isSlackDirectKind(conversation.kind);
     const participation: SlackInboxInput[] = [];
     const fresh: SlackApi.RawSlackMessage[] = [];
     for (const raw of history.messages) {
@@ -541,8 +572,8 @@ const make = Effect.gen(function* () {
           key: slackInboxItemKey(conversation.kind, conversation.id, raw.ts),
         });
       }
-      if (since === undefined && !raw.subscribed && !isDirect) continue;
-      const threadThreshold = since ?? raw.last_read ?? threshold;
+      if (since === undefined && !raw.subscribed) continue;
+      const threadThreshold = since ?? slackSeedThreshold(raw.last_read ?? threshold, startedAt);
       if (compareSlackTs(raw.latest_reply, threadThreshold) <= 0) continue;
       const replies = yield* call(
         session,
@@ -598,7 +629,7 @@ const make = Effect.gen(function* () {
     }
     yield* bumpLastEvent(startedAt);
     yield* setStatus("connected");
-  });
+  }, syncLock.withPermits(1));
 
   const handleEvent = Effect.fnUntraced(function* (session: Session, payload: unknown) {
     const decoded = decodeEvent(payload);
@@ -675,7 +706,9 @@ const make = Effect.gen(function* () {
       });
       yield* applyInbox([messageInput(state, conversation, message, session)]);
     }
-    yield* bumpLastEvent(event.ts);
+    if ((yield* SubscriptionRef.get(stateRef)).status !== "syncing") {
+      yield* bumpLastEvent(event.ts);
+    }
   });
 
   const pollPresence = Effect.fn("Slack.pollPresence")(function* (session: Session) {
@@ -746,7 +779,6 @@ const make = Effect.gen(function* () {
     const signals = yield* socket.open(tokens.appToken);
     yield* Effect.forkScoped(snoozeLoop);
     yield* refreshDirectory(session);
-    yield* sync(session);
     yield* Effect.forkScoped(
       Effect.sleep(DIRECTORY_REFRESH_INTERVAL).pipe(
         Effect.andThen(refreshDirectory(session)),
@@ -774,25 +806,28 @@ const make = Effect.gen(function* () {
       }).pipe(Effect.forever),
     );
     let downAt: number | undefined;
-    yield* Stream.runForEach(Stream.merge(signals, Stream.fromQueue(resyncs)), (signal) =>
-      Effect.gen(function* () {
-        if (signal.type === "event") return yield* handleEvent(session, signal.event);
-        if (signal.type === "resync") {
-          downAt ??= signal.since;
-          return yield* sync(session, downAt);
-        }
-        const now = yield* Clock.currentTimeMillis;
-        if (signal.type === "down") {
-          downAt ??= now;
-          return;
-        }
-        const gapStartedAt = downAt;
-        downAt = undefined;
-        if (gapStartedAt !== undefined && now - gapStartedAt > RECONNECT_GAP_MS) {
-          yield* sync(session, gapStartedAt);
-        }
-      }).pipe(Effect.catchIf(isRecoverable, logFailure("Slack event handling failed"))),
+    const handleSignals = Stream.runForEach(
+      Stream.merge(signals, Stream.fromQueue(resyncs)),
+      (signal) =>
+        Effect.gen(function* () {
+          if (signal.type === "event") return yield* handleEvent(session, signal.event);
+          if (signal.type === "resync") {
+            downAt ??= signal.since;
+            return yield* sync(session, downAt);
+          }
+          const now = yield* Clock.currentTimeMillis;
+          if (signal.type === "down") {
+            downAt ??= now;
+            return;
+          }
+          const gapStartedAt = downAt;
+          downAt = undefined;
+          if (gapStartedAt !== undefined && now - gapStartedAt > RECONNECT_GAP_MS) {
+            yield* sync(session, gapStartedAt);
+          }
+        }).pipe(Effect.catchIf(isRecoverable, logFailure("Slack event handling failed"))),
     );
+    yield* Effect.all([sync(session), handleSignals], { concurrency: 2, discard: true });
   }, Effect.scoped);
 
   const runConnection = (tokens: {

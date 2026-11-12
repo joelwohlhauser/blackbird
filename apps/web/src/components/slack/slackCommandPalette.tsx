@@ -33,7 +33,7 @@ export function useSlackCommandPaletteItem(): CommandPaletteSubmenuItem | null {
         kind: "action",
         value: `slack:conversation:${conversation.id}`,
         searchTerms: ["slack", label],
-        title: `Slack: ${label}`,
+        title: label,
         icon: isChannel ? (
           <HashIcon className={ITEM_ICON_CLASS} />
         ) : (
@@ -46,12 +46,15 @@ export function useSlackCommandPaletteItem(): CommandPaletteSubmenuItem | null {
     },
   );
   const peopleItems: CommandPaletteActionItem[] = snapshot.users
-    .filter((user) => user.id !== snapshot.selfUserId && !directMessageUserIds.has(user.id))
+    .filter(
+      (user) =>
+        !user.isDeleted && user.id !== snapshot.selfUserId && !directMessageUserIds.has(user.id),
+    )
     .map((user) => ({
       kind: "action",
       value: `slack:user:${user.id}`,
       searchTerms: ["slack", user.name],
-      title: `Slack: ${user.name}`,
+      title: user.name,
       icon: <UserIcon className={ITEM_ICON_CLASS} />,
       run: async () => {
         const result = await openDirectMessage({ environmentId, input: { userId: user.id } });

@@ -7,6 +7,7 @@ import {
   EMPTY_SLACK_INBOX,
   nextSnoozeExpiry,
   slackPlainPreview,
+  slackSeedThreshold,
   type SlackInbox,
   type SlackInboxInput,
   type SlackInboxMessage,
@@ -348,8 +349,19 @@ describe("slackInbox", () => {
       ),
       "@Ada see #general and #random, the doc https://example.com @here @team a < b & c",
     );
+    assert.strictEqual(
+      slackPlainPreview("&gt; quoted\n&gt; more\nreply", names),
+      "quoted more reply",
+    );
     const long = slackPlainPreview("x".repeat(300), names);
     assert.strictEqual(long.length, 200);
     assert.strictEqual(long.endsWith("…"), true);
+  });
+
+  it("seeds from the read cursor but never from more than seven days back", () => {
+    const startedAt = "2000000.000000";
+    assert.strictEqual(slackSeedThreshold("1900000.000100", startedAt), "1900000.000100");
+    assert.strictEqual(slackSeedThreshold("1000000.000100", startedAt), "1395200.000000");
+    assert.strictEqual(slackSeedThreshold("0000000000.000000", startedAt), "1395200.000000");
   });
 });

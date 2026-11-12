@@ -7,6 +7,10 @@ import { resolveSlackEmoji, SLACK_EMOJI, SLACK_QUICK_REACTIONS } from "./slackEm
 
 const MAX_RESULTS = 48;
 const STANDARD_NAMES = Object.keys(SLACK_EMOJI);
+const DISTINCT_STANDARD_NAMES = STANDARD_NAMES.filter(
+  (name, index) =>
+    STANDARD_NAMES.findIndex((other) => SLACK_EMOJI[other] === SLACK_EMOJI[name]) === index,
+);
 
 export function SlackEmoji({ name }: { readonly name: string }) {
   const { mrkdwn } = useSlackDirectory();
@@ -21,7 +25,10 @@ function matchingEmojiNames(query: string, customNames: ReadonlyArray<string>) {
   const needle = query.trim().toLowerCase().replaceAll(":", "");
   if (needle.length === 0) {
     const quick = new Set<string>(SLACK_QUICK_REACTIONS);
-    return [...quick, ...STANDARD_NAMES.filter((name) => !quick.has(name))].slice(0, MAX_RESULTS);
+    return [...quick, ...DISTINCT_STANDARD_NAMES.filter((name) => !quick.has(name))].slice(
+      0,
+      MAX_RESULTS,
+    );
   }
   return [...STANDARD_NAMES, ...customNames]
     .filter((name) => name.includes(needle))

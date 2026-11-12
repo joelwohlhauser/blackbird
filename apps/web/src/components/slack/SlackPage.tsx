@@ -241,6 +241,12 @@ function SlackWorkspace({
                 conversationId={activeTarget.conversationId}
                 composerRef={detailComposerRef}
                 controls={controls}
+                onOpenThread={(rootTs) =>
+                  void navigate({
+                    to: "/slack",
+                    search: { c: activeTarget.conversationId, t: rootTs },
+                  })
+                }
               />
             ) : (
               <SlackThreadView

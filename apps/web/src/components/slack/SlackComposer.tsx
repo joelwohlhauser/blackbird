@@ -44,7 +44,10 @@ export function SlackComposer({
     if (files.length === 0) {
       const result = await postMessage({ environmentId, input: { ...target, text: body } });
       setSending(false);
-      if (result._tag !== "Success") return;
+      if (result._tag !== "Success") {
+        setError("The message could not be sent. Try again.");
+        return;
+      }
       setText("");
       onSent(result.value);
       return;
@@ -67,7 +70,10 @@ export function SlackComposer({
       },
     });
     setSending(false);
-    if (result._tag !== "Success") return;
+    if (result._tag !== "Success") {
+      setError("The files could not be sent. Try again.");
+      return;
+    }
     setText("");
     setFiles([]);
   };

@@ -41,6 +41,7 @@ export const SlackUser = Schema.Struct({
   name: Schema.String,
   avatarUrl: Schema.optionalKey(Schema.String),
   isBot: Schema.Boolean,
+  isDeleted: Schema.Boolean,
   presence: Schema.optionalKey(SlackPresence),
 });
 export type SlackUser = typeof SlackUser.Type;
