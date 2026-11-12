@@ -13,7 +13,7 @@ export function useSlackSnapshot() {
   const query = useEnvironmentQuery(
     environmentId === null ? null : slackEnvironment.snapshot({ environmentId, input: {} }),
   );
-  return { environmentId, snapshot: query.data, error: query.error };
+  return { environmentId, snapshot: query.data ?? null, error: query.error };
 }
 
 function selectSlackAvailable(result: AsyncResult.AsyncResult<SlackSnapshot, unknown>): boolean {
