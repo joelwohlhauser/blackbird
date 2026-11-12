@@ -1,12 +1,21 @@
-import type { SlackSidebarLayout, SlackSidebarSection } from "@t3tools/contracts";
+import type {
+  SlackConversationKind,
+  SlackSidebarLayout,
+  SlackSidebarSection,
+} from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+
+import { compareSlackTs, isSlackDirectKind } from "./slackInbox.ts";
+
+const QUIET_AFTER_SECONDS = 30 * 24 * 60 * 60;
 
 const ConversationCount = Schema.Struct({
   id: Schema.String,
   has_unreads: Schema.Boolean,
   last_read: Schema.String,
+  latest: Schema.String,
 });
 
 export const SlackWebResponses = {
@@ -37,7 +46,6 @@ export const SlackWebResponses = {
     Schema.Struct({
       prefs: Schema.Struct({
         all_notifications_prefs: Schema.optionalKey(Schema.String),
-        sidebar_behavior: Schema.optionalKey(Schema.String),
       }),
     }),
   ),
@@ -73,15 +81,15 @@ const decodeNotificationPrefs = Schema.decodeUnknownOption(
 
 export interface SlackWebLayout {
   readonly muted: ReadonlySet<string>;
-  readonly hidesRead: boolean;
   readonly sections: ReadonlyArray<SlackSidebarSection>;
 }
 
 export interface SlackWebReadState {
   readonly conversations: ReadonlyMap<
     string,
-    { readonly lastRead: string; readonly hasUnreads: boolean }
+    { readonly lastRead: string; readonly hasUnreads: boolean; readonly latest: string }
   >;
+  readonly fetchedAt: string;
   readonly unreadThreads: ReadonlyMap<string, ReadonlySet<string>>;
   readonly unreadThreadsComplete: boolean;
   readonly conversationsWithUnreadThreads: ReadonlySet<string>;
@@ -119,7 +127,6 @@ export function slackWebLayout(
         channel.muted ? [id] : [],
       ),
     ),
-    hidesRead: prefs.prefs.sidebar_behavior?.startsWith("hide_read_channels") ?? false,
     sections: ordered.flatMap((section) =>
       section.type === "standard" && section.name.trim() !== ""
         ? [
@@ -137,6 +144,7 @@ export function slackWebLayout(
 export function slackWebReadState(
   counts: Decoded<"counts">,
   threadView: Decoded<"threadView">,
+  fetchedAt: string,
 ): SlackWebReadState {
   const unreadThreads = new Map<string, Set<string>>();
   let unreadReplies = 0;
@@ -151,9 +159,14 @@ export function slackWebReadState(
     conversations: new Map(
       [...counts.channels, ...counts.mpims, ...counts.ims].map((conversation) => [
         conversation.id,
-        { lastRead: conversation.last_read, hasUnreads: conversation.has_unreads },
+        {
+          lastRead: conversation.last_read,
+          hasUnreads: conversation.has_unreads,
+          latest: conversation.latest,
+        },
       ]),
     ),
+    fetchedAt,
     unreadThreads,
     unreadThreadsComplete: !threadView.has_more || unreadReplies >= threadView.total_unread_replies,
     conversationsWithUnreadThreads: new Set(
@@ -177,24 +190,31 @@ export function slackWebSidebarLayout(
   web: SlackWebState,
   conversations: ReadonlyArray<{
     readonly id: string;
+    readonly kind: SlackConversationKind;
     readonly isStarred: boolean;
     readonly unreadItemCount: number;
   }>,
 ): SlackSidebarLayout {
-  const isUnreadInSlack = (id: string) =>
-    !web.muted.has(id) &&
-    ((web.read.conversations.get(id)?.hasUnreads ?? false) ||
-      web.read.conversationsWithUnreadThreads.has(id));
+  const inOwnSection = new Set(web.sections.flatMap((section) => section.conversationIds));
+  const quietSince = (Number(web.read.fetchedAt) - QUIET_AFTER_SECONDS).toFixed(6);
+  const isQuiet = (id: string) => {
+    const known = web.read.conversations.get(id);
+    return (
+      known !== undefined &&
+      compareSlackTs(known.latest, quietSince) < 0 &&
+      !(known.hasUnreads && !web.muted.has(id)) &&
+      !web.read.conversationsWithUnreadThreads.has(id)
+    );
+  };
   const hidden = new Set(
-    web.hidesRead
-      ? conversations.flatMap((conversation) =>
-          conversation.isStarred ||
-          conversation.unreadItemCount > 0 ||
-          isUnreadInSlack(conversation.id)
-            ? []
-            : [conversation.id],
-        )
-      : [],
+    conversations.flatMap((conversation) =>
+      conversation.isStarred ||
+      conversation.unreadItemCount > 0 ||
+      (inOwnSection.has(conversation.id) && !isSlackDirectKind(conversation.kind)) ||
+      !isQuiet(conversation.id)
+        ? []
+        : [conversation.id],
+    ),
   );
   return {
     sections: web.sections.map((section) => ({

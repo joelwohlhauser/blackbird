@@ -15,10 +15,15 @@ const section = (id: string, type: string, name: string, next: string | null, id
   channel_ids_page: { channel_ids: ids },
 });
 
-const count = (id: string, hasUnreads: boolean) => ({
+const FETCHED_AT = "8640000.000000";
+const RECENT = "8000000.000000";
+const QUIET = "5000000.000000";
+
+const count = (id: string, hasUnreads: boolean, latest = RECENT) => ({
   id,
   has_unreads: hasUnreads,
   last_read: "10.000001",
+  latest,
 });
 
 it("reads muted conversations and the user's own sections in sidebar order", () => {
@@ -28,7 +33,6 @@ it("reads muted conversations and the user's own sections in sidebar order", () 
         all_notifications_prefs: JSON.stringify({
           channels: { C001: { muted: true }, C002: { muted: false }, C003: {} },
         }),
-        sidebar_behavior: "hide_read_channels_unless_starred",
       },
     },
     {
@@ -41,15 +45,13 @@ it("reads muted conversations and the user's own sections in sidebar order", () 
     },
   );
   assert.deepStrictEqual([...layout.muted], ["C001"]);
-  assert.strictEqual(layout.hidesRead, true);
   assert.deepStrictEqual(layout.sections, [
     { id: "L1", name: "Apps", conversationIds: ["D001"] },
     { id: "L2", name: "Team", conversationIds: ["C002"] },
   ]);
-  assert.strictEqual(slackWebLayout({ prefs: {} }, { channel_sections: [] }).hidesRead, false);
 });
 
-it("hides read conversations and knows unread threads only when the list is complete", () => {
+it("knows unread threads only when the list is complete", () => {
   const counts = {
     channels: [count("C001", true), count("C002", true), count("C003", false)],
     mpims: [],
@@ -60,47 +62,79 @@ it("hides read conversations and knows unread threads only when the list is comp
     root_msg: { channel, thread_ts: rootTs },
     ...(unread === 0 ? {} : { unread_replies: Array.from({ length: unread }, () => ({})) }),
   });
-  const read = slackWebReadState(counts, {
-    total_unread_replies: 3,
-    has_more: true,
-    threads: [thread("D001", "5.000001", 1), thread("C002", "6.000001", 0)],
-  });
+  const read = slackWebReadState(
+    counts,
+    {
+      total_unread_replies: 3,
+      has_more: true,
+      threads: [thread("D001", "5.000001", 1), thread("C002", "6.000001", 0)],
+    },
+    FETCHED_AT,
+  );
   assert.deepStrictEqual(slackWebUnreadRoots(read, "D001"), undefined);
   assert.deepStrictEqual(slackWebUnreadRoots(read, "C002"), new Set());
-  const complete = slackWebReadState(counts, {
-    total_unread_replies: 1,
-    has_more: true,
-    threads: [thread("D001", "5.000001", 1)],
-  });
+  const complete = slackWebReadState(
+    counts,
+    {
+      total_unread_replies: 1,
+      has_more: true,
+      threads: [thread("D001", "5.000001", 1)],
+    },
+    FETCHED_AT,
+  );
   assert.deepStrictEqual(slackWebUnreadRoots(complete, "D001"), new Set(["5.000001"]));
   assert.deepStrictEqual(slackWebUnreadRoots(complete, "C003"), new Set());
+});
 
+it("hides conversations that went quiet, like the Slack sidebar does", () => {
+  const read = slackWebReadState(
+    {
+      channels: [
+        count("C001", true, QUIET),
+        count("C002", false, QUIET),
+        count("C003", false, QUIET),
+        count("C004", false, QUIET),
+        count("C005", false),
+      ],
+      mpims: [],
+      ims: [
+        count("D001", false, QUIET),
+        count("D002", false),
+        count("D003", false, QUIET),
+        count("D004", false, QUIET),
+      ],
+      threads: { unread_count_by_channel: { C003: 1 } },
+    },
+    { total_unread_replies: 0, has_more: false, threads: [] },
+    FETCHED_AT,
+  );
   const conversation = (id: string, isStarred = false, unreadItemCount = 0) => ({
     id,
+    kind: id.startsWith("D") ? ("im" as const) : ("channel" as const),
     isStarred,
     unreadItemCount,
   });
   const web = {
     muted: new Set(["C001"]),
-    hidesRead: true,
-    sections: [{ id: "L1", name: "Team", conversationIds: ["C002", "D002"] }],
+    sections: [{ id: "L1", name: "Team", conversationIds: ["C002", "D001"] }],
     read,
   };
-  const conversations = [
-    conversation("C001"),
-    conversation("C002"),
-    conversation("C003"),
-    conversation("D001"),
-    conversation("D002"),
-    conversation("D003", true),
-    conversation("D004", false, 1),
-  ];
-  assert.deepStrictEqual(slackWebSidebarLayout(web, conversations), {
-    sections: [{ id: "L1", name: "Team", conversationIds: ["C002"] }],
-    hiddenConversationIds: ["C001", "D002"],
-  });
   assert.deepStrictEqual(
-    slackWebSidebarLayout({ ...web, hidesRead: false }, conversations).hiddenConversationIds,
-    [],
+    slackWebSidebarLayout(web, [
+      conversation("C001"),
+      conversation("C002"),
+      conversation("C003"),
+      conversation("C004"),
+      conversation("C005"),
+      conversation("D001"),
+      conversation("D002"),
+      conversation("D003", true),
+      conversation("D004", false, 1),
+      conversation("D005"),
+    ]),
+    {
+      sections: [{ id: "L1", name: "Team", conversationIds: ["C002"] }],
+      hiddenConversationIds: ["C001", "C004", "D001"],
+    },
   );
 });

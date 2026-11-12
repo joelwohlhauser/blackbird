@@ -929,6 +929,7 @@ const make = Effect.gen(function* () {
           thread_counts_by_channel: "true",
         }),
         yield* webCall(workspaceUrl, "subscriptions.thread.getView", SlackWebResponses.threadView),
+        before,
       );
       yield* requireFollowing;
       yield* update((state) => ({ ...state, web: { ...layout, read } }));
