@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import {
@@ -210,6 +211,7 @@ export class SlackApi extends Context.Service<
       readonly url: string;
       readonly bytes: Uint8Array;
     }) => Effect.Effect<void, SlackError>;
+    readonly guard: (check: Effect.Effect<void, SlackError>) => Effect.Effect<void>;
   }
 >()("t3/slack/SlackApi") {}
 
@@ -281,6 +283,8 @@ const make = Effect.gen(function* () {
   const scopedHttpClient = HttpClient.withScope(httpClient);
   const buckets = new Map<string, { readonly tokens: number; readonly at: number }>();
   const pausedUntil = new Map<string, number>();
+  const guardRef = yield* Ref.make<Effect.Effect<void, SlackError>>(Effect.void);
+  const allowed = Effect.flatten(Ref.get(guardRef));
 
   const acquire = Effect.fnUntraced(function* (method: string, channel: string | undefined) {
     const pace =
@@ -319,6 +323,7 @@ const make = Effect.gen(function* () {
     const channel = params.find(([name]) => name === "channel")?.[1];
     for (let attempt = 0; ; attempt += 1) {
       yield* acquire(input.method, channel);
+      yield* allowed;
       const response = yield* httpClient.execute(request).pipe(
         Effect.provideService(FetchHttpClient.RequestInit, MANUAL_REDIRECT),
         Effect.provideService(HttpClient.TracerPropagationEnabled, false),
@@ -366,6 +371,9 @@ const make = Effect.gen(function* () {
 
   return SlackApi.of({
     call,
+    guard: Effect.fn("SlackApi.guard")(function* (check) {
+      yield* Ref.set(guardRef, check);
+    }),
     fetchFile: Effect.fn("SlackApi.fetchFile")(function* (input) {
       const target = URL.parse(input.url);
       if (
@@ -381,6 +389,7 @@ const make = Effect.gen(function* () {
           message: "The Slack file is not served by Slack's file host.",
         });
       }
+      yield* allowed;
       return yield* scopedHttpClient
         .execute(
           HttpClientRequest.get(target).pipe(
@@ -399,6 +408,7 @@ const make = Effect.gen(function* () {
       if (target === null || target.protocol !== "https:") {
         return yield* unreachable("file upload");
       }
+      yield* allowed;
       const response = yield* httpClient
         .execute(
           HttpClientRequest.post(target).pipe(

@@ -2,6 +2,7 @@ import { COMPOSER_CONTEXT_SLACK_TEXT_MAX_CHARS, type SlackMessage } from "@t3too
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  slackAskFor,
   slackAskItemKey,
   slackThreadContextRecord,
   slackTranscript,
@@ -99,5 +100,19 @@ describe("pending ask on the first message", () => {
     expect(withSlackAskContext(undefined, ask)).toEqual({ version: 1, records: [record] });
     expect(withSlackAskReference("fix this", null)).toBe("fix this");
     expect(withSlackAskContext(undefined, null)).toBeUndefined();
+  });
+});
+
+describe("slackAskFor", () => {
+  const ask = { draftId: "draft-1", threadId: "thread-1" } as PendingSlackAsk;
+  const otherDraft = { draftId: "draft-2" } as Pick<PendingSlackAsk, "draftId">;
+
+  it("finds the ask by its draft or its chat only while the integration is on", () => {
+    expect(slackAskFor(ask, true, { draftId: ask.draftId })).toBe(ask);
+    expect(slackAskFor(ask, true, { threadId: ask.threadId })).toBe(ask);
+    expect(slackAskFor(ask, true, otherDraft)).toBeNull();
+    expect(slackAskFor(ask, true, { draftId: null })).toBeNull();
+    expect(slackAskFor(ask, false, { draftId: ask.draftId })).toBeNull();
+    expect(slackAskFor(ask, false, { threadId: ask.threadId })).toBeNull();
   });
 });

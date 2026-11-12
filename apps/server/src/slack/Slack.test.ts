@@ -1,15 +1,17 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
+import { DEFAULT_SERVER_SETTINGS, ThreadId } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
-import { HttpClient } from "effect/http";
+import * as TestClock from "effect/testing/TestClock";
+import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { AssetSigner } from "../assets/AssetSigner.ts";
 import { ServerSecretStore } from "../auth/ServerSecretStore.ts";
@@ -20,10 +22,12 @@ import Migration0087 from "../persistence/Migrations/087_SlackThreadLinks.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as Slack from "./Slack.ts";
 
-const makeWorld = Effect.gen(function* () {
+const makeWorld = Effect.fn(function* (respond?: () => Response) {
   const world = {
     enabled: false,
+    requests: 0,
     requestsWhileOff: 0,
+    storedSecrets: [] as string[],
     subscribed: yield* Deferred.make<void>(),
     requested: yield* Deferred.make<void>(),
     interrupted: yield* Deferred.make<void>(),
@@ -35,18 +39,24 @@ const makeWorld = Effect.gen(function* () {
       Layer.mergeAll(
         Layer.succeed(
           HttpClient.HttpClient,
-          HttpClient.make(() =>
+          HttpClient.make((request) =>
             Effect.sync(() => {
+              world.requests += 1;
               if (!world.enabled) world.requestsWhileOff += 1;
             }).pipe(
               Effect.andThen(Deferred.succeed(world.requested, undefined)),
-              Effect.andThen(Effect.never),
+              Effect.andThen(
+                respond === undefined
+                  ? Effect.never
+                  : Effect.sync(() => HttpClientResponse.fromWeb(request, respond())),
+              ),
               Effect.onInterrupt(() => Deferred.succeed(world.interrupted, undefined)),
             ),
           ),
         ),
         Layer.mock(ServerSecretStore)({
           get: (name) => Effect.succeedSome(new TextEncoder().encode(`${name}-value`)),
+          set: (name) => Effect.sync(() => void world.storedSecrets.push(name)),
         }),
         Layer.mock(ServerSettingsService)({
           getSettings: Effect.sync(settings),
@@ -75,6 +85,7 @@ const makeWorld = Effect.gen(function* () {
         world.enabled = enabled;
         return PubSub.publish(changes, settings());
       }),
+    requests: () => world.requests,
     requestsWhileOff: () => world.requestsWhileOff,
   };
 });
@@ -82,7 +93,7 @@ const makeWorld = Effect.gen(function* () {
 it.effect("connects only while the integration is on, and stops when it is switched off", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const world = yield* makeWorld;
+      const world = yield* makeWorld();
       yield* Effect.forkScoped(world.slack.start);
       yield* Deferred.await(world.subscribed);
       assert.isFalse(yield* world.slack.enabled);
@@ -99,6 +110,69 @@ it.effect("connects only while the integration is on, and stops when it is switc
         Stream.filter((snapshot) => snapshot.status === "disconnected"),
         Stream.runHead,
       );
+    }),
+  ),
+);
+
+const tokens = { userToken: "xoxp-test", appToken: "xapp-test" };
+
+it.effect("rejects every operation while the integration is off", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld();
+      const threadId = ThreadId.make("thread-1");
+      const item = { conversationId: "C001", ts: "10.000001" };
+      const errors = yield* Effect.forEach(
+        [
+          world.slack.connect(tokens),
+          world.slack.history({ conversationId: "C001" }),
+          world.slack.thread({ conversationId: "C001", rootTs: "10.000001" }),
+          world.slack.sendMessage({ conversationId: "C001", text: "hello" }),
+          world.slack.updateMessage({ ...item, text: "hello" }),
+          world.slack.deleteMessage(item),
+          world.slack.setReaction({ ...item, name: "eyes", on: true }),
+          world.slack.setItemState({ key: "C001:10.000001", state: "done" }),
+          world.slack.setInboxMode({ conversationId: "C001", mode: "everything" }),
+          world.slack.setFocusMode({ on: true }),
+          world.slack.openDirectMessage({ userId: "U001" }),
+          world.slack.emoji,
+          world.slack.fileUrl({ fileId: "F001", variant: "full" }),
+          world.slack.upload({
+            conversationId: "C001",
+            files: [{ attachmentId: "A001", name: "a.txt" }],
+          }),
+          world.slack.linkThread({ itemKey: "C001:10.000001", threadId, home: "slack" }),
+          world.slack.unlinkThread({ itemKey: "C001:10.000001" }),
+          world.slack.setThreadHome({ threadId, home: "agents" }),
+        ],
+        Effect.flip,
+      );
+      for (const error of errors) {
+        assert.strictEqual(error.reason, "not_connected");
+        assert.include(error.message, "turned off");
+      }
+      assert.strictEqual(world.requests(), 0);
+      assert.deepStrictEqual(world.storedSecrets, []);
+      assert.deepStrictEqual((yield* world.slack.snapshot).links, []);
+    }),
+  ),
+);
+
+it.effect("a connect waiting out a rate limit stops when the integration is switched off", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld(
+        () => new Response(null, { status: 429, headers: { "retry-after": "30" } }),
+      );
+      yield* world.setEnabled(true);
+      const connecting = yield* Effect.forkChild(Effect.flip(world.slack.connect(tokens)));
+      yield* Deferred.await(world.requested);
+      yield* world.setEnabled(false);
+      yield* TestClock.adjust("30 seconds");
+      const error = yield* Fiber.join(connecting);
+      assert.strictEqual(error.reason, "not_connected");
+      assert.strictEqual(world.requests(), 1);
+      assert.deepStrictEqual(world.storedSecrets, []);
     }),
   ),
 );

@@ -19,7 +19,7 @@ import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { useSlackAskStore } from "./slackAsk";
+import { useSlackAsk } from "./slackAsk";
 import { openSlack } from "./slackNavigation";
 
 interface SlackChatProps {
@@ -37,9 +37,7 @@ function useSlackChatLink({ environmentId, threadId }: SlackChatProps) {
 export function SlackChatBackLink(props: SlackChatProps) {
   const navigate = useNavigate();
   const link = useSlackChatLink(props);
-  const pending = useSlackAskStore((state) =>
-    state.pending?.threadId === props.threadId ? state.pending : null,
-  );
+  const pending = useSlackAsk({ threadId: props.threadId });
 
   const leaveOnEscape = useEffectEvent((event: KeyboardEvent) => {
     if (pending === null || event.key !== "Escape" || event.defaultPrevented || event.isComposing) {

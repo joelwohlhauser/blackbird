@@ -1,3 +1,4 @@
+import { SlackError } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -92,6 +93,30 @@ describe("SlackApi", () => {
       yield* Fiber.join(queued);
       yield* Fiber.join(limited);
       assert.strictEqual(world.requests.length, 4);
+    }).pipe(Effect.provide(world.layer));
+  });
+
+  it.effect("a retry is not sent once the guard rejects", () => {
+    const world = makeWorld(
+      () => new Response(null, { status: 429, headers: { "retry-after": "30" } }),
+    );
+    let open = true;
+    return Effect.gen(function* () {
+      const api = yield* SlackApi.SlackApi;
+      yield* api.guard(
+        Effect.suspend(() =>
+          open
+            ? Effect.void
+            : Effect.fail(new SlackError({ reason: "not_connected", message: "Turned off." })),
+        ),
+      );
+      const limited = yield* Effect.forkChild(Effect.flip(post("C001")));
+      yield* TestClock.adjust("1 second");
+      assert.strictEqual(world.requests.length, 1);
+      open = false;
+      yield* TestClock.adjust("30 seconds");
+      assert.strictEqual((yield* Fiber.join(limited)).reason, "not_connected");
+      assert.strictEqual(world.requests.length, 1);
     }).pipe(Effect.provide(world.layer));
   });
 

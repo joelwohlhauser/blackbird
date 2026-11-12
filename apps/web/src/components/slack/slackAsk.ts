@@ -20,6 +20,7 @@ import { persist } from "zustand/middleware";
 import { type DraftId, useComposerDraftStore } from "../../composerDraftStore";
 import { ensureInlineContextReferences } from "../../lib/composerContextReferences";
 import { slackThreadSurface, useRightPanelStore } from "../../rightPanelStore";
+import { readSlackIntegrationEnabled, useSlackIntegration } from "../../state/slack";
 import { slackTsToDate } from "./slackMessages.logic";
 import { slackMrkdwnToMarkdown, type SlackMrkdwnContext } from "./slackMrkdwn";
 
@@ -34,7 +35,7 @@ interface SlackAskState {
   readonly pending: PendingSlackAsk | null;
 }
 
-export const useSlackAskStore = create<SlackAskState>()(
+const useSlackAskStore = create<SlackAskState>()(
   persist((): SlackAskState => ({ pending: null }), { name: "blackbird:slack-ask:v1" }),
 );
 
@@ -124,20 +125,39 @@ export function beginSlackAsk(pending: PendingSlackAsk): void {
   useSlackAskStore.setState({ pending });
 }
 
-export function pendingSlackAsk(draftId: DraftId): PendingSlackAsk | null {
-  const { pending } = useSlackAskStore.getState();
-  return pending?.draftId === draftId ? pending : null;
+type SlackAskOwner = { readonly draftId: DraftId | null } | { readonly threadId: ThreadId };
+
+export function slackAskFor(
+  pending: PendingSlackAsk | null,
+  integrationEnabled: boolean,
+  owner: SlackAskOwner,
+): PendingSlackAsk | null {
+  if (pending === null || !integrationEnabled) return null;
+  const owned =
+    "draftId" in owner ? pending.draftId === owner.draftId : pending.threadId === owner.threadId;
+  return owned ? pending : null;
 }
 
-export function endSlackAsk(ask: PendingSlackAsk | null): void {
-  if (ask !== null && useSlackAskStore.getState().pending === ask) {
-    useSlackAskStore.setState({ pending: null });
-  }
+export function useSlackAsk(owner: SlackAskOwner): PendingSlackAsk | null {
+  const pending = useSlackAskStore((state) => state.pending);
+  return slackAskFor(pending, useSlackIntegration() === "on", owner);
+}
+
+export function pendingSlackAsk(draftId: DraftId): PendingSlackAsk | null {
+  return slackAskFor(useSlackAskStore.getState().pending, readSlackIntegrationEnabled(), {
+    draftId,
+  });
+}
+
+export function endSlackAsk(draftId: DraftId): PendingSlackAsk | null {
+  const { pending } = useSlackAskStore.getState();
+  if (pending?.draftId !== draftId) return null;
+  useSlackAskStore.setState({ pending: null });
+  return pending;
 }
 
 export function abandonSlackAsk(draftId: DraftId): void {
-  const pending = pendingSlackAsk(draftId);
-  endSlackAsk(pending);
+  const pending = endSlackAsk(draftId);
   const draft = useComposerDraftStore.getState().getDraftSession(draftId);
   if (pending === null || draft === null) return;
   useRightPanelStore

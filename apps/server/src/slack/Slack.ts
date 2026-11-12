@@ -140,6 +140,11 @@ const NOT_CONNECTED = new SlackError({
   message: "Slack is not connected.",
 });
 
+const INTEGRATION_OFF = new SlackError({
+  reason: "not_connected",
+  message: "The Slack integration is turned off.",
+});
+
 const CHAT_NOT_MOVED = new SlackError({
   reason: "chat_not_moved",
   message:
@@ -252,6 +257,14 @@ const make = Effect.gen(function* () {
     Effect.map((current) => current.slackIntegrationEnabled),
     Effect.orElseSucceed(() => false),
   );
+  const requireEnabled = enabled.pipe(
+    Effect.filterOrFail(
+      (on) => on,
+      () => INTEGRATION_OFF,
+    ),
+    Effect.asVoid,
+  );
+  yield* api.guard(requireEnabled);
   const storedTokens = Effect.all({
     userToken: readSecret(USER_TOKEN_SECRET),
     appToken: readSecret(APP_TOKEN_SECRET),
@@ -302,7 +315,8 @@ const make = Effect.gen(function* () {
   const logFailure = (label: string) => (error: SlackError) =>
     Effect.logWarning(label, { reason: error.reason });
 
-  const requireSession = Ref.get(sessionRef).pipe(
+  const requireSession = requireEnabled.pipe(
+    Effect.andThen(Ref.get(sessionRef)),
     Effect.filterOrFail(
       (session) => session !== undefined,
       () => NOT_CONNECTED,
@@ -927,6 +941,7 @@ const make = Effect.gen(function* () {
   }).pipe(Effect.scoped, Effect.withSpan("Slack.start"));
 
   const connect = Effect.fn("Slack.connect")(function* (input: SlackConnectInput) {
+    yield* requireEnabled;
     if (!input.userToken.startsWith("xoxp-") || !input.appToken.startsWith("xapp-")) {
       return yield* new SlackError({
         reason: "invalid_token",
@@ -943,6 +958,7 @@ const make = Effect.gen(function* () {
       method: "apps.connections.open",
       decode: SlackApi.SlackResponses.connectionsOpen,
     });
+    yield* requireEnabled;
     const encoder = new TextEncoder();
     yield* secrets
       .set(USER_TOKEN_SECRET, encoder.encode(input.userToken))
@@ -1056,6 +1072,7 @@ const make = Effect.gen(function* () {
     }),
 
     setItemState: Effect.fn("Slack.setItemState")(function* (input) {
+      yield* requireEnabled;
       if (input.state === "snoozed" && input.snoozedUntil === undefined) {
         return yield* new SlackError({
           reason: "slack_api",
@@ -1082,6 +1099,7 @@ const make = Effect.gen(function* () {
     }),
 
     setInboxMode: Effect.fn("Slack.setInboxMode")(function* (input) {
+      yield* requireEnabled;
       yield* store.setInboxMode(input.conversationId, input.mode).pipe(Effect.orDie);
       yield* update((state) => ({
         ...state,
@@ -1091,16 +1109,19 @@ const make = Effect.gen(function* () {
     }),
 
     linkThread: Effect.fn("Slack.linkThread")(function* (input) {
+      yield* requireEnabled;
       const chat = yield* readChatState(input.threadId);
       if (chat === "deleted") return yield* chatMissing(input.threadId);
       yield* applyInbox([{ type: "link", ...input, active: chat === "active" }]);
     }),
 
     unlinkThread: Effect.fn("Slack.unlinkThread")(function* (input) {
+      yield* requireEnabled;
       yield* applyInbox([{ type: "unlink", ...input }]);
     }),
 
     setThreadHome: Effect.fn("Slack.setThreadHome")(function* ({ projectId, ...home }) {
+      yield* requireEnabled;
       if (projectId !== undefined) {
         yield* orchestrator
           .dispatch({
