@@ -647,6 +647,16 @@ const make = Effect.gen(function* () {
     if (newest !== undefined) recordActivity(conversation.id, newest.latest_reply ?? newest.ts);
 
     const participation: SlackInboxInput[] = [];
+    const item = isDirect
+      ? (yield* SubscriptionRef.get(stateRef)).inbox.items.get(conversation.id)
+      : undefined;
+    const threadOfLatest =
+      item !== undefined && item.latestThreadTs === item.latestTs
+        ? history.find((raw) => raw.latest_reply === item.latestTs)
+        : undefined;
+    if (threadOfLatest !== undefined) {
+      participation.push({ type: "thread", key: conversation.id, rootTs: threadOfLatest.ts });
+    }
     const fresh: SlackApi.RawSlackMessage[] = [];
     const addReplies = (
       replies: ReadonlyArray<SlackApi.RawSlackMessage>,

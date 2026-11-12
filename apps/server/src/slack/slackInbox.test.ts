@@ -542,6 +542,11 @@ describe("slackInbox", () => {
       direct("40.000001", { threadTs: "15.000001" }),
     ]);
     assert.strictEqual(inbox.items.get(DIRECT)?.latestThreadTs, "15.000001");
+    assert.strictEqual(
+      run([{ type: "thread", key: DIRECT, rootTs: "14.000001" }], inbox).items.get(DIRECT)
+        ?.latestThreadTs,
+      "14.000001",
+    );
     for (const next of [direct("41.000001"), direct("41.000001", { isOwn: true })]) {
       assert.strictEqual(run([next], inbox).items.get(DIRECT)?.latestThreadTs, "41.000001");
     }

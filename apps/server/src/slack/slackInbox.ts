@@ -54,6 +54,7 @@ export type SlackInboxInput =
       readonly preview: string;
     }
   | { readonly type: "participation"; readonly key: string }
+  | { readonly type: "thread"; readonly key: string; readonly rootTs: string }
   | {
       readonly type: "action";
       readonly key: string;
@@ -354,6 +355,15 @@ export function applyInboxInput(inbox: SlackInbox, input: SlackInboxInput): Slac
         existing.preview === input.preview
         ? inbox
         : { ...inbox, items: withItem(inbox.items, { ...existing, preview: input.preview }) };
+    }
+    case "thread": {
+      const existing = inbox.items.get(input.key);
+      return existing === undefined || existing.latestThreadTs === input.rootTs
+        ? inbox
+        : {
+            ...inbox,
+            items: withItem(inbox.items, { ...existing, latestThreadTs: input.rootTs }),
+          };
     }
     case "participation":
       return inbox.participation.has(input.key)
