@@ -13,7 +13,7 @@ import {
 export { compareSlackTs, slackInboxItemKey };
 
 export interface SlackInboxRecord extends SlackInboxItem {
-  readonly doneThroughTs?: string;
+  readonly acknowledgedThroughTs?: string;
 }
 
 export interface SlackInbox {
@@ -105,7 +105,7 @@ const isRoutedToChat = (inbox: SlackInbox, key: string) =>
 
 const markDone = (existing: SlackInboxRecord): SlackInboxRecord => {
   const { snoozedUntil: _snoozedUntil, ...item } = existing;
-  return { ...item, state: "done", doneThroughTs: item.latestTs };
+  return { ...item, state: "done", acknowledgedThroughTs: item.latestTs };
 };
 
 const mapLinks = (
@@ -158,9 +158,10 @@ function applyMessage(
     };
   }
   const isMissed =
-    existing?.state === "done" &&
-    existing.doneThroughTs !== undefined &&
-    compareSlackTs(message.ts, existing.doneThroughTs) > 0;
+    existing !== undefined &&
+    existing.state !== "unread" &&
+    existing.acknowledgedThroughTs !== undefined &&
+    compareSlackTs(message.ts, existing.acknowledgedThroughTs) > 0;
   if (!isNewer && !isMissed) return inbox;
 
   const mentionsSelfDirectly =
@@ -203,7 +204,7 @@ function applyMessage(
     };
     return {
       ...inbox,
-      items: withItem(inbox.items, { ...kept, ...shown, doneThroughTs: message.ts }),
+      items: withItem(inbox.items, { ...kept, ...shown, acknowledgedThroughTs: message.ts }),
     };
   }
 
@@ -214,7 +215,9 @@ function applyMessage(
       state: "unread",
       ...shown,
       mentionsSelf: (existing?.state === "unread" && existing.mentionsSelf) || mentions,
-      ...(existing?.doneThroughTs === undefined ? {} : { doneThroughTs: existing.doneThroughTs }),
+      ...(existing?.acknowledgedThroughTs === undefined
+        ? {}
+        : { acknowledgedThroughTs: existing.acknowledgedThroughTs }),
     }),
   };
 }
@@ -238,6 +241,7 @@ function applyAction(
               ...item,
               state: "snoozed",
               snoozedUntil: input.snoozedUntil,
+              acknowledgedThroughTs: item.latestTs,
             }),
           };
     case "unread":
@@ -348,7 +352,7 @@ export function applyInboxInput(inbox: SlackInbox, input: SlackInboxInput): Slac
 export function visibleSlackInboxItems(inbox: SlackInbox): ReadonlyArray<SlackInboxItem> {
   return [...inbox.items.values()]
     .filter((item) => item.state !== "done" && !isRoutedToChat(inbox, item.key))
-    .map(({ doneThroughTs: _doneThroughTs, ...item }) => item)
+    .map(({ acknowledgedThroughTs: _acknowledgedThroughTs, ...item }) => item)
     .toSorted((left, right) => compareSlackTs(right.latestTs, left.latestTs));
 }
 
@@ -424,9 +428,9 @@ export function chatsToMarkUnread(
     if (item === undefined || item === previous) continue;
     const isNewer = previous === undefined || compareSlackTs(item.latestTs, previous.latestTs) > 0;
     const isMissed =
-      item.doneThroughTs !== undefined &&
-      item.doneThroughTs !== previous?.doneThroughTs &&
-      compareSlackTs(item.doneThroughTs, item.latestTs) < 0;
+      item.acknowledgedThroughTs !== undefined &&
+      item.acknowledgedThroughTs !== previous?.acknowledgedThroughTs &&
+      compareSlackTs(item.acknowledgedThroughTs, item.latestTs) < 0;
     if (isNewer ? item.latestAuthorId !== selfUserId : isMissed) threadIds.add(link.threadId);
   }
   return [...threadIds];

@@ -1,4 +1,8 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
@@ -10,10 +14,10 @@ import { isQuickChatsProject, QUICK_CHATS_PROJECT_TITLE } from "../../quickChats
 import { useSlackSpaceStore } from "../../slackSpaceStore";
 import { useProjects, useQuietThreadShell } from "../../state/entities";
 import { slackEnvironment, useSlackThreadLinks } from "../../state/slack";
-import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useSlackAskStore } from "./slackAsk";
 import { openSlack } from "./slackNavigation";
@@ -82,23 +86,36 @@ export function SlackChatBackLink(props: SlackChatProps) {
 export function SlackChatHomeAction(props: SlackChatProps) {
   const link = useSlackChatLink(props);
   const setThreadHome = useAtomCommand(slackEnvironment.setThreadHome, { reportFailure: true });
-  const moveThread = useAtomCommand(threadEnvironment.updateMetadata, "move chat to project");
   const thread = useQuietThreadShell(scopeThreadRef(props.environmentId, props.threadId));
   const projects = useProjects().filter((project) => project.environmentId === props.environmentId);
   if (link === undefined) return null;
 
-  const setHome = (home: "slack" | "agents") => {
-    useSlackSpaceStore.getState().setSpace(home);
-    void setThreadHome({
+  const setHome = async (home: "slack" | "agents", projectId?: ProjectId) => {
+    const result = await setThreadHome({
       environmentId: props.environmentId,
-      input: { threadId: props.threadId, home },
+      input: {
+        threadId: props.threadId,
+        home,
+        ...(projectId === undefined || projectId === thread?.projectId ? {} : { projectId }),
+      },
+    });
+    if (result._tag === "Success") {
+      useSlackSpaceStore.getState().setSpace(home);
+      return;
+    }
+    if (isAtomCommandInterrupted(result)) return;
+    const failure = squashAtomCommandFailure(result);
+    toastManager.add({
+      type: "error",
+      title: "The chat could not be moved.",
+      ...(failure instanceof Error ? { description: failure.message } : {}),
     });
   };
   if (link.home === "agents") {
     return (
       <Tooltip>
         <TooltipTrigger
-          render={<Button size="sm" variant="outline" onClick={() => setHome("slack")} />}
+          render={<Button size="sm" variant="outline" onClick={() => void setHome("slack")} />}
         >
           <MessageSquareIcon />
           <span className={COLLAPSING_LABEL_CLASS}>Move to Slack</span>
@@ -110,14 +127,6 @@ export function SlackChatHomeAction(props: SlackChatProps) {
 
   const canChangeProject =
     thread !== null && !threadRuntimeIsActive(thread.runtime) && thread.worktreePath === null;
-  const moveToAgents = (projectId: ProjectId | undefined) => {
-    setHome("agents");
-    if (projectId === undefined || projectId === thread?.projectId) return;
-    void moveThread({
-      environmentId: props.environmentId,
-      input: { threadId: props.threadId, projectId },
-    });
-  };
   const quickChats = projects.find(isQuickChatsProject);
   return (
     <Menu>
@@ -128,7 +137,7 @@ export function SlackChatHomeAction(props: SlackChatProps) {
       <MenuPopup align="end">
         <MenuItem
           disabled={!canChangeProject && quickChats?.id !== thread?.projectId}
-          onClick={() => moveToAgents(quickChats?.id)}
+          onClick={() => void setHome("agents", quickChats?.id)}
         >
           {QUICK_CHATS_PROJECT_TITLE}
         </MenuItem>
@@ -139,7 +148,7 @@ export function SlackChatHomeAction(props: SlackChatProps) {
             <MenuItem
               key={project.id}
               disabled={!canChangeProject && project.id !== thread?.projectId}
-              onClick={() => moveToAgents(project.id)}
+              onClick={() => void setHome("agents", project.id)}
             >
               {project.title}
             </MenuItem>

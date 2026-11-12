@@ -155,6 +155,7 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
       snapshot: { ...baseSnapshot, ...initial },
       posts: [] as Array<SlackPostMessageInput>,
       failNextPost: false,
+      loseNextReply: false,
       crashAfterNextPost: false,
     };
     const layerSlack = Layer.mock(Slack.Slack)({
@@ -175,6 +176,15 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
             );
           }
           slack.posts.push(input);
+          if (slack.loseNextReply) {
+            slack.loseNextReply = false;
+            return Effect.fail(
+              new SlackError({
+                reason: "unconfirmed",
+                message: "Slack chat.postMessage could not be reached.",
+              }),
+            );
+          }
           if (slack.crashAfterNextPost) {
             slack.crashAfterNextPost = false;
             return Effect.die("The process stopped after Slack accepted the message.");
@@ -491,6 +501,27 @@ it.effect("a failed send leaves the draft open, and a discarded draft posts noth
       expect(notices).toHaveLength(1);
       expect(notices[0]).toMatchObject({ notification: { outcome: "cancelled" } });
       expect(notices[0]!.text).toContain("Nothing was sent");
+    }),
+  ),
+);
+
+it.effect("a send whose reply was lost is not offered as a normal send again", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld();
+      yield* world.draft({ person: "Ada", text: "Lunch?" });
+      const card = yield* pendingCard(world);
+      world.slack.loseNextReply = true;
+      const lost = yield* world.drafts
+        .answer({ threadId, turnItemId: card.id, answer: { type: "send", text: "Lunch?" } })
+        .pipe(Effect.flip);
+      expect(lost).toMatchObject({ reason: "unconfirmed" });
+      expect(yield* world.cards).toMatchObject([{ status: "waiting", draftStatus: "sending" }]);
+      const again = yield* world.drafts
+        .answer({ threadId, turnItemId: card.id, answer: { type: "send", text: "Lunch?" } })
+        .pipe(Effect.flip);
+      expect(again).toMatchObject({ reason: "already_answered" });
+      expect(world.slack.posts).toHaveLength(1);
     }),
   ),
 );

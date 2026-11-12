@@ -139,6 +139,12 @@ const NOT_CONNECTED = new SlackError({
   message: "Slack is not connected.",
 });
 
+const CHAT_NOT_MOVED = new SlackError({
+  reason: "chat_not_moved",
+  message:
+    "The chat stays where it is. A chat with unfinished work or a worktree cannot change its project.",
+});
+
 const decodeEvent = Schema.decodeUnknownOption(SlackApi.RawSlackEvent);
 
 const toConversation = (
@@ -1073,8 +1079,20 @@ const make = Effect.gen(function* () {
       yield* applyInbox([{ type: "unlink", ...input }]);
     }),
 
-    setThreadHome: Effect.fn("Slack.setThreadHome")(function* (input) {
-      yield* applyInbox([{ type: "home", ...input }]);
+    setThreadHome: Effect.fn("Slack.setThreadHome")(function* ({ projectId, ...home }) {
+      if (projectId !== undefined) {
+        yield* orchestrator
+          .dispatch({
+            type: "thread.metadata.update",
+            commandId: CommandId.make(`server:slack:${yield* random.uuidV4()}`),
+            threadId: home.threadId,
+            projectId,
+            expectedIdle: true,
+            expectedWorktreePath: null,
+          })
+          .pipe(Effect.mapError(() => CHAT_NOT_MOVED));
+      }
+      yield* applyInbox([{ type: "home", ...home }]);
     }),
 
     setFocusMode: Effect.fn("Slack.setFocusMode")(function* (input) {

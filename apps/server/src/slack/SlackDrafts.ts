@@ -514,8 +514,8 @@ const make = Effect.gen(function* () {
           ...(card.threadTs === undefined ? {} : { threadTs: card.threadTs }),
         })
         .pipe(
-          Effect.tapError(() =>
-            interrupted
+          Effect.tapError((error) =>
+            interrupted || error.reason === "unconfirmed"
               ? Effect.void
               : save({ draftStatus: "pending", text: card.text }, "").pipe(Effect.ignore),
           ),

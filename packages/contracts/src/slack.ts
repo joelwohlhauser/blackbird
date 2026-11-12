@@ -5,6 +5,7 @@ import {
   IsoDateTime,
   NonNegativeInt,
   PositiveInt,
+  ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
   TurnItemId,
@@ -201,8 +202,10 @@ export class SlackError extends Schema.TaggedError<SlackError>()("SlackError", {
     "invalid_token",
     "rate_limited",
     "slack_api",
+    "unconfirmed",
     "not_found",
     "already_answered",
+    "chat_not_moved",
   ]),
   message: Schema.String,
 }) {}
@@ -290,6 +293,7 @@ export type SlackUnlinkThreadInput = typeof SlackUnlinkThreadInput.Type;
 export const SlackSetThreadHomeInput = Schema.Struct({
   threadId: ThreadId,
   home: SlackThreadHome,
+  projectId: Schema.optionalKey(ProjectId),
 });
 export type SlackSetThreadHomeInput = typeof SlackSetThreadHomeInput.Type;
 

@@ -221,7 +221,7 @@ describe("slackInbox", () => {
       direct("11.000001"),
       { type: "action", key: DIRECT, state: "done" },
     ]);
-    assert.strictEqual(done.items.get(DIRECT)?.doneThroughTs, "11.000001");
+    assert.strictEqual(done.items.get(DIRECT)?.acknowledgedThroughTs, "11.000001");
 
     assert.strictEqual(run([direct("10.000001"), direct("11.000001")], done), done);
     assert.strictEqual(visibleSlackInboxItems(done).length, 0);
@@ -239,7 +239,7 @@ describe("slackInbox", () => {
     assert.strictEqual(run([direct("12.000001", { text: "missed" })], missed), missed);
     assert.strictEqual(
       run([{ type: "action", key: DIRECT, state: "done" }], missed).items.get(DIRECT)
-        ?.doneThroughTs,
+        ?.acknowledgedThroughTs,
       "13.000001",
     );
 
@@ -280,6 +280,12 @@ describe("slackInbox", () => {
     assert.deepStrictEqual(states(run([direct("11.000001", { isOwn: true })], snoozed)), {
       [DIRECT]: "snoozed",
     });
+    const recovered = run([direct("12.000001", { isOwn: true }), direct("11.000001")], snoozed);
+    assert.deepStrictEqual(states(recovered), { [DIRECT]: "unread" });
+    assert.strictEqual(recovered.items.get(DIRECT)?.snoozedUntil, undefined);
+    assert.strictEqual(recovered.items.get(DIRECT)?.latestTs, "12.000001");
+    assert.strictEqual(run([direct("11.000001")], recovered), recovered);
+    assert.strictEqual(run([direct("10.000001")], snoozed), snoozed);
     assert.strictEqual(run([{ type: "action", key: DIRECT, state: "snoozed" }], expired), expired);
     assert.deepStrictEqual(
       states(run([{ type: "action", key: DIRECT, state: "unread" }], snoozed)),
@@ -537,7 +543,7 @@ describe("slackInbox", () => {
         [`${CHANNEL}:11.000001`, "snoozed"],
       ],
     );
-    assert.strictEqual("doneThroughTs" in (visibleSlackInboxItems(inbox)[0] ?? {}), false);
+    assert.strictEqual("acknowledgedThroughTs" in (visibleSlackInboxItems(inbox)[0] ?? {}), false);
   });
 
   it("writes previews as plain text of at most 200 characters", () => {

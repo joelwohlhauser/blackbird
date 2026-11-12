@@ -274,7 +274,7 @@ const errorForCode = (method: string, code: string) =>
   });
 
 const unreachable = (target: string) =>
-  new SlackError({ reason: "slack_api", message: `Slack ${target} could not be reached.` });
+  new SlackError({ reason: "unconfirmed", message: `Slack ${target} could not be reached.` });
 
 const make = Effect.gen(function* () {
   const httpClient = yield* HttpClient.HttpClient;
@@ -283,12 +283,6 @@ const make = Effect.gen(function* () {
   const pausedUntil = new Map<string, number>();
 
   const acquire = Effect.fnUntraced(function* (method: string, channel: string | undefined) {
-    let now = yield* Clock.currentTimeMillis;
-    for (let until = pausedUntil.get(method); until !== undefined && until > now;) {
-      yield* Effect.sleep(until - now);
-      now = yield* Clock.currentTimeMillis;
-      until = pausedUntil.get(method);
-    }
     const pace =
       method === POST_MESSAGE_METHOD
         ? { key: `${method}:${channel}`, interval: POST_MESSAGE_INTERVAL_MS, burst: 1 }
@@ -297,10 +291,20 @@ const make = Effect.gen(function* () {
             interval: 60_000 / (TIER_2_METHODS.has(method) ? TIER_2_PER_MINUTE : TIER_3_PER_MINUTE),
             burst: BUCKET_BURST,
           };
-    const bucket = buckets.get(pace.key) ?? { tokens: pace.burst, at: now };
-    const tokens = Math.min(pace.burst, bucket.tokens + (now - bucket.at) / pace.interval) - 1;
-    buckets.set(pace.key, { tokens, at: now });
-    if (tokens < 0) yield* Effect.sleep(Math.ceil(-tokens * pace.interval));
+    for (;;) {
+      const now = yield* Clock.currentTimeMillis;
+      const bucket = buckets.get(pace.key) ?? { tokens: pace.burst, at: now };
+      const tokens = Math.min(pace.burst, bucket.tokens + (now - bucket.at) / pace.interval);
+      const wait = Math.max(
+        (pausedUntil.get(method) ?? 0) - now,
+        Math.ceil((1 - tokens) * pace.interval),
+      );
+      if (wait <= 0) {
+        buckets.set(pace.key, { tokens: tokens - 1, at: now });
+        return;
+      }
+      yield* Effect.sleep(wait);
+    }
   });
 
   const call: SlackApi["Service"]["call"] = Effect.fn("SlackApi.call")(function* (input) {
@@ -341,7 +345,7 @@ const make = Effect.gen(function* () {
       const envelope = decodeEnvelope(body);
       if (envelope._tag === "None") {
         return yield* new SlackError({
-          reason: "slack_api",
+          reason: "unconfirmed",
           message: `Slack ${input.method} answered with status ${response.status}.`,
         });
       }
@@ -352,7 +356,7 @@ const make = Effect.gen(function* () {
         Effect.mapError(
           () =>
             new SlackError({
-              reason: "slack_api",
+              reason: "unconfirmed",
               message: `Slack ${input.method} returned a reply Blackbird could not read.`,
             }),
         ),
