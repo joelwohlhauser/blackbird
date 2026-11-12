@@ -84,3 +84,30 @@ export function newlyUnreadSlackItems(
     return seen === undefined || compareSlackTs(item.latestTs, seen) > 0;
   });
 }
+
+export interface OpenedSlackItem {
+  readonly key: string | null;
+  readonly thread: string | undefined;
+  readonly resolved: boolean;
+}
+
+export function openSlackItem(
+  opened: OpenedSlackItem | null,
+  key: string | null,
+  requestedThread: string | undefined,
+  item: Pick<SlackInboxItem, "latestThreadTs"> | undefined,
+): OpenedSlackItem {
+  if (opened === null || opened.key !== key || !opened.resolved) {
+    const thread = requestedThread ?? item?.latestThreadTs;
+    const resolved = key === null || requestedThread !== undefined || item !== undefined;
+    return opened !== null &&
+      opened.key === key &&
+      opened.thread === thread &&
+      opened.resolved === resolved
+      ? opened
+      : { key, thread, resolved };
+  }
+  return requestedThread === undefined || requestedThread === opened.thread
+    ? opened
+    : { ...opened, thread: requestedThread };
+}

@@ -19,7 +19,12 @@ import { SidebarInset } from "../ui/sidebar";
 import { Switch } from "../ui/switch";
 import { useSlackDirectory, useSlackInbox } from "./slackDirectory";
 import { SlackSnapshotProvider } from "./SlackDirectoryProvider";
-import { moveSlackSelection, slackSelectionAfterRemoval } from "./slackInbox.logic";
+import {
+  moveSlackSelection,
+  type OpenedSlackItem,
+  openSlackItem,
+  slackSelectionAfterRemoval,
+} from "./slackInbox.logic";
 import { SlackInboxList } from "./SlackInboxList";
 import {
   type SlackAskAgent,
@@ -125,12 +130,14 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
     });
   };
   const activeItem = activeKey === null ? undefined : items.find((item) => item.key === activeKey);
-  const [opened, setOpened] = useState({ key: activeKey, thread: activeItem?.latestThreadTs });
-  if (opened.key !== activeKey) {
-    setOpened({ key: activeKey, thread: activeItem?.latestThreadTs });
-  }
-  const openedThread =
-    search.t ?? (opened.key === activeKey ? opened.thread : activeItem?.latestThreadTs);
+  const [storedOpened, setOpened] = useState<OpenedSlackItem | null>(null);
+  const opened = openSlackItem(
+    storedOpened,
+    activeKey,
+    inboxView ? search.t : undefined,
+    activeItem,
+  );
+  if (opened !== storedOpened) setOpened(opened);
   const controls = useSlackItemControls(activeItem, (item) => {
     if (inboxView) selectItem(slackSelectionAfterRemoval(listedKeys, item.key));
   });
@@ -188,7 +195,7 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
     inboxView && activeKey !== null
       ? {
           ...parseSlackInboxItemKey(activeKey),
-          ...(openedThread === undefined ? {} : { rootTs: openedThread }),
+          ...(opened.thread === undefined ? {} : { rootTs: opened.thread }),
         }
       : null;
 
