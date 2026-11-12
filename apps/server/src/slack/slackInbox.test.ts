@@ -1,8 +1,10 @@
-import type { SlackConversationKind, SlackInboxMode } from "@t3tools/contracts";
+import { type SlackConversationKind, type SlackInboxMode, ThreadId } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
 
 import {
   applyInboxInput,
+  chatsToMarkUnread,
+  chatToSettle,
   conversationToMarkRead,
   EMPTY_SLACK_INBOX,
   nextSnoozeExpiry,
@@ -19,6 +21,16 @@ const SELF = "U001";
 const OTHER = "U002";
 const CHANNEL = "C001";
 const DIRECT = "D001";
+const CHAT = ThreadId.make("thread-1");
+const THREAD_KEY = `${CHANNEL}:10.000001`;
+
+const link = (home: "slack" | "agents", itemKey = THREAD_KEY): SlackInboxInput => ({
+  type: "link",
+  itemKey,
+  threadId: CHAT,
+  home,
+  active: true,
+});
 
 const message = (
   ts: string,
@@ -306,6 +318,154 @@ describe("slackInbox", () => {
     assert.strictEqual(conversationToMarkRead(oneDone, snoozed, second), undefined);
     const reopened = run([{ type: "action", key: first, state: "unread" }], allDone);
     assert.strictEqual(conversationToMarkRead(allDone, reopened, first), undefined);
+  });
+
+  it("link rule a: an item linked to an Agents chat leaves the inbox and wakes the chat", () => {
+    const unread = run([message("10.000001", {}, "everything")]);
+    const linked = run([link("agents")], unread);
+    assert.deepStrictEqual(linked.links.get(THREAD_KEY), {
+      itemKey: THREAD_KEY,
+      threadId: CHAT,
+      home: "agents",
+      conversationId: CHANNEL,
+      rootTs: "10.000001",
+      active: true,
+    });
+    assert.strictEqual(visibleSlackInboxItems(linked).length, 0);
+    assert.strictEqual(unreadItemCounts(linked).get(CHANNEL), undefined);
+    assert.deepStrictEqual(chatsToMarkUnread(unread, linked, SELF), []);
+
+    const done = run([{ type: "action", key: THREAD_KEY, state: "done" }], linked);
+    const replied = run([message("11.000001", { threadTs: "10.000001" }, "off")], done);
+    assert.strictEqual(replied.items.get(THREAD_KEY)?.state, "done");
+    assert.strictEqual(replied.items.get(THREAD_KEY)?.latestTs, "11.000001");
+    assert.deepStrictEqual(chatsToMarkUnread(done, replied, SELF), [CHAT]);
+
+    const own = run([message("12.000001", { threadTs: "10.000001", isOwn: true })], replied);
+    assert.deepStrictEqual(chatsToMarkUnread(replied, own, SELF), []);
+
+    const fresh = run([link("agents", DIRECT), direct("11.000001")]);
+    assert.strictEqual(fresh.items.get(DIRECT)?.state, "done");
+    assert.deepStrictEqual(chatsToMarkUnread(EMPTY_SLACK_INBOX, fresh, SELF), [CHAT]);
+
+    const moved = run([{ type: "home", threadId: CHAT, home: "slack" }], linked);
+    assert.deepStrictEqual(states(moved), { [THREAD_KEY]: "unread" });
+    assert.strictEqual(visibleSlackInboxItems(moved).length, 1);
+    const unlinked = run([{ type: "unlink", itemKey: THREAD_KEY }], linked);
+    assert.strictEqual(unlinked.links.size, 0);
+    assert.strictEqual(visibleSlackInboxItems(unlinked).length, 1);
+  });
+
+  it("link rule b: done on an item with a Slack-home chat settles that chat", () => {
+    const linked = run([message("10.000001", {}, "everything"), link("slack")]);
+    assert.strictEqual(visibleSlackInboxItems(linked).length, 1);
+    const done = run([{ type: "action", key: THREAD_KEY, state: "done" }], linked);
+    assert.strictEqual(chatToSettle(linked, done, THREAD_KEY), CHAT);
+    assert.strictEqual(chatToSettle(done, done, THREAD_KEY), undefined);
+
+    const agents = run([{ type: "home", threadId: CHAT, home: "agents" }], linked);
+    assert.strictEqual(
+      chatToSettle(
+        agents,
+        run([{ type: "action", key: THREAD_KEY, state: "done" }], agents),
+        THREAD_KEY,
+      ),
+      undefined,
+    );
+
+    const reply = run([message("11.000001", { threadTs: "10.000001" }, "off")], done);
+    assert.deepStrictEqual(states(reply), { [THREAD_KEY]: "unread" });
+    assert.deepStrictEqual(chatsToMarkUnread(done, reply, SELF), []);
+  });
+
+  it("link rule c: a settled or archived chat finishes its items and its link then sleeps", () => {
+    const second = `${CHANNEL}:12.000001`;
+    const linked = run([
+      message("10.000001", {}, "everything"),
+      message("12.000001", {}, "everything"),
+      link("slack"),
+      link("slack", second),
+      { type: "action", key: second, state: "snoozed", snoozedUntil: "2026-01-05T08:00:00.000Z" },
+    ]);
+    const closed = run([{ type: "chat", threadId: CHAT, state: "closed" }], linked);
+    assert.deepStrictEqual(states(closed), { [THREAD_KEY]: "done", [second]: "done" });
+    assert.strictEqual(closed.items.get(second)?.snoozedUntil, undefined);
+    assert.strictEqual(closed.links.get(THREAD_KEY)?.active, false);
+    assert.strictEqual(chatToSettle(linked, closed, THREAD_KEY), undefined);
+    assert.strictEqual(run([{ type: "chat", threadId: CHAT, state: "closed" }], closed), closed);
+
+    const agents = run([{ type: "home", threadId: CHAT, home: "agents" }], closed);
+    const reply = run([message("13.000001", { threadTs: "10.000001" })], agents);
+    assert.strictEqual(reply.items.get(THREAD_KEY)?.state, "unread");
+    assert.deepStrictEqual(
+      visibleSlackInboxItems(reply).map((item) => item.key),
+      [THREAD_KEY],
+    );
+    assert.deepStrictEqual(chatsToMarkUnread(agents, reply, SELF), []);
+
+    const reopened = run([{ type: "chat", threadId: CHAT, state: "active" }], reply);
+    assert.strictEqual(reopened.links.get(THREAD_KEY)?.active, true);
+    assert.strictEqual(visibleSlackInboxItems(reopened).length, 0);
+  });
+
+  it("link rule d: deleting a chat removes its links and keeps the items", () => {
+    const linked = run([
+      message("10.000001", {}, "everything"),
+      link("agents"),
+      link("agents", DIRECT),
+      {
+        type: "link",
+        itemKey: `${CHANNEL}:12.000001`,
+        threadId: ThreadId.make("thread-2"),
+        home: "slack",
+        active: true,
+      },
+    ]);
+    const deleted = run([{ type: "chat", threadId: CHAT, state: "deleted" }], linked);
+    assert.deepStrictEqual([...deleted.links.keys()], [`${CHANNEL}:12.000001`]);
+    assert.deepStrictEqual(states(deleted), { [THREAD_KEY]: "unread" });
+    assert.strictEqual(visibleSlackInboxItems(deleted).length, 1);
+  });
+
+  it("a second link moves every link of the chat to the new home", () => {
+    const linked = run([link("slack"), link("agents", DIRECT)]);
+    assert.deepStrictEqual(
+      [...linked.links.values()].map((entry) => [entry.itemKey, entry.home]),
+      [
+        [THREAD_KEY, "agents"],
+        [DIRECT, "agents"],
+      ],
+    );
+  });
+
+  it("a narrower inbox mode drops the channel's items that no longer qualify", () => {
+    const mine = `${CHANNEL}:11.000001`;
+    const mention = `${CHANNEL}:12.000001`;
+    const snoozed = `${CHANNEL}:13.000001`;
+    const inbox = run([
+      message("10.000001", {}, "everything"),
+      message("11.000001", {}, "everything"),
+      message("11.500001", { threadTs: "11.000001", isOwn: true }),
+      message("12.000001", { text: `ping <@${SELF}>` }, "everything"),
+      message("13.000001", {}, "everything"),
+      direct("14.000001"),
+      { type: "action", key: snoozed, state: "snoozed", snoozedUntil: "2026-01-05T08:00:00.000Z" },
+    ]);
+    assert.strictEqual(
+      run([{ type: "mode", conversationId: CHANNEL, mode: "everything" }], inbox),
+      inbox,
+    );
+    for (const mode of ["mentions", "off"] as const) {
+      const narrowed = run([{ type: "mode", conversationId: CHANNEL, mode }], inbox);
+      assert.deepStrictEqual(states(narrowed), {
+        [THREAD_KEY]: "done",
+        [mine]: "unread",
+        [mention]: "unread",
+        [snoozed]: "done",
+        [DIRECT]: "unread",
+      });
+      assert.strictEqual(narrowed.items.get(snoozed)?.snoozedUntil, undefined);
+    }
   });
 
   it("rule 9: unread counts and the visible list are derived from the items", () => {

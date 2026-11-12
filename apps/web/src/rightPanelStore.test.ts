@@ -635,7 +635,7 @@ describe("rightPanelStore", () => {
     ).toBe("diff");
   });
 
-  it("drops the legacy singleton terminal surface during migration", () => {
+  it("drops the legacy singleton terminal and malformed Slack surfaces during migration", () => {
     expect(
       migratePersistedRightPanelState({
         byThreadKey: {
@@ -644,6 +644,7 @@ describe("rightPanelStore", () => {
             surfaces: [
               { id: "browser:tab-a", kind: "preview", resourceId: "tab-a" },
               { id: "terminal", kind: "terminal" },
+              { id: "slack-thread:C001:10.000001", kind: "slack-thread", itemKey: "C001" },
             ],
           },
         },

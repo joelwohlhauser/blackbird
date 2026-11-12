@@ -26,12 +26,14 @@ import {
 } from "./slackInbox.logic";
 import { SlackInboxList } from "./SlackInboxList";
 import {
+  type SlackAskAgent,
   SlackConversationView,
   SlackPaneHeader,
   SlackThreadView,
   type SlackItemControls,
 } from "./SlackPanes";
 import type { SlackSearch } from "./slackSearch";
+import { useSlackAskAgent } from "./useSlackAskAgent";
 
 function ResizablePane({
   edge,
@@ -96,6 +98,12 @@ function SlackWorkspace({
   const [snoozeOpen, setSnoozeOpen] = useState(false);
 
   const directory = buildSlackDirectory(environmentId, snapshot, emoji.data?.custom);
+  const { askAgent, openChat } = useSlackAskAgent(directory);
+  const ask: SlackAskAgent = {
+    onAsk: (conversationId, rootTs) => void askAgent(conversationId, rootTs),
+    onAskAboutMessage: (message) =>
+      void askAgent(message.conversationId, message.threadTs ?? message.ts),
+  };
   const inboxView = search.c === undefined;
   const listed = inboxView
     ? slackItemsInState(snapshot.items, search.view === "snoozed" ? "snoozed" : "unread")
@@ -118,6 +126,11 @@ function SlackWorkspace({
       },
       replace: true,
     });
+  const openItem = (key: string) => {
+    const link = directory.links.get(key);
+    if (link?.home === "slack" && link.active) openChat(link);
+    else selectItem(key);
+  };
   const openThread = (rootTs: string | null) => {
     if (search.c === undefined) return;
     void navigate({
@@ -189,6 +202,14 @@ function SlackWorkspace({
       selectItem(moveSlackSelection(listedKeys, activeKey, key === "j" ? 1 : -1));
       return;
     }
+    if (key === "a" && activeKey !== null) {
+      const target = parseSlackItemKey(activeKey);
+      const kind = directory.conversations.get(target.conversationId)?.kind;
+      if (target.rootTs === undefined && kind !== "im" && kind !== "mpim") return;
+      event.preventDefault();
+      void askAgent(target.conversationId, target.rootTs);
+      return;
+    }
     if (activeItem === undefined) return;
     if (key === "e") {
       event.preventDefault();
@@ -228,7 +249,7 @@ function SlackWorkspace({
                 emptyMessage={
                   search.view === "snoozed" ? "Nothing is snoozed." : "You're all caught up."
                 }
-                onSelect={selectItem}
+                onSelect={openItem}
               />
             </ResizablePane>
             {activeTarget === null ? (
@@ -241,6 +262,7 @@ function SlackWorkspace({
                 conversationId={activeTarget.conversationId}
                 composerRef={detailComposerRef}
                 controls={controls}
+                askAgent={ask}
                 onOpenThread={(rootTs) =>
                   void navigate({
                     to: "/slack",
@@ -255,6 +277,7 @@ function SlackWorkspace({
                 rootTs={activeTarget.rootTs}
                 composerRef={detailComposerRef}
                 controls={controls}
+                askAgent={ask}
               />
             )}
           </div>
@@ -266,6 +289,7 @@ function SlackWorkspace({
               conversationId={search.c}
               composerRef={primaryComposerRef}
               controls={search.t === undefined ? controls : undefined}
+              askAgent={ask}
               onOpenThread={openThread}
             />
             {search.t === undefined ? null : (
@@ -281,6 +305,7 @@ function SlackWorkspace({
                   rootTs={search.t}
                   composerRef={detailComposerRef}
                   controls={controls}
+                  askAgent={ask}
                   onClose={() => openThread(null)}
                 />
               </ResizablePane>

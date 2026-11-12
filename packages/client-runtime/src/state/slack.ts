@@ -85,5 +85,17 @@ export function createSlackEnvironmentAtoms<R, E>(
       label: "environment-data:slack:upload",
       tag: WS_METHODS.slackUpload,
     }),
+    linkThread: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:slack:link-thread",
+      tag: WS_METHODS.slackLinkThread,
+    }),
+    unlinkThread: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:slack:unlink-thread",
+      tag: WS_METHODS.slackUnlinkThread,
+    }),
+    setThreadHome: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:slack:set-thread-home",
+      tag: WS_METHODS.slackSetThreadHome,
+    }),
   };
 }

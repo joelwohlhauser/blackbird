@@ -1,4 +1,9 @@
-import type { SlackConversation, SlackInboxItem, SlackInboxMode } from "@t3tools/contracts";
+import type {
+  SlackConversation,
+  SlackInboxItem,
+  SlackInboxMode,
+  SlackMessage,
+} from "@t3tools/contracts";
 import {
   BellIcon,
   BotIcon,
@@ -23,6 +28,7 @@ import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../
 import { useSidebarVisibility } from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { slackThreadTarget } from "./slackAsk";
 import { SlackComposer } from "./SlackComposer";
 import { useSlackDirectory } from "./slackDirectory";
 import { slackConversationLabel, slackWebUrl } from "./slackInbox.logic";
@@ -132,6 +138,32 @@ function OpenInSlackAction({
   );
 }
 
+export interface SlackAskAgent {
+  readonly onAsk: (conversationId: string, rootTs: string | undefined) => void;
+  readonly onAskAboutMessage: (message: SlackMessage) => void;
+}
+
+function AskAgentAction({
+  conversationId,
+  rootTs,
+  onAsk,
+}: {
+  readonly conversationId: string;
+  readonly rootTs?: string | undefined;
+  readonly onAsk: SlackAskAgent["onAsk"];
+}) {
+  const { conversations, links } = useSlackDirectory();
+  const target = slackThreadTarget(conversations.get(conversationId), conversationId, rootTs);
+  return (
+    <HeaderAction
+      label={links.has(target.itemKey) ? "Open chat (A)" : "Ask agent (A)"}
+      onClick={() => onAsk(conversationId, rootTs)}
+    >
+      <BotIcon />
+    </HeaderAction>
+  );
+}
+
 export interface SlackItemControls {
   readonly item: SlackInboxItem;
   readonly reactOpen: boolean;
@@ -224,18 +256,20 @@ function SlackMessagePane({
   composerRef,
   placeholder,
   onOpenThread,
+  onAskAgent,
 }: {
   readonly scope: SlackMessageScope;
   readonly composerRef?: RefObject<HTMLTextAreaElement | null> | undefined;
   readonly placeholder: string;
   readonly onOpenThread?: ((rootTs: string) => void) | undefined;
+  readonly onAskAgent?: SlackAskAgent["onAskAboutMessage"] | undefined;
 }) {
   const { messages, isLoading, error, hasMore, isLoadingOlder, loadOlder, apply } =
     useSlackMessages(scope);
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto">
-        <div className="flex flex-col py-2">
+        <div className="mb-auto flex flex-col py-2">
           {hasMore ? (
             <div className="flex justify-center py-1 [overflow-anchor:none]">
               <Button disabled={isLoadingOlder} size="sm" variant="ghost-muted" onClick={loadOlder}>
@@ -258,6 +292,7 @@ function SlackMessagePane({
                 message={message}
                 apply={apply}
                 onOpenThread={onOpenThread}
+                onAskAgent={onAskAgent}
               />
             ))
           )}
@@ -299,12 +334,14 @@ export function SlackConversationView({
   leading = false,
   composerRef,
   controls,
+  askAgent,
   onOpenThread,
 }: {
   readonly conversationId: string;
   readonly leading?: boolean;
   readonly composerRef?: RefObject<HTMLTextAreaElement | null> | undefined;
   readonly controls?: SlackItemControls | undefined;
+  readonly askAgent?: SlackAskAgent | undefined;
   readonly onOpenThread?: ((rootTs: string) => void) | undefined;
 }) {
   const { conversations, users } = useSlackDirectory();
@@ -318,6 +355,9 @@ export function SlackConversationView({
         leading={leading}
         title={<ConversationTitle conversationId={conversationId} />}
       >
+        {askAgent === undefined || conversation === undefined || isChannel ? null : (
+          <AskAgentAction conversationId={conversationId} onAsk={askAgent.onAsk} />
+        )}
         {controls === undefined ? null : <SlackItemActions controls={controls} />}
         {conversation !== undefined && isChannel ? (
           <InboxModeMenu conversation={conversation} />
@@ -329,6 +369,7 @@ export function SlackConversationView({
         composerRef={composerRef}
         placeholder={`Message ${isChannel ? "#" : ""}${label}`}
         onOpenThread={onOpenThread}
+        onAskAgent={askAgent?.onAskAboutMessage}
       />
     </section>
   );
@@ -339,12 +380,14 @@ export function SlackThreadView({
   rootTs,
   composerRef,
   controls,
+  askAgent,
   onClose,
 }: {
   readonly conversationId: string;
   readonly rootTs: string;
   readonly composerRef?: RefObject<HTMLTextAreaElement | null> | undefined;
   readonly controls?: SlackItemControls | undefined;
+  readonly askAgent?: SlackAskAgent | undefined;
   readonly onClose?: (() => void) | undefined;
 }) {
   return (
@@ -359,6 +402,9 @@ export function SlackThreadView({
           </>
         }
       >
+        {askAgent === undefined ? null : (
+          <AskAgentAction conversationId={conversationId} rootTs={rootTs} onAsk={askAgent.onAsk} />
+        )}
         {controls === undefined ? null : <SlackItemActions controls={controls} />}
         <OpenInSlackAction conversationId={conversationId} rootTs={rootTs} />
         {onClose === undefined ? null : (
@@ -371,6 +417,7 @@ export function SlackThreadView({
         scope={{ kind: "thread", conversationId, rootTs }}
         composerRef={composerRef}
         placeholder="Reply in thread"
+        onAskAgent={askAgent?.onAskAboutMessage}
       />
     </section>
   );

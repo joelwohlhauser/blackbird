@@ -1,9 +1,14 @@
-import type { SlackInboxItem } from "@t3tools/contracts";
-import { AtSignIcon } from "lucide-react";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { ScopedThreadRef, SlackInboxItem } from "@t3tools/contracts";
+import { AtSignIcon, BotIcon } from "lucide-react";
 
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { cn } from "../../lib/utils";
+import { useThreadShell } from "../../state/entities";
 import { formatRelativeTime } from "../../timestampFormat";
+import { useUiStateStore } from "../../uiStateStore";
+import { resolveThreadLastVisitedAt, resolveThreadStatusPill } from "../Sidebar.logic";
+import { ThreadStatusLabel } from "../ThreadStatusIndicators";
 import { useSlackDirectory } from "./slackDirectory";
 import { slackConversationLabel } from "./slackInbox.logic";
 import { slackTsToDate } from "./slackMessages.logic";
@@ -14,6 +19,27 @@ const snoozeFormatter = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",
   minute: "2-digit",
 });
+
+function SlackItemChatStatus({ threadRef }: { readonly threadRef: ScopedThreadRef }) {
+  const shell = useThreadShell(threadRef);
+  const localLastVisitedAt = useUiStateStore(
+    (state) => state.threadLastVisitedAtById[scopedThreadKey(threadRef)],
+  );
+  const status =
+    shell === null
+      ? null
+      : resolveThreadStatusPill({
+          thread: {
+            ...shell,
+            lastVisitedAt: resolveThreadLastVisitedAt(shell.lastVisitedAt, localLastVisitedAt),
+          },
+        });
+  return status === null ? (
+    <BotIcon aria-label="Has a chat" className="size-3 shrink-0" />
+  ) : (
+    <ThreadStatusLabel status={status} compact />
+  );
+}
 
 function SlackInboxRow({
   item,
@@ -26,8 +52,9 @@ function SlackInboxRow({
   readonly nowMs: number;
   readonly onSelect: (key: string) => void;
 }) {
-  const { conversations, users } = useSlackDirectory();
+  const { environmentId, conversations, users, links } = useSlackDirectory();
   const conversation = conversations.get(item.conversationId);
+  const link = links.get(item.key);
   const label =
     conversation === undefined ? item.conversationId : slackConversationLabel(conversation, users);
   const author = item.latestAuthorId === undefined ? undefined : users.get(item.latestAuthorId);
@@ -54,6 +81,9 @@ function SlackInboxRow({
           <span className="min-w-0 flex-1 truncate">
             {item.replyCount ? `Thread in ${label}` : label}
           </span>
+          {link?.active ? (
+            <SlackItemChatStatus threadRef={scopeThreadRef(environmentId, link.threadId)} />
+          ) : null}
           {item.mentionsSelf ? (
             <AtSignIcon
               aria-label="Mentions you"

@@ -355,6 +355,8 @@ function formatComposerContextProviderPayload(record: KnownComposerContextRecord
         `environmentId: ${record.environmentId}`,
         "The user means this machine. Not linked here yet: call t3_environment_link with this environmentId. Linked: pass it as environmentId, or target.environmentId for delegate_task.",
       ].join("\n");
+    case "slack-thread":
+      return [`conversation: ${record.label}`, "messages:", indent(record.text)].join("\n");
   }
 }
 

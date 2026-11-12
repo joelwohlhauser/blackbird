@@ -1,5 +1,5 @@
 import type { SlackEvent, SlackMessage } from "@t3tools/contracts";
-import { MessageSquareIcon, PencilIcon, SmilePlusIcon, Trash2Icon } from "lucide-react";
+import { BotIcon, MessageSquareIcon, PencilIcon, SmilePlusIcon, Trash2Icon } from "lucide-react";
 import { memo, useState } from "react";
 
 import { useClientSettings } from "../../hooks/useSettings";
@@ -77,10 +77,12 @@ export const SlackMessageRow = memo(function SlackMessageRow({
   message,
   apply,
   onOpenThread,
+  onAskAgent,
 }: {
   readonly message: SlackMessage;
   readonly apply: (event: SlackEvent) => void;
   readonly onOpenThread?: ((rootTs: string) => void) | undefined;
+  readonly onAskAgent?: ((message: SlackMessage) => void) | undefined;
 }) {
   const { environmentId, selfUserId, users, mrkdwn } = useSlackDirectory();
   const setReaction = useAtomCommand(slackEnvironment.setReaction);
@@ -164,7 +166,7 @@ export const SlackMessageRow = memo(function SlackMessageRow({
             />
           )
         ) : (
-          <div className="flex flex-col items-end gap-1.5 py-1">
+          <div className="flex flex-col items-end gap-1.5 py-1 **:[textarea]:resize-none">
             <Textarea
               aria-label="Edit message"
               autoFocus
@@ -259,6 +261,11 @@ export const SlackMessageRow = memo(function SlackMessageRow({
         {onOpenThread === undefined ? null : (
           <MessageAction label="Reply in thread" onClick={() => onOpenThread(ts)}>
             <MessageSquareIcon />
+          </MessageAction>
+        )}
+        {onAskAgent === undefined ? null : (
+          <MessageAction label="Ask agent" onClick={() => onAskAgent(message)}>
+            <BotIcon />
           </MessageAction>
         )}
         {message.isOwn ? (

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import {
+  filterSidebarV2VisibleThreads,
   shouldCreateNewThreadInCurrentProject,
   deleteSelectedThreadEntries,
   getFallbackThreadIdAfterDelete,
@@ -1794,5 +1795,19 @@ describe("resolveSidebarFolderDot", () => {
     expect(resolveSidebarFolderDot([idle, working])).toBe("working");
     expect(resolveSidebarFolderDot([working, unread])).toBe("unread");
     expect(resolveSidebarFolderDot([unread, limited])).toBe("attention");
+  });
+});
+
+describe("filterSidebarV2VisibleThreads", () => {
+  it("hides chats whose home is the Slack space", () => {
+    const threads = [
+      makeThreadFixture({ id: ThreadId.make("thread-1") }),
+      makeThreadFixture({ id: ThreadId.make("thread-2") }),
+    ];
+    const slackHome = new Set([`${threads[1]!.environmentId}:thread-2`]);
+    expect(
+      filterSidebarV2VisibleThreads(threads, null, new Set(), slackHome).map((entry) => entry.id),
+    ).toEqual(["thread-1"]);
+    expect(filterSidebarV2VisibleThreads(threads, null, new Set())).toHaveLength(2);
   });
 });

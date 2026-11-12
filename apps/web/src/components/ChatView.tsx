@@ -366,6 +366,7 @@ import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { SlackThreadTab } from "./slack/SlackThreadTab";
 import { useSideChat } from "./chat/useSideChat";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -4291,6 +4292,8 @@ export default function ChatView(props: ChatViewProps) {
             onClose={() => closeRightPanelSurface(surface)}
           />
         );
+      case "slack-thread":
+        return <SlackThreadTab key={surface.id} surface={surface} />;
       case "thread":
         return (
           <ThreadTranscriptPanel

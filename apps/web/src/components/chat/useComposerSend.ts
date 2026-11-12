@@ -110,6 +110,15 @@ import { fileAttachmentCapabilityBlockReason } from "./composerAttachmentFiles";
 import { useLinkedEnvironments } from "../../state/peerLinks";
 import { readEnvironmentScope } from "../../state/session";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
+import { slackEnvironment } from "../../state/slack";
+import { useAtomCommand } from "../../state/use-atom-command";
+import {
+  beginSlackAsk,
+  endSlackAsk,
+  pendingSlackAsk,
+  withSlackAskContext,
+  withSlackAskReference,
+} from "../slack/slackAsk";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
   threadContextsOutsideEnvironment,
@@ -338,6 +347,7 @@ export function useComposerSend(input: ComposerSendInput) {
   const uploadThreadFeedback = useOrchestrationCommand(threadEnvironment.uploadFeedback, {
     reportFailure: false,
   });
+  const linkSlackThread = useAtomCommand(slackEnvironment.linkThread, { reportFailure: true });
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const sendToMultipleModels = useMultipleModelSend({
@@ -781,18 +791,22 @@ export function useComposerSend(input: ComposerSendInput) {
     // Records bind attachments by the id each side knows: the local id for the optimistic
     // row, the upload id (or local id on the data-URL path) on the wire; the server
     // rebinds them to the persisted id.
+    const slackAsk = isLocalDraftThread && draftId ? pendingSlackAsk(draftId) : null;
     const buildOutgoingMessageContext = (attachmentIds: ReadonlyArray<string>) =>
-      buildMessageContext({
-        terminalContexts: composerTerminalContextsSnapshot,
-        reviewComments: composerReviewCommentsSnapshot,
-        previewAnnotations: composerPreviewAnnotationsSnapshot,
-        threadContexts: composerThreadContextsSnapshot,
-        environmentContexts: composerEnvironmentContextsSnapshot,
-        attachments: composerAttachmentsSnapshot.map((attachment, index) => ({
-          attachment,
-          attachmentId: attachmentIds[index] ?? attachment.id,
-        })),
-      });
+      withSlackAskContext(
+        buildMessageContext({
+          terminalContexts: composerTerminalContextsSnapshot,
+          reviewComments: composerReviewCommentsSnapshot,
+          previewAnnotations: composerPreviewAnnotationsSnapshot,
+          threadContexts: composerThreadContextsSnapshot,
+          environmentContexts: composerEnvironmentContextsSnapshot,
+          attachments: composerAttachmentsSnapshot.map((attachment, index) => ({
+            attachment,
+            attachmentId: attachmentIds[index] ?? attachment.id,
+          })),
+        }),
+        slackAsk,
+      );
     const outgoingMessageContext = buildOutgoingMessageContext(
       composerAttachmentsSnapshot.map((attachment) => attachment.id),
     );
@@ -803,7 +817,7 @@ export function useComposerSend(input: ComposerSendInput) {
       model: ctxSelectedModel,
       models: ctxSelectedProviderModels,
       effort: ctxSelectedPromptEffort,
-      text: messageTextForSend || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
+      text: withSlackAskReference(messageTextForSend, slackAsk) || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
     });
     if (composerRef.current?.validateProviderInput(outgoingMessageText) === false) {
       return;
@@ -1141,6 +1155,7 @@ export function useComposerSend(input: ComposerSendInput) {
       : null;
     // Keep new-thread flows from reusing this draft while attachments and worktree setup settle.
     if (sentDraftThreadRef) markPromotedDraftThreadByRef(sentDraftThreadRef);
+    endSlackAsk(slackAsk);
     promptRef.current = "";
     clearComposerDraftContent(composerDraftTarget);
     composerRef.current?.resetCursorState();
@@ -1308,6 +1323,12 @@ export function useComposerSend(input: ComposerSendInput) {
           messageCreatedAt,
         );
         turnStartSucceeded = true;
+        if (slackAsk) {
+          void linkSlackThread({
+            environmentId,
+            input: { itemKey: slackAsk.target.itemKey, threadId: threadIdForSend, home: "slack" },
+          });
+        }
         setKeepFullHistory(routeThreadKey, false);
         if (freshArm !== undefined) disarmFreshSession(routeThreadKey, freshArm);
         clearUsageLimitsFor(routeThreadKey);
@@ -1361,6 +1382,7 @@ export function useComposerSend(input: ComposerSendInput) {
             : threadIdForSend,
         );
         clearBackgroundDraftSubmissionByRef(scopeThreadRef(environmentId, threadIdForSend));
+        if (slackAsk) beginSlackAsk(slackAsk);
       }
       if (
         !composerDraftHasUserContent(

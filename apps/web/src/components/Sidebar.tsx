@@ -168,6 +168,7 @@ import {
   buildThreadActionMenuItems,
   threadActionRequiresOperate,
 } from "./threadActionMenu.logic";
+import { useSlackHomeThreadKeys } from "../state/slack";
 import {
   applySidebarThreadDrop,
   filterSidebarV2VisibleThreads,
@@ -337,6 +338,7 @@ type SidebarOptimisticDrop = {
 
 interface SidebarThreadPartitionInput {
   readonly threads: readonly EnvironmentThreadShell[];
+  readonly slackHomeThreadKeys: ReadonlySet<string>;
   readonly scopedProjectKeys: ReadonlySet<string> | null;
   /** Tasks linked environments run for a listed thread; they show under it. */
   readonly delegatedUnderParent: ReadonlySet<string>;
@@ -466,8 +468,10 @@ function useSidebarThreads(input: {
   const settledVisibleCount =
     settledTail.scopeKey === projectScopeKey ? settledTail.count : SETTLED_TAIL_INITIAL_COUNT;
 
+  const slackHomeThreadKeys = useSlackHomeThreadKeys();
   const partition = partitionSidebarThreads({
     threads,
+    slackHomeThreadKeys,
     scopedProjectKeys,
     delegatedUnderParent,
     serverConfigs,
@@ -612,7 +616,12 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     sortActiveBySend,
   } = input;
   const preciseNow = new Date().toISOString();
-  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, delegatedUnderParent);
+  const visible = filterSidebarV2VisibleThreads(
+    threads,
+    scopedProjectKeys,
+    delegatedUnderParent,
+    input.slackHomeThreadKeys,
+  );
   const inboxObservation = inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];

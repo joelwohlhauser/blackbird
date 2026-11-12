@@ -7,6 +7,7 @@ export const THREAD_DETAILS_ITEMS = [
   { id: "scripts", label: "Project scripts", defaultVisible: true },
   { id: "branch", label: "Branch and pull request", defaultVisible: true },
   { id: "servers", label: "Servers", defaultVisible: true },
+  { id: "slack", label: "Slack threads", defaultVisible: true },
   { id: "automations", label: "Automations", defaultVisible: true },
   { id: "lineage", label: "Lineage", defaultVisible: true },
   { id: "sideChats", label: "Side chats", defaultVisible: true },

@@ -24,7 +24,12 @@ import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import ChatMarkdown from "../ChatMarkdown";
 import { EnvironmentContextChip } from "../EnvironmentContextChip";
 import { ThreadContextChip } from "../ThreadContextChip";
-import { MessageCircleIcon, MousePointerClickIcon, PaintbrushIcon } from "lucide-react";
+import {
+  MessageCircleIcon,
+  MessagesSquareIcon,
+  MousePointerClickIcon,
+  PaintbrushIcon,
+} from "lucide-react";
 import type { ComposerContextId, KnownComposerContextRecord } from "@t3tools/contracts";
 import { buildExpandedImagePreview } from "./ExpandedImagePreview";
 import { WorkspaceEntryIcon, WorkspaceEntryTooltip } from "./WorkspaceEntryIcon";
@@ -329,6 +334,26 @@ const userMessageContextPresentationRegistry = createContextPresentationRegistry
       render: (record, context) =>
         record.kind === "environment" ? (
           <EnvironmentContextChip record={record} copyMarkdown={context.copyMarkdown} />
+        ) : (
+          <UnavailableUserMessageContextChip {...context} />
+        ),
+    },
+    {
+      kind: "slack-thread",
+      canRender: (record) => record.kind === "slack-thread",
+      render: (record, context) =>
+        record.kind === "slack-thread" ? (
+          <UserMessageContextPopover
+            copyMarkdown={context.copyMarkdown}
+            accessibleLabel={`Slack thread, ${record.label}`}
+            kind="thread"
+            icon={<MessagesSquareIcon />}
+            label={record.label}
+          >
+            <div className="max-h-80 max-w-full overflow-auto rounded-lg border border-border/70 bg-background/70 px-3 py-2.5 text-xs whitespace-pre-wrap text-message-foreground">
+              {record.text}
+            </div>
+          </UserMessageContextPopover>
         ) : (
           <UnavailableUserMessageContextChip {...context} />
         ),

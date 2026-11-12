@@ -88,6 +88,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.slackSetFocusMode]: AuthOrchestrationOperateScope,
   [WS_METHODS.slackOpenDirectMessage]: AuthOrchestrationOperateScope,
   [WS_METHODS.slackUpload]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackLinkThread]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackUnlinkThread]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackSetThreadHome]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

@@ -111,7 +111,7 @@ export function SlackComposer({
           ))}
         </ul>
       )}
-      <div className="flex items-end gap-1.5">
+      <div className="flex items-end gap-1.5 **:[textarea]:resize-none">
         <input
           ref={fileInputRef}
           aria-label="Attach files"

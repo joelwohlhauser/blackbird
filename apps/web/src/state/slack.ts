@@ -1,5 +1,5 @@
 import { createSlackEnvironmentAtoms } from "@t3tools/client-runtime/state/slack";
-import type { SlackSnapshot } from "@t3tools/contracts";
+import type { SlackSnapshot, SlackThreadHome } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
@@ -38,4 +38,32 @@ export function useSlackAvailable(): boolean {
 
 export function useSlackBadgeCount(): number {
   return useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackBadgeCount);
+}
+
+function selectSlackThreadHomes(result: AsyncResult.AsyncResult<SlackSnapshot, unknown>): string {
+  const snapshot = AsyncResult.getOrElse(result, () => null);
+  if (snapshot === null) return "";
+  return [...new Set(snapshot.links.map((link) => `${link.threadId} ${link.home}`))]
+    .toSorted()
+    .join("\n");
+}
+
+export function useSlackThreadHomes() {
+  const environmentId = usePrimaryEnvironmentId();
+  const serialized = useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackThreadHomes);
+  const homes = new Map<string, SlackThreadHome>();
+  for (const entry of serialized.length === 0 ? [] : serialized.split("\n")) {
+    const separator = entry.lastIndexOf(" ");
+    homes.set(entry.slice(0, separator), entry.endsWith(" slack") ? "slack" : "agents");
+  }
+  return { environmentId, homes };
+}
+
+export function useSlackHomeThreadKeys(): ReadonlySet<string> {
+  const { environmentId, homes } = useSlackThreadHomes();
+  return new Set(
+    [...homes].flatMap(([threadId, home]) =>
+      home === "slack" && environmentId !== null ? [`${environmentId}:${threadId}`] : [],
+    ),
+  );
 }

@@ -1,7 +1,13 @@
 import * as Schema from "effect/Schema";
 
 import { AssetCreateUrlResult } from "./assets.ts";
-import { IsoDateTime, NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import {
+  IsoDateTime,
+  NonNegativeInt,
+  PositiveInt,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "./baseSchemas.ts";
 
 export const SlackConversationId = TrimmedNonEmptyString;
 export type SlackConversationId = typeof SlackConversationId.Type;
@@ -100,6 +106,19 @@ export const SlackInboxItem = Schema.Struct({
 });
 export type SlackInboxItem = typeof SlackInboxItem.Type;
 
+export const SlackThreadHome = Schema.Literals(["slack", "agents"]);
+export type SlackThreadHome = typeof SlackThreadHome.Type;
+
+export const SlackThreadLink = Schema.Struct({
+  itemKey: SlackInboxItemKey,
+  threadId: ThreadId,
+  home: SlackThreadHome,
+  conversationId: SlackConversationId,
+  rootTs: Schema.optionalKey(SlackTs),
+  active: Schema.Boolean,
+});
+export type SlackThreadLink = typeof SlackThreadLink.Type;
+
 export const SlackConnectionStatus = Schema.Literals([
   "disconnected",
   "connecting",
@@ -117,6 +136,7 @@ export const SlackSnapshot = Schema.Struct({
   conversations: Schema.Array(SlackConversation),
   users: Schema.Array(SlackUser),
   items: Schema.Array(SlackInboxItem),
+  links: Schema.Array(SlackThreadLink),
   focusMode: Schema.Boolean,
 });
 export type SlackSnapshot = typeof SlackSnapshot.Type;
@@ -232,6 +252,22 @@ export const SlackSetInboxModeInput = Schema.Struct({
   mode: SlackInboxMode,
 });
 export type SlackSetInboxModeInput = typeof SlackSetInboxModeInput.Type;
+
+export const SlackLinkThreadInput = Schema.Struct({
+  itemKey: SlackInboxItemKey,
+  threadId: ThreadId,
+  home: SlackThreadHome,
+});
+export type SlackLinkThreadInput = typeof SlackLinkThreadInput.Type;
+
+export const SlackUnlinkThreadInput = Schema.Struct({ itemKey: SlackInboxItemKey });
+export type SlackUnlinkThreadInput = typeof SlackUnlinkThreadInput.Type;
+
+export const SlackSetThreadHomeInput = Schema.Struct({
+  threadId: ThreadId,
+  home: SlackThreadHome,
+});
+export type SlackSetThreadHomeInput = typeof SlackSetThreadHomeInput.Type;
 
 export const SlackSetFocusModeInput = Schema.Struct({ on: Schema.Boolean });
 export type SlackSetFocusModeInput = typeof SlackSetFocusModeInput.Type;

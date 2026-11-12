@@ -1,4 +1,11 @@
-import { SlackInboxMode, SlackInboxState } from "@t3tools/contracts";
+import {
+  SlackInboxMode,
+  SlackInboxState,
+  SlackThreadHome,
+  type SlackThreadLink,
+  ThreadId,
+} from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -25,6 +32,14 @@ const ItemRow = Schema.Struct({
   mentionsSelf: Schema.Int,
 });
 
+const LinkRow = Schema.Struct({
+  itemKey: Schema.String,
+  threadId: ThreadId,
+  conversationId: Schema.String,
+  rootTs: Schema.NullOr(Schema.String),
+  home: SlackThreadHome,
+});
+
 const SettingsRow = Schema.Struct({ conversationId: Schema.String, inboxMode: SlackInboxMode });
 
 const StateRow = Schema.Struct({
@@ -48,6 +63,8 @@ export class SlackStore extends Context.Service<
     readonly saveInbox: (input: {
       readonly items: ReadonlyArray<SlackInboxRecord>;
       readonly participation: ReadonlyArray<string>;
+      readonly links: ReadonlyArray<SlackThreadLink>;
+      readonly removedLinks: ReadonlyArray<string>;
     }) => Effect.Effect<void, SlackStoreError>;
     readonly setInboxMode: (
       conversationId: string,
@@ -94,6 +111,19 @@ const make = Effect.gen(function* () {
     Result: Schema.Struct({ key: Schema.String }),
     execute: () => sql`SELECT key AS "key" FROM slack_thread_participation`,
   });
+  const listLinks = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: LinkRow,
+    execute: () => sql`
+      SELECT
+        item_key AS "itemKey",
+        thread_id AS "threadId",
+        conversation_id AS "conversationId",
+        root_ts AS "rootTs",
+        home AS "home"
+      FROM slack_thread_links
+    `,
+  });
   const listSettings = SqlSchema.findAll({
     Request: Schema.Void,
     Result: SettingsRow,
@@ -116,9 +146,10 @@ const make = Effect.gen(function* () {
 
   return SlackStore.of({
     load: Effect.gen(function* () {
-      const [items, participation, settings, state] = yield* Effect.all([
+      const [items, participation, links, settings, state] = yield* Effect.all([
         listItems(undefined),
         listParticipation(undefined),
+        listLinks(undefined),
         listSettings(undefined),
         listState(undefined),
       ]);
@@ -143,6 +174,19 @@ const make = Effect.gen(function* () {
             ]),
           ),
           participation: new Set(participation.map((row) => row.key)),
+          links: new Map(
+            links.map((row) => [
+              row.itemKey,
+              {
+                itemKey: row.itemKey,
+                threadId: row.threadId,
+                home: row.home,
+                conversationId: row.conversationId,
+                ...(row.rootTs === null ? {} : { rootTs: row.rootTs }),
+                active: true,
+              } satisfies SlackThreadLink,
+            ]),
+          ),
         },
         inboxModes: new Map(settings.map((row) => [row.conversationId, row.inboxMode])),
         focusMode: (state[0]?.focusMode ?? 0) !== 0,
@@ -152,6 +196,7 @@ const make = Effect.gen(function* () {
     }).pipe(Effect.mapError(toStoreError("SlackStore.load")), Effect.withSpan("SlackStore.load")),
 
     saveInbox: Effect.fn("SlackStore.saveInbox")(function* (input) {
+      const createdAt = DateTime.formatIso(yield* DateTime.now);
       yield* sql
         .withTransaction(
           Effect.gen(function* () {
@@ -201,6 +246,34 @@ const make = Effect.gen(function* () {
                 ON CONFLICT (key) DO NOTHING
               `;
             }
+            for (const link of input.links) {
+              yield* sql`
+                INSERT INTO slack_thread_links (
+                  item_key,
+                  thread_id,
+                  conversation_id,
+                  root_ts,
+                  home,
+                  created_at
+                )
+                VALUES (
+                  ${link.itemKey},
+                  ${link.threadId},
+                  ${link.conversationId},
+                  ${link.rootTs ?? null},
+                  ${link.home},
+                  ${createdAt}
+                )
+                ON CONFLICT (item_key) DO UPDATE SET
+                  thread_id = excluded.thread_id,
+                  conversation_id = excluded.conversation_id,
+                  root_ts = excluded.root_ts,
+                  home = excluded.home
+              `;
+            }
+            for (const itemKey of input.removedLinks) {
+              yield* sql`DELETE FROM slack_thread_links WHERE item_key = ${itemKey}`;
+            }
           }),
         )
         .pipe(Effect.mapError(toStoreError("SlackStore.saveInbox")));
@@ -239,6 +312,7 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           yield* sql`DELETE FROM slack_inbox_items`;
           yield* sql`DELETE FROM slack_thread_participation`;
+          yield* sql`DELETE FROM slack_thread_links`;
           yield* sql`DELETE FROM slack_conversation_settings`;
           yield* sql`DELETE FROM slack_state`;
         }),

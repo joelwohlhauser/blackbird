@@ -1,4 +1,6 @@
 import {
+  CommandId,
+  type OrchestrationV2DomainEvent,
   type SlackConnectInput,
   type SlackConnectionStatus,
   type SlackConversation,
@@ -13,6 +15,7 @@ import {
   type SlackHistoryInput,
   type SlackHistoryResult,
   type SlackInboxMode,
+  type SlackLinkThreadInput,
   type SlackMessage,
   type SlackOpenDirectMessageInput,
   type SlackPostMessageInput,
@@ -20,15 +23,19 @@ import {
   type SlackSetInboxModeInput,
   type SlackSetItemStateInput,
   type SlackSetReactionInput,
+  type SlackSetThreadHomeInput,
   type SlackSnapshot,
   type SlackThreadInput,
   type SlackThreadResult,
+  type SlackUnlinkThreadInput,
   type SlackUpdateMessageInput,
   type SlackUploadInput,
   type SlackUser,
+  type ThreadId,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -50,9 +57,12 @@ import { deletePendingAttachment } from "../assets/AttachmentUpload.ts";
 import { resolveAttachmentPathById } from "../attachmentStore.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as SlackApi from "./SlackApi.ts";
 import {
   applyInboxInput,
+  chatsToMarkUnread,
+  chatToSettle,
   compareSlackTs,
   conversationToMarkRead,
   EMPTY_SLACK_INBOX,
@@ -93,6 +103,13 @@ const INBOX_MESSAGE_SUBTYPES = new Set([
   "file_share",
   "thread_broadcast",
   "me_message",
+]);
+const CHAT_STATE_EVENTS: ReadonlySet<OrchestrationV2DomainEvent["type"]> = new Set([
+  "thread.settled",
+  "thread.unsettled",
+  "thread.archived",
+  "thread.unarchived",
+  "run.created",
 ]);
 const INLINE_CONTENT_TYPE_PATTERN = /^(?:image|video|audio)\/[\w!#$&^.+-]+$/i;
 const FORWARDED_REQUEST_HEADERS = ["range", "if-range"] as const;
@@ -183,6 +200,7 @@ const toSnapshot = (state: State): SlackSnapshot => {
     ),
     users: [...state.users.values()],
     items: visibleSlackInboxItems(state.inbox),
+    links: [...state.inbox.links.values()],
     focusMode: state.focusMode,
   };
 };
@@ -269,6 +287,9 @@ export class Slack extends Context.Service<
     readonly emoji: Effect.Effect<SlackEmojiResult, SlackError>;
     readonly fileUrl: (input: SlackFileUrlInput) => Effect.Effect<SlackFileUrlResult, SlackError>;
     readonly upload: (input: SlackUploadInput) => Effect.Effect<void, SlackError>;
+    readonly linkThread: (input: SlackLinkThreadInput) => Effect.Effect<void, SlackError>;
+    readonly unlinkThread: (input: SlackUnlinkThreadInput) => Effect.Effect<void, SlackError>;
+    readonly setThreadHome: (input: SlackSetThreadHomeInput) => Effect.Effect<void, SlackError>;
     readonly fileResponse: (
       file: { readonly fileId: string; readonly variant: SlackFileVariant },
       requestHeaders: Readonly<Record<string, string | undefined>>,
@@ -284,7 +305,25 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const signer = yield* AssetSigner.AssetSigner;
+  const orchestrator = yield* Orchestrator.OrchestratorV2;
+  const random = yield* SecureRandom.SecureRandom;
   const serviceScope = yield* Effect.scope;
+
+  const readSecret = (name: string) =>
+    secrets
+      .get(name)
+      .pipe(Effect.map(Option.map((bytes) => new TextDecoder().decode(bytes).trim())));
+  const storedTokens = yield* Effect.all({
+    userToken: readSecret(USER_TOKEN_SECRET),
+    appToken: readSecret(APP_TOKEN_SECRET),
+  }).pipe(
+    Effect.map(Option.all),
+    Effect.catch((error) =>
+      Effect.logWarning("Slack tokens could not be read", { error: error._tag }).pipe(
+        Effect.as(Option.none()),
+      ),
+    ),
+  );
 
   const stored = yield* store.load.pipe(
     Effect.catch((error) =>
@@ -301,6 +340,7 @@ const make = Effect.gen(function* () {
   );
   const stateRef = yield* SubscriptionRef.make<State>({
     ...DISCONNECTED_STATE,
+    status: Option.isSome(storedTokens) ? "connecting" : "disconnected",
     focusMode: stored.focusMode,
     inboxModes: stored.inboxModes,
     inbox: stored.inbox,
@@ -403,20 +443,77 @@ const make = Effect.gen(function* () {
     },
   });
 
+  const dispatchToChat = Effect.fnUntraced(function* (
+    type: "thread.mark-unread" | "thread.settle",
+    threadId: ThreadId,
+  ) {
+    const commandId = CommandId.make(`server:slack:${yield* random.uuidV4()}`);
+    yield* orchestrator
+      .dispatch({ type, commandId, threadId })
+      .pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("Slack could not update the linked chat", { type, error: error._tag }),
+        ),
+      );
+  });
+
   const applyInbox = Effect.fnUntraced(function* (inputs: ReadonlyArray<SlackInboxInput>) {
-    const before = (yield* SubscriptionRef.get(stateRef)).inbox;
+    const state = yield* SubscriptionRef.get(stateRef);
+    const before = state.inbox;
     const after = inputs.reduce(applyInboxInput, before);
     if (after === before) return { before, after };
     yield* store
       .saveInbox({
         items: [...after.items.values()].filter((item) => before.items.get(item.key) !== item),
         participation: [...after.participation].filter((key) => !before.participation.has(key)),
+        links: [...after.links.values()].filter((link) => before.links.get(link.itemKey) !== link),
+        removedLinks: [...before.links.keys()].filter((key) => !after.links.has(key)),
       })
       .pipe(Effect.orDie);
-    yield* update((state) => ({ ...state, inbox: after }));
+    yield* update((current) => ({ ...current, inbox: after }));
     yield* Queue.offer(snoozeWake, undefined);
+    for (const threadId of chatsToMarkUnread(before, after, state.selfUserId)) {
+      yield* dispatchToChat("thread.mark-unread", threadId);
+    }
     return { before, after };
   }, inboxLock.withPermits(1));
+
+  const chatMissing = (threadId: ThreadId) =>
+    new SlackError({ reason: "not_found", message: `The chat ${threadId} no longer exists.` });
+
+  const readChatState = Effect.fnUntraced(function* (threadId: ThreadId) {
+    const shell = yield* orchestrator.getThreadShell(threadId).pipe(Effect.orDie);
+    if (shell === null || shell.deletedAt !== null) return "deleted" as const;
+    return shell.archivedAt !== null ||
+      shell.settledOverride === "settled" ||
+      shell.settledAt !== null
+      ? ("closed" as const)
+      : ("active" as const);
+  });
+
+  const syncChat = Effect.fnUntraced(function* (threadId: ThreadId) {
+    yield* applyInbox([{ type: "chat", threadId, state: yield* readChatState(threadId) }]);
+  });
+
+  const watchChats = Effect.gen(function* () {
+    const linked = new Set(
+      [...(yield* SubscriptionRef.get(stateRef)).inbox.links.values()].map((link) => link.threadId),
+    );
+    for (const threadId of linked) yield* syncChat(threadId);
+    yield* Stream.runForEach(orchestrator.streamDomainEvents, (event) =>
+      Effect.gen(function* () {
+        const { links } = (yield* SubscriptionRef.get(stateRef)).inbox;
+        if (![...links.values()].some((link) => link.threadId === event.threadId)) return;
+        if (event.type === "thread.deleted") {
+          yield* applyInbox([{ type: "chat", threadId: event.threadId, state: "deleted" }]);
+        } else if (CHAT_STATE_EVENTS.has(event.type)) {
+          yield* syncChat(event.threadId);
+        }
+      }),
+    );
+  }).pipe(
+    Effect.catchCause((cause) => Effect.logWarning("Slack stopped following chats", { cause })),
+  );
 
   const bumpLastEvent = Effect.fnUntraced(function* (ts: string) {
     const known = yield* Ref.get(lastEventRef);
@@ -866,20 +963,10 @@ const make = Effect.gen(function* () {
   const secretFailure = () =>
     new SlackError({ reason: "slack_api", message: "Blackbird could not store the Slack tokens." });
 
-  const readSecret = (name: string) =>
-    secrets
-      .get(name)
-      .pipe(Effect.map(Option.map((bytes) => new TextDecoder().decode(bytes).trim())));
-
   const start = Effect.gen(function* () {
-    const userToken = yield* readSecret(USER_TOKEN_SECRET);
-    const appToken = yield* readSecret(APP_TOKEN_SECRET);
-    if (Option.isNone(userToken) || Option.isNone(appToken)) return;
-    yield* launch({ userToken: userToken.value, appToken: appToken.value });
-  }).pipe(
-    Effect.catch((error) => Effect.logWarning("Slack could not start", { error: error._tag })),
-    Effect.withSpan("Slack.start"),
-  );
+    yield* Effect.forkIn(watchChats, serviceScope);
+    if (Option.isSome(storedTokens)) yield* launch(storedTokens.value);
+  }).pipe(Effect.withSpan("Slack.start"));
 
   const connect = Effect.fn("Slack.connect")(function* (input: SlackConnectInput) {
     if (!input.userToken.startsWith("xoxp-") || !input.appToken.startsWith("xapp-")) {
@@ -1095,6 +1182,8 @@ const make = Effect.gen(function* () {
           message: "The Slack inbox item no longer exists.",
         });
       }
+      const chat = chatToSettle(before, after, input.key);
+      if (chat !== undefined) yield* dispatchToChat("thread.settle", chat);
       const mark = conversationToMarkRead(before, after, input.key);
       const session = yield* Ref.get(sessionRef);
       if (mark === undefined || session === undefined) return;
@@ -1111,6 +1200,21 @@ const make = Effect.gen(function* () {
         ...state,
         inboxModes: new Map(state.inboxModes).set(input.conversationId, input.mode),
       }));
+      yield* applyInbox([{ type: "mode", ...input }]);
+    }),
+
+    linkThread: Effect.fn("Slack.linkThread")(function* (input) {
+      const chat = yield* readChatState(input.threadId);
+      if (chat === "deleted") return yield* chatMissing(input.threadId);
+      yield* applyInbox([{ type: "link", ...input, active: chat === "active" }]);
+    }),
+
+    unlinkThread: Effect.fn("Slack.unlinkThread")(function* (input) {
+      yield* applyInbox([{ type: "unlink", ...input }]);
+    }),
+
+    setThreadHome: Effect.fn("Slack.setThreadHome")(function* (input) {
+      yield* applyInbox([{ type: "home", ...input }]);
     }),
 
     setFocusMode: Effect.fn("Slack.setFocusMode")(function* (input) {

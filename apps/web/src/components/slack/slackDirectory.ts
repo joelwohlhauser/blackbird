@@ -3,6 +3,7 @@ import type {
   SlackConversation,
   SlackInboxItem,
   SlackSnapshot,
+  SlackThreadLink,
   SlackUser,
 } from "@t3tools/contracts";
 import { createContext, use } from "react";
@@ -16,6 +17,7 @@ export interface SlackDirectory {
   readonly users: ReadonlyMap<string, SlackUser>;
   readonly conversations: ReadonlyMap<string, SlackConversation>;
   readonly items: ReadonlyArray<SlackInboxItem>;
+  readonly links: ReadonlyMap<string, SlackThreadLink>;
   readonly mrkdwn: SlackMrkdwnContext;
 }
 
@@ -37,6 +39,7 @@ export function buildSlackDirectory(
     users,
     conversations,
     items: snapshot.items,
+    links: new Map(snapshot.links.map((link) => [link.itemKey, link])),
     mrkdwn: {
       userName: (userId) => users.get(userId)?.name,
       channelName: (conversationId) => conversations.get(conversationId)?.name,

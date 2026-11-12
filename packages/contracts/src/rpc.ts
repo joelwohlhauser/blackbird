@@ -385,6 +385,7 @@ import {
   SlackFileUrlResult,
   SlackHistoryInput,
   SlackHistoryResult,
+  SlackLinkThreadInput,
   SlackMessage,
   SlackOpenDirectMessageInput,
   SlackPostMessageInput,
@@ -392,9 +393,11 @@ import {
   SlackSetInboxModeInput,
   SlackSetItemStateInput,
   SlackSetReactionInput,
+  SlackSetThreadHomeInput,
   SlackSnapshot,
   SlackThreadInput,
   SlackThreadResult,
+  SlackUnlinkThreadInput,
   SlackUpdateMessageInput,
   SlackUploadInput,
 } from "./slack.ts";
@@ -610,6 +613,9 @@ export const WS_METHODS = {
   slackEmoji: "slack.emoji",
   slackFileUrl: "slack.fileUrl",
   slackUpload: "slack.upload",
+  slackLinkThread: "slack.linkThread",
+  slackUnlinkThread: "slack.unlinkThread",
+  slackSetThreadHome: "slack.setThreadHome",
 
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
   cloudInstallRelayClient: "cloud.installRelayClient",
@@ -2183,6 +2189,21 @@ const WsSlackUploadRpc = Rpc.make(WS_METHODS.slackUpload, {
   error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
 });
 
+const WsSlackLinkThreadRpc = Rpc.make(WS_METHODS.slackLinkThread, {
+  payload: SlackLinkThreadInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackUnlinkThreadRpc = Rpc.make(WS_METHODS.slackUnlinkThread, {
+  payload: SlackUnlinkThreadInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackSetThreadHomeRpc = Rpc.make(WS_METHODS.slackSetThreadHome, {
+  payload: SlackSetThreadHomeInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
 const WsGuestShareCreateRpc = Rpc.make(WS_METHODS.guestShareCreate, {
   payload: GuestShareCreateInput,
   success: GuestShareCreateResult,
@@ -2320,6 +2341,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsSlackEmojiRpc,
   WsSlackFileUrlRpc,
   WsSlackUploadRpc,
+  WsSlackLinkThreadRpc,
+  WsSlackUnlinkThreadRpc,
+  WsSlackSetThreadHomeRpc,
   WsServerReportClientActivityRpc,
   WsCloudGetRelayClientStatusRpc,
   WsCloudInstallRelayClientRpc,

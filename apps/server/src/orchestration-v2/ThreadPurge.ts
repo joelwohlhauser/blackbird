@@ -109,6 +109,7 @@ const THREAD_TABLES = [
   "orchestration_v2_thread_launch_workflows",
   "provider_session_runtime",
   "mcp_app_model_context",
+  "slack_thread_links",
 ] as const;
 
 export class ThreadPurge extends Context.Service<

@@ -3,6 +3,7 @@ import type { SlackConnectionStatus } from "@t3tools/contracts";
 import { useState } from "react";
 
 import { readLocalApi } from "../../localApi";
+import { useSlackSpaceStore } from "../../slackSpaceStore";
 import { slackEnvironment, useSlackSnapshot } from "../../state/slack";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsRow, SettingsSection } from "../settings/settingsLayout";
@@ -54,6 +55,7 @@ export function SlackSettingsSection() {
     if (!confirmed) return;
     setBusy(true);
     await disconnect({ environmentId, input: {} });
+    useSlackSpaceStore.getState().setSpace("agents");
     setBusy(false);
   };
 

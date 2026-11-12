@@ -118,6 +118,14 @@ const knownRecords: Record<(typeof COMPOSER_CONTEXT_KINDS)[number], Record<strin
     label: "vps",
     environmentId: "environment-vps",
   },
+  "slack-thread": {
+    ...base,
+    kind: "slack-thread",
+    label: "#general",
+    conversationId: "C001",
+    rootTs: "10.000001",
+    text: "Ada (2026-01-05T08:00:00.000Z):\nthe build is red",
+  },
 };
 
 describe("ComposerContextRecord", () => {
