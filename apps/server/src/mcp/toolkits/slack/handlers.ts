@@ -26,4 +26,10 @@ export const layer = McpToolAccess.toLayer(SlackToolkit, {
       return yield* drafts.channelNotifications(input);
     }),
   ),
+  slack_sidebar_layout: McpToolAccess.actsAsCaller((input) =>
+    Effect.gen(function* () {
+      const drafts = yield* SlackDrafts.SlackDrafts;
+      return yield* drafts.sidebarLayout(input);
+    }),
+  ),
 });

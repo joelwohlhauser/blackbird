@@ -22,6 +22,9 @@ import {
   type SlackSetInboxModeInput,
   type SlackSetItemStateInput,
   type SlackSetReactionInput,
+  type SlackSidebarEdit,
+  type SlackSidebarLayout,
+  type SlackSidebarSection,
   type SlackSetThreadHomeInput,
   type SlackSnapshot,
   type SlackThreadInput,
@@ -78,6 +81,13 @@ import {
   unreadItemCounts,
   visibleSlackInboxItems,
 } from "./slackInbox.ts";
+import {
+  arrangeSlackSidebar,
+  editSlackSidebarLayout,
+  EMPTY_SLACK_SIDEBAR_LAYOUT,
+  resolveSlackSidebar,
+  showSlackConversationsWithNewMessages,
+} from "./slackSidebar.ts";
 import * as SlackSocket from "./SlackSocket.ts";
 import * as SlackStore from "./SlackStore.ts";
 
@@ -123,6 +133,7 @@ interface State {
   readonly conversations: ReadonlyMap<string, SlackDirectoryConversation>;
   readonly users: ReadonlyMap<string, SlackUser>;
   readonly inboxModes: ReadonlyMap<string, SlackInboxMode>;
+  readonly sidebarLayout: SlackSidebarLayout;
   readonly inbox: SlackInbox;
 }
 
@@ -132,6 +143,7 @@ const DISCONNECTED_STATE: State = {
   conversations: new Map(),
   users: new Map(),
   inboxModes: new Map(),
+  sidebarLayout: EMPTY_SLACK_SIDEBAR_LAYOUT,
   inbox: EMPTY_SLACK_INBOX,
 };
 
@@ -173,14 +185,16 @@ const toConversation = (
 
 const toSnapshot = (state: State): SlackSnapshot => {
   const counts = unreadItemCounts(state.inbox);
+  const conversations = [...state.conversations.values()].map((conversation) =>
+    toConversation(state, conversation, counts.get(conversation.id) ?? 0),
+  );
   return {
     status: state.status,
     ...(state.errorMessage === undefined ? {} : { errorMessage: state.errorMessage }),
     ...(state.selfUserId === undefined ? {} : { selfUserId: state.selfUserId }),
     ...(state.teamId === undefined ? {} : { teamId: state.teamId }),
-    conversations: [...state.conversations.values()].map((conversation) =>
-      toConversation(state, conversation, counts.get(conversation.id) ?? 0),
-    ),
+    conversations,
+    sidebar: resolveSlackSidebar(state.sidebarLayout, conversations),
     users: [...state.users.values()],
     items: visibleSlackInboxItems(state.inbox),
     links: [...state.inbox.links.values()],
@@ -222,6 +236,12 @@ export class Slack extends Context.Service<
     readonly setItemState: (input: SlackSetItemStateInput) => Effect.Effect<void, SlackError>;
     readonly setInboxMode: (input: SlackSetInboxModeInput) => Effect.Effect<void, SlackError>;
     readonly setFocusMode: (input: SlackSetFocusModeInput) => Effect.Effect<void, SlackError>;
+    readonly editSidebar: (input: SlackSidebarEdit) => Effect.Effect<void, SlackError>;
+    readonly arrangeSidebar: (input: {
+      readonly sections: ReadonlyArray<Omit<SlackSidebarSection, "id">>;
+      readonly hiddenConversationIds: ReadonlyArray<string>;
+      readonly hideOthers: boolean;
+    }) => Effect.Effect<void, SlackError>;
     readonly openDirectMessage: (
       input: SlackOpenDirectMessageInput,
     ) => Effect.Effect<SlackConversation, SlackError>;
@@ -285,6 +305,7 @@ const make = Effect.gen(function* () {
           inboxModes: new Map<string, SlackInboxMode>(),
           focusMode: false,
           lastEventTs: undefined,
+          sidebarLayout: EMPTY_SLACK_SIDEBAR_LAYOUT,
         }),
       ),
     ),
@@ -294,6 +315,7 @@ const make = Effect.gen(function* () {
     status: (yield* enabled) && Option.isSome(yield* storedTokens) ? "connecting" : "disconnected",
     focusMode: stored.focusMode,
     inboxModes: stored.inboxModes,
+    sidebarLayout: stored.sidebarLayout,
     inbox: stored.inbox,
   });
   const sessionRef = yield* Ref.make<Session | undefined>(undefined);
@@ -388,11 +410,23 @@ const make = Effect.gen(function* () {
       );
   });
 
+  const saveSidebarLayout = Effect.fnUntraced(function* (sidebarLayout: SlackSidebarLayout) {
+    yield* store.setSidebarLayout(sidebarLayout).pipe(Effect.orDie);
+    yield* update((state) => ({ ...state, sidebarLayout }));
+  });
+
   const applyInboxLocked = Effect.fnUntraced(function* (inputs: ReadonlyArray<SlackInboxInput>) {
     const state = yield* SubscriptionRef.get(stateRef);
     const before = state.inbox;
     const after = inputs.reduce(applyInboxInput, before);
     if (after === before) return { before, after };
+    const sidebarLayout = showSlackConversationsWithNewMessages(
+      state.sidebarLayout,
+      before,
+      after,
+      state.selfUserId,
+    );
+    if (sidebarLayout !== state.sidebarLayout) yield* saveSidebarLayout(sidebarLayout);
     yield* store
       .saveInbox({
         items: [...after.items.values()].filter((item) => before.items.get(item.key) !== item),
@@ -1154,6 +1188,27 @@ const make = Effect.gen(function* () {
       yield* store.setFocusMode(input.on).pipe(Effect.orDie);
       yield* update((state) => ({ ...state, focusMode: input.on }));
     }),
+
+    editSidebar: Effect.fn("Slack.editSidebar")(function* (input) {
+      yield* requireEnabled;
+      const { sidebarLayout } = yield* SubscriptionRef.get(stateRef);
+      const edited = editSlackSidebarLayout(sidebarLayout, input, yield* random.uuidV4());
+      if ("_tag" in edited) return yield* edited;
+      if (edited !== sidebarLayout) yield* saveSidebarLayout(edited);
+    }, inboxLock.withPermits(1)),
+
+    arrangeSidebar: Effect.fn("Slack.arrangeSidebar")(function* (input) {
+      yield* requireEnabled;
+      const state = yield* SubscriptionRef.get(stateRef);
+      const sections = yield* Effect.forEach(input.sections, (section) =>
+        random.uuidV4().pipe(Effect.map((id) => ({ ...section, id }))),
+      );
+      yield* saveSidebarLayout(
+        arrangeSlackSidebar(state.sidebarLayout, { ...input, sections }, [
+          ...state.conversations.keys(),
+        ]),
+      );
+    }, inboxLock.withPermits(1)),
 
     openDirectMessage: Effect.fn("Slack.openDirectMessage")(function* (input) {
       const session = yield* requireSession;

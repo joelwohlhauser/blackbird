@@ -3,10 +3,13 @@ import { assert, describe, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import Migration0086 from "../persistence/Migrations/086_SlackInbox.ts";
 import Migration0087 from "../persistence/Migrations/087_SlackThreadLinks.ts";
+import Migration0088 from "../persistence/Migrations/088_SlackSidebarLayout.ts";
 import { applyInboxInput, EMPTY_SLACK_INBOX } from "./slackInbox.ts";
+import { EMPTY_SLACK_SIDEBAR_LAYOUT } from "./slackSidebar.ts";
 import * as SlackStore from "./SlackStore.ts";
 
 const layer = SlackStore.layer.pipe(
@@ -18,6 +21,7 @@ describe("SlackStore", () => {
     Effect.gen(function* () {
       yield* Migration0086;
       yield* Migration0087;
+      yield* Migration0088;
       const store = yield* SlackStore.SlackStore;
       const inbox = [
         { type: "participation" as const, key: "C001:10.000001" },
@@ -77,12 +81,28 @@ describe("SlackStore", () => {
       yield* store.setInboxMode("C001", "everything");
       yield* store.setFocusMode(true);
       yield* store.setLastEventTs("12.000001");
+      const sidebarLayout = {
+        sections: [{ id: "section-1", name: "Team A", conversationIds: ["C001"] }],
+        hiddenConversationIds: ["D001"],
+      };
+      yield* store.setSidebarLayout(sidebarLayout);
 
       assert.deepStrictEqual(yield* store.load, {
         inbox,
         inboxModes: new Map([["C001", "everything" as const]]),
         focusMode: true,
         lastEventTs: "12.000001",
+        sidebarLayout,
+      });
+
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE slack_state SET sidebar_layout_json = '{"sections":'`;
+      assert.deepStrictEqual(yield* store.load, {
+        inbox,
+        inboxModes: new Map([["C001", "everything" as const]]),
+        focusMode: true,
+        lastEventTs: "12.000001",
+        sidebarLayout: EMPTY_SLACK_SIDEBAR_LAYOUT,
       });
 
       yield* store.clear;
@@ -91,6 +111,7 @@ describe("SlackStore", () => {
         inboxModes: new Map(),
         focusMode: false,
         lastEventTs: undefined,
+        sidebarLayout: EMPTY_SLACK_SIDEBAR_LAYOUT,
       });
     }).pipe(Effect.provide(layer)),
   );

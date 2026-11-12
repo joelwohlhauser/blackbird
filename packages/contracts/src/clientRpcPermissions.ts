@@ -86,6 +86,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.slackSetItemState]: AuthOrchestrationOperateScope,
   [WS_METHODS.slackSetInboxMode]: AuthOrchestrationOperateScope,
   [WS_METHODS.slackSetFocusMode]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackEditSidebar]: AuthOrchestrationOperateScope,
   [WS_METHODS.slackOpenDirectMessage]: AuthOrchestrationOperateScope,
   [WS_METHODS.slackUpload]: AuthOrchestrationOperateScope,
   [WS_METHODS.slackLinkThread]: AuthOrchestrationOperateScope,

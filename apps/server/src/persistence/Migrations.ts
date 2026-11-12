@@ -89,6 +89,7 @@ import Migration0084 from "./Migrations/084_ScheduledTaskThreadMode.ts";
 import Migration0085 from "./Migrations/085_ScheduledTaskOnceRunAt.ts";
 import Migration0086 from "./Migrations/086_SlackInbox.ts";
 import Migration0087 from "./Migrations/087_SlackThreadLinks.ts";
+import Migration0088 from "./Migrations/088_SlackSidebarLayout.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -179,6 +180,7 @@ const migrationEntries = [
   [85, "ScheduledTaskOnceRunAt", Migration0085],
   [86, "SlackInbox", Migration0086],
   [87, "SlackThreadLinks", Migration0087],
+  [88, "SlackSidebarLayout", Migration0088],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

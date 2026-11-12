@@ -395,6 +395,7 @@ import {
   SlackSetItemStateInput,
   SlackSetReactionInput,
   SlackSetThreadHomeInput,
+  SlackSidebarEdit,
   SlackSnapshot,
   SlackThreadInput,
   SlackThreadResult,
@@ -610,6 +611,7 @@ export const WS_METHODS = {
   slackSetItemState: "slack.setItemState",
   slackSetInboxMode: "slack.setInboxMode",
   slackSetFocusMode: "slack.setFocusMode",
+  slackEditSidebar: "slack.editSidebar",
   slackOpenDirectMessage: "slack.openDirectMessage",
   slackEmoji: "slack.emoji",
   slackFileUrl: "slack.fileUrl",
@@ -2168,6 +2170,11 @@ const WsSlackSetFocusModeRpc = Rpc.make(WS_METHODS.slackSetFocusMode, {
   error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
 });
 
+const WsSlackEditSidebarRpc = Rpc.make(WS_METHODS.slackEditSidebar, {
+  payload: SlackSidebarEdit,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
 const WsSlackOpenDirectMessageRpc = Rpc.make(WS_METHODS.slackOpenDirectMessage, {
   payload: SlackOpenDirectMessageInput,
   success: SlackConversation,
@@ -2344,6 +2351,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSlackSetItemStateRpc,
   WsSlackSetInboxModeRpc,
   WsSlackSetFocusModeRpc,
+  WsSlackEditSidebarRpc,
   WsSlackOpenDirectMessageRpc,
   WsSlackEmojiRpc,
   WsSlackFileUrlRpc,

@@ -14,6 +14,7 @@ import {
   SlackError,
   type SlackMessage,
   type SlackPostMessageInput,
+  type SlackSidebarLayout,
   type SlackSnapshot,
   type SlackThreadLink,
   ThreadId,
@@ -42,6 +43,11 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as Slack from "./Slack.ts";
 import * as SlackDrafts from "./SlackDrafts.ts";
+import {
+  arrangeSlackSidebar,
+  EMPTY_SLACK_SIDEBAR_LAYOUT,
+  resolveSlackSidebar,
+} from "./slackSidebar.ts";
 
 const instanceId = ProviderInstanceId.make("codex");
 const driver = ProviderDriverKind.make("codex");
@@ -93,7 +99,7 @@ const linkedThread: SlackThreadLink = {
   active: true,
 };
 
-const baseSnapshot: SlackSnapshot = {
+const baseSnapshot: Omit<SlackSnapshot, "sidebar"> = {
   status: "connected",
   selfUserId: "U001",
   teamId: "T000",
@@ -149,11 +155,13 @@ const slackMessage = (ts: string, userId: string, text: string): SlackMessage =>
   isOwn: userId === "U001",
 });
 
-const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
+const makeWorld = (initial: Partial<Omit<SlackSnapshot, "sidebar">> = {}) =>
   Effect.gen(function* () {
     const slack = {
       enabled: true,
       snapshot: { ...baseSnapshot, ...initial },
+      sidebarLayout: EMPTY_SLACK_SIDEBAR_LAYOUT as SlackSidebarLayout,
+      arrangedSections: 0,
       posts: [] as Array<SlackPostMessageInput>,
       failNextPost: false,
       loseNextReply: false,
@@ -161,7 +169,24 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
     };
     const layerSlack = Layer.mock(Slack.Slack)({
       enabled: Effect.sync(() => slack.enabled),
-      snapshot: Effect.sync(() => slack.snapshot),
+      snapshot: Effect.sync(() => ({
+        ...slack.snapshot,
+        sidebar: resolveSlackSidebar(slack.sidebarLayout, slack.snapshot.conversations),
+      })),
+      arrangeSidebar: (input) =>
+        Effect.sync(() => {
+          slack.sidebarLayout = arrangeSlackSidebar(
+            slack.sidebarLayout,
+            {
+              ...input,
+              sections: input.sections.map((section) => {
+                slack.arrangedSections += 1;
+                return { ...section, id: `section-${slack.arrangedSections}` };
+              }),
+            },
+            slack.snapshot.conversations.map((conversation) => conversation.id),
+          );
+        }),
       thread: () =>
         Effect.succeed({
           messages: [
@@ -385,6 +410,7 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
       draft: (args: Record<string, unknown>) => call("slack_draft_message", args),
       read: (args: Record<string, unknown>) => call("slack_linked_threads", args),
       notifications: (args: Record<string, unknown>) => call("slack_channel_notifications", args),
+      sidebar: (args: Record<string, unknown>) => call("slack_sidebar_layout", args),
       cards: projection.pipe(
         Effect.map(({ turnItems }) => turnItems.filter((item) => item.type === "slack_draft")),
       ),
@@ -700,6 +726,74 @@ it.effect("channel notifications are read and set by id or name, entry by entry"
       world.slack.enabled = false;
       const hidden = yield* world.notifications({}).pipe(Effect.flip);
       expect(hidden.message).toBe("Tool 'slack_channel_notifications' not found");
+    }),
+  ),
+);
+
+it.effect("the sidebar layout is read and set by id or name, entry by entry", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld();
+      const general = { id: "C001", name: "general", kind: "channel" };
+      const help = { id: "C002", name: "general-help", kind: "channel" };
+      const ada = { id: "D001", name: "Ada", kind: "im" };
+      const defaultGroups = (
+        channels: ReadonlyArray<typeof general>,
+        directMessages: ReadonlyArray<typeof general>,
+      ) => [
+        { name: "Starred", conversations: [] },
+        { name: "Channels", conversations: channels },
+        { name: "Direct messages", conversations: directMessages },
+      ];
+      expect((yield* world.sidebar({})).value).toEqual({
+        sections: [],
+        defaultGroups: defaultGroups([general, help], [ada]),
+        hidden: [],
+        notSet: [],
+      });
+
+      expect(
+        (yield* world.sidebar({
+          set: {
+            sections: [
+              { name: "Team A", conversations: ["C001", "gener"] },
+              { name: "direct messages", conversations: ["Ada"] },
+            ],
+            hideOthers: true,
+          },
+        })).value,
+      ).toEqual({
+        sections: [{ name: "Team A", conversations: [general] }],
+        defaultGroups: defaultGroups([], [ada]),
+        hidden: [help],
+        notSet: [
+          {
+            entry: "gener",
+            reason:
+              "The user has no Slack conversation named gener. Close matches: #general, #general-help.",
+          },
+        ],
+      });
+      const [teamA] = world.slack.sidebarLayout.sections;
+
+      expect(
+        (yield* world.sidebar({
+          set: {
+            sections: [{ name: "team a", conversations: ["#General-Help"] }],
+            hidden: ["@ada"],
+          },
+        })).value,
+      ).toEqual({
+        sections: [{ name: "team a", conversations: [help] }],
+        defaultGroups: defaultGroups([general], []),
+        hidden: [ada],
+        notSet: [],
+      });
+      expect(world.slack.sidebarLayout.sections.map(({ id }) => id)).toEqual([teamA?.id]);
+
+      world.slack.enabled = false;
+      const hidden = yield* world.sidebar({}).pipe(Effect.flip);
+      expect(hidden.message).toBe("Tool 'slack_sidebar_layout' not found");
     }),
   ),
 );

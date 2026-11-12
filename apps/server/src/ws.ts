@@ -2617,6 +2617,7 @@ export const layerWsRpc = (
         [WS_METHODS.slackSetItemState]: (input) => slack.setItemState(input),
         [WS_METHODS.slackSetInboxMode]: (input) => slack.setInboxMode(input),
         [WS_METHODS.slackSetFocusMode]: (input) => slack.setFocusMode(input),
+        [WS_METHODS.slackEditSidebar]: (input) => slack.editSidebar(input),
         [WS_METHODS.slackOpenDirectMessage]: (input) => slack.openDirectMessage(input),
         [WS_METHODS.slackEmoji]: (_input) => slack.emoji,
         [WS_METHODS.slackFileUrl]: (input) => slack.fileUrl(input),
