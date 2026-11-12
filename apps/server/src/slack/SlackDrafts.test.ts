@@ -196,6 +196,17 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
             conversationId: input.conversationId,
           });
         }),
+      setInboxMode: (input) =>
+        Effect.sync(() => {
+          slack.snapshot = {
+            ...slack.snapshot,
+            conversations: slack.snapshot.conversations.map((conversation) =>
+              conversation.id === input.conversationId
+                ? { ...conversation, inboxMode: input.mode }
+                : conversation,
+            ),
+          };
+        }),
       linkThread: (input) =>
         Effect.sync(() => {
           const [conversationId = "", rootTs] = input.itemKey.split(":");
@@ -373,6 +384,7 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
       drafts: Context.get(here, SlackDrafts.SlackDrafts),
       draft: (args: Record<string, unknown>) => call("slack_draft_message", args),
       read: (args: Record<string, unknown>) => call("slack_linked_threads", args),
+      notifications: (args: Record<string, unknown>) => call("slack_channel_notifications", args),
       cards: projection.pipe(
         Effect.map(({ turnItems }) => turnItems.filter((item) => item.type === "slack_draft")),
       ),
@@ -640,6 +652,54 @@ it.effect("reading returns the linked thread with names in place of ids", () =>
       });
       const unlinked = yield* makeWorld();
       expect((yield* unlinked.read({})).error?.message).toContain("no linked Slack thread");
+    }),
+  ),
+);
+
+it.effect("channel notifications are read and set by id or name, entry by entry", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld();
+      const channels = (general: string, help: string) => [
+        { id: "C001", name: "general", mode: general },
+        { id: "C002", name: "general-help", mode: help },
+      ];
+      expect((yield* world.notifications({})).value).toEqual({
+        channels: channels("mentions", "mentions"),
+        notSet: [],
+      });
+      expect(
+        (yield* world.notifications({
+          set: [
+            { channel: "C001", mode: "off" },
+            { channel: "#General-Help", mode: "everything" },
+            { channel: "gener", mode: "off" },
+            { channel: "D001", mode: "off" },
+          ],
+        })).value,
+      ).toEqual({
+        channels: channels("off", "everything"),
+        notSet: [
+          {
+            channel: "gener",
+            reason:
+              "The user is not a member of a Slack channel named #gener, or it does not exist. Close matches: #general, #general-help.",
+          },
+          {
+            channel: "D001",
+            reason: "This is a direct message. Only channels have a notification setting.",
+          },
+        ],
+      });
+      expect(world.slack.snapshot.conversations.map(({ inboxMode }) => inboxMode)).toEqual([
+        "off",
+        "everything",
+        "mentions",
+      ]);
+
+      world.slack.enabled = false;
+      const hidden = yield* world.notifications({}).pipe(Effect.flip);
+      expect(hidden.message).toBe("Tool 'slack_channel_notifications' not found");
     }),
   ),
 );

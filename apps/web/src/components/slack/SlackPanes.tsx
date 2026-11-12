@@ -1,4 +1,4 @@
-import type { SlackInboxMode, SlackMessage } from "@t3tools/contracts";
+import { SlackInboxMode, type SlackMessage } from "@t3tools/contracts";
 import {
   BellIcon,
   BotIcon,
@@ -30,18 +30,13 @@ import {
   useSlackDirectory,
   useSlackInbox,
 } from "./slackDirectory";
+import { SLACK_INBOX_MODE_LABELS } from "./slackInbox.logic";
 import type { SlackMessageScope } from "./slackMessages.logic";
 import { SlackMessageRow } from "./SlackMessage";
 import { SlackReactionPicker } from "./SlackReactionPicker";
 import { SlackSnoozeMenu } from "./SlackSnoozeMenu";
 import type { SlackItemControls } from "./useSlackItemControls";
 import { useSlackMessages } from "./useSlackMessages";
-
-const INBOX_MODE_LABELS: Readonly<Record<SlackInboxMode, string>> = {
-  everything: "Every message",
-  mentions: "Mentions and my threads",
-  off: "Off",
-};
 
 export function SlackConversationIcon({
   conversation,
@@ -211,14 +206,14 @@ function InboxModeMenu({ conversation }: { readonly conversation: SlackDirectory
       <MenuTrigger
         render={
           <Button
-            aria-label={`Inbox: ${INBOX_MODE_LABELS[conversation.inboxMode]}`}
+            aria-label={`Inbox: ${SLACK_INBOX_MODE_LABELS[conversation.inboxMode]}`}
             size="sm"
             variant="ghost-muted"
           />
         }
       >
         <BellIcon />
-        {INBOX_MODE_LABELS[conversation.inboxMode]}
+        {SLACK_INBOX_MODE_LABELS[conversation.inboxMode]}
       </MenuTrigger>
       <MenuPopup align="end">
         <MenuRadioGroup
@@ -231,9 +226,9 @@ function InboxModeMenu({ conversation }: { readonly conversation: SlackDirectory
             });
           }}
         >
-          {(["everything", "mentions", "off"] as const).map((mode) => (
+          {SlackInboxMode.literals.map((mode) => (
             <MenuRadioItem key={mode} closeOnClick value={mode}>
-              {INBOX_MODE_LABELS[mode]}
+              {SLACK_INBOX_MODE_LABELS[mode]}
             </MenuRadioItem>
           ))}
         </MenuRadioGroup>

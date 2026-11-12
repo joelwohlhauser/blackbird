@@ -1,10 +1,11 @@
-import type { SlackConversation } from "@t3tools/contracts";
+import { type SlackConversation, SlackInboxMode } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { ClockIcon, InboxIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { BellOffIcon, ClockIcon, InboxIcon } from "lucide-react";
+import type { MouseEvent, ReactNode } from "react";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
+import { readLocalApi } from "../../localApi";
 import { slackEnvironment, useSlackSnapshot } from "../../state/slack";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SidebarChromeFooter, SidebarChromeHeader } from "../sidebar/SidebarChrome";
@@ -19,7 +20,13 @@ import {
 } from "../ui/sidebar";
 import { Switch } from "../ui/switch";
 import { SlackSnapshotProvider } from "./SlackDirectoryProvider";
-import { groupSlackConversations } from "./slackInbox.logic";
+import { useSlackDirectory } from "./slackDirectory";
+import {
+  groupSlackConversations,
+  isSlackChannel,
+  isSlackChannelMuted,
+  SLACK_INBOX_MODE_LABELS,
+} from "./slackInbox.logic";
 import { SlackConversationIcon } from "./SlackPanes";
 import type { SlackSearch } from "./slackSearch";
 import { validateSlackSearch } from "./slackSearch";
@@ -41,19 +48,52 @@ function ConversationRow({
   readonly active: boolean;
   readonly onOpen: (search: SlackSearch) => void;
 }) {
+  const { environmentId } = useSlackDirectory();
+  const setInboxMode = useAtomCommand(slackEnvironment.setInboxMode);
   const unread = conversation.unreadItemCount > 0;
+  const muted = isSlackChannelMuted(conversation);
+
+  const openInboxModeMenu = (event: MouseEvent) => {
+    const api = readLocalApi();
+    if (!api || !isSlackChannel(conversation)) return;
+    event.preventDefault();
+    void api.contextMenu
+      .show(
+        SlackInboxMode.literals.map((mode) => ({
+          id: mode,
+          label: SLACK_INBOX_MODE_LABELS[mode],
+          checked: mode === conversation.inboxMode,
+        })),
+        { x: event.clientX, y: event.clientY },
+      )
+      .then((mode) => {
+        if (mode === null || mode === conversation.inboxMode) return;
+        void setInboxMode({ environmentId, input: { conversationId: conversation.id, mode } });
+      });
+  };
+
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton isActive={active} size="sm" onClick={() => onOpen({ c: conversation.id })}>
-        <SlackConversationIcon conversation={conversation} className="size-3.5 shrink-0" />
+      <SidebarMenuButton
+        isActive={active}
+        size="sm"
+        onClick={() => onOpen({ c: conversation.id })}
+        onContextMenu={openInboxModeMenu}
+      >
+        <SlackConversationIcon
+          conversation={conversation}
+          className={cn("size-3.5 shrink-0", muted && !unread && "opacity-50")}
+        />
         <span
           className={cn(
             "min-w-0 flex-1 truncate",
             unread && "font-semibold text-sidebar-foreground",
+            muted && !unread && "opacity-50",
           )}
         >
           {conversation.name}
         </span>
+        {muted ? <BellOffIcon aria-label="Muted" className="size-3 shrink-0 opacity-50" /> : null}
         <SidebarCount count={conversation.unreadItemCount} />
       </SidebarMenuButton>
     </SidebarMenuItem>

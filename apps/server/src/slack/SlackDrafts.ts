@@ -9,6 +9,7 @@ import {
   type SlackConversation,
   type SlackDraftAnswerInput,
   SlackError,
+  type SlackInboxMode,
   type SlackMessage,
   type SlackSnapshot,
   type SlackThreadLink,
@@ -97,6 +98,43 @@ const closeMatches = (query: string, names: ReadonlyArray<string>) =>
 const listed = (names: ReadonlyArray<string>) =>
   names.length === 0 ? "" : ` Close matches: ${names.join(", ")}.`;
 
+const findNotificationChannel = (
+  snapshot: SlackSnapshot,
+  given: string,
+): { readonly conversation: SlackConversation } | { readonly reason: string } => {
+  const byId = snapshot.conversations.find((candidate) => candidate.id === given.trim());
+  if (byId !== undefined) {
+    return isChannel(byId)
+      ? { conversation: byId }
+      : { reason: "This is a direct message. Only channels have a notification setting." };
+  }
+  const query = normalizeName(given);
+  const channels = snapshot.conversations.filter(isChannel);
+  const [conversation, ...others] = channels.filter(
+    (candidate) => candidate.name.toLowerCase() === query,
+  );
+  if (conversation === undefined) {
+    return {
+      reason: `The user is not a member of a Slack channel named #${query}, or it does not exist.${listed(
+        closeMatches(
+          query,
+          channels.map((candidate) => candidate.name),
+        ).map((match) => `#${match}`),
+      )}`,
+    };
+  }
+  return others.length === 0
+    ? { conversation }
+    : {
+        reason: `${others.length + 1} channels are named #${query}. Pass the id of one: ${[
+          conversation,
+          ...others,
+        ]
+          .map((candidate) => candidate.id)
+          .join(", ")}.`,
+      };
+};
+
 const slackTsToIso = (ts: string) =>
   DateTime.formatIso(DateTime.makeUnsafe(Number(ts.split(".")[0]) * 1000));
 
@@ -155,6 +193,21 @@ export class SlackDrafts extends Context.Service<
       OrchestratorMcpFailure
     >;
     readonly answer: (input: SlackDraftAnswerInput) => Effect.Effect<void, SlackError>;
+    readonly channelNotifications: (input: {
+      readonly set?:
+        | ReadonlyArray<{ readonly channel: string; readonly mode: SlackInboxMode }>
+        | undefined;
+    }) => Effect.Effect<
+      {
+        readonly channels: ReadonlyArray<{
+          readonly id: string;
+          readonly name: string;
+          readonly mode: SlackInboxMode;
+        }>;
+        readonly notSet: ReadonlyArray<{ readonly channel: string; readonly reason: string }>;
+      },
+      OrchestratorMcpFailure
+    >;
   }
 >()("t3/slack/SlackDrafts") {}
 
@@ -529,7 +582,31 @@ const make = Effect.gen(function* () {
     (effect, input) => answerLocks.withLock(input.turnItemId, effect),
   );
 
-  return SlackDrafts.of({ read, draft, answer });
+  const channelNotifications: SlackDrafts["Service"]["channelNotifications"] = Effect.fn(
+    "SlackDrafts.channelNotifications",
+  )(function* (input) {
+    const snapshot = yield* connectedSnapshot;
+    const notSet: Array<{ readonly channel: string; readonly reason: string }> = [];
+    for (const { channel, mode } of input.set ?? []) {
+      const found = findNotificationChannel(snapshot, channel);
+      const reason =
+        "reason" in found
+          ? found.reason
+          : yield* slack.setInboxMode({ conversationId: found.conversation.id, mode }).pipe(
+              Effect.as(undefined),
+              Effect.catch((error) => Effect.succeed(error.message)),
+            );
+      if (reason !== undefined) notSet.push({ channel, reason });
+    }
+    return {
+      channels: (yield* slack.snapshot).conversations
+        .filter(isChannel)
+        .map(({ id, name, inboxMode }) => ({ id, name, mode: inboxMode })),
+      notSet,
+    };
+  });
+
+  return SlackDrafts.of({ read, draft, answer, channelNotifications });
 });
 
 export const layer = Layer.effect(SlackDrafts, make);

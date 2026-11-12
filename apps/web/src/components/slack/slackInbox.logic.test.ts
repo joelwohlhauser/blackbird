@@ -127,4 +127,18 @@ describe("groupSlackConversations", () => {
     expect(groups.channels.map((entry) => entry.id)).toEqual(["C001", "C002"]);
     expect(groups.directMessages.map((entry) => entry.id)).toEqual(["D001", "G001"]);
   });
+
+  it("puts muted channels after the other channels of their section", () => {
+    const groups = groupSlackConversations([
+      conversation("C001", "alerts", { inboxMode: "off" }),
+      conversation("C002", "random"),
+      conversation("C003", "announcements", { isStarred: true, inboxMode: "off" }),
+      conversation("C004", "team", { isStarred: true }),
+      conversation("D001", "Ada", { kind: "im", inboxMode: "off" }),
+      conversation("D002", "Grace", { kind: "im" }),
+    ]);
+    expect(groups.starred.map((entry) => entry.id)).toEqual(["C004", "C003"]);
+    expect(groups.channels.map((entry) => entry.id)).toEqual(["C002", "C001"]);
+    expect(groups.directMessages.map((entry) => entry.id)).toEqual(["D001", "D002"]);
+  });
 });
