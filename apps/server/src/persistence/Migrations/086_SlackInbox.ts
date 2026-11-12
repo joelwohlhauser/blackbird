@@ -34,8 +34,7 @@ export default Effect.gen(function* () {
     CREATE TABLE IF NOT EXISTS slack_state (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       focus_mode INTEGER NOT NULL DEFAULT 0,
-      last_event_ts TEXT,
-      seeded INTEGER NOT NULL DEFAULT 0
+      last_event_ts TEXT
     )
   `;
 });

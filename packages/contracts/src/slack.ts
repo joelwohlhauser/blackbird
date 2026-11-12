@@ -338,6 +338,7 @@ export const SlackDraftAnswerInput = Schema.Struct({
   turnItemId: TurnItemId,
   answer: Schema.Union([
     Schema.Struct({ type: Schema.Literal("send"), text: TrimmedNonEmptyString }),
+    Schema.Struct({ type: Schema.Literal("resend") }),
     Schema.Struct({ type: Schema.Literal("discard") }),
   ]),
 });

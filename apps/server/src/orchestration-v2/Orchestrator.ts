@@ -9526,16 +9526,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         });
       const run = projection.runs.find((candidate) => candidate.id === command.runId);
       if (run === undefined) return yield* reject(`Run ${command.runId} was not found.`);
-      const existing = projection.turnItems.find((item) => item.id === command.turnItemId);
-      if (existing !== undefined && existing.type !== "slack_draft") {
-        return yield* reject(`Turn item ${command.turnItemId} is not a Slack draft.`);
-      }
-      if (existing !== undefined && existing.runId !== command.runId) {
-        return yield* reject(`Slack draft ${command.turnItemId} belongs to another run.`);
-      }
-      if (existing === undefined && run.rootNodeId !== command.nodeId) {
-        return yield* reject(`Node ${command.nodeId} is not the root of run ${command.runId}.`);
-      }
+      const existing = projection.turnItems
+        .filter((item) => item.type === "slack_draft")
+        .find((item) => item.id === command.turnItemId);
       if (
         existing === undefined &&
         (!isActiveRun(run) || (yield* stopReachedRun(command, command.threadId, run.id)))
@@ -9544,10 +9537,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       }
       const unchanged =
         existing !== undefined &&
-        (existing.draftStatus !== "pending" || command.draftStatus === "pending");
+        (existing.draftStatus === "sent" ||
+          existing.draftStatus === "discarded" ||
+          existing.draftStatus === command.draftStatus);
       if (unchanged) return;
       const now = yield* DateTime.now;
-      const pending = command.draftStatus === "pending";
+      const pending = command.draftStatus === "pending" || command.draftStatus === "sending";
       const {
         type: _type,
         commandId: _commandId,

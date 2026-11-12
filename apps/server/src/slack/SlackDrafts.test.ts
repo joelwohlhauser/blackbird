@@ -155,6 +155,7 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
       snapshot: { ...baseSnapshot, ...initial },
       posts: [] as Array<SlackPostMessageInput>,
       failNextPost: false,
+      crashAfterNextPost: false,
     };
     const layerSlack = Layer.mock(Slack.Slack)({
       snapshot: Effect.sync(() => slack.snapshot),
@@ -174,6 +175,10 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
             );
           }
           slack.posts.push(input);
+          if (slack.crashAfterNextPost) {
+            slack.crashAfterNextPost = false;
+            return Effect.die("The process stopped after Slack accepted the message.");
+          }
           return Effect.succeed({
             ...slackMessage(`${200 + slack.posts.length}.000001`, "U001", input.text),
             conversationId: input.conversationId,
@@ -490,6 +495,58 @@ it.effect("a failed send leaves the draft open, and a discarded draft posts noth
   ),
 );
 
+it.effect("a draft whose send was interrupted is only sent again when the user confirms", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld({ links: [linkedThread] });
+      const interrupt = Effect.gen(function* () {
+        yield* world.draft({ itemKey: linkedThread.itemKey, text: "Fixed in main." });
+        const card = yield* pendingCard(world);
+        world.slack.crashAfterNextPost = true;
+        yield* world.drafts
+          .answer({ threadId, turnItemId: card.id, answer: { type: "send", text: "Fixed." } })
+          .pipe(Effect.exit);
+        const again = yield* world.drafts
+          .answer({ threadId, turnItemId: card.id, answer: { type: "send", text: "Fixed." } })
+          .pipe(Effect.flip);
+        expect(again).toMatchObject({ reason: "already_answered" });
+        expect(again.message).toContain("interrupted");
+        return card;
+      });
+
+      const first = yield* interrupt;
+      expect(world.slack.posts).toHaveLength(1);
+      expect(yield* world.cards).toMatchObject([
+        { status: "waiting", draftStatus: "sending", text: "Fixed." },
+      ]);
+      expect(yield* world.notices).toEqual([]);
+      yield* world.drafts.answer({
+        threadId,
+        turnItemId: first.id,
+        answer: { type: "resend" },
+      });
+      expect(world.slack.posts.map((post) => post.text)).toEqual(["Fixed.", "Fixed."]);
+      expect(yield* world.cards).toMatchObject([{ status: "completed", draftStatus: "sent" }]);
+      expect(yield* world.notices).toHaveLength(1);
+
+      const second = yield* interrupt;
+      yield* world.drafts.answer({
+        threadId,
+        turnItemId: second.id,
+        answer: { type: "discard" },
+      });
+      expect(world.slack.posts).toHaveLength(3);
+      expect((yield* world.cards).find((card) => card.id === second.id)).toMatchObject({
+        status: "cancelled",
+        draftStatus: "discarded",
+      });
+      expect(
+        (yield* world.notices).filter((notice) => notice.text.includes("may have been sent")),
+      ).toHaveLength(1);
+    }),
+  ),
+);
+
 it.effect("a target that is unknown, ambiguous, or not linked shows no card", () =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -526,6 +583,7 @@ it.effect("reading returns the linked thread with names in place of ids", () =>
     Effect.gen(function* () {
       const world = yield* makeWorld({ links: [linkedThread] });
       expect((yield* world.read({})).value).toEqual({
+        notice: SlackDrafts.SLACK_MESSAGES_UNTRUSTED_NOTICE,
         threads: [
           {
             itemKey: linkedThread.itemKey,

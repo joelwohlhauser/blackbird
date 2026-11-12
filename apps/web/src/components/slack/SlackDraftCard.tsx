@@ -32,7 +32,8 @@ export function SlackDraftCard(props: {
 }) {
   const { item } = props;
   if (item.draftStatus === "sent") return <SentSlackDraft item={item} />;
-  if (item.draftStatus === "pending" && props.visibility === "local") {
+  const open = item.draftStatus === "pending" || item.draftStatus === "sending";
+  if (open && props.visibility === "local") {
     return <PendingSlackDraft environmentId={props.environmentId} item={item} />;
   }
   return (
@@ -41,8 +42,7 @@ export function SlackDraftCard(props: {
       icon={<MinusIcon className="size-3.5 text-icon-muted" aria-hidden />}
       label={
         <>
-          Slack draft · {draftTarget(item)} ·{" "}
-          {item.draftStatus === "pending" ? "Waiting in its own chat" : "Discarded"}
+          Slack draft · {draftTarget(item)} · {open ? "Waiting in its own chat" : "Discarded"}
         </>
       }
     />
@@ -86,26 +86,66 @@ function PendingSlackDraft(props: {
   const selfName = useSlackSelfName();
   const answer = useAtomCommand(slackEnvironment.answerDraft, { reportFailure: false });
   const [text, setText] = useState(item.text);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<SlackDraftAnswerInput["answer"]["type"] | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   const send = async (reply: SlackDraftAnswerInput["answer"]) => {
     if (inFlight.current) return;
     inFlight.current = true;
-    setSubmitting(true);
+    setSubmitting(reply.type);
     setError(null);
     const result = await answer({
       environmentId: props.environmentId,
       input: { threadId: item.threadId, turnItemId: item.id, answer: reply },
     }).finally(() => {
       inFlight.current = false;
-      setSubmitting(false);
+      setSubmitting(null);
     });
     if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
     const failure = squashAtomCommandFailure(result);
     setError(failure instanceof Error ? failure.message : "Could not update the Slack draft.");
   };
+  const busy = submitting !== null;
+
+  if (item.draftStatus === "sending" && submitting !== "send") {
+    return (
+      <div
+        data-v2-item-type={item.type}
+        className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/60 bg-card p-4"
+      >
+        <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
+          <MessageSquareIcon className="size-3.5 shrink-0 text-icon-muted" aria-hidden />
+          <span className="min-w-0 truncate">{draftTarget(item)}</span>
+        </p>
+        <p className="text-sm wrap-anywhere whitespace-pre-wrap text-foreground">{item.text}</p>
+        <p role="alert" className="text-xs text-destructive">
+          {error ?? "Sending was interrupted: check Slack"}
+        </p>
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost-muted"
+            disabled={busy}
+            onClick={() => void send({ type: "discard" })}
+          >
+            Discard
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void send({ type: "resend" })}
+          >
+            I checked, send again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form
@@ -126,7 +166,7 @@ function PendingSlackDraft(props: {
       <Textarea
         id={textId}
         value={text}
-        disabled={submitting}
+        disabled={busy}
         aria-invalid={error !== null || undefined}
         aria-describedby={error === null ? undefined : errorId}
         onChange={(event) => {
@@ -144,12 +184,12 @@ function PendingSlackDraft(props: {
           type="button"
           size="xs"
           variant="ghost-muted"
-          disabled={submitting}
+          disabled={busy}
           onClick={() => void send({ type: "discard" })}
         >
           Discard
         </Button>
-        <Button type="submit" disabled={submitting || text.trim().length === 0}>
+        <Button type="submit" disabled={busy || text.trim().length === 0}>
           {selfName === null ? "Send" : `Send as ${selfName}`}
         </Button>
       </div>

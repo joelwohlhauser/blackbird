@@ -53,7 +53,6 @@ export type SlackInboxInput =
       readonly ts: string;
       readonly preview: string;
     }
-  | { readonly type: "message.deleted"; readonly key: string; readonly ts: string }
   | { readonly type: "participation"; readonly key: string }
   | {
       readonly type: "action";
@@ -158,7 +157,11 @@ function applyMessage(
       items: withItem(inbox.items, { ...existing, ...latest, latestAuthorId: selfUserId }),
     };
   }
-  if (!isNewer) return inbox;
+  const isMissed =
+    existing?.state === "done" &&
+    existing.doneThroughTs !== undefined &&
+    compareSlackTs(message.ts, existing.doneThroughTs) > 0;
+  if (!isNewer && !isMissed) return inbox;
 
   const mentionsSelfDirectly =
     message.text.includes(`<@${selfUserId}>`) || message.text.includes(`<@${selfUserId}|`);
@@ -180,7 +183,17 @@ function applyMessage(
     conversationId: message.conversationId,
     ...(isDirect ? {} : { rootTs }),
   };
-  const author = message.userId === undefined ? {} : { latestAuthorId: message.userId };
+  const shown =
+    existing !== undefined && !isNewer
+      ? {
+          latestTs: existing.latestTs,
+          preview: existing.preview,
+          ...(existing.replyCount === undefined ? {} : { replyCount: existing.replyCount }),
+          ...(existing.latestAuthorId === undefined
+            ? {}
+            : { latestAuthorId: existing.latestAuthorId }),
+        }
+      : { ...latest, ...(message.userId === undefined ? {} : { latestAuthorId: message.userId }) };
   if (link?.home === "agents") {
     const { latestAuthorId: _latestAuthorId, ...kept } = existing ?? {
       ...identity,
@@ -188,7 +201,10 @@ function applyMessage(
       mentionsSelf: false,
       latestAuthorId: undefined,
     };
-    return { ...inbox, items: withItem(inbox.items, { ...kept, ...latest, ...author }) };
+    return {
+      ...inbox,
+      items: withItem(inbox.items, { ...kept, ...shown, doneThroughTs: message.ts }),
+    };
   }
 
   return {
@@ -196,8 +212,7 @@ function applyMessage(
     items: withItem(inbox.items, {
       ...identity,
       state: "unread",
-      ...latest,
-      ...author,
+      ...shown,
       mentionsSelf: (existing?.state === "unread" && existing.mentionsSelf) || mentions,
       ...(existing?.doneThroughTs === undefined ? {} : { doneThroughTs: existing.doneThroughTs }),
     }),
@@ -270,9 +285,10 @@ function applyChat(
   );
   if (active) return next;
   let items: Map<string, SlackInboxRecord> | undefined;
-  for (const link of next.links.values()) {
+  for (const link of inbox.links.values()) {
     const item = next.items.get(link.itemKey);
-    if (link.threadId !== input.threadId || item === undefined || item.state === "done") continue;
+    if (link.threadId !== input.threadId || !link.active) continue;
+    if (item === undefined || item.state === "done") continue;
     items ??= new Map(next.items);
     items.set(item.key, markDone(item));
   }
@@ -291,8 +307,6 @@ export function applyInboxInput(inbox: SlackInbox, input: SlackInboxInput): Slac
         ? inbox
         : { ...inbox, items: withItem(inbox.items, { ...existing, preview: input.preview }) };
     }
-    case "message.deleted":
-      return inbox;
     case "participation":
       return inbox.participation.has(input.key)
         ? inbox
@@ -347,6 +361,28 @@ export function unreadItemCounts(inbox: SlackInbox): ReadonlyMap<string, number>
   return counts;
 }
 
+export function trackedSlackThreadRoots(
+  inbox: SlackInbox,
+  activeSince: string,
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const roots = new Map<string, Set<string>>();
+  const track = (conversationId: string, rootTs: string, lastActivity: string) => {
+    if (compareSlackTs(lastActivity, activeSince) <= 0) return;
+    const known = roots.get(conversationId) ?? new Set<string>();
+    roots.set(conversationId, known.add(rootTs));
+  };
+  for (const item of inbox.items.values()) {
+    if (item.rootTs !== undefined) track(item.conversationId, item.rootTs, item.latestTs);
+  }
+  for (const key of inbox.participation) {
+    const { conversationId, rootTs } = parseSlackInboxItemKey(key);
+    if (rootTs !== undefined) {
+      track(conversationId, rootTs, inbox.items.get(key)?.latestTs ?? rootTs);
+    }
+  }
+  return roots;
+}
+
 export function nextSnoozeExpiry(inbox: SlackInbox): number | undefined {
   let next: number | undefined;
   for (const item of inbox.items.values()) {
@@ -384,11 +420,14 @@ export function chatsToMarkUnread(
   for (const link of after.links.values()) {
     if (!link.active || link.home !== "agents") continue;
     const item = after.items.get(link.itemKey);
-    if (item === undefined || item.latestAuthorId === selfUserId) continue;
     const previous = before.items.get(link.itemKey);
-    if (previous === undefined || compareSlackTs(item.latestTs, previous.latestTs) > 0) {
-      threadIds.add(link.threadId);
-    }
+    if (item === undefined || item === previous) continue;
+    const isNewer = previous === undefined || compareSlackTs(item.latestTs, previous.latestTs) > 0;
+    const isMissed =
+      item.doneThroughTs !== undefined &&
+      item.doneThroughTs !== previous?.doneThroughTs &&
+      compareSlackTs(item.doneThroughTs, item.latestTs) < 0;
+    if (isNewer ? item.latestAuthorId !== selfUserId : isMissed) threadIds.add(link.threadId);
   }
   return [...threadIds];
 }

@@ -8,10 +8,7 @@ export default Effect.gen(function* () {
     CREATE TABLE IF NOT EXISTS slack_thread_links (
       item_key TEXT PRIMARY KEY,
       thread_id TEXT NOT NULL,
-      conversation_id TEXT NOT NULL,
-      root_ts TEXT,
-      home TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      home TEXT NOT NULL
     )
   `;
   yield* sql`

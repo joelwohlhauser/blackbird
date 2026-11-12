@@ -4,7 +4,6 @@ import {
   type SlackConnectInput,
   type SlackConnectionStatus,
   type SlackConversation,
-  type SlackConversationKind,
   type SlackDeleteMessageInput,
   type SlackEmojiResult,
   SlackError,
@@ -38,7 +37,6 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
@@ -49,16 +47,18 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { HttpServerResponse } from "effect/http";
+import type { HttpServerResponse } from "effect/http";
 
-import { issueSlackFileUrl } from "../assets/AssetAccess.ts";
-import * as AssetSigner from "../assets/AssetSigner.ts";
-import { deletePendingAttachment } from "../assets/AttachmentUpload.ts";
-import { resolveAttachmentPathById } from "../attachmentStore.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
-import * as ServerConfig from "../config.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as SlackApi from "./SlackApi.ts";
+import {
+  fetchSlackDirectory,
+  paginateSlack,
+  type SlackDirectoryConversation,
+  toDirectoryConversation,
+} from "./slackDirectory.ts";
+import * as SlackFiles from "./SlackFiles.ts";
 import {
   applyInboxInput,
   chatsToMarkUnread,
@@ -73,6 +73,7 @@ import {
   slackInboxItemKey,
   slackPlainPreview,
   slackSeedThreshold,
+  trackedSlackThreadRoots,
   unreadItemCounts,
   visibleSlackInboxItems,
 } from "./slackInbox.ts";
@@ -82,11 +83,11 @@ import * as SlackStore from "./SlackStore.ts";
 const USER_TOKEN_SECRET = "slack-user-token";
 const APP_TOKEN_SECRET = "slack-app-token";
 const DEFAULT_INBOX_MODE: SlackInboxMode = "mentions";
-const CONVERSATION_TYPES = "public_channel,private_channel,im,mpim";
-const DIRECTORY_PAGE_SIZE = 200;
-const MAX_DIRECTORY_PAGES = 50;
 const HISTORY_PAGE_SIZE = 50;
 const SYNC_HISTORY_LIMIT = 100;
+const SYNC_MAX_PAGES = 20;
+const SYNC_RETRY_AFTER = "60 seconds";
+const SYNC_RETRY_ROUNDS = 5;
 const THREAD_PAGE_SIZE = 200;
 const MAX_THREAD_PAGES = 5;
 const RECONNECT_GAP_MS = 30_000;
@@ -95,9 +96,8 @@ const RETRY_CONNECTION_AFTER = "60 seconds";
 const DIRECTORY_REFRESH_INTERVAL = "30 minutes";
 const PRESENCE_INTERVAL = "60 seconds";
 const PRESENCE_MAX_USERS = 15;
-const PRESENCE_ACTIVITY_SECONDS = 14 * 24 * 60 * 60;
+const RECENT_ACTIVITY_SECONDS = 14 * 24 * 60 * 60;
 const FOCUS_SNOOZE_MINUTES = 1440;
-const MAX_REMEMBERED_FILES = 5000;
 const INBOX_MESSAGE_SUBTYPES = new Set([
   "bot_message",
   "file_share",
@@ -111,36 +111,7 @@ const CHAT_STATE_EVENTS: ReadonlySet<OrchestrationV2DomainEvent["type"]> = new S
   "thread.unarchived",
   "run.created",
 ]);
-const INLINE_CONTENT_TYPE_PATTERN = /^(?:image|video|audio)\/[\w!#$&^.+-]+$/i;
-const FORWARDED_REQUEST_HEADERS = ["range", "if-range"] as const;
-const FORWARDED_RESPONSE_HEADERS = [
-  "content-length",
-  "content-range",
-  "accept-ranges",
-  "etag",
-  "last-modified",
-] as const;
-
-interface Session {
-  readonly userToken: string;
-  readonly appToken: string;
-  readonly selfUserId: string;
-}
-
-interface DirectoryConversation {
-  readonly id: string;
-  readonly kind: SlackConversationKind;
-  readonly name: string;
-  readonly userId?: string;
-  readonly isStarred: boolean;
-}
-
-interface RememberedFile {
-  readonly name: string;
-  readonly mimetype: string;
-  readonly full: string;
-  readonly thumb: string;
-}
+type Session = SlackApi.SlackSession;
 
 interface State {
   readonly status: SlackConnectionStatus;
@@ -148,7 +119,7 @@ interface State {
   readonly selfUserId?: string;
   readonly teamId?: string;
   readonly focusMode: boolean;
-  readonly conversations: ReadonlyMap<string, DirectoryConversation>;
+  readonly conversations: ReadonlyMap<string, SlackDirectoryConversation>;
   readonly users: ReadonlyMap<string, SlackUser>;
   readonly inboxModes: ReadonlyMap<string, SlackInboxMode>;
   readonly inbox: SlackInbox;
@@ -172,7 +143,7 @@ const decodeEvent = Schema.decodeUnknownOption(SlackApi.RawSlackEvent);
 
 const toConversation = (
   state: State,
-  conversation: DirectoryConversation,
+  conversation: SlackDirectoryConversation,
   unreadItemCount: number,
 ): SlackConversation => {
   const peer = conversation.userId === undefined ? undefined : state.users.get(conversation.userId);
@@ -205,48 +176,6 @@ const toSnapshot = (state: State): SlackSnapshot => {
   };
 };
 
-interface GroupMember {
-  readonly id: string;
-  readonly name: string;
-}
-
-const toDirectoryConversation = (
-  raw: SlackApi.RawSlackConversation,
-  previous: DirectoryConversation | undefined,
-  group?: {
-    readonly selfUserId: string;
-    readonly membersByHandle: ReadonlyMap<string, GroupMember>;
-  },
-): DirectoryConversation => {
-  const kind: SlackConversationKind = raw.is_im
-    ? "im"
-    : raw.is_mpim
-      ? "mpim"
-      : raw.is_private
-        ? "private_channel"
-        : "channel";
-  const name =
-    kind === "mpim"
-      ? (raw.name ?? raw.id)
-          .replace(/^mpdm-/, "")
-          .replace(/-\d+$/, "")
-          .split("--")
-          .flatMap((handle) => {
-            const member = group?.membersByHandle.get(handle);
-            if (member === undefined) return [handle];
-            return member.id === group?.selfUserId ? [] : [member.name];
-          })
-          .join(", ")
-      : (raw.name ?? raw.id);
-  return {
-    id: raw.id,
-    kind,
-    name,
-    ...(raw.user ? { userId: raw.user } : {}),
-    isStarred: raw.is_starred ?? previous?.isStarred ?? false,
-  };
-};
-
 const isInboxMessage = (raw: {
   readonly subtype?: string | null | undefined;
   readonly hidden?: boolean | null | undefined;
@@ -254,11 +183,9 @@ const isInboxMessage = (raw: {
 
 const isRecoverable = (error: SlackError) => error.reason !== "invalid_token";
 
-const hasCode = (code: string) => (error: SlackError) => error.message.endsWith(`: ${code}`);
+const isNotFound = (error: SlackError) => error.reason === "not_found";
 
-const encodeUploadedFiles = Schema.encodeSync(
-  Schema.fromJsonString(Schema.Array(Schema.Struct({ id: Schema.String, title: Schema.String }))),
-);
+const hasCode = (code: string) => (error: SlackError) => error.message.endsWith(`: ${code}`);
 
 const toSlackTs = (millis: number) => (millis / 1000).toFixed(6);
 
@@ -303,9 +230,7 @@ const make = Effect.gen(function* () {
   const socket = yield* SlackSocket.SlackSocket;
   const store = yield* SlackStore.SlackStore;
   const secrets = yield* ServerSecretStore.ServerSecretStore;
-  const config = yield* ServerConfig.ServerConfig;
-  const fileSystem = yield* FileSystem.FileSystem;
-  const signer = yield* AssetSigner.AssetSigner;
+  const slackFiles = yield* SlackFiles.SlackFiles;
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   const random = yield* SecureRandom.SecureRandom;
   const serviceScope = yield* Effect.scope;
@@ -334,7 +259,6 @@ const make = Effect.gen(function* () {
           inboxModes: new Map<string, SlackInboxMode>(),
           focusMode: false,
           lastEventTs: undefined,
-          seeded: false,
         }),
       ),
     ),
@@ -347,8 +271,8 @@ const make = Effect.gen(function* () {
     inbox: stored.inbox,
   });
   const sessionRef = yield* Ref.make<Session | undefined>(undefined);
-  const seededRef = yield* Ref.make(stored.seeded);
   const lastEventRef = yield* Ref.make(stored.lastEventTs);
+  const openSyncsRef = yield* Ref.make(0);
   const emojiRef = yield* Ref.make<Readonly<Record<string, string>>>({});
   const connectionRef = yield* Ref.make<Fiber.Fiber<void> | undefined>(undefined);
   const eventsPubSub = yield* PubSub.unbounded<SlackEvent>();
@@ -356,7 +280,6 @@ const make = Effect.gen(function* () {
   const inboxLock = yield* Semaphore.make(1);
   const connectionLock = yield* Semaphore.make(1);
   const syncLock = yield* Semaphore.make(1);
-  const files = new Map<string, RememberedFile>();
   const activity = new Map<string, string>();
 
   const update = (change: (state: State) => State) => SubscriptionRef.update(stateRef, change);
@@ -386,28 +309,8 @@ const make = Effect.gen(function* () {
       ...(params === undefined ? {} : { params }),
     });
 
-  const rememberFile = (raw: SlackApi.RawSlackFile): RememberedFile | undefined => {
-    if (!raw.url_private) return undefined;
-    const file = SlackApi.normalizeSlackFile(raw);
-    const remembered = {
-      name: file.name,
-      mimetype: file.mimetype,
-      full: raw.url_private,
-      thumb:
-        (file.isImage ? (raw.thumb_720 ?? raw.thumb_480 ?? raw.thumb_360) : undefined) ??
-        raw.url_private,
-    };
-    files.delete(raw.id);
-    files.set(raw.id, remembered);
-    if (files.size > MAX_REMEMBERED_FILES) {
-      const oldest = files.keys().next().value;
-      if (oldest !== undefined) files.delete(oldest);
-    }
-    return remembered;
-  };
-
   const normalize = (raw: SlackApi.RawSlackMessage, conversationId: string, session: Session) => {
-    for (const file of raw.files ?? []) rememberFile(file);
+    for (const file of raw.files ?? []) slackFiles.remember(file);
     return SlackApi.normalizeSlackMessage(raw, conversationId, session.selfUserId);
   };
 
@@ -424,7 +327,7 @@ const make = Effect.gen(function* () {
 
   const messageInput = (
     state: State,
-    conversation: DirectoryConversation,
+    conversation: SlackDirectoryConversation,
     message: SlackMessage,
     session: Session,
   ): SlackInboxInput => ({
@@ -496,23 +399,40 @@ const make = Effect.gen(function* () {
     yield* applyInbox([{ type: "chat", threadId, state: yield* readChatState(threadId) }]);
   });
 
-  const watchChats = Effect.gen(function* () {
-    const linked = new Set(
-      [...(yield* SubscriptionRef.get(stateRef)).inbox.links.values()].map((link) => link.threadId),
-    );
-    for (const threadId of linked) yield* syncChat(threadId);
-    yield* Stream.runForEach(orchestrator.streamDomainEvents, (event) =>
-      Effect.gen(function* () {
-        const { links } = (yield* SubscriptionRef.get(stateRef)).inbox;
-        if (![...links.values()].some((link) => link.threadId === event.threadId)) return;
-        if (event.type === "thread.deleted") {
-          yield* applyInbox([{ type: "chat", threadId: event.threadId, state: "deleted" }]);
-        } else if (CHAT_STATE_EVENTS.has(event.type)) {
-          yield* syncChat(event.threadId);
-        }
-      }),
-    );
+  const restoreLinkActivity = Effect.gen(function* () {
+    const inputs: SlackInboxInput[] = [];
+    for (const link of (yield* SubscriptionRef.get(stateRef)).inbox.links.values()) {
+      const chat = yield* readChatState(link.threadId);
+      inputs.push(
+        chat === "deleted"
+          ? { type: "chat", threadId: link.threadId, state: chat }
+          : {
+              type: "link",
+              itemKey: link.itemKey,
+              threadId: link.threadId,
+              home: link.home,
+              active: chat === "active",
+            },
+      );
+    }
+    yield* applyInbox(inputs);
   }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Slack could not restore its chat links", { cause }),
+    ),
+  );
+
+  const watchChats = Stream.runForEach(orchestrator.streamDomainEvents, (event) =>
+    Effect.gen(function* () {
+      const { links } = (yield* SubscriptionRef.get(stateRef)).inbox;
+      if (![...links.values()].some((link) => link.threadId === event.threadId)) return;
+      if (event.type === "thread.deleted") {
+        yield* applyInbox([{ type: "chat", threadId: event.threadId, state: "deleted" }]);
+      } else if (CHAT_STATE_EVENTS.has(event.type)) {
+        yield* syncChat(event.threadId);
+      }
+    }),
+  ).pipe(
     Effect.catchCause((cause) => Effect.logWarning("Slack stopped following chats", { cause })),
   );
 
@@ -523,92 +443,12 @@ const make = Effect.gen(function* () {
     yield* store.setLastEventTs(ts).pipe(Effect.orDie);
   });
 
-  const paginate = Effect.fnUntraced(function* <A>(
-    maxPages: number,
-    page: (
-      cursor: string | undefined,
-    ) => Effect.Effect<
-      { readonly items: ReadonlyArray<A>; readonly next: string | null | undefined },
-      SlackError
-    >,
-  ) {
-    const items: A[] = [];
-    let cursor: string | undefined;
-    for (let index = 0; index < maxPages; index += 1) {
-      const result = yield* page(cursor);
-      items.push(...result.items);
-      if (!result.next) break;
-      cursor = result.next;
-    }
-    return items;
-  });
-
-  const refreshDirectory = Effect.fn("Slack.refreshDirectory")(function* (session: Session) {
-    const conversations = yield* paginate(MAX_DIRECTORY_PAGES, (cursor) =>
-      call(session, "users.conversations", SlackApi.SlackResponses.conversations, {
-        types: CONVERSATION_TYPES,
-        exclude_archived: true,
-        limit: DIRECTORY_PAGE_SIZE,
-        cursor,
-      }).pipe(
-        Effect.map((page) => ({
-          items: page.channels,
-          next: page.response_metadata?.next_cursor,
-        })),
-      ),
+  const refreshDirectory = Effect.fnUntraced(function* (session: Session) {
+    const directory = yield* fetchSlackDirectory(session).pipe(
+      Effect.provideService(SlackApi.SlackApi, api),
     );
-    const members = yield* paginate(MAX_DIRECTORY_PAGES, (cursor) =>
-      call(session, "users.list", SlackApi.SlackResponses.users, {
-        limit: DIRECTORY_PAGE_SIZE,
-        cursor,
-      }).pipe(
-        Effect.map((page) => ({ items: page.members, next: page.response_metadata?.next_cursor })),
-      ),
-    );
-    const emoji = yield* call(session, "emoji.list", SlackApi.SlackResponses.emoji);
-    yield* Ref.set(emojiRef, emoji.emoji);
-    const people = members.map((member) => ({
-      ...member,
-      displayName:
-        member.profile?.display_name ||
-        member.profile?.real_name ||
-        member.real_name ||
-        member.name ||
-        member.id,
-    }));
-    const group = {
-      selfUserId: session.selfUserId,
-      membersByHandle: new Map(
-        people.flatMap((member) =>
-          member.name ? [[member.name, { id: member.id, name: member.displayName }] as const] : [],
-        ),
-      ),
-    };
-    yield* update((state) => ({
-      ...state,
-      conversations: new Map(
-        conversations.map((raw) => [
-          raw.id,
-          toDirectoryConversation(raw, state.conversations.get(raw.id), group),
-        ]),
-      ),
-      users: new Map(
-        people.map((member) => {
-          const presence = state.users.get(member.id)?.presence;
-          return [
-            member.id,
-            {
-              id: member.id,
-              name: member.displayName,
-              ...(member.profile?.image_72 ? { avatarUrl: member.profile.image_72 } : {}),
-              isBot: member.is_bot === true || member.id === "USLACKBOT",
-              isDeleted: member.deleted === true,
-              ...(presence === undefined ? {} : { presence }),
-            } satisfies SlackUser,
-          ];
-        }),
-      ),
-    }));
+    yield* Ref.set(emojiRef, directory.emoji);
+    yield* update((state) => ({ ...state, ...directory.merge(state) }));
   });
 
   const ensureConversation = Effect.fnUntraced(function* (session: Session, id: string) {
@@ -625,11 +465,57 @@ const make = Effect.gen(function* () {
     return conversation;
   });
 
+  const fetchReplies = (
+    session: Session,
+    conversationId: string,
+    rootTs: string,
+    oldest?: string,
+  ) =>
+    paginateSlack(MAX_THREAD_PAGES, (cursor) =>
+      call(session, "conversations.replies", SlackApi.SlackResponses.messages, {
+        channel: conversationId,
+        ts: rootTs,
+        oldest,
+        limit: THREAD_PAGE_SIZE,
+        cursor,
+      }).pipe(
+        Effect.map((page) => ({
+          items: page.messages,
+          next: page.response_metadata?.next_cursor,
+        })),
+      ),
+    );
+
+  const fetchSyncHistory = Effect.fnUntraced(function* (
+    session: Session,
+    conversationId: string,
+    since: string | undefined,
+  ) {
+    const messages: SlackApi.RawSlackMessage[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < SYNC_MAX_PAGES; page += 1) {
+      const result = yield* call(
+        session,
+        "conversations.history",
+        SlackApi.SlackResponses.messages,
+        { channel: conversationId, limit: SYNC_HISTORY_LIMIT, cursor },
+      );
+      messages.push(...result.messages);
+      const oldest = result.messages.at(-1);
+      const next = result.response_metadata?.next_cursor;
+      if (since === undefined || !next || oldest === undefined) break;
+      if (compareSlackTs(oldest.ts, since) <= 0) break;
+      cursor = next;
+    }
+    return messages;
+  });
+
   const syncConversation = Effect.fn("Slack.syncConversation")(function* (
     session: Session,
-    conversation: DirectoryConversation,
+    conversation: SlackDirectoryConversation,
     since: string | undefined,
     startedAt: string,
+    trackedRoots: ReadonlySet<string> | undefined,
   ) {
     const info = yield* call(session, "conversations.info", SlackApi.SlackResponses.conversation, {
       channel: conversation.id,
@@ -650,18 +536,24 @@ const make = Effect.gen(function* () {
       (isDirect
         ? (info.channel.last_read ?? startedAt)
         : slackSeedThreshold(info.channel.last_read ?? startedAt, startedAt));
-    const history = yield* call(
-      session,
-      "conversations.history",
-      SlackApi.SlackResponses.messages,
-      { channel: conversation.id, limit: SYNC_HISTORY_LIMIT },
-    );
-    const newest = history.messages[0];
+    const history = yield* fetchSyncHistory(session, conversation.id, since);
+    const newest = history[0];
     if (newest !== undefined) recordActivity(conversation.id, newest.latest_reply ?? newest.ts);
 
     const participation: SlackInboxInput[] = [];
     const fresh: SlackApi.RawSlackMessage[] = [];
-    for (const raw of history.messages) {
+    const addReplies = (
+      replies: ReadonlyArray<SlackApi.RawSlackMessage>,
+      rootTs: string,
+      after: string,
+    ) => {
+      for (const reply of replies) {
+        if (reply.ts !== rootTs && isInboxMessage(reply) && compareSlackTs(reply.ts, after) > 0) {
+          fresh.push(reply);
+        }
+      }
+    };
+    for (const raw of history) {
       if (isInboxMessage(raw) && compareSlackTs(raw.ts, threshold) > 0) fresh.push(raw);
       if (!raw.latest_reply) continue;
       if (raw.subscribed && !isDirect) {
@@ -673,25 +565,20 @@ const make = Effect.gen(function* () {
       if (since === undefined && !raw.subscribed) continue;
       const threadThreshold = since ?? slackSeedThreshold(raw.last_read ?? threshold, startedAt);
       if (compareSlackTs(raw.latest_reply, threadThreshold) <= 0) continue;
-      const replies = yield* call(
-        session,
-        "conversations.replies",
-        SlackApi.SlackResponses.messages,
-        {
-          channel: conversation.id,
-          ts: raw.ts,
-          oldest: threadThreshold,
-          limit: SYNC_HISTORY_LIMIT,
-        },
+      addReplies(
+        yield* fetchReplies(session, conversation.id, raw.ts, threadThreshold),
+        raw.ts,
+        threadThreshold,
       );
-      for (const reply of replies.messages) {
-        if (
-          reply.ts !== raw.ts &&
-          isInboxMessage(reply) &&
-          compareSlackTs(reply.ts, threadThreshold) > 0
-        ) {
-          fresh.push(reply);
-        }
+    }
+    if (since !== undefined && trackedRoots !== undefined) {
+      const fetched = new Set(history.map((raw) => raw.ts));
+      for (const rootTs of trackedRoots) {
+        if (fetched.has(rootTs)) continue;
+        const replies = yield* fetchReplies(session, conversation.id, rootTs, since).pipe(
+          Effect.catchIf(isNotFound, () => Effect.succeed([])),
+        );
+        addReplies(replies, rootTs, since);
       }
     }
     const state = yield* SubscriptionRef.get(stateRef);
@@ -705,29 +592,82 @@ const make = Effect.gen(function* () {
     ]);
   });
 
-  const sync = Effect.fn("Slack.sync")(function* (session: Session, gapStartedAt?: number) {
-    yield* setStatus("syncing");
-    const startedAt = toSlackTs(yield* Clock.currentTimeMillis);
-    const seeded = yield* Ref.get(seededRef);
-    const lastEvent = yield* Ref.get(lastEventRef);
-    const gapStart = gapStartedAt === undefined ? undefined : toSlackTs(gapStartedAt);
-    const since = !seeded
-      ? undefined
-      : gapStart !== undefined && lastEvent !== undefined && compareSlackTs(gapStart, lastEvent) < 0
-        ? gapStart
-        : lastEvent;
-    for (const conversation of (yield* SubscriptionRef.get(stateRef)).conversations.values()) {
-      yield* syncConversation(session, conversation, since, startedAt).pipe(
-        Effect.catchIf(isRecoverable, logFailure("Slack conversation sync failed")),
+  const syncRound = Effect.fnUntraced(function* (
+    session: Session,
+    conversations: ReadonlyArray<SlackDirectoryConversation>,
+    since: string | undefined,
+    startedAt: string,
+  ) {
+    const trackedRoots = trackedSlackThreadRoots(
+      (yield* SubscriptionRef.get(stateRef)).inbox,
+      (Number(startedAt) - RECENT_ACTIVITY_SECONDS).toFixed(6),
+    );
+    const failed: SlackDirectoryConversation[] = [];
+    for (const conversation of conversations) {
+      yield* syncConversation(
+        session,
+        conversation,
+        since,
+        startedAt,
+        trackedRoots.get(conversation.id),
+      ).pipe(
+        Effect.catchIf(isRecoverable, (error) =>
+          Effect.logWarning("Slack conversation sync failed", { reason: error.reason }).pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                if (!isNotFound(error)) failed.push(conversation);
+              }),
+            ),
+          ),
+        ),
       );
     }
-    if (!seeded) {
-      yield* store.setSeeded.pipe(Effect.orDie);
-      yield* Ref.set(seededRef, true);
+    return failed;
+  }, syncLock.withPermits(1));
+
+  const retrySync = Effect.fnUntraced(function* (
+    session: Session,
+    failed: ReadonlyArray<SlackDirectoryConversation>,
+    since: string | undefined,
+    startedAt: string,
+  ) {
+    let pending = failed;
+    for (let round = 0; pending.length > 0; round += 1) {
+      if (round === SYNC_RETRY_ROUNDS) {
+        return yield* Effect.logWarning("Slack keeps its sync cursor until the next sync", {
+          conversations: pending.length,
+        });
+      }
+      yield* Effect.sleep(SYNC_RETRY_AFTER);
+      pending = yield* syncRound(session, pending, since, startedAt);
     }
     yield* bumpLastEvent(startedAt);
+    yield* Ref.update(openSyncsRef, (count) => count - 1);
+  });
+
+  const sync = Effect.fn("Slack.sync")(function* (session: Session, gapStartedAt?: number) {
+    yield* Ref.update(openSyncsRef, (count) => count + 1);
+    yield* setStatus("syncing");
+    const startedAt = toSlackTs(yield* Clock.currentTimeMillis);
+    const lastEvent = yield* Ref.get(lastEventRef);
+    const gapStart = gapStartedAt === undefined ? undefined : toSlackTs(gapStartedAt);
+    const since =
+      lastEvent !== undefined && gapStart !== undefined && compareSlackTs(gapStart, lastEvent) < 0
+        ? gapStart
+        : lastEvent;
+    const failed = yield* syncRound(
+      session,
+      [...(yield* SubscriptionRef.get(stateRef)).conversations.values()],
+      since,
+      startedAt,
+    );
     yield* setStatus("connected");
-  }, syncLock.withPermits(1));
+    yield* Effect.forkScoped(
+      retrySync(session, failed, since, startedAt).pipe(
+        Effect.catch(logFailure("Slack sync retry failed")),
+      ),
+    );
+  });
 
   const handleEvent = Effect.fnUntraced(function* (session: Session, payload: unknown) {
     const decoded = decodeEvent(payload);
@@ -781,17 +721,6 @@ const make = Effect.gen(function* () {
           ts: event.deleted_ts,
           ...(threadTs === undefined ? {} : { threadTs }),
         });
-        yield* applyInbox([
-          {
-            type: "message.deleted",
-            key: slackInboxItemKey(
-              conversation.kind,
-              conversation.id,
-              threadTs ?? event.deleted_ts,
-            ),
-            ts: event.deleted_ts,
-          },
-        ]);
       }
     } else if (isInboxMessage(event)) {
       const message = normalize(event, conversation.id, session);
@@ -804,14 +733,14 @@ const make = Effect.gen(function* () {
       });
       yield* applyInbox([messageInput(state, conversation, message, session)]);
     }
-    if ((yield* SubscriptionRef.get(stateRef)).status !== "syncing") {
-      yield* bumpLastEvent(event.ts);
-    }
+    const isCaughtUp =
+      (yield* Ref.get(lastEventRef)) !== undefined && (yield* Ref.get(openSyncsRef)) === 0;
+    if (isCaughtUp) yield* bumpLastEvent(event.ts);
   });
 
   const pollPresence = Effect.fn("Slack.pollPresence")(function* (session: Session) {
     const state = yield* SubscriptionRef.get(stateRef);
-    const cutoff = (yield* Clock.currentTimeMillis) / 1000 - PRESENCE_ACTIVITY_SECONDS;
+    const cutoff = (yield* Clock.currentTimeMillis) / 1000 - RECENT_ACTIVITY_SECONDS;
     const people = [...state.conversations.values()]
       .flatMap((conversation) => {
         const lastActivity = activity.get(conversation.id);
@@ -866,6 +795,7 @@ const make = Effect.gen(function* () {
     readonly appToken: string;
   }) {
     yield* setStatus("connecting");
+    yield* Ref.set(openSyncsRef, 0);
     const auth = yield* api.call({
       token: tokens.userToken,
       method: "auth.test",
@@ -965,6 +895,7 @@ const make = Effect.gen(function* () {
     new SlackError({ reason: "slack_api", message: "Blackbird could not store the Slack tokens." });
 
   const start = Effect.gen(function* () {
+    yield* restoreLinkActivity;
     yield* Effect.forkIn(watchChats, serviceScope);
     if (Option.isSome(storedTokens)) yield* launch(storedTokens.value);
   }).pipe(Effect.withSpan("Slack.start"));
@@ -1002,10 +933,9 @@ const make = Effect.gen(function* () {
       .remove(USER_TOKEN_SECRET)
       .pipe(Effect.andThen(secrets.remove(APP_TOKEN_SECRET)), Effect.mapError(secretFailure));
     yield* store.clear.pipe(Effect.orDie, inboxLock.withPermits(1));
-    yield* Ref.set(seededRef, false);
     yield* Ref.set(lastEventRef, undefined);
     yield* Ref.set(emojiRef, {});
-    files.clear();
+    slackFiles.clear();
     activity.clear();
     yield* SubscriptionRef.set(stateRef, DISCONNECTED_STATE);
   }).pipe(connectionLock.withPermits(1), Effect.withSpan("Slack.disconnect"));
@@ -1026,66 +956,6 @@ const make = Effect.gen(function* () {
       conversationId,
       session,
     );
-
-  const fileResponse: Slack["Service"]["fileResponse"] = Effect.fn("Slack.fileResponse")(
-    function* (asset, requestHeaders) {
-      const headers: Record<string, string> = {
-        "cache-control": "private, max-age=3600",
-        "x-content-type-options": "nosniff",
-      };
-      const failed = (status: number) =>
-        HttpServerResponse.empty({
-          status,
-          headers: { ...headers, "cache-control": "private, no-store" },
-        });
-      const session = yield* Ref.get(sessionRef);
-      if (session === undefined) return failed(404);
-      const file =
-        files.get(asset.fileId) ??
-        (yield* call(session, "files.info", SlackApi.SlackResponses.file, {
-          file: asset.fileId,
-        }).pipe(
-          Effect.map((info) => rememberFile(info.file)),
-          Effect.orElseSucceed(() => undefined),
-        ));
-      if (file === undefined) return failed(404);
-      const forwarded: Record<string, string> = {};
-      for (const name of FORWARDED_REQUEST_HEADERS) {
-        const value = requestHeaders[name];
-        if (value !== undefined) forwarded[name] = value;
-      }
-      const response = yield* api
-        .fetchFile({
-          token: session.userToken,
-          url: asset.variant === "thumb" ? file.thumb : file.full,
-          headers: forwarded,
-        })
-        .pipe(Effect.orElseSucceed(() => undefined));
-      if (response === undefined || (response.status >= 300 && response.status < 400)) {
-        return failed(502);
-      }
-      if (response.status >= 400) return failed(response.status >= 500 ? 502 : response.status);
-      const upstreamType =
-        response.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-      if (upstreamType === "text/html" && file.mimetype !== "text/html") return failed(502);
-      for (const name of FORWARDED_RESPONSE_HEADERS) {
-        const value = response.headers[name];
-        if (value !== undefined) headers[name] = value;
-      }
-      const inline =
-        INLINE_CONTENT_TYPE_PATTERN.test(upstreamType) && upstreamType !== "image/svg+xml";
-      const contentType = inline ? upstreamType : "application/octet-stream";
-      if (!inline) {
-        headers["content-disposition"] =
-          `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`;
-      }
-      return HttpServerResponse.stream(response.stream, {
-        status: response.status,
-        headers,
-        contentType,
-      });
-    },
-  );
 
   return Slack.of({
     start,
@@ -1113,19 +983,7 @@ const make = Effect.gen(function* () {
 
     thread: Effect.fn("Slack.thread")(function* (input) {
       const session = yield* requireSession;
-      const messages = yield* paginate(MAX_THREAD_PAGES, (cursor) =>
-        call(session, "conversations.replies", SlackApi.SlackResponses.messages, {
-          channel: input.conversationId,
-          ts: input.rootTs,
-          limit: THREAD_PAGE_SIZE,
-          cursor,
-        }).pipe(
-          Effect.map((page) => ({
-            items: page.messages,
-            next: page.response_metadata?.next_cursor,
-          })),
-        ),
-      );
+      const messages = yield* fetchReplies(session, input.conversationId, input.rootTs);
       return { messages: messages.map((raw) => normalize(raw, input.conversationId, session)) };
     }),
 
@@ -1240,7 +1098,7 @@ const make = Effect.gen(function* () {
         SlackApi.SlackResponses.conversation,
         { users: input.userId, return_im: true },
       );
-      const conversation: DirectoryConversation = {
+      const conversation: SlackDirectoryConversation = {
         ...toDirectoryConversation({ ...opened.channel, is_im: true }, undefined),
         userId: input.userId,
       };
@@ -1266,71 +1124,22 @@ const make = Effect.gen(function* () {
 
     fileUrl: Effect.fn("Slack.fileUrl")(function* (input) {
       yield* requireSession;
-      return yield* issueSlackFileUrl({
-        fileId: input.fileId,
-        variant: input.variant,
-        fileName: files.get(input.fileId)?.name ?? input.fileId,
-      }).pipe(
-        Effect.provideService(AssetSigner.AssetSigner, signer),
-        Effect.mapError(
-          () =>
-            new SlackError({
-              reason: "slack_api",
-              message: "Blackbird could not sign the Slack file link.",
-            }),
-        ),
-      );
+      return yield* slackFiles.fileUrl(input);
     }),
 
     upload: Effect.fn("Slack.upload")(function* (input) {
-      const session = yield* requireSession;
-      const uploaded: Array<{ readonly id: string; readonly title: string }> = [];
-      for (const file of input.files) {
-        const attachmentPath = resolveAttachmentPathById({
-          attachmentsDir: config.attachmentsDir,
-          attachmentId: file.attachmentId,
-        });
-        const bytes =
-          attachmentPath === null
-            ? undefined
-            : yield* fileSystem
-                .readFile(attachmentPath)
-                .pipe(Effect.orElseSucceed(() => undefined));
-        if (bytes === undefined) {
-          return yield* new SlackError({
-            reason: "not_found",
-            message: `The upload ${file.name} is no longer available.`,
-          });
-        }
-        const target = yield* call(
-          session,
-          "files.getUploadURLExternal",
-          SlackApi.SlackResponses.uploadUrl,
-          { filename: file.name, length: bytes.byteLength },
-        );
-        yield* api.upload({ url: target.upload_url, bytes });
-        uploaded.push({ id: target.file_id, title: file.name });
-      }
-      yield* call(session, "files.completeUploadExternal", SlackApi.SlackResponses.empty, {
-        files: encodeUploadedFiles(uploaded),
-        channel_id: input.conversationId,
-        thread_ts: input.threadTs,
-        initial_comment: input.comment?.trim() || undefined,
-      });
-      for (const file of input.files) {
-        yield* deletePendingAttachment(file.attachmentId).pipe(
-          Effect.provideService(ServerConfig.ServerConfig, config),
-          Effect.provideService(FileSystem.FileSystem, fileSystem),
-        );
-      }
+      yield* slackFiles.upload(yield* requireSession, input);
     }),
 
-    fileResponse,
+    fileResponse: Effect.fn("Slack.fileResponse")(function* (file, requestHeaders) {
+      return yield* slackFiles.fileResponse(yield* Ref.get(sessionRef), file, requestHeaders);
+    }),
   });
 });
 
 export const layer = Layer.effect(Slack, make).pipe(
   Layer.provide(SlackSocket.layer),
+  Layer.provide(SlackFiles.layer),
   Layer.provide(SlackApi.layer),
   Layer.provide(SlackStore.layer),
 );

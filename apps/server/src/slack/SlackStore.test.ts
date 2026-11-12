@@ -77,14 +77,12 @@ describe("SlackStore", () => {
       yield* store.setInboxMode("C001", "everything");
       yield* store.setFocusMode(true);
       yield* store.setLastEventTs("12.000001");
-      yield* store.setSeeded;
 
       assert.deepStrictEqual(yield* store.load, {
         inbox,
         inboxModes: new Map([["C001", "everything" as const]]),
         focusMode: true,
         lastEventTs: "12.000001",
-        seeded: true,
       });
 
       yield* store.clear;
@@ -93,7 +91,6 @@ describe("SlackStore", () => {
         inboxModes: new Map(),
         focusMode: false,
         lastEventTs: undefined,
-        seeded: false,
       });
     }).pipe(Effect.provide(layer)),
   );

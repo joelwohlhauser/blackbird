@@ -10,6 +10,7 @@ import {
   nextSnoozeExpiry,
   slackPlainPreview,
   slackSeedThreshold,
+  trackedSlackThreadRoots,
   type SlackInbox,
   type SlackInboxInput,
   type SlackInboxMessage,
@@ -229,6 +230,19 @@ describe("slackInbox", () => {
     assert.strictEqual(unread.items.get(DIRECT)?.state, "unread");
     assert.strictEqual(run([direct("11.000001"), direct("12.000001")], unread), unread);
 
+    const answered = run([direct("13.000001", { isOwn: true, text: "mine" })], done);
+    assert.strictEqual(run([direct("11.000001")], answered), answered);
+    const missed = run([direct("12.000001", { text: "missed" })], answered);
+    assert.strictEqual(missed.items.get(DIRECT)?.state, "unread");
+    assert.strictEqual(missed.items.get(DIRECT)?.latestTs, "13.000001");
+    assert.strictEqual(missed.items.get(DIRECT)?.preview, "mine");
+    assert.strictEqual(run([direct("12.000001", { text: "missed" })], missed), missed);
+    assert.strictEqual(
+      run([{ type: "action", key: DIRECT, state: "done" }], missed).items.get(DIRECT)
+        ?.doneThroughTs,
+      "13.000001",
+    );
+
     const thread = run([
       message("10.000001", {}, "everything"),
       message("11.000001", { threadTs: "10.000001" }),
@@ -273,12 +287,8 @@ describe("slackInbox", () => {
     );
   });
 
-  it("rule 7: a deletion keeps the item and an edit only updates the latest message", () => {
+  it("rule 7: an edit only updates the latest message", () => {
     const inbox = run([direct("10.000001"), direct("11.000001", { text: "latest" })]);
-    assert.strictEqual(
-      run([{ type: "message.deleted", key: DIRECT, ts: "11.000001" }], inbox),
-      inbox,
-    );
     assert.strictEqual(
       run([{ type: "message.changed", key: DIRECT, ts: "10.000001", preview: "old edit" }], inbox),
       inbox,
@@ -343,6 +353,21 @@ describe("slackInbox", () => {
 
     const own = run([message("12.000001", { threadTs: "10.000001", isOwn: true })], replied);
     assert.deepStrictEqual(chatsToMarkUnread(replied, own, SELF), []);
+    const missed = run([message("11.500001", { threadTs: "10.000001" }, "off")], own);
+    assert.strictEqual(missed.items.get(THREAD_KEY)?.latestTs, "12.000001");
+    assert.deepStrictEqual(chatsToMarkUnread(own, missed, SELF), [CHAT]);
+    assert.strictEqual(
+      run([message("11.500001", { threadTs: "10.000001" }, "off")], missed),
+      missed,
+    );
+    assert.strictEqual(
+      run([message("11.000001", { threadTs: "10.000001" }, "off")], missed),
+      missed,
+    );
+    assert.deepStrictEqual(
+      chatsToMarkUnread(own, run([{ type: "action", key: THREAD_KEY, state: "done" }], own), SELF),
+      [],
+    );
 
     const fresh = run([link("agents", DIRECT), direct("11.000001")]);
     assert.strictEqual(fresh.items.get(DIRECT)?.state, "done");
@@ -402,6 +427,7 @@ describe("slackInbox", () => {
       [THREAD_KEY],
     );
     assert.deepStrictEqual(chatsToMarkUnread(agents, reply, SELF), []);
+    assert.strictEqual(run([{ type: "chat", threadId: CHAT, state: "closed" }], reply), reply);
 
     const reopened = run([{ type: "chat", threadId: CHAT, state: "active" }], reply);
     assert.strictEqual(reopened.links.get(THREAD_KEY)?.active, true);
@@ -466,6 +492,23 @@ describe("slackInbox", () => {
       });
       assert.strictEqual(narrowed.items.get(snoozed)?.snoozedUntil, undefined);
     }
+  });
+
+  it("tracks recent threads the user takes part in or has an item for", () => {
+    const inbox = run([
+      message("10.000001", {}, "everything"),
+      message("50.000001", { threadTs: "10.000001" }),
+      message("20.000001", {}, "everything"),
+      message("60.000001", {}, "everything"),
+      { type: "participation", key: `${CHANNEL}:30.000001` },
+      { type: "participation", key: `${CHANNEL}:70.000001` },
+      { type: "participation", key: `${CHANNEL}:10.000001` },
+      direct("80.000001"),
+    ]);
+    assert.deepStrictEqual(
+      [...trackedSlackThreadRoots(inbox, "40.000000")].map(([id, roots]) => [id, [...roots]]),
+      [[CHANNEL, ["10.000001", "60.000001", "70.000001"]]],
+    );
   });
 
   it("rule 9: unread counts and the visible list are derived from the items", () => {

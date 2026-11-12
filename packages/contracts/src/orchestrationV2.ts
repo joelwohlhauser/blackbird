@@ -1620,7 +1620,12 @@ const OrchestrationV2LinkRequestFields = {
   failure: Schema.optional(Schema.String),
 } as const;
 
-export const OrchestrationV2SlackDraftStatus = Schema.Literals(["pending", "sent", "discarded"]);
+export const OrchestrationV2SlackDraftStatus = Schema.Literals([
+  "pending",
+  "sending",
+  "sent",
+  "discarded",
+]);
 export type OrchestrationV2SlackDraftStatus = typeof OrchestrationV2SlackDraftStatus.Type;
 
 const OrchestrationV2SlackDraftContentFields = {

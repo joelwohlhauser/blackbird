@@ -1,13 +1,19 @@
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { BotIcon, ChevronLeftIcon, MessageSquareIcon } from "lucide-react";
 import { useEffect, useEffectEvent } from "react";
 
 import { composerDraftHasUserContent, useComposerDraftStore } from "../../composerDraftStore";
+import { isQuickChatsProject, QUICK_CHATS_PROJECT_TITLE } from "../../quickChats";
 import { useSlackSpaceStore } from "../../slackSpaceStore";
+import { useProjects, useQuietThreadShell } from "../../state/entities";
 import { slackEnvironment, useSlackThreadLinks } from "../../state/slack";
+import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useSlackAskStore } from "./slackAsk";
 import { openSlack } from "./slackNavigation";
@@ -76,30 +82,69 @@ export function SlackChatBackLink(props: SlackChatProps) {
 export function SlackChatHomeAction(props: SlackChatProps) {
   const link = useSlackChatLink(props);
   const setThreadHome = useAtomCommand(slackEnvironment.setThreadHome, { reportFailure: true });
+  const moveThread = useAtomCommand(threadEnvironment.updateMetadata, "move chat to project");
+  const thread = useQuietThreadShell(scopeThreadRef(props.environmentId, props.threadId));
+  const projects = useProjects().filter((project) => project.environmentId === props.environmentId);
   if (link === undefined) return null;
-  const next = link.home === "slack" ? "agents" : "slack";
-  const label = next === "agents" ? "Move to Agents" : "Move to Slack";
+
+  const setHome = (home: "slack" | "agents") => {
+    useSlackSpaceStore.getState().setSpace(home);
+    void setThreadHome({
+      environmentId: props.environmentId,
+      input: { threadId: props.threadId, home },
+    });
+  };
+  if (link.home === "agents") {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={<Button size="sm" variant="outline" onClick={() => setHome("slack")} />}
+        >
+          <MessageSquareIcon />
+          <span className={COLLAPSING_LABEL_CLASS}>Move to Slack</span>
+        </TooltipTrigger>
+        <TooltipPopup side="bottom">Move to Slack</TooltipPopup>
+      </Tooltip>
+    );
+  }
+
+  const canChangeProject =
+    thread !== null && !threadRuntimeIsActive(thread.runtime) && thread.worktreePath === null;
+  const moveToAgents = (projectId: ProjectId | undefined) => {
+    setHome("agents");
+    if (projectId === undefined || projectId === thread?.projectId) return;
+    void moveThread({
+      environmentId: props.environmentId,
+      input: { threadId: props.threadId, projectId },
+    });
+  };
+  const quickChats = projects.find(isQuickChatsProject);
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              useSlackSpaceStore.getState().setSpace(next);
-              void setThreadHome({
-                environmentId: props.environmentId,
-                input: { threadId: props.threadId, home: next },
-              });
-            }}
-          />
-        }
-      >
-        {next === "agents" ? <BotIcon /> : <MessageSquareIcon />}
-        <span className={COLLAPSING_LABEL_CLASS}>{label}</span>
-      </TooltipTrigger>
-      <TooltipPopup side="bottom">{label}</TooltipPopup>
-    </Tooltip>
+    <Menu>
+      <MenuTrigger render={<Button size="sm" variant="outline" />}>
+        <BotIcon />
+        <span className={COLLAPSING_LABEL_CLASS}>Move to Agents</span>
+      </MenuTrigger>
+      <MenuPopup align="end">
+        <MenuItem
+          disabled={!canChangeProject && quickChats?.id !== thread?.projectId}
+          onClick={() => moveToAgents(quickChats?.id)}
+        >
+          {QUICK_CHATS_PROJECT_TITLE}
+        </MenuItem>
+        {projects
+          .filter((project) => !isQuickChatsProject(project))
+          .toSorted((left, right) => left.title.localeCompare(right.title))
+          .map((project) => (
+            <MenuItem
+              key={project.id}
+              disabled={!canChangeProject && project.id !== thread?.projectId}
+              onClick={() => moveToAgents(project.id)}
+            >
+              {project.title}
+            </MenuItem>
+          ))}
+      </MenuPopup>
+    </Menu>
   );
 }

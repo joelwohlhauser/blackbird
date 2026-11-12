@@ -26,9 +26,10 @@ const TIER_2_METHODS = new Set([
   "dnd.setSnooze",
   "dnd.endSnooze",
 ]);
+const POST_MESSAGE_METHOD = "chat.postMessage";
+const POST_MESSAGE_INTERVAL_MS = 1000;
 const MAX_RATE_LIMIT_RETRIES = 3;
 const DEFAULT_RETRY_AFTER_SECONDS = 5;
-const MAX_RETRY_AFTER_SECONDS = 120;
 const INVALID_TOKEN_CODES = new Set([
   "invalid_auth",
   "not_authed",
@@ -185,6 +186,12 @@ const decodeEnvelope = Schema.decodeUnknownOption(Envelope);
 
 type SlackParams = Readonly<Record<string, string | number | boolean | undefined>>;
 
+export interface SlackSession {
+  readonly userToken: string;
+  readonly appToken: string;
+  readonly selfUserId: string;
+}
+
 export class SlackApi extends Context.Service<
   SlackApi,
   {
@@ -273,14 +280,27 @@ const make = Effect.gen(function* () {
   const httpClient = yield* HttpClient.HttpClient;
   const scopedHttpClient = HttpClient.withScope(httpClient);
   const buckets = new Map<string, { readonly tokens: number; readonly at: number }>();
+  const pausedUntil = new Map<string, number>();
 
-  const acquire = Effect.fnUntraced(function* (method: string) {
-    const now = yield* Clock.currentTimeMillis;
-    const interval = 60_000 / (TIER_2_METHODS.has(method) ? TIER_2_PER_MINUTE : TIER_3_PER_MINUTE);
-    const bucket = buckets.get(method) ?? { tokens: BUCKET_BURST, at: now };
-    const tokens = Math.min(BUCKET_BURST, bucket.tokens + (now - bucket.at) / interval) - 1;
-    buckets.set(method, { tokens, at: now });
-    if (tokens < 0) yield* Effect.sleep(Math.ceil(-tokens * interval));
+  const acquire = Effect.fnUntraced(function* (method: string, channel: string | undefined) {
+    let now = yield* Clock.currentTimeMillis;
+    for (let until = pausedUntil.get(method); until !== undefined && until > now;) {
+      yield* Effect.sleep(until - now);
+      now = yield* Clock.currentTimeMillis;
+      until = pausedUntil.get(method);
+    }
+    const pace =
+      method === POST_MESSAGE_METHOD
+        ? { key: `${method}:${channel}`, interval: POST_MESSAGE_INTERVAL_MS, burst: 1 }
+        : {
+            key: method,
+            interval: 60_000 / (TIER_2_METHODS.has(method) ? TIER_2_PER_MINUTE : TIER_3_PER_MINUTE),
+            burst: BUCKET_BURST,
+          };
+    const bucket = buckets.get(pace.key) ?? { tokens: pace.burst, at: now };
+    const tokens = Math.min(pace.burst, bucket.tokens + (now - bucket.at) / pace.interval) - 1;
+    buckets.set(pace.key, { tokens, at: now });
+    if (tokens < 0) yield* Effect.sleep(Math.ceil(-tokens * pace.interval));
   });
 
   const call: SlackApi["Service"]["call"] = Effect.fn("SlackApi.call")(function* (input) {
@@ -292,8 +312,9 @@ const make = Effect.gen(function* () {
       HttpClientRequest.bearerToken(input.token),
       HttpClientRequest.bodyUrlParams(params),
     );
+    const channel = params.find(([name]) => name === "channel")?.[1];
     for (let attempt = 0; ; attempt += 1) {
-      yield* acquire(input.method);
+      yield* acquire(input.method, channel);
       const response = yield* httpClient.execute(request).pipe(
         Effect.provideService(FetchHttpClient.RequestInit, MANUAL_REDIRECT),
         Effect.provideService(HttpClient.TracerPropagationEnabled, false),
@@ -307,15 +328,13 @@ const make = Effect.gen(function* () {
           });
         }
         const retryAfter = Number(response.headers["retry-after"]);
-        yield* Effect.sleep(
+        const resumeAt =
+          (yield* Clock.currentTimeMillis) +
           1000 *
-            Math.min(
-              MAX_RETRY_AFTER_SECONDS,
-              Number.isFinite(retryAfter) && retryAfter > 0
-                ? retryAfter
-                : DEFAULT_RETRY_AFTER_SECONDS,
-            ),
-        );
+            (Number.isFinite(retryAfter) && retryAfter > 0
+              ? retryAfter
+              : DEFAULT_RETRY_AFTER_SECONDS);
+        pausedUntil.set(input.method, Math.max(resumeAt, pausedUntil.get(input.method) ?? 0));
         continue;
       }
       const body = yield* response.json.pipe(Effect.orElseSucceed((): unknown => undefined));
