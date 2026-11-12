@@ -77,6 +77,7 @@ describe("slackInbox", () => {
           conversationId: DIRECT,
           state: "unread",
           latestTs: "11.000001",
+          latestThreadTs: "11.000001",
           preview: "second",
           latestAuthorId: OTHER,
           mentionsSelf: false,
@@ -542,7 +543,7 @@ describe("slackInbox", () => {
     ]);
     assert.strictEqual(inbox.items.get(DIRECT)?.latestThreadTs, "15.000001");
     for (const next of [direct("41.000001"), direct("41.000001", { isOwn: true })]) {
-      assert.strictEqual(run([next], inbox).items.get(DIRECT)?.latestThreadTs, undefined);
+      assert.strictEqual(run([next], inbox).items.get(DIRECT)?.latestThreadTs, "41.000001");
     }
     const muted = run(
       [

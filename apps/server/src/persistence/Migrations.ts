@@ -91,6 +91,7 @@ import Migration0086 from "./Migrations/086_SlackInbox.ts";
 import Migration0087 from "./Migrations/087_SlackThreadLinks.ts";
 import Migration0088 from "./Migrations/088_SlackSidebarLayout.ts";
 import Migration0089 from "./Migrations/089_SlackInboxLatestThread.ts";
+import Migration0090 from "./Migrations/090_SlackInboxDirectMessageThread.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -183,6 +184,7 @@ const migrationEntries = [
   [87, "SlackThreadLinks", Migration0087],
   [88, "SlackSidebarLayout", Migration0088],
   [89, "SlackInboxLatestThread", Migration0089],
+  [90, "SlackInboxDirectMessageThread", Migration0090],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

@@ -1264,7 +1264,9 @@ const make = Effect.gen(function* () {
       const threadTs =
         item?.rootTs !== undefined && item.latestTs !== item.rootTs
           ? item.rootTs
-          : item?.latestThreadTs;
+          : item?.latestThreadTs === item?.latestTs
+            ? undefined
+            : item?.latestThreadTs;
       if (
         item?.state === "done" &&
         before.items.get(input.key)?.state !== "done" &&

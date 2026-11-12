@@ -151,7 +151,7 @@ function applyMessage(
     latestTs: message.ts,
     preview: message.preview,
     ...(replyCount === undefined ? {} : { replyCount }),
-    ...(isDirect && isReply ? { latestThreadTs: rootTs } : {}),
+    ...(isDirect ? { latestThreadTs: rootTs } : {}),
   };
 
   if (message.isOwn) {
