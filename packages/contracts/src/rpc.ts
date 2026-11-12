@@ -385,6 +385,7 @@ import {
   SlackFileUrlResult,
   SlackHistoryInput,
   SlackHistoryResult,
+  SlackDraftAnswerInput,
   SlackLinkThreadInput,
   SlackMessage,
   SlackOpenDirectMessageInput,
@@ -616,6 +617,7 @@ export const WS_METHODS = {
   slackLinkThread: "slack.linkThread",
   slackUnlinkThread: "slack.unlinkThread",
   slackSetThreadHome: "slack.setThreadHome",
+  slackAnswerDraft: "slack.answerDraft",
 
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
   cloudInstallRelayClient: "cloud.installRelayClient",
@@ -2204,6 +2206,11 @@ const WsSlackSetThreadHomeRpc = Rpc.make(WS_METHODS.slackSetThreadHome, {
   error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
 });
 
+const WsSlackAnswerDraftRpc = Rpc.make(WS_METHODS.slackAnswerDraft, {
+  payload: SlackDraftAnswerInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
 const WsGuestShareCreateRpc = Rpc.make(WS_METHODS.guestShareCreate, {
   payload: GuestShareCreateInput,
   success: GuestShareCreateResult,
@@ -2344,6 +2351,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSlackLinkThreadRpc,
   WsSlackUnlinkThreadRpc,
   WsSlackSetThreadHomeRpc,
+  WsSlackAnswerDraftRpc,
   WsServerReportClientActivityRpc,
   WsCloudGetRelayClientStatusRpc,
   WsCloudInstallRelayClientRpc,

@@ -188,6 +188,7 @@ import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
 import * as SkillSync from "./skills/SkillSync.ts";
 import * as Slack from "./slack/Slack.ts";
+import * as SlackDrafts from "./slack/SlackDrafts.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import { terminalOutputStream, withOutputWindow } from "./terminal/OutputProtocol.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
@@ -1431,6 +1432,7 @@ export const layerWsRpc = (
       const storageCleanup = yield* StorageCleanup.StorageCleanup;
       const skillSync = yield* SkillSync.SkillSync;
       const slack = yield* Slack.Slack;
+      const slackDrafts = yield* SlackDrafts.SlackDrafts;
       const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const secretResolver = yield* SecretResolver.SecretResolver;
@@ -2622,6 +2624,7 @@ export const layerWsRpc = (
         [WS_METHODS.slackLinkThread]: (input) => slack.linkThread(input),
         [WS_METHODS.slackUnlinkThread]: (input) => slack.unlinkThread(input),
         [WS_METHODS.slackSetThreadHome]: (input) => slack.setThreadHome(input),
+        [WS_METHODS.slackAnswerDraft]: (input) => slackDrafts.answer(input),
         [WS_METHODS.serverGetDatabaseStorage]: () => databaseStorage.status,
         [WS_METHODS.serverReclaimDatabaseSpace]: () => databaseStorage.requestReclaim,
         [WS_METHODS.peerLinksList]: (_input) =>
@@ -3469,6 +3472,7 @@ export const layer = Layer.unwrap(
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
     const peerLinks = yield* PeerLinks.PeerLinks;
     const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
+    const slackDrafts = yield* SlackDrafts.SlackDrafts;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3534,6 +3538,7 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
               Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
+              Layer.provide(Layer.succeed(SlackDrafts.SlackDrafts, slackDrafts)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

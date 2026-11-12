@@ -344,6 +344,8 @@ Unreads is a triage inbox: the list on the left, the selected thread or direct m
 
 **Ask agent** (the thread header, a message's hover actions, or `A`) opens a Quick chat that carries the Slack thread as context and shows the thread as a tab next to the chat. Such a chat stays out of the Agents list: its inbox row shows the agent's status and opens the chat. **Move to Agents** in the chat header lists it with your other chats and takes the thread out of Unreads, and a new Slack reply then marks the chat unread. Marking the thread done settles the chat, and settling or archiving the chat marks the thread done. The Details tab lists a chat's Slack threads.
 
+Agents never post to Slack themselves. An agent reads the threads linked to its chat and drafts messages; a draft shows in the chat as a card with editable text, and only **Send as …** posts it, as you. A new post you send this way is linked to the chat.
+
 ## Local and remote environments
 
 Environment settings are host-specific. Remote worktrees default to `~/repositories/.worktrees`; `~`, `.env` links, and setup scripts resolve on the machine that owns the repository. Environment labels are user-chosen and can differ from the SSH hostname.

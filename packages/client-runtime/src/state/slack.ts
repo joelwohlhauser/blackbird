@@ -97,5 +97,9 @@ export function createSlackEnvironmentAtoms<R, E>(
       label: "environment-data:slack:set-thread-home",
       tag: WS_METHODS.slackSetThreadHome,
     }),
+    answerDraft: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:slack:answer-draft",
+      tag: WS_METHODS.slackAnswerDraft,
+    }),
   };
 }

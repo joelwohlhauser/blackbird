@@ -125,6 +125,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.slackLinkThread]: "slack",
   [WS_METHODS.slackUnlinkThread]: "slack",
   [WS_METHODS.slackSetThreadHome]: "slack",
+  [WS_METHODS.slackAnswerDraft]: "slack",
   [WS_METHODS.secretsAnswerRequest]: "secrets",
   [WS_METHODS.guestShareCreate]: "guest-share",
   [WS_METHODS.cloudGetRelayClientStatus]: "cloud",

@@ -13,6 +13,7 @@ import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collaps
 import { EnvironmentSubagentAvatar, SubagentElapsed, V2LifecycleRow } from "./V2LifecycleRow";
 import { LinkRequestCard } from "./LinkRequestCard";
 import { SecretRequestCard } from "./SecretRequestCard";
+import { SlackDraftCard } from "../slack/SlackDraftCard";
 import { TimelineRowCtx, type TimelineRow } from "./timelineRowContext";
 import { subagentGroupTiming } from "./TimelineV2EventRow.logic";
 
@@ -34,6 +35,15 @@ export function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: 
   if (item.type === "link_request") {
     return (
       <LinkRequestCard
+        environmentId={ctx.activeThreadEnvironmentId}
+        item={item}
+        visibility={visibility}
+      />
+    );
+  }
+  if (item.type === "slack_draft") {
+    return (
+      <SlackDraftCard
         environmentId={ctx.activeThreadEnvironmentId}
         item={item}
         visibility={visibility}

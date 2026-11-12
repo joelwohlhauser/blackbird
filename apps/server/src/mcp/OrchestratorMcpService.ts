@@ -972,6 +972,8 @@ function turnItemText(item: OrchestrationV2TurnItem): string | null {
       return item.linkStatus === "linked"
         ? `Linked ${item.linkedLabel ?? item.label ?? item.url ?? "an environment"} (${item.linkedAccess}).`
         : `Asked the user to link ${item.label ?? item.url ?? "an environment"}: ${item.linkStatus}.`;
+    case "slack_draft":
+      return `Slack draft for ${item.targetLabel} (${item.draftStatus}):\n${item.text}`;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":

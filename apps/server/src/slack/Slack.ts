@@ -266,6 +266,7 @@ export class Slack extends Context.Service<
   Slack,
   {
     readonly start: Effect.Effect<void>;
+    readonly snapshot: Effect.Effect<SlackSnapshot>;
     readonly snapshots: Stream.Stream<SlackSnapshot>;
     readonly events: Stream.Stream<SlackEvent>;
     readonly connect: (input: SlackConnectInput) => Effect.Effect<void, SlackError>;
@@ -1088,6 +1089,7 @@ const make = Effect.gen(function* () {
 
   return Slack.of({
     start,
+    snapshot: SubscriptionRef.get(stateRef).pipe(Effect.map(toSnapshot)),
     snapshots: SubscriptionRef.changes(stateRef).pipe(Stream.map(toSnapshot)),
     events: Stream.fromPubSub(eventsPubSub),
     connect,

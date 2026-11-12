@@ -422,15 +422,13 @@ export function chatToSettle(
     : undefined;
 }
 
-export function slackPlainPreview(
-  text: string,
-  names: {
-    readonly user: (id: string) => string | undefined;
-    readonly conversation: (id: string) => string | undefined;
-  },
-): string {
-  const plain = text
-    .replace(/^&gt; ?/gm, "")
+interface SlackNames {
+  readonly user: (id: string) => string | undefined;
+  readonly conversation: (id: string) => string | undefined;
+}
+
+export function slackPlainText(text: string, names: SlackNames): string {
+  return text
     .replace(/<([^<>]*)>/g, (_match, body: string) => {
       const separator = body.indexOf("|");
       const target = separator === -1 ? body : body.slice(0, separator);
@@ -446,7 +444,11 @@ export function slackPlainPreview(
     })
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&")
+    .replaceAll("&amp;", "&");
+}
+
+export function slackPlainPreview(text: string, names: SlackNames): string {
+  const plain = slackPlainText(text.replace(/^&gt; ?/gm, ""), names)
     .replace(/\s+/g, " ")
     .trim();
   return plain.length > PREVIEW_MAX_LENGTH

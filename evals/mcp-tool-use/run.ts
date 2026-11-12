@@ -68,7 +68,9 @@ import {
   CHILD_PULL_REQUEST_REPORT_NEXT,
   PullRequestsToolkit,
 } from "../../apps/server/src/mcp/toolkits/pullRequests/tools.ts";
+import { SlackToolkit } from "../../apps/server/src/mcp/toolkits/slack/tools.ts";
 import { ThreadToolkit } from "../../apps/server/src/mcp/toolkits/thread/tools.ts";
+import { SLACK_DRAFT_PENDING_NEXT } from "../../apps/server/src/slack/SlackDrafts.ts";
 import { WorktreeToolkit } from "../../apps/server/src/mcp/toolkits/worktree/tools.ts";
 import {
   CLAUDE_PROVIDER,
@@ -445,6 +447,7 @@ const t3SourceTools: ReadonlyArray<Tool.Any> = [
   PreviewControlsToolkit,
   WorktreeToolkit,
   PullRequestsToolkit,
+  SlackToolkit,
   PreviewToolkit,
   DeviceToolkit,
   HtmlToolkit,
@@ -1342,6 +1345,10 @@ const withProductFields = (name: string, value: unknown, child: boolean): unknow
     case "link_pull_request":
     case "link_pull_requests":
       return child ? { ...value, next: CHILD_PULL_REQUEST_REPORT_NEXT } : value;
+    case "slack_draft_message":
+      return value.status === "pending" && value.next === undefined
+        ? { ...value, next: SLACK_DRAFT_PENDING_NEXT }
+        : value;
     default:
       return value;
   }

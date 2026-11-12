@@ -615,6 +615,7 @@ export const make = Effect.gen(function* () {
             !isAppOwnedDelegationItem(candidate) &&
             // A link card waits on the user, not the run, and answers by message.
             candidate.type !== "link_request" &&
+            candidate.type !== "slack_draft" &&
             (candidate.status === "pending" ||
               candidate.status === "running" ||
               candidate.status === "waiting"),

@@ -7,6 +7,7 @@ import {
   PositiveInt,
   ThreadId,
   TrimmedNonEmptyString,
+  TurnItemId,
 } from "./baseSchemas.ts";
 
 export const SlackConversationId = TrimmedNonEmptyString;
@@ -179,6 +180,7 @@ export class SlackError extends Schema.TaggedError<SlackError>()("SlackError", {
     "rate_limited",
     "slack_api",
     "not_found",
+    "already_answered",
   ]),
   message: Schema.String,
 }) {}
@@ -308,3 +310,13 @@ export const SlackUploadInput = Schema.Struct({
   comment: Schema.optionalKey(Schema.String),
 });
 export type SlackUploadInput = typeof SlackUploadInput.Type;
+
+export const SlackDraftAnswerInput = Schema.Struct({
+  threadId: ThreadId,
+  turnItemId: TurnItemId,
+  answer: Schema.Union([
+    Schema.Struct({ type: Schema.Literal("send"), text: TrimmedNonEmptyString }),
+    Schema.Struct({ type: Schema.Literal("discard") }),
+  ]),
+});
+export type SlackDraftAnswerInput = typeof SlackDraftAnswerInput.Type;

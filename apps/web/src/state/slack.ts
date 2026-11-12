@@ -27,6 +27,13 @@ function selectSlackBadgeCount(result: AsyncResult.AsyncResult<SlackSnapshot, un
   return snapshot.items.filter((item) => item.state === "unread").length;
 }
 
+function selectSlackSelfName(
+  result: AsyncResult.AsyncResult<SlackSnapshot, unknown>,
+): string | null {
+  const snapshot = AsyncResult.getOrElse(result, () => null);
+  return snapshot?.users.find((user) => user.id === snapshot.selfUserId)?.name ?? null;
+}
+
 function useSlackSnapshotAtom() {
   const environmentId = usePrimaryEnvironmentId();
   return environmentId === null ? null : slackEnvironment.snapshot({ environmentId, input: {} });
@@ -34,6 +41,10 @@ function useSlackSnapshotAtom() {
 
 export function useSlackAvailable(): boolean {
   return useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackAvailable);
+}
+
+export function useSlackSelfName(): string | null {
+  return useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackSelfName);
 }
 
 export function useSlackBadgeCount(): number {
