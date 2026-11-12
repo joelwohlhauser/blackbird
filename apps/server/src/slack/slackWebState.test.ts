@@ -80,7 +80,12 @@ it("hides read conversations and knows unread threads only when the list is comp
     isStarred,
     unreadItemCount,
   });
-  const web = { muted: new Set(["C001"]), hidesRead: true, sections: [], read };
+  const web = {
+    muted: new Set(["C001"]),
+    hidesRead: true,
+    sections: [{ id: "L1", name: "Team", conversationIds: ["C002", "D002"] }],
+    read,
+  };
   const conversations = [
     conversation("C001"),
     conversation("C002"),
@@ -90,10 +95,10 @@ it("hides read conversations and knows unread threads only when the list is comp
     conversation("D003", true),
     conversation("D004", false, 1),
   ];
-  assert.deepStrictEqual(slackWebSidebarLayout(web, conversations).hiddenConversationIds, [
-    "C001",
-    "D002",
-  ]);
+  assert.deepStrictEqual(slackWebSidebarLayout(web, conversations), {
+    sections: [{ id: "L1", name: "Team", conversationIds: ["C002"] }],
+    hiddenConversationIds: ["C001", "D002"],
+  });
   assert.deepStrictEqual(
     slackWebSidebarLayout({ ...web, hidesRead: false }, conversations).hiddenConversationIds,
     [],

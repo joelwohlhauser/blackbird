@@ -185,9 +185,8 @@ export function slackWebSidebarLayout(
     !web.muted.has(id) &&
     ((web.read.conversations.get(id)?.hasUnreads ?? false) ||
       web.read.conversationsWithUnreadThreads.has(id));
-  return {
-    sections: web.sections,
-    hiddenConversationIds: web.hidesRead
+  const hidden = new Set(
+    web.hidesRead
       ? conversations.flatMap((conversation) =>
           conversation.isStarred ||
           conversation.unreadItemCount > 0 ||
@@ -196,5 +195,12 @@ export function slackWebSidebarLayout(
             : [conversation.id],
         )
       : [],
+  );
+  return {
+    sections: web.sections.map((section) => ({
+      ...section,
+      conversationIds: section.conversationIds.filter((id) => !hidden.has(id)),
+    })),
+    hiddenConversationIds: [...hidden],
   };
 }

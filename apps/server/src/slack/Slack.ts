@@ -170,6 +170,11 @@ const INTEGRATION_OFF = new SlackError({
   message: "The Slack integration is turned off.",
 });
 
+const NOT_FOLLOWING_SLACK = new SlackError({
+  reason: "not_connected",
+  message: "Blackbird is not following your Slack.",
+});
+
 const SIDEBAR_FOLLOWS_SLACK = new SlackError({
   reason: "invalid_request",
   message: "The sidebar follows your Slack sidebar. Change sections in Slack.",
@@ -877,46 +882,71 @@ const make = Effect.gen(function* () {
     });
   });
 
-  const followSlack = Effect.fn("Slack.followSlack")(function* (
+  const requireFollowing = followsBrowserSession.pipe(
+    Effect.filterOrFail(
+      (on) => on,
+      () => NOT_FOLLOWING_SLACK,
+    ),
+  );
+
+  const webCall = <A>(
     workspaceUrl: string,
-    poll: number,
-  ) {
-    const known = (yield* SubscriptionRef.get(stateRef)).web;
-    if (!(yield* followsBrowserSession)) {
-      if (known !== undefined) yield* update(({ web: _web, ...state }) => state);
-      return;
-    }
-    const call = <A>(
-      method: string,
-      decode: (body: unknown) => Effect.Effect<A, Schema.SchemaError>,
-      params?: Readonly<Record<string, string>>,
-    ) => webSession.call({ workspaceUrl, method, decode, ...(params ? { params } : {}) });
-    const before = toSlackTs((yield* Clock.currentTimeMillis) - WEB_READ_MARGIN_MS);
-    const layout =
-      known === undefined || poll % WEB_LAYOUT_EVERY_POLLS === 0
-        ? slackWebLayout(
-            yield* call("users.prefs.get", SlackWebResponses.prefs),
-            yield* call("users.channelSections.list", SlackWebResponses.sections),
-          )
-        : known;
-    const read = slackWebReadState(
-      yield* call("client.counts", SlackWebResponses.counts, { thread_counts_by_channel: "true" }),
-      yield* call("subscriptions.thread.getView", SlackWebResponses.threadView),
-    );
-    yield* update((state) => ({ ...state, web: { ...layout, read } }));
-    yield* applyInbox([
-      ...[...layout.muted].flatMap((conversationId): SlackInboxInput[] =>
-        known?.muted.has(conversationId) ? [] : [{ type: "mode", conversationId, mode: "off" }],
+    method: string,
+    decode: (body: unknown) => Effect.Effect<A, Schema.SchemaError>,
+    params?: Readonly<Record<string, string>>,
+  ) =>
+    requireFollowing.pipe(
+      Effect.andThen(
+        webSession.call({ workspaceUrl, method, decode, ...(params ? { params } : {}) }),
       ),
-      ...[...read.conversations].map(([conversationId, conversation]): SlackInboxInput => ({
-        type: "read",
-        conversationId,
-        ...conversation,
-        unreadRoots: slackWebUnreadRoots(read, conversationId),
-        before,
-      })),
-    ]);
-  });
+    );
+
+  const stopFollowingSlack = update(({ web: _web, ...state }) => state);
+
+  const followSlack = Effect.fn("Slack.followSlack")(
+    function* (workspaceUrl: string, poll: number) {
+      const known = (yield* SubscriptionRef.get(stateRef)).web;
+      if (!(yield* followsBrowserSession)) {
+        if (known !== undefined) yield* stopFollowingSlack;
+        return;
+      }
+      const before = toSlackTs((yield* Clock.currentTimeMillis) - WEB_READ_MARGIN_MS);
+      const layout =
+        known === undefined || poll % WEB_LAYOUT_EVERY_POLLS === 0
+          ? slackWebLayout(
+              yield* webCall(workspaceUrl, "users.prefs.get", SlackWebResponses.prefs),
+              yield* webCall(
+                workspaceUrl,
+                "users.channelSections.list",
+                SlackWebResponses.sections,
+              ),
+            )
+          : known;
+      const read = slackWebReadState(
+        yield* webCall(workspaceUrl, "client.counts", SlackWebResponses.counts, {
+          thread_counts_by_channel: "true",
+        }),
+        yield* webCall(workspaceUrl, "subscriptions.thread.getView", SlackWebResponses.threadView),
+      );
+      yield* requireFollowing;
+      yield* update((state) => ({ ...state, web: { ...layout, read } }));
+      yield* applyInbox(
+        [...read.conversations].map(([conversationId, conversation]): SlackInboxInput => ({
+          type: "read",
+          conversationId,
+          ...conversation,
+          muted: layout.muted.has(conversationId),
+          unreadRoots: slackWebUnreadRoots(read, conversationId),
+          before,
+        })),
+      );
+    },
+    Effect.tapError((error) =>
+      error.reason === "not_connected" || error.reason === "invalid_token"
+        ? stopFollowingSlack
+        : Effect.void,
+    ),
+  );
 
   const snoozeLoop = Effect.gen(function* () {
     while (true) {
@@ -1240,19 +1270,12 @@ const make = Effect.gen(function* () {
         session.workspaceUrl !== undefined &&
         (yield* SubscriptionRef.get(stateRef)).web !== undefined
       ) {
-        yield* webSession
-          .call({
-            workspaceUrl: session.workspaceUrl,
-            method: "subscriptions.thread.mark",
-            decode: SlackWebResponses.empty,
-            params: {
-              channel: item.conversationId,
-              thread_ts: threadTs,
-              ts: item.latestTs,
-              read: "1",
-            },
-          })
-          .pipe(Effect.catch(logFailure("Slack mark thread read failed")));
+        yield* webCall(session.workspaceUrl, "subscriptions.thread.mark", SlackWebResponses.empty, {
+          channel: item.conversationId,
+          thread_ts: threadTs,
+          ts: item.latestTs,
+          read: "1",
+        }).pipe(Effect.catch(logFailure("Slack mark thread read failed")));
       }
       if (mark === undefined) return;
       const newest = activity.get(mark.conversationId);

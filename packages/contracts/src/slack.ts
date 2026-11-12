@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { AssetCreateUrlResult } from "./assets.ts";
@@ -207,7 +208,7 @@ export const SlackSidebar = Schema.Struct({
   starred: Schema.Array(SlackConversationId),
   channels: Schema.Array(SlackConversationId),
   directMessages: Schema.Array(SlackConversationId),
-  followsSlack: Schema.Boolean,
+  followsSlack: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type SlackSidebar = typeof SlackSidebar.Type;
 

@@ -146,6 +146,7 @@ export const make = Effect.gen(function* () {
           session
             .fetch(request.url, {
               credentials: "include",
+              redirect: "error",
               ...(request.form === undefined
                 ? {}
                 : {

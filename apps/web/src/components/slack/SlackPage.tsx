@@ -164,13 +164,12 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const threadInDirectMessage = search.t ?? activeItem?.latestThreadTs;
   const activeTarget =
     inboxView && activeKey !== null
       ? {
           ...parseSlackInboxItemKey(activeKey),
-          ...(activeItem?.latestThreadTs === undefined
-            ? {}
-            : { rootTs: activeItem.latestThreadTs }),
+          ...(threadInDirectMessage === undefined ? {} : { rootTs: threadInDirectMessage }),
         }
       : null;
 

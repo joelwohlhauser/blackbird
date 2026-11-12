@@ -35,6 +35,7 @@ describe("SlackStore", () => {
           message: {
             conversationId: "D001",
             ts: "11.000001",
+            threadTs: "9.000001",
             userId: "U002",
             text: "hello",
             preview: "hello",

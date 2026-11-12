@@ -179,6 +179,7 @@ const make = Effect.gen(function* () {
                   ? {}
                   : { acknowledgedThroughTs: row.acknowledgedThroughTs }),
                 ...(row.latestAuthorId === null ? {} : { latestAuthorId: row.latestAuthorId }),
+                ...(row.latestThreadTs === null ? {} : { latestThreadTs: row.latestThreadTs }),
                 ...(row.replyCount === null ? {} : { replyCount: row.replyCount }),
               } satisfies SlackInboxRecord,
             ]),

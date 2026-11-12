@@ -66,6 +66,7 @@ export type SlackInboxInput =
       readonly conversationId: string;
       readonly lastRead: string;
       readonly hasUnreads: boolean;
+      readonly muted: boolean;
       readonly unreadRoots: ReadonlySet<string> | undefined;
       readonly before: string;
     }
@@ -151,7 +152,6 @@ function applyMessage(
     ...(replyCount === undefined ? {} : { replyCount }),
     ...(isDirect && isReply ? { latestThreadTs: rootTs } : {}),
   };
-  const { latestThreadTs: _latestThreadTs, ...earlier } = existing ?? {};
 
   if (message.isOwn) {
     const participation =
@@ -161,15 +161,11 @@ function applyMessage(
     if (existing === undefined || !isNewer) {
       return participation === inbox.participation ? inbox : { ...inbox, participation };
     }
+    const { latestThreadTs: _latestThreadTs, ...earlier } = existing;
     return {
       ...inbox,
       participation,
-      items: withItem(inbox.items, {
-        ...existing,
-        ...earlier,
-        ...latest,
-        latestAuthorId: selfUserId,
-      }),
+      items: withItem(inbox.items, { ...earlier, ...latest, latestAuthorId: selfUserId }),
     };
   }
   const isMissed =
@@ -290,7 +286,10 @@ function applyRead(
 ): SlackInbox {
   const isRead = (item: SlackInboxRecord) => {
     if (item.rootTs === undefined) return !input.hasUnreads && input.unreadRoots?.size === 0;
-    if (compareSlackTs(item.rootTs, input.lastRead) > 0) return false;
+    const rootIsRead = input.muted
+      ? !item.mentionsSelf
+      : compareSlackTs(item.rootTs, input.lastRead) <= 0;
+    if (!rootIsRead) return false;
     return item.latestTs === item.rootTs || input.unreadRoots?.has(item.rootTs) === false;
   };
   let items: Map<string, SlackInboxRecord> | undefined;

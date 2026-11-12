@@ -515,6 +515,7 @@ describe("slackInbox", () => {
       conversationId,
       lastRead: "20.000001",
       hasUnreads: false,
+      muted: false,
       unreadRoots: new Set(),
       before: "50.000001",
       ...overrides,
@@ -534,9 +535,21 @@ describe("slackInbox", () => {
       direct("40.000001", { threadTs: "15.000001" }),
     ]);
     assert.strictEqual(inbox.items.get(DIRECT)?.latestThreadTs, "15.000001");
-    assert.strictEqual(
-      run([direct("41.000001")], inbox).items.get(DIRECT)?.latestThreadTs,
-      undefined,
+    for (const next of [direct("41.000001"), direct("41.000001", { isOwn: true })]) {
+      assert.strictEqual(run([next], inbox).items.get(DIRECT)?.latestThreadTs, undefined);
+    }
+    const muted = run(
+      [
+        message("26.000001", { text: `<@${SELF}> look` }, "everything"),
+        read(CHANNEL, { muted: true, lastRead: "1.000001" }),
+      ],
+      inbox,
+    );
+    assert.deepStrictEqual(
+      [`${CHANNEL}:25.000001`, `${CHANNEL}:26.000001`, `${CHANNEL}:13.000001`].map(
+        (key) => muted.items.get(key)?.state,
+      ),
+      ["done", "unread", "unread"],
     );
 
     const channelRead = read(CHANNEL, { unreadRoots: new Set(["12.000001"]) });
