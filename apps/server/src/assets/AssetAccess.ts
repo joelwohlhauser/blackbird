@@ -14,6 +14,7 @@ import {
   AssetWorkspaceResolutionError,
   AssetWorkspaceRootNormalizationError,
   SOURCE_CONTROL_MEDIA_ASSET,
+  SlackFileVariant,
   ThreadId,
   NativeAppIconReference,
   TurnItemId,
@@ -172,6 +173,13 @@ const AssetClaimsSchema = Schema.Union([
     repository: Schema.optionalKey(Schema.String),
     expiresAt: Schema.Number,
   }),
+  Schema.Struct({
+    version: Schema.Literal(1),
+    kind: Schema.Literal("slack-file"),
+    fileId: Schema.String,
+    variant: SlackFileVariant,
+    expiresAt: Schema.Number,
+  }),
 ]);
 type AssetClaims = typeof AssetClaimsSchema.Type;
 
@@ -200,6 +208,12 @@ export type ResolvedAsset =
       readonly url: string;
       readonly cwd: string;
       readonly repository?: string;
+      readonly expiresAt: number;
+    }
+  | {
+      readonly kind: "slack-file";
+      readonly fileId: string;
+      readonly variant: SlackFileVariant;
       readonly expiresAt: number;
     };
 
@@ -876,6 +890,29 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   };
 });
 
+export const issueSlackFileUrl = Effect.fn("AssetAccess.issueSlackFileUrl")(function* (input: {
+  readonly fileId: string;
+  readonly variant: SlackFileVariant;
+  readonly fileName: string;
+}) {
+  const expiresAt = (yield* Clock.currentTimeMillis) + ASSET_TOKEN_TTL_MS;
+  const encodedPayload = base64UrlEncode(
+    encodeAssetClaims({
+      version: 1,
+      kind: "slack-file",
+      fileId: input.fileId,
+      variant: input.variant,
+      expiresAt,
+    }),
+  );
+  const signer = yield* AssetSigner.AssetSigner;
+  const signature = yield* signer.sign(encodedPayload);
+  return {
+    relativeUrl: `${ASSET_ROUTE_PREFIX}/${encodedPayload}.${signature}/${encodeURIComponent(input.fileName)}`,
+    expiresAt,
+  };
+});
+
 export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
   token: string,
   relativePath: string,
@@ -951,6 +988,11 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
   if (claims.kind === SOURCE_CONTROL_MEDIA_ASSET) {
     const { version: _version, ...media } = claims;
     return { ...media, kind: "source-control-media" } satisfies ResolvedAsset;
+  }
+
+  if (claims.kind === "slack-file") {
+    const { version: _version, ...file } = claims;
+    return file satisfies ResolvedAsset;
   }
 
   if (claims.kind === "tool-output-image") {

@@ -20,19 +20,27 @@ function memoryStorage(initialValue: string | null = null) {
 }
 
 describe("last chat route persistence", () => {
-  it.each(["/", "/draft/draft-123", "/local/thread-123"])(
-    "accepts the chat path %s",
-    (pathname) => {
-      expect(isRestorableChatPath(pathname)).toBe(true);
-    },
-  );
+  it.each([
+    "/",
+    "/draft/draft-123",
+    "/local/thread-123",
+    "/slack",
+    "/slack?c=C001&t=%22100.000001%22",
+  ])("accepts the chat path %s", (pathname) => {
+    expect(isRestorableChatPath(pathname)).toBe(true);
+  });
 
-  it.each(["", "settings/general", "/settings/general/extra", "/draft/id/", "/draft/id?q=1"])(
-    "rejects the non-chat path %s",
-    (pathname) => {
-      expect(isRestorableChatPath(pathname)).toBe(false);
-    },
-  );
+  it.each([
+    "",
+    "settings/general",
+    "/settings/general/extra",
+    "/draft/id/",
+    "/draft/id?q=1",
+    "/slack#top",
+    "/slacker",
+  ])("rejects the non-chat path %s", (pathname) => {
+    expect(isRestorableChatPath(pathname)).toBe(false);
+  });
 
   it("restores a persisted draft or thread only from the startup index", () => {
     expect(resolveStartupChatPath("/", "/draft/draft-123")).toBe("/draft/draft-123");

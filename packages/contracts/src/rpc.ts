@@ -375,6 +375,30 @@ import {
   TextGeneratorError,
 } from "./settings.ts";
 import {
+  SlackConnectInput,
+  SlackConversation,
+  SlackDeleteMessageInput,
+  SlackEmojiResult,
+  SlackError,
+  SlackEvent,
+  SlackFileUrlInput,
+  SlackFileUrlResult,
+  SlackHistoryInput,
+  SlackHistoryResult,
+  SlackMessage,
+  SlackOpenDirectMessageInput,
+  SlackPostMessageInput,
+  SlackSetFocusModeInput,
+  SlackSetInboxModeInput,
+  SlackSetItemStateInput,
+  SlackSetReactionInput,
+  SlackSnapshot,
+  SlackThreadInput,
+  SlackThreadResult,
+  SlackUpdateMessageInput,
+  SlackUploadInput,
+} from "./slack.ts";
+import {
   ScheduledTaskDeleteInput,
   ScheduledTaskDeleteResult,
   ScheduledTaskError,
@@ -568,6 +592,24 @@ export const WS_METHODS = {
   guestShareCreate: "guestShare.create",
   scheduledTasksListWebhookDeliveries: "scheduledTasks.listWebhookDeliveries",
   scheduledTasksGetWebhookDelivery: "scheduledTasks.getWebhookDelivery",
+
+  slackSubscribe: "slack.subscribe",
+  slackSubscribeEvents: "slack.subscribeEvents",
+  slackConnect: "slack.connect",
+  slackDisconnect: "slack.disconnect",
+  slackHistory: "slack.history",
+  slackThread: "slack.thread",
+  slackPostMessage: "slack.postMessage",
+  slackUpdateMessage: "slack.updateMessage",
+  slackDeleteMessage: "slack.deleteMessage",
+  slackSetReaction: "slack.setReaction",
+  slackSetItemState: "slack.setItemState",
+  slackSetInboxMode: "slack.setInboxMode",
+  slackSetFocusMode: "slack.setFocusMode",
+  slackOpenDirectMessage: "slack.openDirectMessage",
+  slackEmoji: "slack.emoji",
+  slackFileUrl: "slack.fileUrl",
+  slackUpload: "slack.upload",
 
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
   cloudInstallRelayClient: "cloud.installRelayClient",
@@ -2045,6 +2087,102 @@ const WsScheduledTasksRotateWebhookTokenRpc = Rpc.make(
   },
 );
 
+const WsSlackSubscribeRpc = Rpc.make(WS_METHODS.slackSubscribe, {
+  payload: Schema.Struct({}),
+  success: SlackSnapshot,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
+const WsSlackSubscribeEventsRpc = Rpc.make(WS_METHODS.slackSubscribeEvents, {
+  payload: Schema.Struct({}),
+  success: SlackEvent,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
+const WsSlackConnectRpc = Rpc.make(WS_METHODS.slackConnect, {
+  payload: SlackConnectInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackDisconnectRpc = Rpc.make(WS_METHODS.slackDisconnect, {
+  payload: Schema.Struct({}),
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackHistoryRpc = Rpc.make(WS_METHODS.slackHistory, {
+  payload: SlackHistoryInput,
+  success: SlackHistoryResult,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackThreadRpc = Rpc.make(WS_METHODS.slackThread, {
+  payload: SlackThreadInput,
+  success: SlackThreadResult,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackPostMessageRpc = Rpc.make(WS_METHODS.slackPostMessage, {
+  payload: SlackPostMessageInput,
+  success: SlackMessage,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackUpdateMessageRpc = Rpc.make(WS_METHODS.slackUpdateMessage, {
+  payload: SlackUpdateMessageInput,
+  success: SlackMessage,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackDeleteMessageRpc = Rpc.make(WS_METHODS.slackDeleteMessage, {
+  payload: SlackDeleteMessageInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackSetReactionRpc = Rpc.make(WS_METHODS.slackSetReaction, {
+  payload: SlackSetReactionInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackSetItemStateRpc = Rpc.make(WS_METHODS.slackSetItemState, {
+  payload: SlackSetItemStateInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackSetInboxModeRpc = Rpc.make(WS_METHODS.slackSetInboxMode, {
+  payload: SlackSetInboxModeInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackSetFocusModeRpc = Rpc.make(WS_METHODS.slackSetFocusMode, {
+  payload: SlackSetFocusModeInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackOpenDirectMessageRpc = Rpc.make(WS_METHODS.slackOpenDirectMessage, {
+  payload: SlackOpenDirectMessageInput,
+  success: SlackConversation,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackEmojiRpc = Rpc.make(WS_METHODS.slackEmoji, {
+  payload: Schema.Struct({}),
+  success: SlackEmojiResult,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackFileUrlRpc = Rpc.make(WS_METHODS.slackFileUrl, {
+  payload: SlackFileUrlInput,
+  success: SlackFileUrlResult,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
+const WsSlackUploadRpc = Rpc.make(WS_METHODS.slackUpload, {
+  payload: SlackUploadInput,
+  error: Schema.Union([SlackError, EnvironmentAuthorizationError]),
+});
+
 const WsGuestShareCreateRpc = Rpc.make(WS_METHODS.guestShareCreate, {
   payload: GuestShareCreateInput,
   success: GuestShareCreateResult,
@@ -2165,6 +2303,23 @@ export const WsRpcGroup = RpcGroup.make(
   WsSecretsAnswerRequestRpc,
   WsScheduledTasksListWebhookDeliveriesRpc,
   WsScheduledTasksGetWebhookDeliveryRpc,
+  WsSlackSubscribeRpc,
+  WsSlackSubscribeEventsRpc,
+  WsSlackConnectRpc,
+  WsSlackDisconnectRpc,
+  WsSlackHistoryRpc,
+  WsSlackThreadRpc,
+  WsSlackPostMessageRpc,
+  WsSlackUpdateMessageRpc,
+  WsSlackDeleteMessageRpc,
+  WsSlackSetReactionRpc,
+  WsSlackSetItemStateRpc,
+  WsSlackSetInboxModeRpc,
+  WsSlackSetFocusModeRpc,
+  WsSlackOpenDirectMessageRpc,
+  WsSlackEmojiRpc,
+  WsSlackFileUrlRpc,
+  WsSlackUploadRpc,
   WsServerReportClientActivityRpc,
   WsCloudGetRelayClientStatusRpc,
   WsCloudInstallRelayClientRpc,

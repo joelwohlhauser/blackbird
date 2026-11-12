@@ -77,6 +77,17 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerLinksUnlink]: AuthAccessWriteScope,
   // A link lets every agent here reach the other environment: Settings' bar.
   [WS_METHODS.peerLinksAnswerRequest]: AuthAccessWriteScope,
+  [WS_METHODS.slackConnect]: AuthSettingsWriteScope,
+  [WS_METHODS.slackDisconnect]: AuthSettingsWriteScope,
+  [WS_METHODS.slackPostMessage]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackUpdateMessage]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackDeleteMessage]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackSetReaction]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackSetItemState]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackSetInboxMode]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackSetFocusMode]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackOpenDirectMessage]: AuthOrchestrationOperateScope,
+  [WS_METHODS.slackUpload]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

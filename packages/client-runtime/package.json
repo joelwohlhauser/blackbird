@@ -243,6 +243,10 @@
       "types": "./src/state/peerLinks.ts",
       "default": "./src/state/peerLinks.ts"
     },
+    "./state/slack": {
+      "types": "./src/state/slack.ts",
+      "default": "./src/state/slack.ts"
+    },
     "./state/environmentHttpAuth": {
       "types": "./src/state/environmentHttpAuth.ts",
       "default": "./src/state/environmentHttpAuth.ts"

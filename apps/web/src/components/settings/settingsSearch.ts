@@ -917,6 +917,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
+    id: "slack-connection",
+    title: "Slack connection",
+    to: "/settings/general",
+    searchTerms: ["slack token connect disconnect inbox messages"],
+  },
+  {
     id: "gemini-api-key",
     title: "Gemini API key",
     to: "/settings/general",

@@ -5,6 +5,7 @@ type ChatRouteStorage = Pick<Storage, "getItem" | "setItem">;
 export function isRestorableChatPath(value: unknown): value is string {
   if (value === "/") return true;
   if (typeof value !== "string" || !value.startsWith("/")) return false;
+  if (value === "/slack" || value.startsWith("/slack?")) return !value.includes("#");
   if (value.includes("?") || value.includes("#") || value.endsWith("/")) return false;
 
   const segments = value.slice(1).split("/");

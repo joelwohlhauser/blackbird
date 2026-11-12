@@ -9,6 +9,7 @@ import * as ThreadPurge from "./orchestration-v2/ThreadPurge.ts";
 import * as EffectOutbox from "./orchestration-v2/EffectOutbox.ts";
 import * as AgentInstructions from "./skills/AgentInstructions.ts";
 import * as SkillSync from "./skills/SkillSync.ts";
+import * as Slack from "./slack/Slack.ts";
 import * as PullRequestSyncReactor from "./orchestration-v2/PullRequestSyncReactor.ts";
 import * as PullRequestWatchReactor from "./orchestration-v2/PullRequestWatchReactor.ts";
 import * as DelegatedTaskQuestionReactor from "./orchestration-v2/DelegatedTaskQuestionReactor.ts";
@@ -703,6 +704,13 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   ProviderInstallation.layer,
   ReplayMarkers.layer,
   SkillSync.layer,
+  Slack.layer,
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const slack = yield* Slack.Slack;
+      yield* ServerActivation.forkParked(slack.start);
+    }),
+  ).pipe(Layer.provide(Slack.layer)),
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),
