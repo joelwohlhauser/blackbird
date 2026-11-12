@@ -24,7 +24,10 @@ function notify(router: AnyRouter, snapshot: SlackSnapshot, item: SlackInboxItem
       notification.close();
       window.focus();
       void window.desktopBridge?.revealWindow().catch(() => undefined);
-      void openSlack((options) => router.navigate(options), { item: item.key });
+      void openSlack((options) => router.navigate(options), {
+        item: item.key,
+        ...(item.latestThreadTs === undefined ? {} : { t: item.latestThreadTs }),
+      });
     });
   } catch {
     return;

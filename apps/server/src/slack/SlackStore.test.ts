@@ -8,6 +8,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import Migration0086 from "../persistence/Migrations/086_SlackInbox.ts";
 import Migration0087 from "../persistence/Migrations/087_SlackThreadLinks.ts";
 import Migration0088 from "../persistence/Migrations/088_SlackSidebarLayout.ts";
+import Migration0089 from "../persistence/Migrations/089_SlackInboxLatestThread.ts";
 import { applyInboxInput, EMPTY_SLACK_INBOX } from "./slackInbox.ts";
 import { EMPTY_SLACK_SIDEBAR_LAYOUT } from "./slackSidebar.ts";
 import * as SlackStore from "./SlackStore.ts";
@@ -22,6 +23,7 @@ describe("SlackStore", () => {
       yield* Migration0086;
       yield* Migration0087;
       yield* Migration0088;
+      yield* Migration0089;
       const store = yield* SlackStore.SlackStore;
       const inbox = [
         { type: "participation" as const, key: "C001:10.000001" },
@@ -33,6 +35,7 @@ describe("SlackStore", () => {
           message: {
             conversationId: "D001",
             ts: "11.000001",
+            threadTs: "9.000001",
             userId: "U002",
             text: "hello",
             preview: "hello",

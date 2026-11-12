@@ -51,7 +51,7 @@ export function resolveSlackSidebar(
   conversations: ReadonlyArray<
     Pick<SlackConversation, "id" | "kind" | "name" | "isStarred" | "inboxMode">
   >,
-): SlackSidebar {
+): Omit<SlackSidebar, "followsSlack"> {
   const isMuted = (conversation: (typeof conversations)[number]) =>
     isChannelKind(conversation.kind) && conversation.inboxMode === "off";
   const sorted = conversations.toSorted(

@@ -171,7 +171,10 @@ const makeWorld = (initial: Partial<Omit<SlackSnapshot, "sidebar">> = {}) =>
       enabled: Effect.sync(() => slack.enabled),
       snapshot: Effect.sync(() => ({
         ...slack.snapshot,
-        sidebar: resolveSlackSidebar(slack.sidebarLayout, slack.snapshot.conversations),
+        sidebar: {
+          ...resolveSlackSidebar(slack.sidebarLayout, slack.snapshot.conversations),
+          followsSlack: false,
+        },
       })),
       arrangeSidebar: (input) =>
         Effect.sync(() => {

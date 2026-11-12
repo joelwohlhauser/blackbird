@@ -1,16 +1,30 @@
-import { parseSlackInboxItemKey } from "@t3tools/contracts";
+import { parseSlackInboxItemKey, type SlackInboxItem } from "@t3tools/contracts";
 import { Navigate, useNavigate, useSearch } from "@tanstack/react-router";
-import { type CSSProperties, type ReactNode, useEffect, useEffectEvent, useRef } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "../../hooks/useResizableWidth";
 import { isEditableFocused } from "../../lib/editableFocus";
+import { useSlackSpaceStore } from "../../slackSpaceStore";
 import { useSlackIntegration, useSlackSnapshot } from "../../state/slack";
 import { RightPanelResizeHandle } from "../preview/RightPanelResizeHandle";
 import { SidebarInset } from "../ui/sidebar";
+import { Switch } from "../ui/switch";
 import { useSlackDirectory, useSlackInbox } from "./slackDirectory";
 import { SlackSnapshotProvider } from "./SlackDirectoryProvider";
-import { moveSlackSelection, slackSelectionAfterRemoval } from "./slackInbox.logic";
+import {
+  moveSlackSelection,
+  type OpenedSlackItem,
+  openSlackItem,
+  slackSelectionAfterRemoval,
+} from "./slackInbox.logic";
 import { SlackInboxList } from "./SlackInboxList";
 import {
   type SlackAskAgent,
@@ -80,8 +94,13 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
       void askAgent(message.conversationId, message.threadTs ?? message.ts),
   };
   const inboxView = search.c === undefined;
-  const listedState = search.view === "snoozed" ? "snoozed" : "unread";
-  const listed = inboxView ? items.filter((item) => item.state === listedState) : [];
+  const unreadsOnly = useSlackSpaceStore((state) => state.activityUnreadsOnly);
+  const setUnreadsOnly = useSlackSpaceStore((state) => state.setActivityUnreadsOnly);
+  const isListed = (item: SlackInboxItem) =>
+    search.view === "snoozed"
+      ? item.state === "snoozed"
+      : item.state === "unread" || (item.state === "done" && !unreadsOnly);
+  const listed = inboxView ? items.filter(isListed) : [];
   const listedKeys = listed.map((item) => item.key);
   const activeKey = inboxView
     ? (search.item ?? null)
@@ -110,12 +129,18 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
       search: { c: search.c, ...(rootTs === null ? {} : { t: rootTs }) },
     });
   };
-  const controls = useSlackItemControls(
-    activeKey === null ? undefined : items.find((item) => item.key === activeKey),
-    (item) => {
-      if (inboxView) selectItem(slackSelectionAfterRemoval(listedKeys, item.key));
-    },
+  const activeItem = activeKey === null ? undefined : items.find((item) => item.key === activeKey);
+  const [storedOpened, setOpened] = useState<OpenedSlackItem | null>(null);
+  const opened = openSlackItem(
+    storedOpened,
+    activeKey,
+    inboxView ? search.t : undefined,
+    activeItem,
   );
+  if (opened !== storedOpened) setOpened(opened);
+  const controls = useSlackItemControls(activeItem, (item) => {
+    if (inboxView) selectItem(slackSelectionAfterRemoval(listedKeys, item.key));
+  });
 
   const handleKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || event.repeat || isCommandPaletteOpen()) {
@@ -166,7 +191,13 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const activeTarget = inboxView && activeKey !== null ? parseSlackInboxItemKey(activeKey) : null;
+  const activeTarget =
+    inboxView && activeKey !== null
+      ? {
+          ...parseSlackInboxItemKey(activeKey),
+          ...(opened.thread === undefined ? {} : { rootTs: opened.thread }),
+        }
+      : null;
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -178,12 +209,23 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
             defaultWidth={360}
             label="Resize inbox list"
           >
-            <SlackPaneHeader leading title={search.view === "snoozed" ? "Snoozed" : "Unreads"} />
+            <SlackPaneHeader leading title={search.view === "snoozed" ? "Snoozed" : "Activity"}>
+              {search.view === "snoozed" ? null : (
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  Unreads
+                  <Switch checked={unreadsOnly} size="sm" onCheckedChange={setUnreadsOnly} />
+                </label>
+              )}
+            </SlackPaneHeader>
             <SlackInboxList
               items={listed}
               selectedKey={activeKey}
               emptyMessage={
-                search.view === "snoozed" ? "Nothing is snoozed." : "You're all caught up."
+                search.view === "snoozed"
+                  ? "Nothing is snoozed."
+                  : unreadsOnly
+                    ? "You're all caught up."
+                    : "No activity yet."
               }
               onSelect={openItem}
             />
@@ -208,7 +250,7 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
             />
           ) : (
             <SlackThreadView
-              key={activeKey}
+              key={`${activeTarget.conversationId}:${activeTarget.rootTs}`}
               conversationId={activeTarget.conversationId}
               rootTs={activeTarget.rootTs}
               composerRef={detailComposerRef}

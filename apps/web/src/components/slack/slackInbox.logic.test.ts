@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   moveSlackSelection,
   newlyUnreadSlackItems,
+  openSlackItem,
   slackSelectionAfterRemoval,
   slackSnoozeUntil,
   unreadSlackItemTimes,
@@ -93,5 +94,35 @@ describe("newlyUnreadSlackItems", () => {
   it("reports an item that returns from snoozed", () => {
     const previous = unreadSlackItemTimes([item("D001", { state: "snoozed" })]);
     expect(newlyUnreadSlackItems(previous, [item("D001")], "U001")).toHaveLength(1);
+  });
+});
+
+describe("openSlackItem", () => {
+  const inThread = (thread: string) => ({ latestThreadTs: thread });
+
+  it("keeps the thread an item was opened with while new replies arrive", () => {
+    const opened = openSlackItem(null, "D1", undefined, inThread("1.000001"));
+    expect(opened).toEqual({ key: "D1", thread: "1.000001", resolved: true });
+    expect(openSlackItem(opened, "D1", undefined, inThread("2.000001"))).toBe(opened);
+    expect(openSlackItem(opened, "D1", undefined, {})).toBe(opened);
+    expect(openSlackItem(opened, "D2", undefined, {}).thread).toBeUndefined();
+  });
+
+  it("follows a requested thread and keeps it once the request is gone", () => {
+    const opened = openSlackItem(null, "D1", undefined, inThread("1.000001"));
+    const requested = openSlackItem(opened, "D1", "2.000001", inThread("2.000001"));
+    expect(requested.thread).toBe("2.000001");
+    expect(openSlackItem(requested, "D1", undefined, inThread("3.000001"))).toBe(requested);
+  });
+
+  it("waits for an item that has not arrived yet", () => {
+    const waiting = openSlackItem(null, "D1", undefined, undefined);
+    expect(waiting.resolved).toBe(false);
+    expect(openSlackItem(waiting, "D1", undefined, undefined)).toBe(waiting);
+    expect(openSlackItem(waiting, "D1", undefined, inThread("1.000001"))).toEqual({
+      key: "D1",
+      thread: "1.000001",
+      resolved: true,
+    });
   });
 });

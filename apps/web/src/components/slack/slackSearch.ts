@@ -16,6 +16,6 @@ export function validateSlackSearch(raw: Record<string, unknown>): SlackSearch {
   if (c !== undefined) return { c, ...(t === undefined ? {} : { t }) };
   return {
     ...(raw.view === "snoozed" ? { view: "snoozed" as const } : {}),
-    ...(item === undefined ? {} : { item }),
+    ...(item === undefined ? {} : { item, ...(t === undefined ? {} : { t }) }),
   };
 }

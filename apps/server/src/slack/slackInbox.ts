@@ -62,6 +62,15 @@ export type SlackInboxInput =
     }
   | { readonly type: "tick"; readonly now: number }
   | {
+      readonly type: "read";
+      readonly conversationId: string;
+      readonly lastRead: string;
+      readonly hasUnreads: boolean;
+      readonly muted: boolean;
+      readonly unreadRoots: ReadonlySet<string> | undefined;
+      readonly before: string;
+    }
+  | {
       readonly type: "mode";
       readonly conversationId: string;
       readonly mode: SlackInboxMode;
@@ -82,6 +91,7 @@ export type SlackInboxInput =
     };
 
 const PREVIEW_MAX_LENGTH = 200;
+const DONE_ITEMS_SHOWN = 100;
 const SEED_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const BROADCAST_MENTION = /<!(?:channel|here|everyone)(?:\|[^>]*)?>/;
 
@@ -141,6 +151,7 @@ function applyMessage(
     latestTs: message.ts,
     preview: message.preview,
     ...(replyCount === undefined ? {} : { replyCount }),
+    ...(isDirect && isReply ? { latestThreadTs: rootTs } : {}),
   };
 
   if (message.isOwn) {
@@ -151,10 +162,11 @@ function applyMessage(
     if (existing === undefined || !isNewer) {
       return participation === inbox.participation ? inbox : { ...inbox, participation };
     }
+    const { latestThreadTs: _latestThreadTs, ...earlier } = existing;
     return {
       ...inbox,
       participation,
-      items: withItem(inbox.items, { ...existing, ...latest, latestAuthorId: selfUserId }),
+      items: withItem(inbox.items, { ...earlier, ...latest, latestAuthorId: selfUserId }),
     };
   }
   const isMissed =
@@ -190,17 +202,25 @@ function applyMessage(
           latestTs: existing.latestTs,
           preview: existing.preview,
           ...(existing.replyCount === undefined ? {} : { replyCount: existing.replyCount }),
+          ...(existing.latestThreadTs === undefined
+            ? {}
+            : { latestThreadTs: existing.latestThreadTs }),
           ...(existing.latestAuthorId === undefined
             ? {}
             : { latestAuthorId: existing.latestAuthorId }),
         }
       : { ...latest, ...(message.userId === undefined ? {} : { latestAuthorId: message.userId }) };
   if (link?.home === "agents") {
-    const { latestAuthorId: _latestAuthorId, ...kept } = existing ?? {
+    const {
+      latestAuthorId: _latestAuthorId,
+      latestThreadTs: _replacedThreadTs,
+      ...kept
+    } = existing ?? {
       ...identity,
       state: "done" as const,
       mentionsSelf: false,
       latestAuthorId: undefined,
+      latestThreadTs: undefined,
     };
     return {
       ...inbox,
@@ -257,6 +277,28 @@ function applyTick(inbox: SlackInbox, now: number): SlackInbox {
     const { snoozedUntil: _snoozedUntil, ...item } = existing;
     items ??= new Map(inbox.items);
     items.set(item.key, { ...item, state: "unread" });
+  }
+  return items === undefined ? inbox : { ...inbox, items };
+}
+
+function applyRead(
+  inbox: SlackInbox,
+  input: Extract<SlackInboxInput, { readonly type: "read" }>,
+): SlackInbox {
+  const isRead = (item: SlackInboxRecord) => {
+    if (item.rootTs === undefined) return !input.hasUnreads && input.unreadRoots?.size === 0;
+    const rootIsRead =
+      compareSlackTs(item.rootTs, input.lastRead) <= 0 || (input.muted && !item.mentionsSelf);
+    if (!rootIsRead) return false;
+    return item.latestTs === item.rootTs || input.unreadRoots?.has(item.rootTs) === false;
+  };
+  let items: Map<string, SlackInboxRecord> | undefined;
+  for (const item of inbox.items.values()) {
+    if (item.conversationId !== input.conversationId || item.state !== "unread") continue;
+    if (item.acknowledgedThroughTs === item.latestTs || activeLink(inbox, item.key)) continue;
+    if (compareSlackTs(item.latestTs, input.before) >= 0 || !isRead(item)) continue;
+    items ??= new Map(inbox.items);
+    items.set(item.key, markDone(item));
   }
   return items === undefined ? inbox : { ...inbox, items };
 }
@@ -321,6 +363,8 @@ export function applyInboxInput(inbox: SlackInbox, input: SlackInboxInput): Slac
       return applyAction(inbox, input);
     case "tick":
       return applyTick(inbox, input.now);
+    case "read":
+      return applyRead(inbox, input);
     case "mode":
       return applyMode(inbox, input);
     case "link": {
@@ -352,10 +396,12 @@ export function applyInboxInput(inbox: SlackInbox, input: SlackInboxInput): Slac
 }
 
 export function visibleSlackInboxItems(inbox: SlackInbox): ReadonlyArray<SlackInboxItem> {
+  let done = 0;
   return [...inbox.items.values()]
-    .filter((item) => item.state !== "done" && !isRoutedToChat(inbox, item.key))
-    .map(({ acknowledgedThroughTs: _acknowledgedThroughTs, ...item }) => item)
-    .toSorted((left, right) => compareSlackTs(right.latestTs, left.latestTs));
+    .filter((item) => !isRoutedToChat(inbox, item.key))
+    .toSorted((left, right) => compareSlackTs(right.latestTs, left.latestTs))
+    .filter((item) => item.state !== "done" || (done += 1) <= DONE_ITEMS_SHOWN)
+    .map(({ acknowledgedThroughTs: _acknowledgedThroughTs, ...item }) => item);
 }
 
 export function unreadItemCounts(inbox: SlackInbox): ReadonlyMap<string, number> {

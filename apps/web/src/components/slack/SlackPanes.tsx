@@ -140,6 +140,7 @@ function ShowInSidebarAction({ conversationId }: { readonly conversationId: stri
   const { environmentId, snapshot } = useSlackSnapshot();
   const editSidebar = useAtomCommand(slackEnvironment.editSidebar);
   if (environmentId === null || snapshot === null) return null;
+  if (snapshot.sidebar.followsSlack) return null;
   if (!snapshot.sidebar.hiddenConversationIds.includes(conversationId)) return null;
   return (
     <HeaderAction
@@ -193,8 +194,8 @@ function SlackItemActions({ controls }: { readonly controls: SlackItemControls }
           </Button>
         }
       />
-      {controls.item.state === "snoozed" ? (
-        <HeaderAction label="Move to Unreads" onClick={controls.onUnsnooze}>
+      {controls.item.state !== "unread" ? (
+        <HeaderAction label="Mark unread" onClick={controls.onUnsnooze}>
           <InboxIcon />
         </HeaderAction>
       ) : (
@@ -209,9 +210,11 @@ function SlackItemActions({ controls }: { readonly controls: SlackItemControls }
           }
         />
       )}
-      <HeaderAction label="Done (E)" onClick={controls.onDone}>
-        <CheckIcon />
-      </HeaderAction>
+      {controls.item.state === "done" ? null : (
+        <HeaderAction label="Done (E)" onClick={controls.onDone}>
+          <CheckIcon />
+        </HeaderAction>
+      )}
     </>
   );
 }

@@ -15,6 +15,7 @@ import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
+import * as BrowserSession from "./BrowserSession.ts";
 import { createCdpRelayConnection, type CdpRelayConnection } from "./CdpRelay.ts";
 import { makeGuestInput, type GuestInput } from "./GuestInput.ts";
 
@@ -30,6 +31,7 @@ const FOCUS_IDLE = "5 seconds";
 /** Well inside the server's 10 s DESKTOP_ATTACH_TIMEOUT, for a first page that never reports it is up. */
 const FIRST_PAGE_TIMEOUT = "5 seconds";
 const ERR_ABORTED = -3;
+const FETCH_URL = /^https:\/\/[a-z0-9-]+\.slack\.com\//;
 
 export interface DesktopBrowserTabKey {
   readonly threadId: string;
@@ -131,6 +133,40 @@ export const make = Effect.gen(function* () {
   // and the server forgets `shown` on detach, for example while DevTools holds the debugger.
   const shownTabs = new Map<string, boolean>();
   const emit = (event: DesktopBrowserEventType) => runFork(PubSub.publish(outbox, event));
+  const browserSession = yield* Effect.serviceOption(BrowserSession.BrowserSession);
+
+  const fetchWithCookies = Effect.fnUntraced(function* (
+    request: Extract<DesktopBrowserCommand, { readonly type: "fetch" }>,
+  ) {
+    const failed = { type: "fetched" as const, requestId: request.requestId, body: "" };
+    if (Option.isNone(browserSession) || !FETCH_URL.test(request.url)) return emit(failed);
+    const answer = yield* browserSession.value.getSession(request.partitionScope).pipe(
+      Effect.flatMap((session) =>
+        Effect.promise(() =>
+          session
+            .fetch(request.url, {
+              credentials: "include",
+              redirect: "error",
+              ...(request.form === undefined
+                ? {}
+                : {
+                    method: "POST",
+                    headers: { "content-type": "application/x-www-form-urlencoded" },
+                    body: request.form,
+                  }),
+            })
+            .then(async (response) => ({
+              ...failed,
+              status: response.status,
+              body: await response.text(),
+            }))
+            .catch(() => failed),
+        ),
+      ),
+      Effect.orElseSucceed(() => failed),
+    );
+    emit(answer);
+  });
 
   const nextScreenshot = (tab: AttachedTab) => {
     tab.screenshotTurn = null;
@@ -528,6 +564,10 @@ export const make = Effect.gen(function* () {
     Effect.sync(() => {
       const command = decodeCommand(line);
       if (Option.isNone(command)) return;
+      if (command.value.type === "fetch") {
+        runFork(fetchWithCookies(command.value));
+        return;
+      }
       if (command.value.type === "turn") {
         if (command.value.active) agentTurns.add(command.value.threadId);
         else endAgentTurn(command.value.threadId);

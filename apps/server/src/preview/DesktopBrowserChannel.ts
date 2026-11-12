@@ -8,6 +8,7 @@ import {
   type DesktopBrowserCommand as DesktopBrowserCommandType,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -33,6 +34,8 @@ export interface DesktopTabKey {
   readonly tabId: string;
 }
 
+const FETCH_TIMEOUT = "30 seconds";
+
 const keyOf = ({ threadId, tabId }: DesktopTabKey) => `${threadId}\u0000${tabId}`;
 
 export class DesktopBrowserChannel extends Context.Service<
@@ -53,6 +56,11 @@ export class DesktopBrowserChannel extends Context.Service<
     ) => Effect.Effect<void>;
     /** Never fails. A failed write means a broken channel; the next backend starts with no turns. */
     readonly turn: (threadId: string, active: boolean) => Effect.Effect<void>;
+    readonly fetch: (request: {
+      readonly partitionScope: string;
+      readonly url: string;
+      readonly form?: string;
+    }) => Effect.Effect<Option.Option<{ readonly status: number; readonly body: string }>>;
   }
 >()("t3/preview/DesktopBrowserChannel") {}
 
@@ -65,6 +73,7 @@ const make = Effect.gen(function* () {
   // Missing reports protect desktop tabs until the renderer explicitly marks them hidden.
   const shownTabs = new Map<string, boolean>();
   const inbound = new Map<string, Queue.Queue<string>>();
+  const fetches = new Map<string, Deferred.Deferred<{ status?: number; body: string }>>();
   const writeLock = yield* Semaphore.make(1);
 
   if (inputFd === undefined || controlFd === undefined) {
@@ -88,6 +97,9 @@ const make = Effect.gen(function* () {
         return Effect.void;
       }),
       isShown: () => false,
+      fetch: Effect.fn("DesktopBrowserChannel.fetch")(function () {
+        return Effect.succeedNone;
+      }),
     });
   }
 
@@ -116,6 +128,10 @@ const make = Effect.gen(function* () {
     Stream.runForEach((decoded) => {
       if (Option.isNone(decoded)) return Effect.void;
       const event = decoded.value;
+      if (event.type === "fetched") {
+        const pending = fetches.get(event.requestId);
+        return pending ? Deferred.succeed(pending, event).pipe(Effect.asVoid) : Effect.void;
+      }
       const key = { threadId: event.threadId, tabId: event.tabId };
       const id = keyOf(key);
       switch (event.type) {
@@ -238,6 +254,19 @@ const make = Effect.gen(function* () {
     }),
     pointer: Effect.fn("DesktopBrowserChannel.pointer")(function (key, pointer) {
       return command({ type: "pointer", ...key, ...pointer });
+    }),
+    fetch: Effect.fn("DesktopBrowserChannel.fetch")(function* (request) {
+      const requestId = NodeCrypto.randomUUID();
+      const reply = yield* Deferred.make<{ status?: number; body: string }>();
+      fetches.set(requestId, reply);
+      yield* command({ type: "fetch", requestId, ...request });
+      const answer = yield* Deferred.await(reply).pipe(
+        Effect.timeoutOption(FETCH_TIMEOUT),
+        Effect.ensuring(Effect.sync(() => fetches.delete(requestId))),
+      );
+      return Option.flatMap(answer, ({ status, body }) =>
+        status === undefined ? Option.none() : Option.some({ status, body }),
+      );
     }),
   });
 });

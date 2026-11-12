@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from "@effect/vitest";
 import { DesktopBrowserEvent } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as NodeEvents from "node:events";
 
+import * as BrowserSession from "./BrowserSession.ts";
 import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
 
 const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(DesktopBrowserEvent));
@@ -161,6 +163,52 @@ describe("DesktopBrowserHost", () => {
 
       expect(yield* takeEvents(host, 1)).toEqual([{ type: "attached", ...key }]);
       expect(yield* takeEvents(host, 1)).toEqual([{ type: "attached", ...key }]);
+    }),
+  );
+
+  it.effect("fetches Slack pages with the browser's cookies and nothing else", () =>
+    Effect.gen(function* () {
+      const fetched: Array<{ scope: string | undefined; url: string; body: unknown }> = [];
+      const host = yield* DesktopBrowserHost.make.pipe(
+        Effect.provide(
+          Layer.mock(BrowserSession.BrowserSession)({
+            isPartition: () => false,
+            getSession: (scope) =>
+              Effect.succeed({
+                fetch: async (url: string, init?: RequestInit) => {
+                  fetched.push({ scope, url, body: init?.body });
+                  return new Response("answer", { status: 200 });
+                },
+              } as unknown as Electron.Session),
+          }),
+        ),
+      );
+      const reader = yield* takeEvents(host, 2).pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+      const fetch = (requestId: string, url: string) =>
+        host.handleCommandLine(
+          encodeJson({
+            type: "fetch",
+            requestId,
+            partitionScope: "environment-1",
+            url,
+            form: "a=1",
+          }),
+        );
+      yield* fetch("blocked", "https://example.com/api/client.counts");
+      yield* fetch("allowed", "https://workspace.slack.com/api/client.counts");
+
+      expect(yield* Fiber.join(reader)).toEqual([
+        { type: "fetched", requestId: "blocked", body: "" },
+        { type: "fetched", requestId: "allowed", status: 200, body: "answer" },
+      ]);
+      expect(fetched).toEqual([
+        {
+          scope: "environment-1",
+          url: "https://workspace.slack.com/api/client.counts",
+          body: "a=1",
+        },
+      ]);
     }),
   );
 
@@ -1167,8 +1215,7 @@ describe("DesktopBrowserHost", () => {
       tabs[1]!.emit("Page.loadEventFired", { timestamp: 1 });
       const [detached, next] = yield* Queue.takeN(events, 2);
 
-      const { type, threadId, tabId } = detached!;
-      expect({ type, threadId, tabId }).toEqual({ type: "detached", ...key });
+      expect(detached).toEqual({ type: "detached", ...key });
       expect(send).toHaveBeenCalledWith("Target.setAutoAttach", {
         autoAttach: false,
         waitForDebuggerOnStart: false,

@@ -154,7 +154,11 @@ export type SlackPostedMessage = typeof PostedMessage.Type;
 export const SlackResponses = {
   empty: Schema.decodeUnknownEffect(Schema.Struct({})),
   authTest: Schema.decodeUnknownEffect(
-    Schema.Struct({ user_id: Schema.String, team_id: Schema.String }),
+    Schema.Struct({
+      user_id: Schema.String,
+      team_id: Schema.String,
+      url: Schema.optionalKey(Schema.String),
+    }),
   ),
   connectionsOpen: Schema.decodeUnknownEffect(Schema.Struct({ url: Schema.String })),
   conversations: Schema.decodeUnknownEffect(
@@ -191,6 +195,7 @@ export interface SlackSession {
   readonly userToken: string;
   readonly appToken: string;
   readonly selfUserId: string;
+  readonly workspaceUrl?: string;
 }
 
 export class SlackApi extends Context.Service<
@@ -264,7 +269,7 @@ export function normalizeSlackMessage(
   };
 }
 
-const errorForCode = (method: string, code: string) =>
+export const slackErrorForCode = (method: string, code: string) =>
   new SlackError({
     reason: INVALID_TOKEN_CODES.has(code)
       ? "invalid_token"
@@ -356,7 +361,7 @@ const make = Effect.gen(function* () {
         });
       }
       if (!envelope.value.ok) {
-        return yield* errorForCode(input.method, envelope.value.error ?? "unknown_error");
+        return yield* slackErrorForCode(input.method, envelope.value.error ?? "unknown_error");
       }
       return yield* input.decode(body).pipe(
         Effect.mapError(
