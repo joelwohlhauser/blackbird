@@ -1227,8 +1227,8 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           }),
         })),
       openSlackThread: (ref, target) =>
-        set((state) => ({
-          ...userAction(state, scopedThreadKey(ref), (current) => {
+        set((state) =>
+          automaticUpdate(state, scopedThreadKey(ref), (current) => {
             const surface = slackThreadSurface(target);
             if (findSurface(current, (entry) => entry.id === surface.id)) {
               return upsertSurface(current, surface);
@@ -1240,7 +1240,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               activeSurfaceId: surface.id,
             };
           }),
-        })),
+        ),
       openFile: (ref, requestedPath, line) =>
         set((state) => ({
           ...userAction(state, scopedThreadKey(ref), (current) => {

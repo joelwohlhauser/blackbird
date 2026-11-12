@@ -237,7 +237,10 @@ const make = Effect.gen(function* () {
 
   const read: SlackDrafts["Service"]["read"] = Effect.fn("SlackDrafts.read")(
     function* (scope, input) {
-      const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "slack_read_thread");
+      const { thread } = yield* McpInvocationContext.requireThreadScope(
+        scope,
+        "slack_linked_threads",
+      );
       const snapshot = yield* connectedSnapshot;
       const links =
         input.itemKey === undefined
@@ -275,7 +278,13 @@ const make = Effect.gen(function* () {
   const resolvePerson = Effect.fnUntraced(function* (snapshot: SlackSnapshot, name: string) {
     const query = normalizeName(name);
     const people = snapshot.users.filter((user) => !user.isDeleted);
-    const exact = people.filter((user) => user.name.toLowerCase() === query);
+    const directMessage = (userId: string) =>
+      snapshot.conversations.find(
+        (conversation) => conversation.kind === "im" && conversation.userId === userId,
+      );
+    const named = people.filter((user) => user.name.toLowerCase() === query);
+    const messaged = named.filter((user) => directMessage(user.id) !== undefined);
+    const exact = messaged.length === 1 ? messaged : named;
     const [person] = exact;
     if (person === undefined || exact.length > 1) {
       return yield* failure(
@@ -283,17 +292,12 @@ const make = Effect.gen(function* () {
         exact.length > 1
           ? `${exact.length} people in Slack are named ${name}. Ask the user which one they mean.`
           : `Nobody in Slack is named ${name}.${listed(
-              closeMatches(
-                query,
-                people.map((user) => user.name),
-              ),
+              closeMatches(query, [...new Set(people.map((user) => user.name))]),
             )}`,
       );
     }
     const open =
-      snapshot.conversations.find(
-        (conversation) => conversation.kind === "im" && conversation.userId === person.id,
-      ) ??
+      directMessage(person.id) ??
       (yield* slack
         .openDirectMessage({ userId: person.id })
         .pipe(Effect.mapError((error) => failure("orchestration_error", error.message))));

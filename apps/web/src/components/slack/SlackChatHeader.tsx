@@ -4,6 +4,7 @@ import { ChevronLeftIcon } from "lucide-react";
 import { useEffect, useEffectEvent } from "react";
 
 import { composerDraftHasUserContent, useComposerDraftStore } from "../../composerDraftStore";
+import { useSlackSpaceStore } from "../../slackSpaceStore";
 import { slackEnvironment, useSlackThreadHomes } from "../../state/slack";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
@@ -74,12 +75,13 @@ export function SlackChatHomeAction(props: SlackChatProps) {
     <Button
       size="sm"
       variant="outline"
-      onClick={() =>
+      onClick={() => {
+        useSlackSpaceStore.getState().setSpace(next);
         void setThreadHome({
           environmentId: props.environmentId,
           input: { threadId: props.threadId, home: next },
-        })
-      }
+        });
+      }}
     >
       {next === "agents" ? "Move to Agents" : "Move to Slack"}
     </Button>

@@ -132,6 +132,7 @@ const baseSnapshot: SlackSnapshot = {
     { id: "U002", name: "Ada", isBot: false, isDeleted: false },
     { id: "U003", name: "Linus", isBot: false, isDeleted: false },
     { id: "U004", name: "Linus", isBot: false, isDeleted: false },
+    { id: "U005", name: "Ada", isBot: true, isDeleted: false },
   ],
   items: [],
   links: [],
@@ -354,7 +355,7 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
       slack,
       drafts: Context.get(here, SlackDrafts.SlackDrafts),
       draft: (args: Record<string, unknown>) => call("slack_draft_message", args),
-      read: (args: Record<string, unknown>) => call("slack_read_thread", args),
+      read: (args: Record<string, unknown>) => call("slack_linked_threads", args),
       cards: projection.pipe(
         Effect.map(({ turnItems }) => turnItems.filter((item) => item.type === "slack_draft")),
       ),

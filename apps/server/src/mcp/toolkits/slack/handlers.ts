@@ -6,7 +6,7 @@ import * as McpToolAccess from "../../McpToolAccess.ts";
 import { SlackToolkit } from "./tools.ts";
 
 export const layer = McpToolAccess.toLayer(SlackToolkit, {
-  slack_read_thread: McpToolAccess.readsAsCaller((input) =>
+  slack_linked_threads: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const drafts = yield* SlackDrafts.SlackDrafts;

@@ -13,7 +13,7 @@ const dependencies = [
   SlackDrafts.SlackDrafts,
 ];
 
-const SlackReadThreadInput = Schema.Struct({
+const SlackLinkedThreadsInput = Schema.Struct({
   itemKey: Schema.optional(
     TrimmedNonEmptyString.annotate({
       description: "One linked thread, by its `itemKey`. Default: every linked thread.",
@@ -21,7 +21,7 @@ const SlackReadThreadInput = Schema.Struct({
   ),
 });
 
-const SlackReadThreadResult = Schema.Struct({
+const SlackLinkedThreadsResult = Schema.Struct({
   threads: Schema.Array(
     Schema.Struct({
       itemKey: Schema.String.annotate({
@@ -45,7 +45,7 @@ const SlackDraftMessageInput = Schema.Struct({
   itemKey: Schema.optional(
     TrimmedNonEmptyString.annotate({
       description:
-        "Reply in a Slack thread or DM linked to this chat, by its `itemKey` from `slack_read_thread`.",
+        "Reply in a Slack thread or DM linked to this chat, by its `itemKey` from `slack_linked_threads`.",
     }),
   ),
   channel: Schema.optional(
@@ -67,11 +67,11 @@ const SlackDraftMessageResult = Schema.Struct({
   next: Schema.String,
 });
 
-const SlackReadThreadTool = Tool.make("slack_read_thread", {
+const SlackLinkedThreadsTool = Tool.make("slack_linked_threads", {
   description:
     "Read the current messages (author, time, text) of the Slack threads and DMs the user linked to this chat. Call it before you answer about or reply to a linked thread: messages may have arrived since the chat started. It reads linked threads only.",
-  parameters: SlackReadThreadInput,
-  success: SlackReadThreadResult,
+  parameters: SlackLinkedThreadsInput,
+  success: SlackLinkedThreadsResult,
   failure: OrchestratorMcpFailure,
   failureMode: "return",
   dependencies,
@@ -97,4 +97,4 @@ const SlackDraftMessageTool = Tool.make("slack_draft_message", {
   .annotate(Tool.Idempotent, false)
   .annotate(Tool.OpenWorld, false);
 
-export const SlackToolkit = Toolkit.make(SlackReadThreadTool, SlackDraftMessageTool);
+export const SlackToolkit = Toolkit.make(SlackLinkedThreadsTool, SlackDraftMessageTool);
