@@ -28,7 +28,7 @@ import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as Slack from "./Slack.ts";
 import { slackInboxItemKey, slackPlainText } from "./slackInbox.ts";
-import { arrangeSlackSidebar, SLACK_DEFAULT_GROUP_NAMES } from "./slackSidebar.ts";
+import { SLACK_DEFAULT_GROUP_NAMES } from "./slackSidebar.ts";
 
 const MAX_MESSAGES_PER_THREAD = 100;
 const MAX_CLOSE_MATCHES = 5;
@@ -689,27 +689,15 @@ const make = Effect.gen(function* () {
           notSet.push({ entry, reason: found.reason });
           return [];
         });
-      const sections = yield* Effect.forEach(input.set.sections, (section) =>
-        random.uuidV4().pipe(
-          Effect.map((id) => ({
-            id,
+      yield* slack
+        .arrangeSidebar({
+          sections: input.set.sections.map((section) => ({
             name: section.name,
             conversationIds: resolve(section.conversations),
           })),
-        ),
-      );
-      yield* slack
-        .setSidebarLayout(
-          arrangeSlackSidebar(
-            snapshot.sidebar,
-            {
-              sections,
-              hiddenConversationIds: resolve(input.set.hidden ?? []),
-              hideOthers: input.set.hideOthers ?? false,
-            },
-            snapshot.conversations.map((conversation) => conversation.id),
-          ),
-        )
+          hiddenConversationIds: resolve(input.set.hidden ?? []),
+          hideOthers: input.set.hideOthers ?? false,
+        })
         .pipe(Effect.mapError((error) => failure("orchestration_error", error.message)));
     }
     const { conversations, sidebar } = yield* slack.snapshot;

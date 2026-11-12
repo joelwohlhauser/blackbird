@@ -1,7 +1,9 @@
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   type ContextMenuItem,
   type SlackConversation,
   SlackInboxMode,
+  type SlackSidebarEdit,
   type SlackSidebarSection,
 } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -9,7 +11,7 @@ import { BellOffIcon, ChevronRightIcon, ClockIcon, InboxIcon } from "lucide-reac
 import { type MouseEvent, type ReactNode, useRef, useState } from "react";
 
 import { isElectron } from "../../env";
-import { cn, randomUUID } from "../../lib/utils";
+import { cn } from "../../lib/utils";
 import { readLocalApi } from "../../localApi";
 import { useSlackSpaceStore } from "../../slackSpaceStore";
 import { slackEnvironment, useSlackSnapshot } from "../../state/slack";
@@ -30,11 +32,6 @@ import { useSlackDirectory } from "./slackDirectory";
 import { isSlackChannel, isSlackChannelMuted, SLACK_INBOX_MODE_LABELS } from "./slackInbox.logic";
 import { SlackConversationIcon } from "./SlackPanes";
 import type { SlackSearch } from "./slackSearch";
-import {
-  editSlackSidebarLayout,
-  NEW_SLACK_SECTION_NAME,
-  type SlackSidebarEdit,
-} from "./slackSidebar.logic";
 import { validateSlackSearch } from "./slackSearch";
 
 function SidebarCount({ count }: { readonly count: number }) {
@@ -45,12 +42,15 @@ function SidebarCount({ count }: { readonly count: number }) {
   ) : null;
 }
 
+type SectionNaming =
+  | { readonly type: "rename"; readonly sectionId: string }
+  | { readonly type: "create"; readonly conversationId: string };
+
 interface SidebarLayoutControls {
   readonly sections: ReadonlyArray<SlackSidebarSection>;
-  readonly renamingSectionId: string | null;
-  readonly onEdit: (edit: SlackSidebarEdit) => void;
-  readonly onAddSection: (conversationId: string) => void;
-  readonly onRenameSection: (sectionId: string | null) => void;
+  readonly naming: SectionNaming | null;
+  readonly onEdit: (edit: SlackSidebarEdit) => Promise<string | null>;
+  readonly onName: (naming: SectionNaming | null) => void;
 }
 
 function ConversationRow({
@@ -101,11 +101,16 @@ function ConversationRow({
               ...layout.sections.map((target) =>
                 item(
                   target.name,
-                  () => layout.onEdit({ type: "place", conversationId, sectionId: target.id }),
+                  () =>
+                    void layout.onEdit({
+                      type: "moveConversation",
+                      conversationId,
+                      sectionId: target.id,
+                    }),
                   { checked: target.id === section?.id },
                 ),
               ),
-              item("New section…", () => layout.onAddSection(conversationId), {
+              item("New section…", () => layout.onName({ type: "create", conversationId }), {
                 separatorBefore: layout.sections.length > 0,
               }),
             ],
@@ -113,11 +118,20 @@ function ConversationRow({
           ...(section === undefined
             ? []
             : [
-                item("Remove from section", () =>
-                  layout.onEdit({ type: "place", conversationId, sectionId: null }),
+                item(
+                  "Remove from section",
+                  () =>
+                    void layout.onEdit({
+                      type: "moveConversation",
+                      conversationId,
+                      sectionId: null,
+                    }),
                 ),
               ]),
-          item("Hide from sidebar", () => layout.onEdit({ type: "hide", conversationId })),
+          item(
+            "Hide from sidebar",
+            () => void layout.onEdit({ type: "hideConversation", conversationId }),
+          ),
         ],
         { x: event.clientX, y: event.clientY },
       )
@@ -152,40 +166,62 @@ function ConversationRow({
   );
 }
 
+const SECTION_HEADER_CLASS =
+  "mx-[var(--sidebar-row-content-inset)] mb-1 flex flex-col items-start text-xs font-medium text-sidebar-muted-foreground/60";
+
 function SectionNameInput({
   name,
   onCommit,
   onClose,
 }: {
   readonly name: string;
-  readonly onCommit: (name: string) => void;
+  readonly onCommit: (name: string) => Promise<string | null>;
   readonly onClose: () => void;
 }) {
   const [value, setValue] = useState(name);
-  const settledRef = useRef(false);
-  const settle = (commit: boolean) => {
-    if (settledRef.current) return;
-    settledRef.current = true;
-    const next = value.trim();
-    if (commit && next.length > 0 && next !== name) onCommit(next);
+  const [error, setError] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  const close = () => {
+    busyRef.current = true;
     onClose();
   };
+  const commit = async () => {
+    if (busyRef.current) return;
+    const next = value.trim();
+    if (next.length === 0 || next === name) return close();
+    busyRef.current = true;
+    const problem = await onCommit(next);
+    if (problem === null) return onClose();
+    busyRef.current = false;
+    setError(problem);
+  };
   return (
-    <input
-      autoFocus
-      value={value}
-      dir="auto"
-      aria-label="Section name"
-      onChange={(event) => setValue(event.target.value)}
-      onFocus={(event) => event.currentTarget.select()}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter") settle(true);
-        else if (event.key === "Escape") settle(false);
-      }}
-      onBlur={() => settle(true)}
-      className="w-full min-w-0 rounded-sm border border-input bg-card px-1 text-xs font-medium text-card-foreground outline-none focus:border-foreground"
-    />
+    <>
+      <input
+        autoFocus
+        value={value}
+        dir="auto"
+        aria-label="Section name"
+        aria-invalid={error !== null}
+        onChange={(event) => {
+          setValue(event.target.value);
+          setError(null);
+        }}
+        onFocus={(event) => event.currentTarget.select()}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return;
+          if (event.key === "Enter") void commit();
+          else if (event.key === "Escape") close();
+        }}
+        onBlur={() => (error === null ? void commit() : close())}
+        className="w-full min-w-0 rounded-sm border border-input bg-card px-1 text-xs font-medium text-card-foreground outline-none focus:border-foreground"
+      />
+      {error === null ? null : (
+        <p role="alert" className="mt-1 font-normal text-destructive">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -229,29 +265,27 @@ function ConversationGroup({
         { x: event.clientX, y: event.clientY },
       )
       .then((action) => {
-        if (action === "rename") layout.onRenameSection(section.id);
+        if (action === "rename") layout.onName({ type: "rename", sectionId: section.id });
         else if (action === "delete") {
-          layout.onEdit({ type: "delete-section", sectionId: section.id });
+          void layout.onEdit({ type: "deleteSection", sectionId: section.id });
         } else if (action !== null) {
-          layout.onEdit({
-            type: "move-section",
-            sectionId: section.id,
-            by: action === "up" ? -1 : 1,
-          });
+          void layout.onEdit({ type: "moveSection", sectionId: section.id, direction: action });
         }
       });
   };
 
   return (
     <SidebarGroup>
-      <h3 className="mx-[var(--sidebar-row-content-inset)] mb-1 flex text-xs font-medium text-sidebar-muted-foreground/60">
-        {section !== undefined && layout.renamingSectionId === section.id ? (
+      <h3 className={SECTION_HEADER_CLASS}>
+        {section !== undefined &&
+        layout.naming?.type === "rename" &&
+        layout.naming.sectionId === section.id ? (
           <SectionNameInput
             name={section.name}
             onCommit={(name) =>
-              layout.onEdit({ type: "rename-section", sectionId: section.id, name })
+              layout.onEdit({ type: "renameSection", sectionId: section.id, name })
             }
-            onClose={() => layout.onRenameSection(null)}
+            onClose={() => layout.onName(null)}
           />
         ) : (
           <button
@@ -317,8 +351,8 @@ export function SlackSidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
   const { environmentId, snapshot } = useSlackSnapshot();
   const setFocusMode = useAtomCommand(slackEnvironment.setFocusMode);
-  const setSidebarLayout = useAtomCommand(slackEnvironment.setSidebarLayout);
-  const [renamingSectionId, setRenamingSectionId] = useState<string | null>(null);
+  const editSidebar = useAtomCommand(slackEnvironment.editSidebar, { reportFailure: false });
+  const [naming, setNaming] = useState<SectionNaming | null>(null);
   const location = useLocation({
     select: ({ pathname, search }) =>
       pathname === "/slack" ? validateSlackSearch(search as Record<string, unknown>) : null,
@@ -346,18 +380,16 @@ export function SlackSidebar() {
   );
   const conversationsOf = (conversationIds: ReadonlyArray<string>) =>
     conversationIds.flatMap((id) => conversationsById.get(id) ?? []);
-  const editLayout = (edit: SlackSidebarEdit) =>
-    void setSidebarLayout({ environmentId, input: editSlackSidebarLayout(sidebar, edit) });
   const layout: SidebarLayoutControls = {
     sections: sidebar.sections,
-    renamingSectionId,
-    onEdit: editLayout,
-    onAddSection: (conversationId) => {
-      const sectionId = randomUUID();
-      editLayout({ type: "add-section", sectionId, name: NEW_SLACK_SECTION_NAME, conversationId });
-      setRenamingSectionId(sectionId);
+    naming,
+    onEdit: async (input) => {
+      const result = await editSidebar({ environmentId, input });
+      if (result._tag === "Success") return null;
+      const failure = squashAtomCommandFailure(result);
+      return failure instanceof Error ? failure.message : "The sidebar could not be changed.";
     },
-    onRenameSection: setRenamingSectionId,
+    onName: setNaming,
   };
   const unreadCount = snapshot.items.filter((item) => item.state === "unread").length;
   const snoozedCount = snapshot.items.filter((item) => item.state === "snoozed").length;
@@ -400,6 +432,24 @@ export function SlackSidebar() {
             onOpen={open}
           />
         ))}
+        {naming?.type === "create" ? (
+          <SidebarGroup>
+            <h3 className={SECTION_HEADER_CLASS}>
+              <SectionNameInput
+                key={naming.conversationId}
+                name=""
+                onCommit={(name) =>
+                  layout.onEdit({
+                    type: "createSection",
+                    name,
+                    conversationId: naming.conversationId,
+                  })
+                }
+                onClose={() => setNaming(null)}
+              />
+            </h3>
+          </SidebarGroup>
+        ) : null}
         {(
           [
             ["starred", "Starred"],

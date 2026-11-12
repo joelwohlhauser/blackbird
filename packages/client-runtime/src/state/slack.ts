@@ -77,9 +77,9 @@ export function createSlackEnvironmentAtoms<R, E>(
       label: "environment-data:slack:set-focus-mode",
       tag: WS_METHODS.slackSetFocusMode,
     }),
-    setSidebarLayout: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:slack:set-sidebar-layout",
-      tag: WS_METHODS.slackSetSidebarLayout,
+    editSidebar: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:slack:edit-sidebar",
+      tag: WS_METHODS.slackEditSidebar,
     }),
     openDirectMessage: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:slack:open-direct-message",

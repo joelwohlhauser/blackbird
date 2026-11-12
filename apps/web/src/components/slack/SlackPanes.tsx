@@ -34,7 +34,6 @@ import {
 import { SLACK_INBOX_MODE_LABELS } from "./slackInbox.logic";
 import type { SlackMessageScope } from "./slackMessages.logic";
 import { SlackMessageRow } from "./SlackMessage";
-import { editSlackSidebarLayout } from "./slackSidebar.logic";
 import { SlackReactionPicker } from "./SlackReactionPicker";
 import { SlackSnoozeMenu } from "./SlackSnoozeMenu";
 import type { SlackItemControls } from "./useSlackItemControls";
@@ -139,22 +138,14 @@ function OpenInSlackAction({
 
 function ShowInSidebarAction({ conversationId }: { readonly conversationId: string }) {
   const { environmentId, snapshot } = useSlackSnapshot();
-  const setSidebarLayout = useAtomCommand(slackEnvironment.setSidebarLayout);
+  const editSidebar = useAtomCommand(slackEnvironment.editSidebar);
   if (environmentId === null || snapshot === null) return null;
-  const { sidebar } = snapshot;
-  if (!sidebar.hiddenConversationIds.includes(conversationId)) return null;
+  if (!snapshot.sidebar.hiddenConversationIds.includes(conversationId)) return null;
   return (
     <HeaderAction
       label="Show in sidebar"
       onClick={() =>
-        void setSidebarLayout({
-          environmentId,
-          input: editSlackSidebarLayout(sidebar, {
-            type: "place",
-            conversationId,
-            sectionId: null,
-          }),
-        })
+        void editSidebar({ environmentId, input: { type: "showConversation", conversationId } })
       }
     >
       <EyeIcon />

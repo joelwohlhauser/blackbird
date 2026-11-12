@@ -170,7 +170,12 @@ it.effect("rejects every operation while the integration is off", () =>
           world.slack.setItemState({ key: "C001:10.000001", state: "done" }),
           world.slack.setInboxMode({ conversationId: "C001", mode: "everything" }),
           world.slack.setFocusMode({ on: true }),
-          world.slack.setSidebarLayout({ sections: [], hiddenConversationIds: [] }),
+          world.slack.editSidebar({ type: "hideConversation", conversationId: "C001" }),
+          world.slack.arrangeSidebar({
+            sections: [],
+            hiddenConversationIds: [],
+            hideOthers: false,
+          }),
           world.slack.openDirectMessage({ userId: "U001" }),
           world.slack.emoji,
           world.slack.fileUrl({ fileId: "F001", variant: "full" }),

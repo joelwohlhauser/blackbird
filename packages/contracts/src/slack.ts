@@ -165,6 +165,42 @@ export const SlackSidebarLayout = Schema.Struct({
 });
 export type SlackSidebarLayout = typeof SlackSidebarLayout.Type;
 
+export const SlackSidebarEdit = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("moveConversation"),
+    conversationId: SlackConversationId,
+    sectionId: Schema.NullOr(TrimmedNonEmptyString),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("hideConversation"),
+    conversationId: SlackConversationId,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("showConversation"),
+    conversationId: SlackConversationId,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("createSection"),
+    name: TrimmedNonEmptyString,
+    conversationId: Schema.optionalKey(SlackConversationId),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("renameSection"),
+    sectionId: TrimmedNonEmptyString,
+    name: TrimmedNonEmptyString,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("moveSection"),
+    sectionId: TrimmedNonEmptyString,
+    direction: Schema.Literals(["up", "down"]),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("deleteSection"),
+    sectionId: TrimmedNonEmptyString,
+  }),
+]);
+export type SlackSidebarEdit = typeof SlackSidebarEdit.Type;
+
 export const SlackSidebar = Schema.Struct({
   ...SlackSidebarLayout.fields,
   starred: Schema.Array(SlackConversationId),
@@ -228,6 +264,7 @@ export class SlackError extends Schema.TaggedError<SlackError>()("SlackError", {
     "not_found",
     "already_answered",
     "chat_not_moved",
+    "invalid_request",
   ]),
   message: Schema.String,
 }) {}

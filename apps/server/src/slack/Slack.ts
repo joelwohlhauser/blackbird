@@ -22,7 +22,9 @@ import {
   type SlackSetInboxModeInput,
   type SlackSetItemStateInput,
   type SlackSetReactionInput,
+  type SlackSidebarEdit,
   type SlackSidebarLayout,
+  type SlackSidebarSection,
   type SlackSetThreadHomeInput,
   type SlackSnapshot,
   type SlackThreadInput,
@@ -80,10 +82,11 @@ import {
   visibleSlackInboxItems,
 } from "./slackInbox.ts";
 import {
+  arrangeSlackSidebar,
+  editSlackSidebarLayout,
   EMPTY_SLACK_SIDEBAR_LAYOUT,
-  normalizeSlackSidebarLayout,
   resolveSlackSidebar,
-  showSlackConversationOnMessage,
+  showSlackConversationsWithNewMessages,
 } from "./slackSidebar.ts";
 import * as SlackSocket from "./SlackSocket.ts";
 import * as SlackStore from "./SlackStore.ts";
@@ -233,7 +236,12 @@ export class Slack extends Context.Service<
     readonly setItemState: (input: SlackSetItemStateInput) => Effect.Effect<void, SlackError>;
     readonly setInboxMode: (input: SlackSetInboxModeInput) => Effect.Effect<void, SlackError>;
     readonly setFocusMode: (input: SlackSetFocusModeInput) => Effect.Effect<void, SlackError>;
-    readonly setSidebarLayout: (input: SlackSidebarLayout) => Effect.Effect<void, SlackError>;
+    readonly editSidebar: (input: SlackSidebarEdit) => Effect.Effect<void, SlackError>;
+    readonly arrangeSidebar: (input: {
+      readonly sections: ReadonlyArray<Omit<SlackSidebarSection, "id">>;
+      readonly hiddenConversationIds: ReadonlyArray<string>;
+      readonly hideOthers: boolean;
+    }) => Effect.Effect<void, SlackError>;
     readonly openDirectMessage: (
       input: SlackOpenDirectMessageInput,
     ) => Effect.Effect<SlackConversation, SlackError>;
@@ -409,15 +417,16 @@ const make = Effect.gen(function* () {
 
   const applyInboxLocked = Effect.fnUntraced(function* (inputs: ReadonlyArray<SlackInboxInput>) {
     const state = yield* SubscriptionRef.get(stateRef);
-    const sidebarLayout = inputs.reduce(
-      (layout, input) =>
-        input.type === "message" ? showSlackConversationOnMessage(layout, input) : layout,
-      state.sidebarLayout,
-    );
-    if (sidebarLayout !== state.sidebarLayout) yield* saveSidebarLayout(sidebarLayout);
     const before = state.inbox;
     const after = inputs.reduce(applyInboxInput, before);
     if (after === before) return { before, after };
+    const sidebarLayout = showSlackConversationsWithNewMessages(
+      state.sidebarLayout,
+      before,
+      after,
+      state.selfUserId,
+    );
+    if (sidebarLayout !== state.sidebarLayout) yield* saveSidebarLayout(sidebarLayout);
     yield* store
       .saveInbox({
         items: [...after.items.values()].filter((item) => before.items.get(item.key) !== item),
@@ -1180,11 +1189,25 @@ const make = Effect.gen(function* () {
       yield* update((state) => ({ ...state, focusMode: input.on }));
     }),
 
-    setSidebarLayout: Effect.fn("Slack.setSidebarLayout")(function* (input) {
+    editSidebar: Effect.fn("Slack.editSidebar")(function* (input) {
+      yield* requireEnabled;
+      const { sidebarLayout } = yield* SubscriptionRef.get(stateRef);
+      const edited = editSlackSidebarLayout(sidebarLayout, input, yield* random.uuidV4());
+      if ("_tag" in edited) return yield* edited;
+      if (edited !== sidebarLayout) yield* saveSidebarLayout(edited);
+    }, inboxLock.withPermits(1)),
+
+    arrangeSidebar: Effect.fn("Slack.arrangeSidebar")(function* (input) {
       yield* requireEnabled;
       const state = yield* SubscriptionRef.get(stateRef);
-      if (state.status !== "connected" && state.status !== "syncing") return yield* NOT_CONNECTED;
-      yield* saveSidebarLayout(normalizeSlackSidebarLayout(input, state.conversations));
+      const sections = yield* Effect.forEach(input.sections, (section) =>
+        random.uuidV4().pipe(Effect.map((id) => ({ ...section, id }))),
+      );
+      yield* saveSidebarLayout(
+        arrangeSlackSidebar(state.sidebarLayout, { ...input, sections }, [
+          ...state.conversations.keys(),
+        ]),
+      );
     }, inboxLock.withPermits(1)),
 
     openDirectMessage: Effect.fn("Slack.openDirectMessage")(function* (input) {

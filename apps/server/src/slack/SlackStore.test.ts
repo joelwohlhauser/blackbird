@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import Migration0086 from "../persistence/Migrations/086_SlackInbox.ts";
 import Migration0087 from "../persistence/Migrations/087_SlackThreadLinks.ts";
@@ -92,6 +93,16 @@ describe("SlackStore", () => {
         focusMode: true,
         lastEventTs: "12.000001",
         sidebarLayout,
+      });
+
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE slack_state SET sidebar_layout_json = '{"sections":'`;
+      assert.deepStrictEqual(yield* store.load, {
+        inbox,
+        inboxModes: new Map([["C001", "everything" as const]]),
+        focusMode: true,
+        lastEventTs: "12.000001",
+        sidebarLayout: EMPTY_SLACK_SIDEBAR_LAYOUT,
       });
 
       yield* store.clear;

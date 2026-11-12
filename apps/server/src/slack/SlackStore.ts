@@ -10,6 +10,7 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
@@ -44,11 +45,12 @@ const SettingsRow = Schema.Struct({ conversationId: Schema.String, inboxMode: Sl
 
 const SidebarLayoutJson = Schema.fromJsonString(SlackSidebarLayout);
 const encodeSidebarLayout = Schema.encodeEffect(SidebarLayoutJson);
+const decodeSidebarLayout = Schema.decodeUnknownOption(SidebarLayoutJson);
 
 const StateRow = Schema.Struct({
   focusMode: Schema.Int,
   lastEventTs: Schema.NullOr(Schema.String),
-  sidebarLayout: Schema.NullOr(SidebarLayoutJson),
+  sidebarLayout: Schema.NullOr(Schema.String),
 });
 
 interface SlackStoredState {
@@ -194,7 +196,10 @@ const make = Effect.gen(function* () {
         inboxModes: new Map(settings.map((row) => [row.conversationId, row.inboxMode])),
         focusMode: (state[0]?.focusMode ?? 0) !== 0,
         lastEventTs: state[0]?.lastEventTs ?? undefined,
-        sidebarLayout: state[0]?.sidebarLayout ?? EMPTY_SLACK_SIDEBAR_LAYOUT,
+        sidebarLayout: Option.getOrElse(
+          decodeSidebarLayout(state[0]?.sidebarLayout),
+          () => EMPTY_SLACK_SIDEBAR_LAYOUT,
+        ),
       };
     }).pipe(Effect.mapError(toStoreError("SlackStore.load")), Effect.withSpan("SlackStore.load")),
 

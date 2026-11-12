@@ -1,12 +1,14 @@
-import type {
-  SlackConversation,
-  SlackConversationKind,
-  SlackSidebar,
-  SlackSidebarLayout,
-  SlackSidebarSection,
+import {
+  type SlackConversation,
+  type SlackConversationKind,
+  SlackError,
+  type SlackSidebar,
+  type SlackSidebarEdit,
+  type SlackSidebarLayout,
+  type SlackSidebarSection,
 } from "@t3tools/contracts";
 
-import { isSlackDirectKind, type SlackInboxMessage } from "./slackInbox.ts";
+import { compareSlackTs, isSlackDirectKind, type SlackInbox } from "./slackInbox.ts";
 
 export const EMPTY_SLACK_SIDEBAR_LAYOUT: SlackSidebarLayout = {
   sections: [],
@@ -27,15 +29,12 @@ const sectionKey = (name: string) => name.trim().toLowerCase();
 
 const isChannelKind = (kind: SlackConversationKind) => !isSlackDirectKind(kind);
 
-export function normalizeSlackSidebarLayout(
-  layout: SlackSidebarLayout,
-  known: { readonly has: (conversationId: string) => boolean },
-): SlackSidebarLayout {
+function normalizeSlackSidebarLayout(layout: SlackSidebarLayout): SlackSidebarLayout {
   const placed = new Set<string>();
   const sectionIds = new Set<string>();
   const place = (conversationIds: ReadonlyArray<string>) =>
     conversationIds.filter((id) => {
-      if (!known.has(id) || placed.has(id)) return false;
+      if (placed.has(id)) return false;
       placed.add(id);
       return true;
     });
@@ -60,7 +59,14 @@ export function resolveSlackSidebar(
       Number(isMuted(left)) - Number(isMuted(right)) || left.name.localeCompare(right.name),
   );
   const order = new Map(sorted.map((conversation, index) => [conversation.id, index]));
-  const { sections, hiddenConversationIds } = normalizeSlackSidebarLayout(layout, order);
+  const normalized = normalizeSlackSidebarLayout(layout);
+  const known = (conversationIds: ReadonlyArray<string>) =>
+    conversationIds.filter((id) => order.has(id));
+  const sections = normalized.sections.map((section) => ({
+    ...section,
+    conversationIds: known(section.conversationIds),
+  }));
+  const hiddenConversationIds = known(normalized.hiddenConversationIds);
   const arranged = new Set([
     ...sections.flatMap((section) => section.conversationIds),
     ...hiddenConversationIds,
@@ -82,20 +88,127 @@ export function resolveSlackSidebar(
   };
 }
 
-export function showSlackConversationOnMessage(
+export function showSlackConversationsWithNewMessages(
   layout: SlackSidebarLayout,
-  input: {
-    readonly kind: SlackConversationKind;
-    readonly message: Pick<SlackInboxMessage, "conversationId" | "isOwn">;
-  },
+  before: SlackInbox,
+  after: SlackInbox,
+  selfUserId: string | undefined,
 ): SlackSidebarLayout {
-  const { conversationId, isOwn } = input.message;
-  if (isOwn || !isSlackDirectKind(input.kind)) return layout;
-  if (!layout.hiddenConversationIds.includes(conversationId)) return layout;
+  const hiddenConversationIds = layout.hiddenConversationIds.filter((id) => {
+    const item = after.items.get(id);
+    if (item === undefined || item.latestAuthorId === selfUserId) return true;
+    const known = before.items.get(id);
+    return known !== undefined && compareSlackTs(item.latestTs, known.latestTs) <= 0;
+  });
+  return hiddenConversationIds.length === layout.hiddenConversationIds.length
+    ? layout
+    : { ...layout, hiddenConversationIds };
+}
+
+const invalid = (message: string) => new SlackError({ reason: "invalid_request", message });
+
+const sectionNameProblem = (
+  sections: ReadonlyArray<SlackSidebarSection>,
+  name: string,
+  renamedSectionId?: string,
+) => {
+  const key = sectionKey(name);
+  if (DEFAULT_GROUP_KEYS.has(key)) {
+    return invalid(`"${name}" is a default group. Choose another name.`);
+  }
+  return sections.some(
+    (section) => section.id !== renamedSectionId && sectionKey(section.name) === key,
+  )
+    ? invalid(`A section named "${name}" already exists.`)
+    : undefined;
+};
+
+const placeConversation = (
+  layout: SlackSidebarLayout,
+  conversationId: string,
+  target: { readonly sectionId: string } | "hidden" | "default",
+): SlackSidebarLayout => {
+  const hidden = layout.hiddenConversationIds.filter((id) => id !== conversationId);
   return {
-    ...layout,
-    hiddenConversationIds: layout.hiddenConversationIds.filter((id) => id !== conversationId),
+    sections: layout.sections.map((section) => {
+      const others = section.conversationIds.filter((id) => id !== conversationId);
+      return {
+        ...section,
+        conversationIds:
+          typeof target === "object" && target.sectionId === section.id
+            ? [...others, conversationId]
+            : others,
+      };
+    }),
+    hiddenConversationIds: target === "hidden" ? [...hidden, conversationId] : hidden,
   };
+};
+
+export function editSlackSidebarLayout(
+  layout: SlackSidebarLayout,
+  edit: SlackSidebarEdit,
+  newSectionId: string,
+): SlackSidebarLayout | SlackError {
+  const { sections } = layout;
+  const missing = (sectionId: string) =>
+    sections.some((section) => section.id === sectionId)
+      ? undefined
+      : new SlackError({ reason: "not_found", message: "The section no longer exists." });
+  switch (edit.type) {
+    case "moveConversation":
+      if (edit.sectionId === null) return placeConversation(layout, edit.conversationId, "default");
+      return (
+        missing(edit.sectionId) ??
+        placeConversation(layout, edit.conversationId, { sectionId: edit.sectionId })
+      );
+    case "hideConversation":
+      return placeConversation(layout, edit.conversationId, "hidden");
+    case "showConversation":
+      return {
+        ...layout,
+        hiddenConversationIds: layout.hiddenConversationIds.filter(
+          (id) => id !== edit.conversationId,
+        ),
+      };
+    case "createSection": {
+      const created = {
+        ...layout,
+        sections: [...sections, { id: newSectionId, name: edit.name, conversationIds: [] }],
+      };
+      return (
+        sectionNameProblem(sections, edit.name) ??
+        (edit.conversationId === undefined
+          ? created
+          : placeConversation(created, edit.conversationId, { sectionId: newSectionId }))
+      );
+    }
+    case "renameSection":
+      return (
+        missing(edit.sectionId) ??
+        sectionNameProblem(sections, edit.name, edit.sectionId) ?? {
+          ...layout,
+          sections: sections.map((section) =>
+            section.id === edit.sectionId ? { ...section, name: edit.name } : section,
+          ),
+        }
+      );
+    case "moveSection": {
+      const from = sections.findIndex((section) => section.id === edit.sectionId);
+      const to = from + (edit.direction === "up" ? -1 : 1);
+      const moved = sections[from];
+      const swapped = sections[to];
+      if (moved === undefined) return missing(edit.sectionId) ?? layout;
+      if (swapped === undefined) return layout;
+      return {
+        ...layout,
+        sections: sections.map((section, index) =>
+          index === from ? swapped : index === to ? moved : section,
+        ),
+      };
+    }
+    case "deleteSection":
+      return { ...layout, sections: sections.filter((section) => section.id !== edit.sectionId) };
+  }
 }
 
 export function arrangeSlackSidebar(
@@ -126,14 +239,12 @@ export function arrangeSlackSidebar(
           },
     );
   }
-  return normalizeSlackSidebarLayout(
-    {
-      sections: [...sections.values()],
-      hiddenConversationIds: [
-        ...(input.hideOthers ? conversationIds : current.hiddenConversationIds),
-        ...input.hiddenConversationIds,
-      ].filter((id) => !listed.has(id)),
-    },
-    new Set(conversationIds),
-  );
+  return normalizeSlackSidebarLayout({
+    sections: [...sections.values()],
+    hiddenConversationIds: [
+      ...current.hiddenConversationIds,
+      ...(input.hideOthers ? conversationIds : []),
+      ...input.hiddenConversationIds,
+    ].filter((id) => !listed.has(id)),
+  });
 }

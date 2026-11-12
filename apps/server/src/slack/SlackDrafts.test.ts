@@ -43,7 +43,11 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as Slack from "./Slack.ts";
 import * as SlackDrafts from "./SlackDrafts.ts";
-import { EMPTY_SLACK_SIDEBAR_LAYOUT, resolveSlackSidebar } from "./slackSidebar.ts";
+import {
+  arrangeSlackSidebar,
+  EMPTY_SLACK_SIDEBAR_LAYOUT,
+  resolveSlackSidebar,
+} from "./slackSidebar.ts";
 
 const instanceId = ProviderInstanceId.make("codex");
 const driver = ProviderDriverKind.make("codex");
@@ -157,6 +161,7 @@ const makeWorld = (initial: Partial<Omit<SlackSnapshot, "sidebar">> = {}) =>
       enabled: true,
       snapshot: { ...baseSnapshot, ...initial },
       sidebarLayout: EMPTY_SLACK_SIDEBAR_LAYOUT as SlackSidebarLayout,
+      arrangedSections: 0,
       posts: [] as Array<SlackPostMessageInput>,
       failNextPost: false,
       loseNextReply: false,
@@ -168,9 +173,19 @@ const makeWorld = (initial: Partial<Omit<SlackSnapshot, "sidebar">> = {}) =>
         ...slack.snapshot,
         sidebar: resolveSlackSidebar(slack.sidebarLayout, slack.snapshot.conversations),
       })),
-      setSidebarLayout: (layout) =>
+      arrangeSidebar: (input) =>
         Effect.sync(() => {
-          slack.sidebarLayout = layout;
+          slack.sidebarLayout = arrangeSlackSidebar(
+            slack.sidebarLayout,
+            {
+              ...input,
+              sections: input.sections.map((section) => {
+                slack.arrangedSections += 1;
+                return { ...section, id: `section-${slack.arrangedSections}` };
+              }),
+            },
+            slack.snapshot.conversations.map((conversation) => conversation.id),
+          );
         }),
       thread: () =>
         Effect.succeed({
