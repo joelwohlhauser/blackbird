@@ -176,7 +176,7 @@ function applyMessage(
       ? mode === "off"
         ? participates || mentionsSelfDirectly
         : existing !== undefined || participates || mentions
-      : mode === "everything" || (mode === "mentions" && mentions));
+      : mode === "everything" || (mode === "mentions" && mentions) || mentionsSelfDirectly);
   if (!qualifies) return inbox;
 
   const identity = {
@@ -269,7 +269,9 @@ function applyMode(
   let items: Map<string, SlackInboxRecord> | undefined;
   for (const item of inbox.items.values()) {
     if (item.conversationId !== input.conversationId || item.state === "done") continue;
-    if (item.mentionsSelf || inbox.participation.has(item.key)) continue;
+    if ((input.mode === "mentions" && item.mentionsSelf) || inbox.participation.has(item.key)) {
+      continue;
+    }
     items ??= new Map(inbox.items);
     items.set(item.key, markDone(item));
   }

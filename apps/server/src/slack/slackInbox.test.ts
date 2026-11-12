@@ -101,7 +101,13 @@ describe("slackInbox", () => {
     { name: "mentions takes <!here>", mode: "mentions", text: "<!here|here> hi", unread: true },
     { name: "mentions takes <!everyone>", mode: "mentions", text: "<!everyone>", unread: true },
     { name: "mentions skips another user", mode: "mentions", text: "<@U003> hi", unread: false },
-    { name: "off skips a mention", mode: "off", text: `hi <@${SELF}>`, unread: false },
+    { name: "off takes a direct mention", mode: "off", text: `hi <@${SELF}>`, unread: true },
+    {
+      name: "off skips a bot's <!channel> reminder",
+      mode: "off",
+      text: "<!channel> daily reminder",
+      unread: false,
+    },
   ])("rule 2: channel top-level post, $name", ({ mode, text, unread }) => {
     const inbox = run([message("10.000001", { text }, mode)]);
     assert.deepStrictEqual(states(inbox), unread ? { [`${CHANNEL}:10.000001`]: "unread" } : {});
@@ -492,7 +498,7 @@ describe("slackInbox", () => {
       assert.deepStrictEqual(states(narrowed), {
         [THREAD_KEY]: "done",
         [mine]: "unread",
-        [mention]: "unread",
+        [mention]: mode === "mentions" ? "unread" : "done",
         [snoozed]: "done",
         [DIRECT]: "unread",
       });

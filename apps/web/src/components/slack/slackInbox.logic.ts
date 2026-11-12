@@ -1,4 +1,21 @@
-import { compareSlackTs, type SlackConversation, type SlackInboxItem } from "@t3tools/contracts";
+import {
+  compareSlackTs,
+  type SlackConversation,
+  type SlackInboxItem,
+  type SlackInboxMode,
+} from "@t3tools/contracts";
+
+export const SLACK_INBOX_MODE_LABELS: Readonly<Record<SlackInboxMode, string>> = {
+  everything: "Every message",
+  mentions: "Mentions and my threads",
+  off: "Off (muted)",
+};
+
+export const isSlackChannel = (conversation: Pick<SlackConversation, "kind">) =>
+  conversation.kind === "channel" || conversation.kind === "private_channel";
+
+export const isSlackChannelMuted = (conversation: Pick<SlackConversation, "kind" | "inboxMode">) =>
+  isSlackChannel(conversation) && conversation.inboxMode === "off";
 
 export function moveSlackSelection(
   keys: ReadonlyArray<string>,
@@ -77,13 +94,15 @@ export interface SlackConversationGroups {
 export function groupSlackConversations(
   conversations: ReadonlyArray<SlackConversation>,
 ): SlackConversationGroups {
-  const sorted = conversations.toSorted((left, right) => left.name.localeCompare(right.name));
+  const sorted = conversations.toSorted(
+    (left, right) =>
+      Number(isSlackChannelMuted(left)) - Number(isSlackChannelMuted(right)) ||
+      left.name.localeCompare(right.name),
+  );
   const rest = sorted.filter((conversation) => !conversation.isStarred);
-  const isChannel = (conversation: SlackConversation) =>
-    conversation.kind === "channel" || conversation.kind === "private_channel";
   return {
     starred: sorted.filter((conversation) => conversation.isStarred),
-    channels: rest.filter(isChannel),
-    directMessages: rest.filter((conversation) => !isChannel(conversation)),
+    channels: rest.filter(isSlackChannel),
+    directMessages: rest.filter((conversation) => !isSlackChannel(conversation)),
   };
 }
