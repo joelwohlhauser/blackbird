@@ -2,6 +2,7 @@ import {
   parseSlackInboxItemKey,
   SlackInboxMode,
   SlackInboxState,
+  SlackSidebarLayout,
   SlackThreadHome,
   type SlackThreadLink,
   ThreadId,
@@ -15,6 +16,7 @@ import * as SqlSchema from "effect/sql/SqlSchema";
 
 import { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import type { SlackInbox, SlackInboxRecord } from "./slackInbox.ts";
+import { EMPTY_SLACK_SIDEBAR_LAYOUT } from "./slackSidebar.ts";
 
 type SlackStoreError = PersistenceSqlError | PersistenceDecodeError;
 
@@ -40,9 +42,13 @@ const LinkRow = Schema.Struct({
 
 const SettingsRow = Schema.Struct({ conversationId: Schema.String, inboxMode: SlackInboxMode });
 
+const SidebarLayoutJson = Schema.fromJsonString(SlackSidebarLayout);
+const encodeSidebarLayout = Schema.encodeEffect(SidebarLayoutJson);
+
 const StateRow = Schema.Struct({
   focusMode: Schema.Int,
   lastEventTs: Schema.NullOr(Schema.String),
+  sidebarLayout: Schema.NullOr(SidebarLayoutJson),
 });
 
 interface SlackStoredState {
@@ -50,6 +56,7 @@ interface SlackStoredState {
   readonly inboxModes: ReadonlyMap<string, SlackInboxMode>;
   readonly focusMode: boolean;
   readonly lastEventTs: string | undefined;
+  readonly sidebarLayout: SlackSidebarLayout;
 }
 
 export class SlackStore extends Context.Service<
@@ -68,6 +75,7 @@ export class SlackStore extends Context.Service<
     ) => Effect.Effect<void, SlackStoreError>;
     readonly setFocusMode: (on: boolean) => Effect.Effect<void, SlackStoreError>;
     readonly setLastEventTs: (ts: string) => Effect.Effect<void, SlackStoreError>;
+    readonly setSidebarLayout: (layout: SlackSidebarLayout) => Effect.Effect<void, SlackStoreError>;
     readonly clear: Effect.Effect<void, SlackStoreError>;
   }
 >()("t3/slack/SlackStore") {}
@@ -129,7 +137,10 @@ const make = Effect.gen(function* () {
     Request: Schema.Void,
     Result: StateRow,
     execute: () => sql`
-      SELECT focus_mode AS "focusMode", last_event_ts AS "lastEventTs"
+      SELECT
+        focus_mode AS "focusMode",
+        last_event_ts AS "lastEventTs",
+        sidebar_layout_json AS "sidebarLayout"
       FROM slack_state
       WHERE id = 1
     `,
@@ -183,6 +194,7 @@ const make = Effect.gen(function* () {
         inboxModes: new Map(settings.map((row) => [row.conversationId, row.inboxMode])),
         focusMode: (state[0]?.focusMode ?? 0) !== 0,
         lastEventTs: state[0]?.lastEventTs ?? undefined,
+        sidebarLayout: state[0]?.sidebarLayout ?? EMPTY_SLACK_SIDEBAR_LAYOUT,
       };
     }).pipe(Effect.mapError(toStoreError("SlackStore.load")), Effect.withSpan("SlackStore.load")),
 
@@ -272,6 +284,17 @@ const make = Effect.gen(function* () {
       yield* ensureState.pipe(
         Effect.andThen(sql`UPDATE slack_state SET last_event_ts = ${ts} WHERE id = 1`),
         Effect.mapError(toStoreError("SlackStore.setLastEventTs")),
+      );
+    }),
+
+    setSidebarLayout: Effect.fn("SlackStore.setSidebarLayout")(function* (layout) {
+      yield* encodeSidebarLayout(layout).pipe(
+        Effect.flatMap((json) =>
+          ensureState.pipe(
+            Effect.andThen(sql`UPDATE slack_state SET sidebar_layout_json = ${json} WHERE id = 1`),
+          ),
+        ),
+        Effect.mapError(toStoreError("SlackStore.setSidebarLayout")),
       );
     }),
 

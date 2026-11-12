@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ClockIcon,
   ExternalLinkIcon,
+  EyeIcon,
   HashIcon,
   InboxIcon,
   LockIcon,
@@ -16,7 +17,7 @@ import type { ReactNode, RefObject } from "react";
 
 import { useOpenLink } from "../../browser/useOpenLink";
 import { cn } from "../../lib/utils";
-import { slackEnvironment } from "../../state/slack";
+import { slackEnvironment, useSlackSnapshot } from "../../state/slack";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
@@ -33,6 +34,7 @@ import {
 import { SLACK_INBOX_MODE_LABELS } from "./slackInbox.logic";
 import type { SlackMessageScope } from "./slackMessages.logic";
 import { SlackMessageRow } from "./SlackMessage";
+import { editSlackSidebarLayout } from "./slackSidebar.logic";
 import { SlackReactionPicker } from "./SlackReactionPicker";
 import { SlackSnoozeMenu } from "./SlackSnoozeMenu";
 import type { SlackItemControls } from "./useSlackItemControls";
@@ -131,6 +133,31 @@ function OpenInSlackAction({
       }
     >
       <ExternalLinkIcon />
+    </HeaderAction>
+  );
+}
+
+function ShowInSidebarAction({ conversationId }: { readonly conversationId: string }) {
+  const { environmentId, snapshot } = useSlackSnapshot();
+  const setSidebarLayout = useAtomCommand(slackEnvironment.setSidebarLayout);
+  if (environmentId === null || snapshot === null) return null;
+  const { sidebar } = snapshot;
+  if (!sidebar.hiddenConversationIds.includes(conversationId)) return null;
+  return (
+    <HeaderAction
+      label="Show in sidebar"
+      onClick={() =>
+        void setSidebarLayout({
+          environmentId,
+          input: editSlackSidebarLayout(sidebar, {
+            type: "place",
+            conversationId,
+            sectionId: null,
+          }),
+        })
+      }
+    >
+      <EyeIcon />
     </HeaderAction>
   );
 }
@@ -347,6 +374,7 @@ export function SlackConversationView({
         {conversation !== undefined && isChannel ? (
           <InboxModeMenu conversation={conversation} />
         ) : null}
+        <ShowInSidebarAction conversationId={conversationId} />
         <OpenInSlackAction conversationId={conversationId} />
       </SlackPaneHeader>
       <SlackMessagePane

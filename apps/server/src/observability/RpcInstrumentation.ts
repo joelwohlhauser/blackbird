@@ -118,6 +118,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.slackSetItemState]: "slack",
   [WS_METHODS.slackSetInboxMode]: "slack",
   [WS_METHODS.slackSetFocusMode]: "slack",
+  [WS_METHODS.slackSetSidebarLayout]: "slack",
   [WS_METHODS.slackOpenDirectMessage]: "slack",
   [WS_METHODS.slackEmoji]: "slack",
   [WS_METHODS.slackFileUrl]: "slack",

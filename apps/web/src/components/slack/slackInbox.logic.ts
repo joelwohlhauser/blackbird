@@ -84,25 +84,3 @@ export function newlyUnreadSlackItems(
     return seen === undefined || compareSlackTs(item.latestTs, seen) > 0;
   });
 }
-
-export interface SlackConversationGroups {
-  readonly starred: ReadonlyArray<SlackConversation>;
-  readonly channels: ReadonlyArray<SlackConversation>;
-  readonly directMessages: ReadonlyArray<SlackConversation>;
-}
-
-export function groupSlackConversations(
-  conversations: ReadonlyArray<SlackConversation>,
-): SlackConversationGroups {
-  const sorted = conversations.toSorted(
-    (left, right) =>
-      Number(isSlackChannelMuted(left)) - Number(isSlackChannelMuted(right)) ||
-      left.name.localeCompare(right.name),
-  );
-  const rest = sorted.filter((conversation) => !conversation.isStarred);
-  return {
-    starred: sorted.filter((conversation) => conversation.isStarred),
-    channels: rest.filter(isSlackChannel),
-    directMessages: rest.filter((conversation) => !isSlackChannel(conversation)),
-  };
-}

@@ -152,12 +152,34 @@ export const SlackConnectionStatus = Schema.Literals([
 ]);
 export type SlackConnectionStatus = typeof SlackConnectionStatus.Type;
 
+export const SlackSidebarSection = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  conversationIds: Schema.Array(SlackConversationId),
+});
+export type SlackSidebarSection = typeof SlackSidebarSection.Type;
+
+export const SlackSidebarLayout = Schema.Struct({
+  sections: Schema.Array(SlackSidebarSection),
+  hiddenConversationIds: Schema.Array(SlackConversationId),
+});
+export type SlackSidebarLayout = typeof SlackSidebarLayout.Type;
+
+export const SlackSidebar = Schema.Struct({
+  ...SlackSidebarLayout.fields,
+  starred: Schema.Array(SlackConversationId),
+  channels: Schema.Array(SlackConversationId),
+  directMessages: Schema.Array(SlackConversationId),
+});
+export type SlackSidebar = typeof SlackSidebar.Type;
+
 export const SlackSnapshot = Schema.Struct({
   status: SlackConnectionStatus,
   errorMessage: Schema.optionalKey(Schema.String),
   selfUserId: Schema.optionalKey(SlackUserId),
   teamId: Schema.optionalKey(TrimmedNonEmptyString),
   conversations: Schema.Array(SlackConversation),
+  sidebar: SlackSidebar,
   users: Schema.Array(SlackUser),
   items: Schema.Array(SlackInboxItem),
   links: Schema.Array(SlackThreadLink),

@@ -7,6 +7,7 @@ import {
   OrchestratorMcpFailure,
   type RunId,
   type SlackConversation,
+  type SlackConversationKind,
   type SlackDraftAnswerInput,
   SlackError,
   type SlackInboxMode,
@@ -27,6 +28,7 @@ import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as Slack from "./Slack.ts";
 import { slackInboxItemKey, slackPlainText } from "./slackInbox.ts";
+import { arrangeSlackSidebar, SLACK_DEFAULT_GROUP_NAMES } from "./slackSidebar.ts";
 
 const MAX_MESSAGES_PER_THREAD = 100;
 const MAX_CLOSE_MATCHES = 5;
@@ -65,6 +67,17 @@ interface SlackThreadTranscript {
     readonly time: string;
     readonly text: string;
   }>;
+}
+
+interface SlackSidebarConversationResult {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: SlackConversationKind;
+}
+
+interface SlackSidebarGroupResult {
+  readonly name: string;
+  readonly conversations: ReadonlyArray<SlackSidebarConversationResult>;
 }
 
 export const SLACK_MESSAGES_UNTRUSTED_NOTICE =
@@ -131,6 +144,43 @@ const findNotificationChannel = (
           ...others,
         ]
           .map((candidate) => candidate.id)
+          .join(", ")}.`,
+      };
+};
+
+const findSidebarConversation = (
+  snapshot: SlackSnapshot,
+  given: string,
+): { readonly conversation: SlackConversation } | { readonly reason: string } => {
+  const entry = given.trim();
+  const byId = snapshot.conversations.find((candidate) => candidate.id === entry);
+  if (byId !== undefined) return { conversation: byId };
+  const query = normalizeName(entry);
+  const candidates = snapshot.conversations.filter((candidate) =>
+    entry.startsWith("#")
+      ? isChannel(candidate)
+      : entry.startsWith("@")
+        ? !isChannel(candidate)
+        : true,
+  );
+  const [conversation, ...others] = candidates.filter(
+    (candidate) => candidate.name.toLowerCase() === query,
+  );
+  if (conversation === undefined) {
+    return {
+      reason: `The user has no Slack conversation named ${entry}.${listed(
+        closeMatches(query, candidates.map(conversationLabel)),
+      )}`,
+    };
+  }
+  return others.length === 0
+    ? { conversation }
+    : {
+        reason: `${others.length + 1} conversations are named ${entry}. Pass the id of one: ${[
+          conversation,
+          ...others,
+        ]
+          .map((candidate) => `${candidate.id} (${candidate.kind})`)
           .join(", ")}.`,
       };
 };
@@ -205,6 +255,26 @@ export class SlackDrafts extends Context.Service<
           readonly mode: SlackInboxMode;
         }>;
         readonly notSet: ReadonlyArray<{ readonly channel: string; readonly reason: string }>;
+      },
+      OrchestratorMcpFailure
+    >;
+    readonly sidebarLayout: (input: {
+      readonly set?:
+        | {
+            readonly sections: ReadonlyArray<{
+              readonly name: string;
+              readonly conversations: ReadonlyArray<string>;
+            }>;
+            readonly hidden?: ReadonlyArray<string> | undefined;
+            readonly hideOthers?: boolean | undefined;
+          }
+        | undefined;
+    }) => Effect.Effect<
+      {
+        readonly sections: ReadonlyArray<SlackSidebarGroupResult>;
+        readonly defaultGroups: ReadonlyArray<SlackSidebarGroupResult>;
+        readonly hidden: ReadonlyArray<SlackSidebarConversationResult>;
+        readonly notSet: ReadonlyArray<{ readonly entry: string; readonly reason: string }>;
       },
       OrchestratorMcpFailure
     >;
@@ -606,7 +676,66 @@ const make = Effect.gen(function* () {
     };
   });
 
-  return SlackDrafts.of({ read, draft, answer, channelNotifications });
+  const sidebarLayout: SlackDrafts["Service"]["sidebarLayout"] = Effect.fn(
+    "SlackDrafts.sidebarLayout",
+  )(function* (input) {
+    const snapshot = yield* connectedSnapshot;
+    const notSet: Array<{ readonly entry: string; readonly reason: string }> = [];
+    if (input.set !== undefined) {
+      const resolve = (entries: ReadonlyArray<string>) =>
+        entries.flatMap((entry) => {
+          const found = findSidebarConversation(snapshot, entry);
+          if ("conversation" in found) return [found.conversation.id];
+          notSet.push({ entry, reason: found.reason });
+          return [];
+        });
+      const sections = yield* Effect.forEach(input.set.sections, (section) =>
+        random.uuidV4().pipe(
+          Effect.map((id) => ({
+            id,
+            name: section.name,
+            conversationIds: resolve(section.conversations),
+          })),
+        ),
+      );
+      yield* slack
+        .setSidebarLayout(
+          arrangeSlackSidebar(
+            snapshot.sidebar,
+            {
+              sections,
+              hiddenConversationIds: resolve(input.set.hidden ?? []),
+              hideOthers: input.set.hideOthers ?? false,
+            },
+            snapshot.conversations.map((conversation) => conversation.id),
+          ),
+        )
+        .pipe(Effect.mapError((error) => failure("orchestration_error", error.message)));
+    }
+    const { conversations, sidebar } = yield* slack.snapshot;
+    const byId = new Map(conversations.map((conversation) => [conversation.id, conversation]));
+    const named = (conversationIds: ReadonlyArray<string>) =>
+      conversationIds.flatMap((id) => {
+        const conversation = byId.get(id);
+        return conversation === undefined
+          ? []
+          : [{ id, name: conversation.name, kind: conversation.kind }];
+      });
+    return {
+      sections: sidebar.sections.map((section) => ({
+        name: section.name,
+        conversations: named(section.conversationIds),
+      })),
+      defaultGroups: (["starred", "channels", "directMessages"] as const).map((group) => ({
+        name: SLACK_DEFAULT_GROUP_NAMES[group],
+        conversations: named(sidebar[group]),
+      })),
+      hidden: named(sidebar.hiddenConversationIds),
+      notSet,
+    };
+  });
+
+  return SlackDrafts.of({ read, draft, answer, channelNotifications, sidebarLayout });
 });
 
 export const layer = Layer.effect(SlackDrafts, make);

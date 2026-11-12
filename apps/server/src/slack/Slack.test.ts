@@ -23,6 +23,7 @@ import * as ServerConfig from "../config.ts";
 import { OrchestratorV2 } from "../orchestration-v2/Orchestrator.ts";
 import Migration0086 from "../persistence/Migrations/086_SlackInbox.ts";
 import Migration0087 from "../persistence/Migrations/087_SlackThreadLinks.ts";
+import Migration0088 from "../persistence/Migrations/088_SlackSidebarLayout.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as Slack from "./Slack.ts";
 
@@ -97,7 +98,9 @@ const makeWorld = Effect.fn(function* (respond?: () => Response) {
         Layer.mock(AssetSigner)({}),
         ServerConfig.layerTest(process.cwd(), { prefix: "t3-slack-service-" }),
         NodeCrypto.layer,
-        Layer.effectDiscard(Effect.andThen(Migration0086, Migration0087)),
+        Layer.effectDiscard(
+          Migration0086.pipe(Effect.andThen(Migration0087), Effect.andThen(Migration0088)),
+        ),
       ),
     ),
     Layer.provide(
@@ -167,6 +170,7 @@ it.effect("rejects every operation while the integration is off", () =>
           world.slack.setItemState({ key: "C001:10.000001", state: "done" }),
           world.slack.setInboxMode({ conversationId: "C001", mode: "everything" }),
           world.slack.setFocusMode({ on: true }),
+          world.slack.setSidebarLayout({ sections: [], hiddenConversationIds: [] }),
           world.slack.openDirectMessage({ userId: "U001" }),
           world.slack.emoji,
           world.slack.fileUrl({ fileId: "F001", variant: "full" }),

@@ -1,8 +1,7 @@
-import type { SlackConversation, SlackInboxItem } from "@t3tools/contracts";
+import type { SlackInboxItem } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  groupSlackConversations,
   moveSlackSelection,
   newlyUnreadSlackItems,
   slackSelectionAfterRemoval,
@@ -19,23 +18,6 @@ function item(key: string, overrides: Partial<SlackInboxItem> = {}): SlackInboxI
     latestAuthorId: "U002",
     preview: "hello",
     mentionsSelf: false,
-    ...overrides,
-  };
-}
-
-function conversation(
-  id: string,
-  name: string,
-  overrides: Partial<SlackConversation> = {},
-): SlackConversation {
-  return {
-    id,
-    kind: "channel",
-    name,
-    isStarred: false,
-    isBot: false,
-    inboxMode: "mentions",
-    unreadItemCount: 0,
     ...overrides,
   };
 }
@@ -111,34 +93,5 @@ describe("newlyUnreadSlackItems", () => {
   it("reports an item that returns from snoozed", () => {
     const previous = unreadSlackItemTimes([item("D001", { state: "snoozed" })]);
     expect(newlyUnreadSlackItems(previous, [item("D001")], "U001")).toHaveLength(1);
-  });
-});
-
-describe("groupSlackConversations", () => {
-  it("splits starred, channels, and direct messages, sorted by shown name", () => {
-    const groups = groupSlackConversations([
-      conversation("C002", "random"),
-      conversation("C001", "general"),
-      conversation("C003", "announcements", { isStarred: true }),
-      conversation("G001", "Grace, Linus", { kind: "mpim" }),
-      conversation("D001", "Ada", { kind: "im", userId: "U002" }),
-    ]);
-    expect(groups.starred.map((entry) => entry.id)).toEqual(["C003"]);
-    expect(groups.channels.map((entry) => entry.id)).toEqual(["C001", "C002"]);
-    expect(groups.directMessages.map((entry) => entry.id)).toEqual(["D001", "G001"]);
-  });
-
-  it("puts muted channels after the other channels of their section", () => {
-    const groups = groupSlackConversations([
-      conversation("C001", "alerts", { inboxMode: "off" }),
-      conversation("C002", "random"),
-      conversation("C003", "announcements", { isStarred: true, inboxMode: "off" }),
-      conversation("C004", "team", { isStarred: true }),
-      conversation("D001", "Ada", { kind: "im", inboxMode: "off" }),
-      conversation("D002", "Grace", { kind: "im" }),
-    ]);
-    expect(groups.starred.map((entry) => entry.id)).toEqual(["C004", "C003"]);
-    expect(groups.channels.map((entry) => entry.id)).toEqual(["C002", "C001"]);
-    expect(groups.directMessages.map((entry) => entry.id)).toEqual(["D001", "D002"]);
   });
 });
