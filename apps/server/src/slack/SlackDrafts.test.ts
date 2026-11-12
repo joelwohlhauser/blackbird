@@ -152,6 +152,7 @@ const slackMessage = (ts: string, userId: string, text: string): SlackMessage =>
 const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
   Effect.gen(function* () {
     const slack = {
+      enabled: true,
       snapshot: { ...baseSnapshot, ...initial },
       posts: [] as Array<SlackPostMessageInput>,
       failNextPost: false,
@@ -159,6 +160,7 @@ const makeWorld = (initial: Partial<SlackSnapshot> = {}) =>
       crashAfterNextPost: false,
     };
     const layerSlack = Layer.mock(Slack.Slack)({
+      enabled: Effect.sync(() => slack.enabled),
       snapshot: Effect.sync(() => slack.snapshot),
       thread: () =>
         Effect.succeed({
@@ -638,6 +640,19 @@ it.effect("reading returns the linked thread with names in place of ids", () =>
       });
       const unlinked = yield* makeWorld();
       expect((yield* unlinked.read({})).error?.message).toContain("no linked Slack thread");
+    }),
+  ),
+);
+
+it.effect("agents do not find the tools while the integration is off", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld({ links: [linkedThread] });
+      world.slack.enabled = false;
+      const failure = yield* world.read({}).pipe(Effect.flip);
+      expect(failure.message).toBe("Tool 'slack_linked_threads' not found");
+      world.slack.enabled = true;
+      expect((yield* world.read({})).error).toBeUndefined();
     }),
   ),
 );

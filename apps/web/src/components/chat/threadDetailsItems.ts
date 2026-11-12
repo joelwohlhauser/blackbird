@@ -15,6 +15,10 @@ export const THREAD_DETAILS_ITEMS = [
   { id: "context", label: "Context window", defaultVisible: false },
 ] as const;
 
+export function availableThreadDetailsItems(slackIntegrationEnabled: boolean) {
+  return THREAD_DETAILS_ITEMS.filter((item) => item.id !== "slack" || slackIntegrationEnabled);
+}
+
 export type ThreadDetailsItemId = (typeof THREAD_DETAILS_ITEMS)[number]["id"];
 export type ThreadDetailsVisibility = Readonly<Record<ThreadDetailsItemId, boolean>>;
 

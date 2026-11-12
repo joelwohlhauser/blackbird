@@ -61,6 +61,7 @@ import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
 import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
+import * as Slack from "../slack/Slack.ts";
 import * as SlackHandlers from "./toolkits/slack/handlers.ts";
 import { SlackToolkit } from "./toolkits/slack/tools.ts";
 import * as DeviceHandlers from "./toolkits/device/handlers.ts";
@@ -1006,7 +1007,11 @@ export const layerPullRequestsToolkit = toolkitRegistration(
   PullRequestsHandlers.layer,
 );
 
-export const layerSlackToolkit = toolkitRegistration(SlackToolkit, SlackHandlers.layer);
+export const layerSlackToolkit = toolkitRegistration(SlackToolkit, SlackHandlers.layer).pipe(
+  Layer.provide(
+    McpServer.visibility(Effect.map(Slack.Slack, (slack) => () => slack.enabled)).layer,
+  ),
+);
 
 const layerDeviceStandardToolkitRegistration = toolkitRegistration(
   DeviceStandardToolkit,

@@ -51,6 +51,7 @@ import type { HttpServerResponse } from "effect/http";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as SlackApi from "./SlackApi.ts";
 import {
   fetchSlackDirectory,
@@ -199,6 +200,7 @@ export class Slack extends Context.Service<
   Slack,
   {
     readonly start: Effect.Effect<void>;
+    readonly enabled: Effect.Effect<boolean>;
     readonly snapshot: Effect.Effect<SlackSnapshot>;
     readonly snapshots: Stream.Stream<SlackSnapshot>;
     readonly events: Stream.Stream<SlackEvent>;
@@ -236,6 +238,7 @@ const make = Effect.gen(function* () {
   const socket = yield* SlackSocket.SlackSocket;
   const store = yield* SlackStore.SlackStore;
   const secrets = yield* ServerSecretStore.ServerSecretStore;
+  const settings = yield* ServerSettings.ServerSettingsService;
   const slackFiles = yield* SlackFiles.SlackFiles;
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   const random = yield* SecureRandom.SecureRandom;
@@ -245,7 +248,11 @@ const make = Effect.gen(function* () {
     secrets
       .get(name)
       .pipe(Effect.map(Option.map((bytes) => new TextDecoder().decode(bytes).trim())));
-  const storedTokens = yield* Effect.all({
+  const enabled = settings.getSettings.pipe(
+    Effect.map((current) => current.slackIntegrationEnabled),
+    Effect.orElseSucceed(() => false),
+  );
+  const storedTokens = Effect.all({
     userToken: readSecret(USER_TOKEN_SECRET),
     appToken: readSecret(APP_TOKEN_SECRET),
   }).pipe(
@@ -271,7 +278,7 @@ const make = Effect.gen(function* () {
   );
   const stateRef = yield* SubscriptionRef.make<State>({
     ...DISCONNECTED_STATE,
-    status: Option.isSome(storedTokens) ? "connecting" : "disconnected",
+    status: (yield* enabled) && Option.isSome(yield* storedTokens) ? "connecting" : "disconnected",
     focusMode: stored.focusMode,
     inboxModes: stored.inboxModes,
     inbox: stored.inbox,
@@ -888,23 +895,36 @@ const make = Effect.gen(function* () {
     yield* Ref.set(sessionRef, undefined);
   });
 
-  const launch = Effect.fnUntraced(function* (tokens: {
-    readonly userToken: string;
-    readonly appToken: string;
-  }) {
+  const runIntegration = (tokens: Option.Option<Omit<Session, "selfUserId">>) =>
+    restoreLinkActivity.pipe(
+      Effect.andThen(
+        Effect.all(
+          [watchChats, Option.match(tokens, { onNone: () => Effect.void, onSome: runConnection })],
+          { concurrency: 2, discard: true },
+        ),
+      ),
+    );
+
+  const apply = Effect.gen(function* () {
     yield* stop;
-    const fiber = yield* runConnection(tokens).pipe(Effect.forkIn(serviceScope));
+    if (!(yield* enabled)) return yield* setStatus("disconnected");
+    const fiber = yield* runIntegration(yield* storedTokens).pipe(Effect.forkIn(serviceScope));
     yield* Ref.set(connectionRef, fiber);
-  }, connectionLock.withPermits(1));
+  }).pipe(connectionLock.withPermits(1));
 
   const secretFailure = () =>
     new SlackError({ reason: "slack_api", message: "Blackbird could not store the Slack tokens." });
 
   const start = Effect.gen(function* () {
-    yield* restoreLinkActivity;
-    yield* Effect.forkIn(watchChats, serviceScope);
-    if (Option.isSome(storedTokens)) yield* launch(storedTokens.value);
-  }).pipe(Effect.withSpan("Slack.start"));
+    const changes = yield* settings.subscribeChanges;
+    yield* Stream.concat(
+      Stream.fromEffect(enabled),
+      changes.pipe(Stream.mapEffect(() => enabled)),
+    ).pipe(
+      Stream.changes,
+      Stream.runForEach(() => apply),
+    );
+  }).pipe(Effect.scoped, Effect.withSpan("Slack.start"));
 
   const connect = Effect.fn("Slack.connect")(function* (input: SlackConnectInput) {
     if (!input.userToken.startsWith("xoxp-") || !input.appToken.startsWith("xapp-")) {
@@ -930,7 +950,7 @@ const make = Effect.gen(function* () {
         Effect.andThen(secrets.set(APP_TOKEN_SECRET, encoder.encode(input.appToken))),
         Effect.mapError(secretFailure),
       );
-    yield* launch(input);
+    yield* apply;
   });
 
   const disconnect = Effect.gen(function* () {
@@ -965,6 +985,7 @@ const make = Effect.gen(function* () {
 
   return Slack.of({
     start,
+    enabled,
     snapshot: SubscriptionRef.get(stateRef).pipe(Effect.map(toSnapshot)),
     snapshots: SubscriptionRef.changes(stateRef).pipe(Stream.map(toSnapshot)),
     events: Stream.fromPubSub(eventsPubSub),

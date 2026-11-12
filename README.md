@@ -338,7 +338,7 @@ On desktop, new drafts in a Git project show a Linear issue picker in the compos
 
 ### Slack space
 
-Once Slack is connected under Settings → General → Slack (a user token and an app-level token of your own Slack app), the left sidebar gets an **Agents | Slack** switch. The Slack space lists Unreads, Snoozed, and your conversations, and its **Focus mode** toggle pauses notifications in Blackbird and in Slack.
+The Slack integration is off by default; turn it on under Settings → General → Slack. Once Slack is connected there (a user token and an app-level token of your own Slack app), the left sidebar gets an **Agents | Slack** switch. The Slack space lists Unreads, Snoozed, and your conversations, and its **Focus mode** toggle pauses notifications in Blackbird and in Slack.
 
 Unreads is a triage inbox: the list on the left, the selected thread or direct message on the right. `J`/`K` move, `E` marks done, `H` snoozes, `R` reacts to the latest message, and `Enter` focuses the reply box. Channels and direct messages open with a compose box, threads in a side pane, reactions, edit and delete for your own messages, inline images, and file upload by button, paste, or drop. Each channel chooses what reaches the inbox: every message, mentions and your threads, or nothing. The command palette's **Slack: go to...** jumps to a channel or person.
 

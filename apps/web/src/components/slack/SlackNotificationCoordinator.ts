@@ -3,8 +3,7 @@ import type { AnyRouter } from "@tanstack/react-router";
 import type { AtomRegistry } from "effect/reactivity";
 
 import { getClientSettings } from "../../hooks/useSettings";
-import { primaryEnvironmentIdAtom } from "../../state/primaryEnvironment";
-import { slackEnvironment } from "../../state/slack";
+import { slackEnvironment, slackEnvironmentIdAtom } from "../../state/slack";
 import { hasDesktopNotifications } from "../../threadNotifications";
 import { newlyUnreadSlackItems, unreadSlackItemTimes } from "./slackInbox.logic";
 import { openSlack } from "./slackNavigation";
@@ -69,7 +68,7 @@ export function startSlackNotifications(
     );
   };
 
-  const unsubscribeEnvironment = registry.subscribe(primaryEnvironmentIdAtom, watch, {
+  const unsubscribeEnvironment = registry.subscribe(slackEnvironmentIdAtom, watch, {
     immediate: true,
   });
   return () => {

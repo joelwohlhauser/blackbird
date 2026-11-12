@@ -5,7 +5,7 @@ import { type CSSProperties, type ReactNode, useEffect, useEffectEvent, useRef }
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "../../hooks/useResizableWidth";
 import { isEditableFocused } from "../../lib/editableFocus";
-import { useSlackSnapshot } from "../../state/slack";
+import { useSlackIntegration, useSlackSnapshot } from "../../state/slack";
 import { RightPanelResizeHandle } from "../preview/RightPanelResizeHandle";
 import { SidebarInset } from "../ui/sidebar";
 import { useSlackDirectory, useSlackInbox } from "./slackDirectory";
@@ -254,7 +254,9 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
 
 export function SlackPage() {
   const search = useSearch({ from: "/_chat/slack" });
+  const integration = useSlackIntegration();
   const { environmentId, snapshot, error } = useSlackSnapshot();
+  if (integration === "off") return <Navigate to="/" replace />;
   if (environmentId === null || snapshot === null) {
     return error === null ? <SidebarInset className="h-dvh" /> : <Navigate to="/" replace />;
   }

@@ -2,14 +2,16 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import type { SlackConnectionStatus } from "@t3tools/contracts";
 import { useState } from "react";
 
+import { useUpdatePrimarySettings } from "../../hooks/useSettings";
 import { readLocalApi } from "../../localApi";
 import { useSlackSpaceStore } from "../../slackSpaceStore";
-import { slackEnvironment, useSlackSnapshot } from "../../state/slack";
+import { slackEnvironment, useSlackIntegration, useSlackSnapshot } from "../../state/slack";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsRow, SettingsSection } from "../settings/settingsLayout";
 import { searchableSetting } from "../settings/settingsSearch";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Switch } from "../ui/switch";
 
 const STATUS_LABELS: Readonly<Record<SlackConnectionStatus, string>> = {
   disconnected: "Not connected. Connect to show the Slack space in the sidebar.",
@@ -20,6 +22,32 @@ const STATUS_LABELS: Readonly<Record<SlackConnectionStatus, string>> = {
 };
 
 export function SlackSettingsSection() {
+  const integration = useSlackIntegration();
+  const updateSettings = useUpdatePrimarySettings();
+  if (integration === "unknown") return null;
+
+  return (
+    <SettingsSection id="slack" title="Slack">
+      <SettingsRow
+        {...searchableSetting("slack-integration")}
+        description="Adds a Slack space to the sidebar, with your unread messages and conversations, and lets agents draft Slack messages for you to send."
+        control={
+          <Switch
+            aria-label="Slack integration"
+            checked={integration === "on"}
+            onCheckedChange={(checked) => {
+              if (!checked) useSlackSpaceStore.getState().setSpace("agents");
+              updateSettings({ slackIntegrationEnabled: Boolean(checked) });
+            }}
+          />
+        }
+      />
+      {integration === "on" ? <SlackConnectionSettings /> : null}
+    </SettingsSection>
+  );
+}
+
+function SlackConnectionSettings() {
   const { environmentId, snapshot } = useSlackSnapshot();
   const connect = useAtomCommand(slackEnvironment.connect, { reportFailure: false });
   const disconnect = useAtomCommand(slackEnvironment.disconnect);
@@ -60,7 +88,7 @@ export function SlackSettingsSection() {
   };
 
   return (
-    <SettingsSection id="slack" title="Slack">
+    <>
       <SettingsRow
         {...searchableSetting("slack-connection")}
         description={
@@ -126,6 +154,6 @@ export function SlackSettingsSection() {
           />
         </>
       ) : null}
-    </SettingsSection>
+    </>
   );
 }

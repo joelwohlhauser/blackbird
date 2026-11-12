@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  availableThreadDetailsItems,
   resolveThreadDetailsVisibility,
   setThreadDetailsItem,
   THREAD_DETAILS_ITEMS,
@@ -23,6 +24,13 @@ describe("thread details items", () => {
     expect(visibility.usage).toBe(row.usage);
     expect(visibility.context).toBe(row.context);
     expect(visibility.servers).toBe(true);
+  });
+
+  it("offers the Slack item only while the Slack integration is on", () => {
+    expect(availableThreadDetailsItems(true)).toEqual(THREAD_DETAILS_ITEMS);
+    expect(availableThreadDetailsItems(false)).toEqual(
+      THREAD_DETAILS_ITEMS.filter((item) => item.id !== "slack"),
+    );
   });
 
   it("stores only choices that differ from the default", () => {

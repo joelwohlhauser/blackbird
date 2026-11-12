@@ -1,18 +1,44 @@
 import { createSlackEnvironmentAtoms } from "@t3tools/client-runtime/state/slack";
 import type { SlackSnapshot, SlackThreadHome } from "@t3tools/contracts";
-import { AsyncResult } from "effect/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
+import { useAtomValue } from "@effect/atom-react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
-import { usePrimaryEnvironmentId } from "./environments";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
 import { useEnvironmentQuery, useEnvironmentQuerySelector } from "./query";
+import { primaryServerConfigAtom } from "./server";
 
 export const slackEnvironment = createSlackEnvironmentAtoms(connectionAtomRuntime);
 
+export type SlackIntegration = "on" | "off" | "unknown";
+
+const slackIntegrationAtom = Atom.make((get): SlackIntegration => {
+  const config = get(primaryServerConfigAtom);
+  if (config === null) return "unknown";
+  return config.settings.slackIntegrationEnabled ? "on" : "off";
+}).pipe(Atom.withLabel("web-slack-integration"));
+
+export const slackEnvironmentIdAtom = Atom.make((get) =>
+  get(slackIntegrationAtom) === "on" ? get(primaryEnvironmentIdAtom) : null,
+).pipe(Atom.withLabel("web-slack-environment-id"));
+
+export function useSlackIntegration(): SlackIntegration {
+  return useAtomValue(slackIntegrationAtom);
+}
+
+export function readSlackIntegrationEnabled(): boolean {
+  return appAtomRegistry.get(slackIntegrationAtom) === "on";
+}
+
+function useSlackSnapshotAtom() {
+  const environmentId = useAtomValue(slackEnvironmentIdAtom);
+  return environmentId === null ? null : slackEnvironment.snapshot({ environmentId, input: {} });
+}
+
 export function useSlackSnapshot() {
-  const environmentId = usePrimaryEnvironmentId();
-  const query = useEnvironmentQuery(
-    environmentId === null ? null : slackEnvironment.snapshot({ environmentId, input: {} }),
-  );
+  const environmentId = useAtomValue(slackEnvironmentIdAtom);
+  const query = useEnvironmentQuery(useSlackSnapshotAtom());
   return { environmentId, snapshot: query.data ?? null, error: query.error };
 }
 
@@ -34,11 +60,6 @@ function selectSlackSelfName(
   return snapshot?.users.find((user) => user.id === snapshot.selfUserId)?.name ?? null;
 }
 
-function useSlackSnapshotAtom() {
-  const environmentId = usePrimaryEnvironmentId();
-  return environmentId === null ? null : slackEnvironment.snapshot({ environmentId, input: {} });
-}
-
 export function useSlackAvailable(): boolean {
   return useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackAvailable);
 }
@@ -58,7 +79,7 @@ function selectSlackThreadLinks(result: AsyncResult.AsyncResult<SlackSnapshot, u
 }
 
 export function useSlackThreadLinks() {
-  const environmentId = usePrimaryEnvironmentId();
+  const environmentId = useAtomValue(slackEnvironmentIdAtom);
   const serialized = useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackThreadLinks);
   const links = new Map<string, { readonly home: SlackThreadHome; readonly itemKey: string }>();
   for (const entry of serialized.length === 0 ? [] : serialized.split("\n")) {
