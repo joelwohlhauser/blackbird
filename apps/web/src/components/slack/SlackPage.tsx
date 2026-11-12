@@ -1,6 +1,13 @@
 import { parseSlackInboxItemKey, type SlackInboxItem } from "@t3tools/contracts";
 import { Navigate, useNavigate, useSearch } from "@tanstack/react-router";
-import { type CSSProperties, type ReactNode, useEffect, useEffectEvent, useRef } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "../../hooks/useResizableWidth";
@@ -96,18 +103,15 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
       ? search.c
       : `${search.c}:${search.t}`;
 
-  const selectItem = (key: string | null) => {
-    const thread = items.find((item) => item.key === key)?.latestThreadTs;
+  const selectItem = (key: string | null) =>
     void navigate({
       to: "/slack",
       search: {
         ...(search.view === "snoozed" ? { view: "snoozed" as const } : {}),
         ...(key === null ? {} : { item: key }),
-        ...(thread === undefined ? {} : { t: thread }),
       },
       replace: true,
     });
-  };
   const openItem = (key: string) => {
     const link = links.get(key);
     if (link?.home === "slack" && link.active) openChat(link);
@@ -121,6 +125,12 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
     });
   };
   const activeItem = activeKey === null ? undefined : items.find((item) => item.key === activeKey);
+  const [opened, setOpened] = useState({ key: activeKey, thread: activeItem?.latestThreadTs });
+  if (opened.key !== activeKey) {
+    setOpened({ key: activeKey, thread: activeItem?.latestThreadTs });
+  }
+  const openedThread =
+    search.t ?? (opened.key === activeKey ? opened.thread : activeItem?.latestThreadTs);
   const controls = useSlackItemControls(activeItem, (item) => {
     if (inboxView) selectItem(slackSelectionAfterRemoval(listedKeys, item.key));
   });
@@ -178,7 +188,7 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
     inboxView && activeKey !== null
       ? {
           ...parseSlackInboxItemKey(activeKey),
-          ...(search.t === undefined ? {} : { rootTs: search.t }),
+          ...(openedThread === undefined ? {} : { rootTs: openedThread }),
         }
       : null;
 
