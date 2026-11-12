@@ -932,6 +932,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     slackIntegrationOnly: true,
   },
   {
+    id: "slack-browser-session",
+    title: "Follow my Slack",
+    to: "/settings/general",
+    searchTerms: ["slack browser session sections muted channels read unread sidebar"],
+    slackIntegrationOnly: true,
+  },
+  {
     id: "gemini-api-key",
     title: "Gemini API key",
     to: "/settings/general",

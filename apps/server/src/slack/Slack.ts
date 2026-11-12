@@ -90,6 +90,15 @@ import {
 } from "./slackSidebar.ts";
 import * as SlackSocket from "./SlackSocket.ts";
 import * as SlackStore from "./SlackStore.ts";
+import * as SlackWebSession from "./SlackWebSession.ts";
+import {
+  slackWebLayout,
+  slackWebReadState,
+  SlackWebResponses,
+  slackWebSidebarLayout,
+  type SlackWebState,
+  slackWebUnreadRoots,
+} from "./slackWebState.ts";
 
 const USER_TOKEN_SECRET = "slack-user-token";
 const APP_TOKEN_SECRET = "slack-app-token";
@@ -109,6 +118,9 @@ const PRESENCE_INTERVAL = "60 seconds";
 const PRESENCE_MAX_USERS = 15;
 const RECENT_ACTIVITY_SECONDS = 14 * 24 * 60 * 60;
 const FOCUS_SNOOZE_MINUTES = 1440;
+const WEB_POLL_INTERVAL = "30 seconds";
+const WEB_LAYOUT_EVERY_POLLS = 10;
+const WEB_READ_MARGIN_MS = 15_000;
 const INBOX_MESSAGE_SUBTYPES = new Set([
   "bot_message",
   "file_share",
@@ -135,6 +147,7 @@ interface State {
   readonly inboxModes: ReadonlyMap<string, SlackInboxMode>;
   readonly sidebarLayout: SlackSidebarLayout;
   readonly inbox: SlackInbox;
+  readonly web?: SlackWebState;
 }
 
 const DISCONNECTED_STATE: State = {
@@ -157,6 +170,11 @@ const INTEGRATION_OFF = new SlackError({
   message: "The Slack integration is turned off.",
 });
 
+const SIDEBAR_FOLLOWS_SLACK = new SlackError({
+  reason: "invalid_request",
+  message: "The sidebar follows your Slack sidebar. Change sections in Slack.",
+});
+
 const CHAT_NOT_MOVED = new SlackError({
   reason: "chat_not_moved",
   message:
@@ -164,6 +182,11 @@ const CHAT_NOT_MOVED = new SlackError({
 });
 
 const decodeEvent = Schema.decodeUnknownOption(SlackApi.RawSlackEvent);
+
+const inboxModeOf = (state: State, conversationId: string): SlackInboxMode =>
+  state.web?.muted.has(conversationId)
+    ? "off"
+    : (state.inboxModes.get(conversationId) ?? DEFAULT_INBOX_MODE);
 
 const toConversation = (
   state: State,
@@ -178,7 +201,7 @@ const toConversation = (
     ...(conversation.userId === undefined ? {} : { userId: conversation.userId }),
     isStarred: conversation.isStarred,
     isBot: peer?.isBot ?? false,
-    inboxMode: state.inboxModes.get(conversation.id) ?? DEFAULT_INBOX_MODE,
+    inboxMode: inboxModeOf(state, conversation.id),
     unreadItemCount,
   };
 };
@@ -194,7 +217,15 @@ const toSnapshot = (state: State): SlackSnapshot => {
     ...(state.selfUserId === undefined ? {} : { selfUserId: state.selfUserId }),
     ...(state.teamId === undefined ? {} : { teamId: state.teamId }),
     conversations,
-    sidebar: resolveSlackSidebar(state.sidebarLayout, conversations),
+    sidebar: {
+      ...resolveSlackSidebar(
+        state.web === undefined
+          ? state.sidebarLayout
+          : slackWebSidebarLayout(state.web, conversations),
+        conversations,
+      ),
+      followsSlack: state.web !== undefined,
+    },
     users: [...state.users.values()],
     items: visibleSlackInboxItems(state.inbox),
     links: [...state.inbox.links.values()],
@@ -265,6 +296,7 @@ const make = Effect.gen(function* () {
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const settings = yield* ServerSettings.ServerSettingsService;
   const slackFiles = yield* SlackFiles.SlackFiles;
+  const webSession = yield* SlackWebSession.SlackWebSession;
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   const random = yield* SecureRandom.SecureRandom;
   const serviceScope = yield* Effect.scope;
@@ -275,6 +307,10 @@ const make = Effect.gen(function* () {
       .pipe(Effect.map(Option.map((bytes) => new TextDecoder().decode(bytes).trim())));
   const enabled = settings.getSettings.pipe(
     Effect.map((current) => current.slackIntegrationEnabled),
+    Effect.orElseSucceed(() => false),
+  );
+  const followsBrowserSession = settings.getSettings.pipe(
+    Effect.map((current) => webSession.available && current.slackBrowserSessionEnabled),
     Effect.orElseSucceed(() => false),
   );
   const requireEnabled = enabled.pipe(
@@ -382,7 +418,7 @@ const make = Effect.gen(function* () {
   ): SlackInboxInput => ({
     type: "message",
     kind: conversation.kind,
-    mode: state.inboxModes.get(conversation.id) ?? DEFAULT_INBOX_MODE,
+    mode: inboxModeOf(state, conversation.id),
     selfUserId: session.selfUserId,
     message: {
       conversationId: conversation.id,
@@ -841,6 +877,47 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const followSlack = Effect.fn("Slack.followSlack")(function* (
+    workspaceUrl: string,
+    poll: number,
+  ) {
+    const known = (yield* SubscriptionRef.get(stateRef)).web;
+    if (!(yield* followsBrowserSession)) {
+      if (known !== undefined) yield* update(({ web: _web, ...state }) => state);
+      return;
+    }
+    const call = <A>(
+      method: string,
+      decode: (body: unknown) => Effect.Effect<A, Schema.SchemaError>,
+      params?: Readonly<Record<string, string>>,
+    ) => webSession.call({ workspaceUrl, method, decode, ...(params ? { params } : {}) });
+    const before = toSlackTs((yield* Clock.currentTimeMillis) - WEB_READ_MARGIN_MS);
+    const layout =
+      known === undefined || poll % WEB_LAYOUT_EVERY_POLLS === 0
+        ? slackWebLayout(
+            yield* call("users.prefs.get", SlackWebResponses.prefs),
+            yield* call("users.channelSections.list", SlackWebResponses.sections),
+          )
+        : known;
+    const read = slackWebReadState(
+      yield* call("client.counts", SlackWebResponses.counts, { thread_counts_by_channel: "true" }),
+      yield* call("subscriptions.thread.getView", SlackWebResponses.threadView),
+    );
+    yield* update((state) => ({ ...state, web: { ...layout, read } }));
+    yield* applyInbox([
+      ...[...layout.muted].flatMap((conversationId): SlackInboxInput[] =>
+        known?.muted.has(conversationId) ? [] : [{ type: "mode", conversationId, mode: "off" }],
+      ),
+      ...[...read.conversations].map(([conversationId, conversation]): SlackInboxInput => ({
+        type: "read",
+        conversationId,
+        ...conversation,
+        unreadRoots: slackWebUnreadRoots(read, conversationId),
+        before,
+      })),
+    ]);
+  });
+
   const snoozeLoop = Effect.gen(function* () {
     while (true) {
       const next = nextSnoozeExpiry((yield* SubscriptionRef.get(stateRef)).inbox);
@@ -866,12 +943,32 @@ const make = Effect.gen(function* () {
       method: "auth.test",
       decode: SlackApi.SlackResponses.authTest,
     });
-    const session: Session = { ...tokens, selfUserId: auth.user_id };
+    const session: Session = {
+      ...tokens,
+      selfUserId: auth.user_id,
+      ...(auth.url === undefined ? {} : { workspaceUrl: auth.url }),
+    };
     yield* Ref.set(sessionRef, session);
     yield* update((state) => ({ ...state, selfUserId: auth.user_id, teamId: auth.team_id }));
     const signals = yield* socket.open(tokens.appToken);
     yield* Effect.forkScoped(snoozeLoop);
     yield* refreshDirectory(session);
+    if (session.workspaceUrl !== undefined) {
+      const { workspaceUrl } = session;
+      const follow = (poll: number) =>
+        followSlack(workspaceUrl, poll).pipe(
+          Effect.catch(logFailure("Slack could not follow the browser session")),
+        );
+      yield* follow(0);
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          for (let poll = 1; ; poll += 1) {
+            yield* Effect.sleep(WEB_POLL_INTERVAL);
+            yield* follow(poll);
+          }
+        }),
+      );
+    }
     yield* Effect.forkScoped(
       Effect.sleep(DIRECTORY_REFRESH_INTERVAL).pipe(
         Effect.andThen(refreshDirectory(session)),
@@ -1130,7 +1227,34 @@ const make = Effect.gen(function* () {
       if (chat !== undefined) yield* dispatchToChat("thread.settle", chat);
       const mark = conversationToMarkRead(before, after, input.key);
       const session = yield* Ref.get(sessionRef);
-      if (mark === undefined || session === undefined) return;
+      if (session === undefined) return;
+      const item = after.items.get(input.key);
+      const threadTs =
+        item?.rootTs !== undefined && item.latestTs !== item.rootTs
+          ? item.rootTs
+          : item?.latestThreadTs;
+      if (
+        item?.state === "done" &&
+        before.items.get(input.key)?.state !== "done" &&
+        threadTs !== undefined &&
+        session.workspaceUrl !== undefined &&
+        (yield* SubscriptionRef.get(stateRef)).web !== undefined
+      ) {
+        yield* webSession
+          .call({
+            workspaceUrl: session.workspaceUrl,
+            method: "subscriptions.thread.mark",
+            decode: SlackWebResponses.empty,
+            params: {
+              channel: item.conversationId,
+              thread_ts: threadTs,
+              ts: item.latestTs,
+              read: "1",
+            },
+          })
+          .pipe(Effect.catch(logFailure("Slack mark thread read failed")));
+      }
+      if (mark === undefined) return;
       const newest = activity.get(mark.conversationId);
       yield* call(session, "conversations.mark", SlackApi.SlackResponses.empty, {
         channel: mark.conversationId,
@@ -1191,7 +1315,8 @@ const make = Effect.gen(function* () {
 
     editSidebar: Effect.fn("Slack.editSidebar")(function* (input) {
       yield* requireEnabled;
-      const { sidebarLayout } = yield* SubscriptionRef.get(stateRef);
+      const { sidebarLayout, web } = yield* SubscriptionRef.get(stateRef);
+      if (web !== undefined) return yield* SIDEBAR_FOLLOWS_SLACK;
       const edited = editSlackSidebarLayout(sidebarLayout, input, yield* random.uuidV4());
       if ("_tag" in edited) return yield* edited;
       if (edited !== sidebarLayout) yield* saveSidebarLayout(edited);
@@ -1200,6 +1325,7 @@ const make = Effect.gen(function* () {
     arrangeSidebar: Effect.fn("Slack.arrangeSidebar")(function* (input) {
       yield* requireEnabled;
       const state = yield* SubscriptionRef.get(stateRef);
+      if (state.web !== undefined) return yield* SIDEBAR_FOLLOWS_SLACK;
       const sections = yield* Effect.forEach(input.sections, (section) =>
         random.uuidV4().pipe(Effect.map((id) => ({ ...section, id }))),
       );
@@ -1260,6 +1386,7 @@ const make = Effect.gen(function* () {
 export const layer = Layer.effect(Slack, make).pipe(
   Layer.provide(SlackSocket.layer),
   Layer.provide(SlackFiles.layer),
+  Layer.provide(SlackWebSession.layer),
   Layer.provide(SlackApi.layer),
   Layer.provide(SlackStore.layer),
 );

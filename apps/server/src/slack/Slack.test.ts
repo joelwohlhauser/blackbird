@@ -4,6 +4,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   type OrchestrationV2ThreadShell,
   ThreadId,
+  EnvironmentId,
 } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
@@ -24,6 +25,8 @@ import { OrchestratorV2 } from "../orchestration-v2/Orchestrator.ts";
 import Migration0086 from "../persistence/Migrations/086_SlackInbox.ts";
 import Migration0087 from "../persistence/Migrations/087_SlackThreadLinks.ts";
 import Migration0088 from "../persistence/Migrations/088_SlackSidebarLayout.ts";
+import Migration0089 from "../persistence/Migrations/089_SlackInboxLatestThread.ts";
+import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as Slack from "./Slack.ts";
 
@@ -96,10 +99,17 @@ const makeWorld = Effect.fn(function* (respond?: () => Response) {
             }),
         }),
         Layer.mock(AssetSigner)({}),
+        Layer.mock(ServerEnvironment)({
+          getEnvironmentId: Effect.succeed(EnvironmentId.make("environment-test")),
+        }),
         ServerConfig.layerTest(process.cwd(), { prefix: "t3-slack-service-" }),
         NodeCrypto.layer,
         Layer.effectDiscard(
-          Migration0086.pipe(Effect.andThen(Migration0087), Effect.andThen(Migration0088)),
+          Migration0086.pipe(
+            Effect.andThen(Migration0087),
+            Effect.andThen(Migration0088),
+            Effect.andThen(Migration0089),
+          ),
         ),
       ),
     ),

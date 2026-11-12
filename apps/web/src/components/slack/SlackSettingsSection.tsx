@@ -1,10 +1,12 @@
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { SlackConnectionStatus } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
 
 import { useUpdatePrimarySettings } from "../../hooks/useSettings";
 import { readLocalApi } from "../../localApi";
 import { useSlackSpaceStore } from "../../slackSpaceStore";
+import { primaryServerConfigAtom } from "../../state/server";
 import { slackEnvironment, useSlackIntegration, useSlackSnapshot } from "../../state/slack";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsRow, SettingsSection } from "../settings/settingsLayout";
@@ -109,6 +111,7 @@ function SlackConnectionSettings() {
           )
         }
       />
+      {needsTokens ? null : <SlackBrowserSessionSetting />}
       {needsTokens ? (
         <>
           <SettingsRow
@@ -155,5 +158,26 @@ function SlackConnectionSettings() {
         </>
       ) : null}
     </>
+  );
+}
+
+function SlackBrowserSessionSetting() {
+  const enabled = useAtomValue(primaryServerConfigAtom)?.settings.slackBrowserSessionEnabled;
+  const updateSettings = useUpdatePrimarySettings();
+  if (enabled === undefined) return null;
+  return (
+    <SettingsRow
+      {...searchableSetting("slack-browser-session")}
+      description="Uses the Slack login in Blackbird's browser to show the sections, muted channels and read state of your Slack. Needs the desktop app, and calls parts of Slack that its public API does not cover."
+      control={
+        <Switch
+          aria-label="Follow my Slack"
+          checked={enabled}
+          onCheckedChange={(checked) =>
+            updateSettings({ slackBrowserSessionEnabled: Boolean(checked) })
+          }
+        />
+      }
+    />
   );
 }

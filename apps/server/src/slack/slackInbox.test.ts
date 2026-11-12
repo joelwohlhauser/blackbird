@@ -506,6 +506,64 @@ describe("slackInbox", () => {
     }
   });
 
+  it("finishes what Slack reports as read, except what arrived after the report or was brought back", () => {
+    const read = (
+      conversationId: string,
+      overrides: Partial<Extract<SlackInboxInput, { readonly type: "read" }>> = {},
+    ): SlackInboxInput => ({
+      type: "read",
+      conversationId,
+      lastRead: "20.000001",
+      hasUnreads: false,
+      unreadRoots: new Set(),
+      before: "50.000001",
+      ...overrides,
+    });
+    const reply = (ts: string, threadTs: string) => message(ts, { threadTs }, "everything");
+    const inbox = run([
+      message("10.000001", {}, "everything"),
+      message("11.000001", {}, "everything"),
+      reply("30.000001", "11.000001"),
+      message("12.000001", {}, "everything"),
+      reply("31.000001", "12.000001"),
+      message("25.000001", {}, "everything"),
+      message("13.000001", {}, "everything"),
+      { type: "action", key: `${CHANNEL}:13.000001`, state: "done" },
+      { type: "action", key: `${CHANNEL}:13.000001`, state: "unread" },
+      direct("15.000001"),
+      direct("40.000001", { threadTs: "15.000001" }),
+    ]);
+    assert.strictEqual(inbox.items.get(DIRECT)?.latestThreadTs, "15.000001");
+    assert.strictEqual(
+      run([direct("41.000001")], inbox).items.get(DIRECT)?.latestThreadTs,
+      undefined,
+    );
+
+    const channelRead = read(CHANNEL, { unreadRoots: new Set(["12.000001"]) });
+    assert.deepStrictEqual(states(run([channelRead, read(DIRECT, { hasUnreads: true })], inbox)), {
+      [`${CHANNEL}:10.000001`]: "done",
+      [`${CHANNEL}:11.000001`]: "done",
+      [`${CHANNEL}:12.000001`]: "unread",
+      [`${CHANNEL}:25.000001`]: "unread",
+      [`${CHANNEL}:13.000001`]: "unread",
+      [DIRECT]: "unread",
+    });
+    assert.strictEqual(
+      run([read(CHANNEL, { unreadRoots: undefined })], inbox).items.get(`${CHANNEL}:11.000001`)
+        ?.state,
+      "unread",
+    );
+    assert.strictEqual(
+      run([read(DIRECT, { unreadRoots: undefined })], inbox).items.get(DIRECT)?.state,
+      "unread",
+    );
+    assert.strictEqual(
+      run([read(DIRECT, { before: "40.000001" })], inbox).items.get(DIRECT)?.state,
+      "unread",
+    );
+    assert.strictEqual(run([read(DIRECT)], inbox).items.get(DIRECT)?.state, "done");
+  });
+
   it("tracks recent threads the user takes part in or has an item for", () => {
     const inbox = run([
       message("10.000001", {}, "everything"),

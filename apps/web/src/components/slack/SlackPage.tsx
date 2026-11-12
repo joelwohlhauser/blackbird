@@ -110,12 +110,10 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
       search: { c: search.c, ...(rootTs === null ? {} : { t: rootTs }) },
     });
   };
-  const controls = useSlackItemControls(
-    activeKey === null ? undefined : items.find((item) => item.key === activeKey),
-    (item) => {
-      if (inboxView) selectItem(slackSelectionAfterRemoval(listedKeys, item.key));
-    },
-  );
+  const activeItem = activeKey === null ? undefined : items.find((item) => item.key === activeKey);
+  const controls = useSlackItemControls(activeItem, (item) => {
+    if (inboxView) selectItem(slackSelectionAfterRemoval(listedKeys, item.key));
+  });
 
   const handleKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || event.repeat || isCommandPaletteOpen()) {
@@ -166,7 +164,15 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const activeTarget = inboxView && activeKey !== null ? parseSlackInboxItemKey(activeKey) : null;
+  const activeTarget =
+    inboxView && activeKey !== null
+      ? {
+          ...parseSlackInboxItemKey(activeKey),
+          ...(activeItem?.latestThreadTs === undefined
+            ? {}
+            : { rootTs: activeItem.latestThreadTs }),
+        }
+      : null;
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
@@ -208,7 +214,7 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
             />
           ) : (
             <SlackThreadView
-              key={activeKey}
+              key={`${activeTarget.conversationId}:${activeTarget.rootTs}`}
               conversationId={activeTarget.conversationId}
               rootTs={activeTarget.rootTs}
               composerRef={detailComposerRef}

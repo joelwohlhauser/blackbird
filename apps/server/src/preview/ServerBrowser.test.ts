@@ -361,6 +361,7 @@ const dependencies = Layer.mergeAll(
   }),
   Layer.succeed(DesktopChannel.DesktopBrowserChannel, {
     available: true,
+    fetch: () => Effect.succeedNone,
     awaitAttached: (key, timeout) =>
       !desktopAttachesLate || desktopRenders(key.tabId)
         ? Effect.sync(() => desktopRenders(key.tabId))

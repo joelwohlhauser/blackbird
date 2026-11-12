@@ -47,6 +47,7 @@ type SectionNaming =
   | { readonly type: "create"; readonly conversationId: string };
 
 interface SidebarLayoutControls {
+  readonly editable: boolean;
   readonly sections: ReadonlyArray<SlackSidebarSection>;
   readonly naming: SectionNaming | null;
   readonly onEdit: (edit: SlackSidebarEdit) => Promise<string | null>;
@@ -77,22 +78,22 @@ function ConversationRow({
     if (!api) return;
     event.preventDefault();
     const modes = isSlackChannel(conversation) ? SlackInboxMode.literals : [];
+    if (!layout.editable && modes.length === 0) return;
     const actions = new Map<string, () => void>();
     const item = (label: string, run: () => void, options: Partial<ContextMenuItem> = {}) => {
       const id = String(actions.size);
       actions.set(id, run);
       return { id, label, ...options };
     };
-    void api.contextMenu
-      .show(
-        [
-          ...modes.map((mode) =>
-            item(
-              SLACK_INBOX_MODE_LABELS[mode],
-              () => void setInboxMode({ environmentId, input: { conversationId, mode } }),
-              { checked: mode === conversation.inboxMode },
-            ),
-          ),
+    const modeItems = modes.map((mode) =>
+      item(
+        SLACK_INBOX_MODE_LABELS[mode],
+        () => void setInboxMode({ environmentId, input: { conversationId, mode } }),
+        { checked: mode === conversation.inboxMode },
+      ),
+    );
+    const layoutItems: ContextMenuItem[] = layout.editable
+      ? [
           {
             id: "move",
             label: "Move to section",
@@ -132,9 +133,10 @@ function ConversationRow({
             "Hide from sidebar",
             () => void layout.onEdit({ type: "hideConversation", conversationId }),
           ),
-        ],
-        { x: event.clientX, y: event.clientY },
-      )
+        ]
+      : [];
+    void api.contextMenu
+      .show([...modeItems, ...layoutItems], { x: event.clientX, y: event.clientY })
       .then((id) => (id === null ? undefined : actions.get(id)?.()));
   };
 
@@ -251,7 +253,7 @@ function ConversationGroup({
 
   const openSectionMenu = (event: MouseEvent) => {
     const api = readLocalApi();
-    if (!api || section === undefined) return;
+    if (!api || section === undefined || !layout.editable) return;
     event.preventDefault();
     const index = layout.sections.findIndex((candidate) => candidate.id === section.id);
     void api.contextMenu
@@ -381,6 +383,7 @@ export function SlackSidebar() {
   const conversationsOf = (conversationIds: ReadonlyArray<string>) =>
     conversationIds.flatMap((id) => conversationsById.get(id) ?? []);
   const layout: SidebarLayoutControls = {
+    editable: !sidebar.followsSlack,
     sections: sidebar.sections,
     naming,
     onEdit: async (input) => {

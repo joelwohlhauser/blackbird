@@ -140,6 +140,7 @@ function ShowInSidebarAction({ conversationId }: { readonly conversationId: stri
   const { environmentId, snapshot } = useSlackSnapshot();
   const editSidebar = useAtomCommand(slackEnvironment.editSidebar);
   if (environmentId === null || snapshot === null) return null;
+  if (snapshot.sidebar.followsSlack) return null;
   if (!snapshot.sidebar.hiddenConversationIds.includes(conversationId)) return null;
   return (
     <HeaderAction
