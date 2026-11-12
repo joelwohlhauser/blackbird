@@ -96,15 +96,18 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
       ? search.c
       : `${search.c}:${search.t}`;
 
-  const selectItem = (key: string | null) =>
+  const selectItem = (key: string | null) => {
+    const thread = items.find((item) => item.key === key)?.latestThreadTs;
     void navigate({
       to: "/slack",
       search: {
         ...(search.view === "snoozed" ? { view: "snoozed" as const } : {}),
         ...(key === null ? {} : { item: key }),
+        ...(thread === undefined ? {} : { t: thread }),
       },
       replace: true,
     });
+  };
   const openItem = (key: string) => {
     const link = links.get(key);
     if (link?.home === "slack" && link.active) openChat(link);
@@ -171,12 +174,11 @@ function SlackWorkspace({ search }: { readonly search: SlackSearch }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const threadInDirectMessage = search.t ?? activeItem?.latestThreadTs;
   const activeTarget =
     inboxView && activeKey !== null
       ? {
           ...parseSlackInboxItemKey(activeKey),
-          ...(threadInDirectMessage === undefined ? {} : { rootTs: threadInDirectMessage }),
+          ...(search.t === undefined ? {} : { rootTs: search.t }),
         }
       : null;
 

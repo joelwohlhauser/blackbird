@@ -587,6 +587,10 @@ describe("slackInbox", () => {
       "unread",
     );
     assert.strictEqual(run([read(DIRECT)], inbox).items.get(DIRECT)?.state, "done");
+    assert.strictEqual(
+      run([link("slack", DIRECT), read(DIRECT)], inbox).items.get(DIRECT)?.state,
+      "unread",
+    );
   });
 
   it("tracks recent threads the user takes part in or has an item for", () => {

@@ -295,7 +295,7 @@ function applyRead(
   let items: Map<string, SlackInboxRecord> | undefined;
   for (const item of inbox.items.values()) {
     if (item.conversationId !== input.conversationId || item.state !== "unread") continue;
-    if (item.acknowledgedThroughTs === item.latestTs) continue;
+    if (item.acknowledgedThroughTs === item.latestTs || activeLink(inbox, item.key)) continue;
     if (compareSlackTs(item.latestTs, input.before) >= 0 || !isRead(item)) continue;
     items ??= new Map(inbox.items);
     items.set(item.key, markDone(item));
