@@ -388,7 +388,7 @@ const make = Effect.gen(function* () {
       );
   });
 
-  const applyInbox = Effect.fnUntraced(function* (inputs: ReadonlyArray<SlackInboxInput>) {
+  const applyInboxLocked = Effect.fnUntraced(function* (inputs: ReadonlyArray<SlackInboxInput>) {
     const state = yield* SubscriptionRef.get(stateRef);
     const before = state.inbox;
     const after = inputs.reduce(applyInboxInput, before);
@@ -407,7 +407,11 @@ const make = Effect.gen(function* () {
       yield* dispatchToChat("thread.mark-unread", threadId);
     }
     return { before, after };
-  }, inboxLock.withPermits(1));
+  });
+  const applyInbox = (inputs: ReadonlyArray<SlackInboxInput>) =>
+    applyInboxLocked(inputs).pipe(inboxLock.withPermits(1));
+  const applyInboxWhileEnabled = (inputs: ReadonlyArray<SlackInboxInput>) =>
+    requireEnabled.pipe(Effect.andThen(applyInboxLocked(inputs)), inboxLock.withPermits(1));
 
   const chatMissing = (threadId: ThreadId) =>
     new SlackError({ reason: "not_found", message: `The chat ${threadId} no longer exists.` });
@@ -929,6 +933,10 @@ const make = Effect.gen(function* () {
   const secretFailure = () =>
     new SlackError({ reason: "slack_api", message: "Blackbird could not store the Slack tokens." });
 
+  const removeTokens = secrets
+    .remove(USER_TOKEN_SECRET)
+    .pipe(Effect.andThen(secrets.remove(APP_TOKEN_SECRET)), Effect.mapError(secretFailure));
+
   const start = Effect.gen(function* () {
     const changes = yield* settings.subscribeChanges;
     yield* Stream.concat(
@@ -962,18 +970,17 @@ const make = Effect.gen(function* () {
     const encoder = new TextEncoder();
     yield* secrets
       .set(USER_TOKEN_SECRET, encoder.encode(input.userToken))
-      .pipe(
-        Effect.andThen(secrets.set(APP_TOKEN_SECRET, encoder.encode(input.appToken))),
-        Effect.mapError(secretFailure),
-      );
+      .pipe(Effect.mapError(secretFailure));
+    yield* requireEnabled.pipe(Effect.tapError(() => Effect.ignore(removeTokens)));
+    yield* secrets
+      .set(APP_TOKEN_SECRET, encoder.encode(input.appToken))
+      .pipe(Effect.mapError(secretFailure));
     yield* apply;
   });
 
   const disconnect = Effect.gen(function* () {
     yield* stop;
-    yield* secrets
-      .remove(USER_TOKEN_SECRET)
-      .pipe(Effect.andThen(secrets.remove(APP_TOKEN_SECRET)), Effect.mapError(secretFailure));
+    yield* removeTokens;
     yield* store.clear.pipe(Effect.orDie, inboxLock.withPermits(1));
     yield* Ref.set(lastEventRef, undefined);
     yield* Ref.set(emojiRef, {});
@@ -1072,14 +1079,13 @@ const make = Effect.gen(function* () {
     }),
 
     setItemState: Effect.fn("Slack.setItemState")(function* (input) {
-      yield* requireEnabled;
       if (input.state === "snoozed" && input.snoozedUntil === undefined) {
         return yield* new SlackError({
           reason: "slack_api",
           message: "A snoozed item needs an end time.",
         });
       }
-      const { before, after } = yield* applyInbox([{ type: "action", ...input }]);
+      const { before, after } = yield* applyInboxWhileEnabled([{ type: "action", ...input }]);
       if (!before.items.has(input.key)) {
         return yield* new SlackError({
           reason: "not_found",
@@ -1112,12 +1118,11 @@ const make = Effect.gen(function* () {
       yield* requireEnabled;
       const chat = yield* readChatState(input.threadId);
       if (chat === "deleted") return yield* chatMissing(input.threadId);
-      yield* applyInbox([{ type: "link", ...input, active: chat === "active" }]);
+      yield* applyInboxWhileEnabled([{ type: "link", ...input, active: chat === "active" }]);
     }),
 
     unlinkThread: Effect.fn("Slack.unlinkThread")(function* (input) {
-      yield* requireEnabled;
-      yield* applyInbox([{ type: "unlink", ...input }]);
+      yield* applyInboxWhileEnabled([{ type: "unlink", ...input }]);
     }),
 
     setThreadHome: Effect.fn("Slack.setThreadHome")(function* ({ projectId, ...home }) {
@@ -1134,7 +1139,7 @@ const make = Effect.gen(function* () {
           })
           .pipe(Effect.mapError(() => CHAT_NOT_MOVED));
       }
-      yield* applyInbox([{ type: "home", ...home }]);
+      yield* applyInboxWhileEnabled([{ type: "home", ...home }]);
     }),
 
     setFocusMode: Effect.fn("Slack.setFocusMode")(function* (input) {

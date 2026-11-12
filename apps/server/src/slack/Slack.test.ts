@@ -1,6 +1,10 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_SERVER_SETTINGS, ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  type OrchestrationV2ThreadShell,
+  ThreadId,
+} from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
@@ -22,12 +26,21 @@ import Migration0087 from "../persistence/Migrations/087_SlackThreadLinks.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as Slack from "./Slack.ts";
 
+const ACTIVE_CHAT = {
+  deletedAt: null,
+  archivedAt: null,
+  settledOverride: null,
+  settledAt: null,
+} as OrchestrationV2ThreadShell;
+
 const makeWorld = Effect.fn(function* (respond?: () => Response) {
   const world = {
     enabled: false,
     requests: 0,
     requestsWhileOff: 0,
     storedSecrets: [] as string[],
+    whenSecretStored: () => {},
+    whenChatRead: () => {},
     subscribed: yield* Deferred.make<void>(),
     requested: yield* Deferred.make<void>(),
     interrupted: yield* Deferred.make<void>(),
@@ -56,7 +69,15 @@ const makeWorld = Effect.fn(function* (respond?: () => Response) {
         ),
         Layer.mock(ServerSecretStore)({
           get: (name) => Effect.succeedSome(new TextEncoder().encode(`${name}-value`)),
-          set: (name) => Effect.sync(() => void world.storedSecrets.push(name)),
+          set: (name) =>
+            Effect.sync(() => {
+              world.storedSecrets.push(name);
+              world.whenSecretStored();
+            }),
+          remove: (name) =>
+            Effect.sync(
+              () => void world.storedSecrets.splice(world.storedSecrets.indexOf(name), 1),
+            ),
         }),
         Layer.mock(ServerSettingsService)({
           getSettings: Effect.sync(settings),
@@ -65,7 +86,14 @@ const makeWorld = Effect.fn(function* (respond?: () => Response) {
             Effect.map((subscription) => Stream.fromSubscription(subscription)),
           ),
         }),
-        Layer.mock(OrchestratorV2)({ streamDomainEvents: Stream.never }),
+        Layer.mock(OrchestratorV2)({
+          streamDomainEvents: Stream.never,
+          getThreadShell: () =>
+            Effect.sync(() => {
+              world.whenChatRead();
+              return ACTIVE_CHAT;
+            }),
+        }),
         Layer.mock(AssetSigner)({}),
         ServerConfig.layerTest(process.cwd(), { prefix: "t3-slack-service-" }),
         NodeCrypto.layer,
@@ -80,6 +108,11 @@ const makeWorld = Effect.fn(function* (respond?: () => Response) {
   return {
     ...world,
     slack,
+    switchOffWhen: (moment: "whenSecretStored" | "whenChatRead") => {
+      world[moment] = () => {
+        world.enabled = false;
+      };
+    },
     setEnabled: (enabled: boolean) =>
       Effect.suspend(() => {
         world.enabled = enabled;
@@ -173,6 +206,45 @@ it.effect("a connect waiting out a rate limit stops when the integration is swit
       assert.strictEqual(error.reason, "not_connected");
       assert.strictEqual(world.requests(), 1);
       assert.deepStrictEqual(world.storedSecrets, []);
+    }),
+  ),
+);
+
+it.effect("a connect switched off between its two token writes leaves no token behind", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld(() =>
+        Response.json({
+          ok: true,
+          user_id: "U001",
+          team_id: "T001",
+          url: "wss://slack.example.test/link",
+        }),
+      );
+      yield* world.setEnabled(true);
+      world.switchOffWhen("whenSecretStored");
+      const error = yield* Effect.flip(world.slack.connect(tokens));
+      assert.strictEqual(error.reason, "not_connected");
+      assert.deepStrictEqual(world.storedSecrets, []);
+    }),
+  ),
+);
+
+it.effect("a link whose chat lookup outlasts the integration is not saved", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const world = yield* makeWorld();
+      yield* world.setEnabled(true);
+      world.switchOffWhen("whenChatRead");
+      const error = yield* Effect.flip(
+        world.slack.linkThread({
+          itemKey: "C001:10.000001",
+          threadId: ThreadId.make("thread-1"),
+          home: "slack",
+        }),
+      );
+      assert.strictEqual(error.reason, "not_connected");
+      assert.deepStrictEqual((yield* world.slack.snapshot).links, []);
     }),
   ),
 );

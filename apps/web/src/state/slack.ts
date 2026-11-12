@@ -8,6 +8,7 @@ import { appAtomRegistry } from "../rpc/atomRegistry";
 import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
 import { useEnvironmentQuery, useEnvironmentQuerySelector } from "./query";
 import { primaryServerConfigAtom } from "./server";
+import { waitForAtomValue } from "./waitForAtomValue";
 
 export const slackEnvironment = createSlackEnvironmentAtoms(connectionAtomRuntime);
 
@@ -29,6 +30,16 @@ export function useSlackIntegration(): SlackIntegration {
 
 export function readSlackIntegrationEnabled(): boolean {
   return appAtomRegistry.get(slackIntegrationAtom) === "on";
+}
+
+export async function settledSlackIntegration(): Promise<SlackIntegration> {
+  await waitForAtomValue({
+    registry: appAtomRegistry,
+    atom: slackIntegrationAtom,
+    predicate: (integration) => integration !== "unknown",
+    timeoutMs: 10_000,
+  });
+  return appAtomRegistry.get(slackIntegrationAtom);
 }
 
 function useSlackSnapshotAtom() {

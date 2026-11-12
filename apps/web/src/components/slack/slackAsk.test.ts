@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   slackAskFor,
   slackAskItemKey,
+  slackAskToSend,
   slackThreadContextRecord,
   slackTranscript,
   withSlackAskContext,
@@ -114,5 +115,20 @@ describe("slackAskFor", () => {
     expect(slackAskFor(ask, true, { draftId: null })).toBeNull();
     expect(slackAskFor(ask, false, { draftId: ask.draftId })).toBeNull();
     expect(slackAskFor(ask, false, { threadId: ask.threadId })).toBeNull();
+  });
+});
+
+describe("slackAskToSend", () => {
+  const ask = { draftId: "draft-1", threadId: "thread-1" } as PendingSlackAsk;
+
+  it("waits for the integration state before deciding, and never decides while it is unknown", async () => {
+    const config = Promise.withResolvers<"on" | "off" | "unknown">();
+    const decision = slackAskToSend(ask, ask.draftId, () => config.promise);
+    config.resolve("on");
+    expect(await decision).toBe(ask);
+    expect(await slackAskToSend(ask, ask.draftId, async () => "off")).toBeNull();
+    expect(await slackAskToSend(ask, ask.draftId, async () => "unknown")).toBe("unknown");
+    const otherDraft = { draftId: "draft-2" } as Pick<PendingSlackAsk, "draftId">;
+    expect(await slackAskToSend(ask, otherDraft.draftId, async () => "unknown")).toBeNull();
   });
 });

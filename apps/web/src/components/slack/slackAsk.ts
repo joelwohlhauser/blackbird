@@ -20,7 +20,11 @@ import { persist } from "zustand/middleware";
 import { type DraftId, useComposerDraftStore } from "../../composerDraftStore";
 import { ensureInlineContextReferences } from "../../lib/composerContextReferences";
 import { slackThreadSurface, useRightPanelStore } from "../../rightPanelStore";
-import { readSlackIntegrationEnabled, useSlackIntegration } from "../../state/slack";
+import {
+  settledSlackIntegration,
+  type SlackIntegration,
+  useSlackIntegration,
+} from "../../state/slack";
 import { slackTsToDate } from "./slackMessages.logic";
 import { slackMrkdwnToMarkdown, type SlackMrkdwnContext } from "./slackMrkdwn";
 
@@ -143,10 +147,20 @@ export function useSlackAsk(owner: SlackAskOwner): PendingSlackAsk | null {
   return slackAskFor(pending, useSlackIntegration() === "on", owner);
 }
 
-export function pendingSlackAsk(draftId: DraftId): PendingSlackAsk | null {
-  return slackAskFor(useSlackAskStore.getState().pending, readSlackIntegrationEnabled(), {
-    draftId,
-  });
+export async function slackAskToSend(
+  pending: PendingSlackAsk | null,
+  draftId: DraftId,
+  settledIntegration: () => Promise<SlackIntegration>,
+): Promise<PendingSlackAsk | null | "unknown"> {
+  if (pending?.draftId !== draftId) return null;
+  const integration = await settledIntegration();
+  return integration === "unknown"
+    ? integration
+    : slackAskFor(pending, integration === "on", { draftId });
+}
+
+export function pendingSlackAsk(draftId: DraftId) {
+  return slackAskToSend(useSlackAskStore.getState().pending, draftId, settledSlackIntegration);
 }
 
 export function endSlackAsk(draftId: DraftId): PendingSlackAsk | null {

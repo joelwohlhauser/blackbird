@@ -212,6 +212,7 @@ export class SlackApi extends Context.Service<
       readonly bytes: Uint8Array;
     }) => Effect.Effect<void, SlackError>;
     readonly guard: (check: Effect.Effect<void, SlackError>) => Effect.Effect<void>;
+    readonly allowed: Effect.Effect<void, SlackError>;
   }
 >()("t3/slack/SlackApi") {}
 
@@ -374,6 +375,7 @@ const make = Effect.gen(function* () {
     guard: Effect.fn("SlackApi.guard")(function* (check) {
       yield* Ref.set(guardRef, check);
     }),
+    allowed,
     fetchFile: Effect.fn("SlackApi.fetchFile")(function* (input) {
       const target = URL.parse(input.url);
       if (

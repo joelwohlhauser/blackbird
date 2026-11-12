@@ -48,6 +48,7 @@ const make = Effect.gen(function* () {
     signals: Queue.Queue<SlackSocketSignal>,
     connection: { up: boolean },
   ) {
+    yield* api.allowed;
     const socket = yield* Socket.makeWebSocket(url, { openTimeout: "15 seconds" }).pipe(
       Effect.provideService(Socket.WebSocketConstructor, webSocketConstructor),
     );
@@ -112,6 +113,6 @@ const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(SlackSocket, make).pipe(
-  Layer.provide(upstreamWebSocketConstructor),
-);
+export const layerWithoutWebSocket = Layer.effect(SlackSocket, make);
+
+export const layer = layerWithoutWebSocket.pipe(Layer.provide(upstreamWebSocketConstructor));

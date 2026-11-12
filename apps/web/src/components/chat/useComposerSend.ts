@@ -791,7 +791,13 @@ export function useComposerSend(input: ComposerSendInput) {
     // Records bind attachments by the id each side knows: the local id for the optimistic
     // row, the upload id (or local id on the data-URL path) on the wire; the server
     // rebinds them to the persisted id.
-    const slackAsk = isLocalDraftThread && draftId ? pendingSlackAsk(draftId) : null;
+    sendInFlightRef.current = true;
+    const slackAsk = isLocalDraftThread && draftId ? await pendingSlackAsk(draftId) : null;
+    sendInFlightRef.current = false;
+    if (slackAsk === "unknown") {
+      setThreadError(threadIdForSend, "Slack is still loading. Send again in a moment.");
+      return;
+    }
     const buildComposerMessageContext = (attachmentIds: ReadonlyArray<string>) =>
       buildMessageContext({
         terminalContexts: composerTerminalContextsSnapshot,
