@@ -895,11 +895,13 @@ const make = Effect.gen(function* () {
     decode: (body: unknown) => Effect.Effect<A, Schema.SchemaError>,
     params?: Readonly<Record<string, string>>,
   ) =>
-    requireFollowing.pipe(
-      Effect.andThen(
-        webSession.call({ workspaceUrl, method, decode, ...(params ? { params } : {}) }),
-      ),
-    );
+    webSession.call({
+      workspaceUrl,
+      allowed: requireFollowing,
+      method,
+      decode,
+      ...(params ? { params } : {}),
+    });
 
   const stopFollowingSlack = update(({ web: _web, ...state }) => state);
 

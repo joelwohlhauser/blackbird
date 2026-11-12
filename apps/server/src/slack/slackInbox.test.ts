@@ -557,6 +557,12 @@ describe("slackInbox", () => {
       ),
       ["done", "unread", "unread"],
     );
+    assert.strictEqual(
+      run([read(CHANNEL, { muted: true, lastRead: "30.000001" })], muted).items.get(
+        `${CHANNEL}:26.000001`,
+      )?.state,
+      "done",
+    );
 
     const channelRead = read(CHANNEL, { unreadRoots: new Set(["12.000001"]) });
     assert.deepStrictEqual(states(run([channelRead, read(DIRECT, { hasUnreads: true })], inbox)), {

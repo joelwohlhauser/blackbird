@@ -287,9 +287,8 @@ function applyRead(
 ): SlackInbox {
   const isRead = (item: SlackInboxRecord) => {
     if (item.rootTs === undefined) return !input.hasUnreads && input.unreadRoots?.size === 0;
-    const rootIsRead = input.muted
-      ? !item.mentionsSelf
-      : compareSlackTs(item.rootTs, input.lastRead) <= 0;
+    const rootIsRead =
+      compareSlackTs(item.rootTs, input.lastRead) <= 0 || (input.muted && !item.mentionsSelf);
     if (!rootIsRead) return false;
     return item.latestTs === item.rootTs || input.unreadRoots?.has(item.rootTs) === false;
   };

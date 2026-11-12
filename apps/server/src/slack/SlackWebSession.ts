@@ -11,7 +11,6 @@ import * as DesktopBrowserChannel from "../preview/DesktopBrowserChannel.ts";
 import * as SlackApi from "./SlackApi.ts";
 
 const SESSION_TOKEN = /"api_token":"(xoxc-[^"]+)"/;
-const SIGNED_OUT_CODES = new Set(["invalid_auth", "not_authed", "token_revoked"]);
 
 const NOT_SIGNED_IN = new SlackError({
   reason: "not_connected",
@@ -34,6 +33,7 @@ export class SlackWebSession extends Context.Service<
     readonly available: boolean;
     readonly call: <A>(input: {
       readonly workspaceUrl: string;
+      readonly allowed: Effect.Effect<void, SlackError>;
       readonly method: string;
       readonly params?: Readonly<Record<string, string>>;
       readonly decode: (body: unknown) => Effect.Effect<A, Schema.SchemaError>;
@@ -41,14 +41,20 @@ export class SlackWebSession extends Context.Service<
   }
 >()("t3/slack/SlackWebSession") {}
 
-const make = Effect.gen(function* () {
+export const make = Effect.gen(function* () {
   const channel = yield* DesktopBrowserChannel.DesktopBrowserChannel;
   const api = yield* SlackApi.SlackApi;
   const partitionScope = yield* (yield* ServerEnvironment.ServerEnvironment).getEnvironmentId;
   const tokenRef = yield* Ref.make<string | undefined>(undefined);
 
-  const fetch = (target: string, url: string, form?: string) =>
-    api.allowed.pipe(
+  const fetch = (
+    allowed: Effect.Effect<void, SlackError>,
+    target: string,
+    url: string,
+    form?: string,
+  ) =>
+    allowed.pipe(
+      Effect.andThen(api.allowed),
       Effect.andThen(
         channel.fetch({ partitionScope, url, ...(form === undefined ? {} : { form }) }),
       ),
@@ -60,10 +66,13 @@ const make = Effect.gen(function* () {
       ),
     );
 
-  const readToken = Effect.fnUntraced(function* (workspaceUrl: string) {
+  const readToken = Effect.fnUntraced(function* (
+    allowed: Effect.Effect<void, SlackError>,
+    workspaceUrl: string,
+  ) {
     const known = yield* Ref.get(tokenRef);
     if (known !== undefined) return known;
-    const page = yield* fetch("sign-in", new URL("/ssb/redirect", workspaceUrl).href);
+    const page = yield* fetch(allowed, "sign-in", new URL("/ssb/redirect", workspaceUrl).href);
     const token = SESSION_TOKEN.exec(page.body)?.[1];
     if (token === undefined) return yield* NOT_SIGNED_IN;
     yield* Ref.set(tokenRef, token);
@@ -73,8 +82,9 @@ const make = Effect.gen(function* () {
   return SlackWebSession.of({
     available: channel.available,
     call: Effect.fn("SlackWebSession.call")(function* (input) {
-      const token = yield* readToken(input.workspaceUrl);
+      const token = yield* readToken(input.allowed, input.workspaceUrl);
       const response = yield* fetch(
+        input.allowed,
         input.method,
         new URL(`/api/${input.method}`, input.workspaceUrl).href,
         new URLSearchParams({ token, ...input.params }).toString(),
@@ -87,9 +97,12 @@ const make = Effect.gen(function* () {
         });
       }
       if (!envelope.value.ok) {
-        const code = envelope.value.error ?? "unknown_error";
-        if (SIGNED_OUT_CODES.has(code)) yield* Ref.set(tokenRef, undefined);
-        return yield* SlackApi.slackErrorForCode(input.method, code);
+        const error = SlackApi.slackErrorForCode(
+          input.method,
+          envelope.value.error ?? "unknown_error",
+        );
+        if (error.reason === "invalid_token") yield* Ref.set(tokenRef, undefined);
+        return yield* error;
       }
       return yield* input.decode(Option.getOrUndefined(decodeJson(response.body))).pipe(
         Effect.mapError(
