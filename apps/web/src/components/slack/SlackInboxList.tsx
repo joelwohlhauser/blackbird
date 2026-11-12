@@ -90,7 +90,12 @@ function SlackInboxRow({
           ) : null}
           <span className="shrink-0 tabular-nums">{time}</span>
         </span>
-        <span className="line-clamp-2 text-sm text-foreground">
+        <span
+          className={cn(
+            "line-clamp-2 text-sm",
+            item.state === "done" ? "text-muted-foreground" : "text-foreground",
+          )}
+        >
           {author === undefined ? null : <span className="font-medium">{author.name}: </span>}
           {item.preview}
         </span>

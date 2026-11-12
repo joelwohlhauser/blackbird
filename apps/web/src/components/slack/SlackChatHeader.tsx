@@ -74,9 +74,9 @@ export function SlackChatBackLink(props: SlackChatProps) {
         }
       >
         <ChevronLeftIcon />
-        <span className={COLLAPSING_LABEL_CLASS}>Unreads</span>
+        <span className={COLLAPSING_LABEL_CLASS}>Activity</span>
       </TooltipTrigger>
-      <TooltipPopup side="bottom">Back to Unreads</TooltipPopup>
+      <TooltipPopup side="bottom">Back to Activity</TooltipPopup>
     </Tooltip>
   );
 }

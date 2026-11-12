@@ -194,8 +194,8 @@ function SlackItemActions({ controls }: { readonly controls: SlackItemControls }
           </Button>
         }
       />
-      {controls.item.state === "snoozed" ? (
-        <HeaderAction label="Move to Unreads" onClick={controls.onUnsnooze}>
+      {controls.item.state !== "unread" ? (
+        <HeaderAction label="Mark unread" onClick={controls.onUnsnooze}>
           <InboxIcon />
         </HeaderAction>
       ) : (
@@ -210,9 +210,11 @@ function SlackItemActions({ controls }: { readonly controls: SlackItemControls }
           }
         />
       )}
-      <HeaderAction label="Done (E)" onClick={controls.onDone}>
-        <CheckIcon />
-      </HeaderAction>
+      {controls.item.state === "done" ? null : (
+        <HeaderAction label="Done (E)" onClick={controls.onDone}>
+          <CheckIcon />
+        </HeaderAction>
+      )}
     </>
   );
 }

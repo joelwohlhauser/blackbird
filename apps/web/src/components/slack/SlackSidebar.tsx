@@ -407,7 +407,7 @@ export function SlackSidebar() {
             <SidebarMenu>
               <ViewRow
                 icon={<InboxIcon />}
-                label="Unreads"
+                label="Activity"
                 count={unreadCount}
                 active={inboxActive && location.view !== "snoozed"}
                 onClick={() => open({})}

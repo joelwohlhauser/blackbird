@@ -91,6 +91,7 @@ export type SlackInboxInput =
     };
 
 const PREVIEW_MAX_LENGTH = 200;
+const DONE_ITEMS_SHOWN = 100;
 const SEED_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const BROADCAST_MENTION = /<!(?:channel|here|everyone)(?:\|[^>]*)?>/;
 
@@ -396,10 +397,12 @@ export function applyInboxInput(inbox: SlackInbox, input: SlackInboxInput): Slac
 }
 
 export function visibleSlackInboxItems(inbox: SlackInbox): ReadonlyArray<SlackInboxItem> {
+  let done = 0;
   return [...inbox.items.values()]
-    .filter((item) => item.state !== "done" && !isRoutedToChat(inbox, item.key))
-    .map(({ acknowledgedThroughTs: _acknowledgedThroughTs, ...item }) => item)
-    .toSorted((left, right) => compareSlackTs(right.latestTs, left.latestTs));
+    .filter((item) => !isRoutedToChat(inbox, item.key))
+    .toSorted((left, right) => compareSlackTs(right.latestTs, left.latestTs))
+    .filter((item) => item.state !== "done" || (done += 1) <= DONE_ITEMS_SHOWN)
+    .map(({ acknowledgedThroughTs: _acknowledgedThroughTs, ...item }) => item);
 }
 
 export function unreadItemCounts(inbox: SlackInbox): ReadonlyMap<string, number> {

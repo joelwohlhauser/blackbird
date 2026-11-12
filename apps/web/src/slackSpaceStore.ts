@@ -8,6 +8,8 @@ interface SlackSpaceState {
   readonly setSpace: (space: AppSpace) => void;
   readonly collapsedSidebarGroups: ReadonlyArray<string>;
   readonly toggleSidebarGroup: (groupId: string) => void;
+  readonly activityUnreadsOnly: boolean;
+  readonly setActivityUnreadsOnly: (unreadsOnly: boolean) => void;
 }
 
 export const useSlackSpaceStore = create<SlackSpaceState>()(
@@ -22,6 +24,8 @@ export const useSlackSpaceStore = create<SlackSpaceState>()(
             ? collapsedSidebarGroups.filter((id) => id !== groupId)
             : [...collapsedSidebarGroups, groupId],
         })),
+      activityUnreadsOnly: true,
+      setActivityUnreadsOnly: (activityUnreadsOnly) => set({ activityUnreadsOnly }),
     }),
     { name: "blackbird:slack-space:v1" },
   ),

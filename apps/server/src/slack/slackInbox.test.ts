@@ -230,7 +230,10 @@ describe("slackInbox", () => {
     assert.strictEqual(done.items.get(DIRECT)?.acknowledgedThroughTs, "11.000001");
 
     assert.strictEqual(run([direct("10.000001"), direct("11.000001")], done), done);
-    assert.strictEqual(visibleSlackInboxItems(done).length, 0);
+    assert.deepStrictEqual(
+      visibleSlackInboxItems(done).map((item) => item.state),
+      ["done"],
+    );
 
     const unread = run([direct("12.000001")], done);
     assert.strictEqual(unread.items.get(DIRECT)?.state, "unread");
@@ -435,8 +438,11 @@ describe("slackInbox", () => {
     const reply = run([message("13.000001", { threadTs: "10.000001" })], agents);
     assert.strictEqual(reply.items.get(THREAD_KEY)?.state, "unread");
     assert.deepStrictEqual(
-      visibleSlackInboxItems(reply).map((item) => item.key),
-      [THREAD_KEY],
+      visibleSlackInboxItems(reply).map((item) => [item.key, item.state]),
+      [
+        [THREAD_KEY, "unread"],
+        [second, "done"],
+      ],
     );
     assert.deepStrictEqual(chatsToMarkUnread(agents, reply, SELF), []);
     assert.strictEqual(run([{ type: "chat", threadId: CHAT, state: "closed" }], reply), reply);
@@ -618,8 +624,19 @@ describe("slackInbox", () => {
         [DIRECT, "unread"],
         [`${CHANNEL}:12.000001`, "unread"],
         [`${CHANNEL}:11.000001`, "snoozed"],
+        [`${CHANNEL}:10.000001`, "done"],
       ],
     );
+    const finished = run(
+      Array.from({ length: 101 }, (_, index) => `${200 + index}.000001`).flatMap((ts) => [
+        message(ts, {}, "everything"),
+        { type: "action" as const, key: `${CHANNEL}:${ts}`, state: "done" as const },
+      ]),
+      inbox,
+    );
+    const shown = visibleSlackInboxItems(finished);
+    assert.strictEqual(shown.filter((item) => item.state === "done").length, 100);
+    assert.strictEqual(shown.filter((item) => item.state !== "done").length, 3);
     assert.strictEqual("acknowledgedThroughTs" in (visibleSlackInboxItems(inbox)[0] ?? {}), false);
   });
 
