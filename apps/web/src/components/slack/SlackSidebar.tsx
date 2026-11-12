@@ -18,8 +18,8 @@ import {
   useSidebar,
 } from "../ui/sidebar";
 import { Switch } from "../ui/switch";
-import { buildSlackDirectory, SlackDirectoryContext, useSlackDirectory } from "./slackDirectory";
-import { groupSlackConversations, slackConversationLabel } from "./slackInbox.logic";
+import { SlackSnapshotProvider } from "./SlackDirectoryProvider";
+import { groupSlackConversations } from "./slackInbox.logic";
 import { SlackConversationIcon } from "./SlackPanes";
 import type { SlackSearch } from "./slackSearch";
 import { validateSlackSearch } from "./slackSearch";
@@ -41,7 +41,6 @@ function ConversationRow({
   readonly active: boolean;
   readonly onOpen: (search: SlackSearch) => void;
 }) {
-  const { users } = useSlackDirectory();
   const unread = conversation.unreadItemCount > 0;
   return (
     <SidebarMenuItem>
@@ -53,7 +52,7 @@ function ConversationRow({
             unread && "font-semibold text-sidebar-foreground",
           )}
         >
-          {slackConversationLabel(conversation, users)}
+          {conversation.name}
         </span>
         <SidebarCount count={conversation.unreadItemCount} />
       </SidebarMenuButton>
@@ -142,14 +141,13 @@ export function SlackSidebar() {
     );
   }
 
-  const directory = buildSlackDirectory(environmentId, snapshot, undefined);
-  const groups = groupSlackConversations(snapshot.conversations, directory.users);
+  const groups = groupSlackConversations(snapshot.conversations);
   const unreadCount = snapshot.items.filter((item) => item.state === "unread").length;
   const snoozedCount = snapshot.items.filter((item) => item.state === "snoozed").length;
   const inboxActive = location !== null && location.c === undefined;
 
   return (
-    <SlackDirectoryContext value={directory}>
+    <SlackSnapshotProvider environmentId={environmentId} snapshot={snapshot}>
       <SidebarChromeHeader isElectron={isElectron} />
       <SidebarContent
         fixedHeader={
@@ -203,6 +201,6 @@ export function SlackSidebar() {
         </label>
       </div>
       <SidebarChromeFooter />
-    </SlackDirectoryContext>
+    </SlackSnapshotProvider>
   );
 }

@@ -4293,7 +4293,7 @@ export default function ChatView(props: ChatViewProps) {
           />
         );
       case "slack-thread":
-        return <SlackThreadTab key={surface.id} surface={surface} />;
+        return <SlackThreadTab key={surface.id} itemKey={surface.itemKey} />;
       case "thread":
         return (
           <ThreadTranscriptPanel

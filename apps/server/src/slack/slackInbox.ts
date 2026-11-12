@@ -1,11 +1,16 @@
-import type {
-  SlackConversationKind,
-  SlackInboxItem,
-  SlackInboxMode,
-  SlackInboxState,
-  SlackThreadHome,
-  SlackThreadLink,
+import {
+  compareSlackTs,
+  parseSlackInboxItemKey,
+  slackInboxItemKey,
+  type SlackConversationKind,
+  type SlackInboxItem,
+  type SlackInboxMode,
+  type SlackInboxState,
+  type SlackThreadHome,
+  type SlackThreadLink,
 } from "@t3tools/contracts";
+
+export { compareSlackTs, slackInboxItemKey };
 
 export interface SlackInboxRecord extends SlackInboxItem {
   readonly doneThroughTs?: string;
@@ -81,34 +86,12 @@ const PREVIEW_MAX_LENGTH = 200;
 const SEED_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const BROADCAST_MENTION = /<!(?:channel|here|everyone)(?:\|[^>]*)?>/;
 
-export function compareSlackTs(left: string, right: string): number {
-  const [leftSeconds = "0", leftMicros = "0"] = left.split(".");
-  const [rightSeconds = "0", rightMicros = "0"] = right.split(".");
-  return Number(leftSeconds) - Number(rightSeconds) || Number(leftMicros) - Number(rightMicros);
-}
-
 export function slackSeedThreshold(lastRead: string, startedAt: string): string {
   const floor = (Number(startedAt) - SEED_MAX_AGE_SECONDS).toFixed(6);
   return compareSlackTs(lastRead, floor) > 0 ? lastRead : floor;
 }
 
 export const isSlackDirectKind = (kind: SlackConversationKind) => kind === "im" || kind === "mpim";
-
-export const slackInboxItemKey = (
-  kind: SlackConversationKind,
-  conversationId: string,
-  rootTs: string,
-) => (isSlackDirectKind(kind) ? conversationId : `${conversationId}:${rootTs}`);
-
-function parseSlackInboxItemKey(key: string): {
-  readonly conversationId: string;
-  readonly rootTs?: string;
-} {
-  const separator = key.indexOf(":");
-  return separator === -1
-    ? { conversationId: key }
-    : { conversationId: key.slice(0, separator), rootTs: key.slice(separator + 1) };
-}
 
 const withItem = (items: SlackInbox["items"], item: SlackInboxRecord) =>
   new Map(items).set(item.key, item);

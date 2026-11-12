@@ -4,8 +4,10 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   applySlackEvent,
   applySlackReaction,
-  compareSlackTs,
+  EMPTY_SLACK_MESSAGE_LIST,
   mergeSlackMessages,
+  reduceSlackMessageList,
+  type SlackMessageListInput,
   type SlackMessageScope,
 } from "./slackMessages.logic";
 
@@ -34,14 +36,6 @@ function added(value: SlackMessage): SlackEvent {
     message: value,
   };
 }
-
-describe("compareSlackTs", () => {
-  it("orders by time, including across a digit boundary", () => {
-    expect(compareSlackTs("100.000001", "100.000002")).toBeLessThan(0);
-    expect(compareSlackTs("999.000001", "1000.000001")).toBeLessThan(0);
-    expect(compareSlackTs("100.000001", "100.000001")).toBe(0);
-  });
-});
 
 describe("mergeSlackMessages", () => {
   it("sorts, replaces by ts, and keeps the list when nothing arrives", () => {
@@ -150,5 +144,81 @@ describe("applySlackEvent", () => {
     ]);
     const other = [message("900.000001")];
     expect(applySlackEvent(other, event, conversation)).toBe(other);
+  });
+});
+
+describe("reduceSlackMessageList", () => {
+  const run = (inputs: ReadonlyArray<SlackMessageListInput>) =>
+    inputs.reduce(
+      (list, input) => reduceSlackMessageList(list, input, conversation),
+      EMPTY_SLACK_MESSAGE_LIST,
+    );
+  const loaded: ReadonlyArray<SlackMessageListInput> = [
+    { type: "page", page: { messages: [message("100.000001"), message("200.000001")] } },
+    { type: "fetching", source: "first", on: true },
+  ];
+  const stalePage: SlackMessageListInput = {
+    type: "page",
+    page: { messages: [message("100.000001"), message("200.000001")] },
+  };
+  const settled: SlackMessageListInput = { type: "fetching", source: "first", on: false };
+
+  it("keeps a live edit that arrived while the page was in flight", () => {
+    const edited = message("200.000001", { text: "edited" });
+    const list = run([
+      ...loaded,
+      {
+        type: "event",
+        event: { type: "message.changed", conversationId: "C001", ts: edited.ts, message: edited },
+      },
+      stalePage,
+      settled,
+    ]);
+    expect(list.messages).toEqual([message("100.000001"), edited]);
+    expect(list.racing).toEqual([]);
+  });
+
+  it("keeps a live deletion that arrived while the page was in flight", () => {
+    const list = run([
+      ...loaded,
+      {
+        type: "event",
+        event: { type: "message.deleted", conversationId: "C001", ts: "200.000001" },
+      },
+      stalePage,
+      settled,
+    ]);
+    expect(list.messages).toEqual([message("100.000001")]);
+  });
+
+  it("drops a cached message that the refreshed page no longer holds", () => {
+    const list = run([
+      ...loaded,
+      { type: "page", page: { messages: [message("200.000001")] } },
+      settled,
+    ]);
+    expect(list.messages).toEqual([message("200.000001")]);
+  });
+
+  it("replaces only the range a page covers and keeps older pages", () => {
+    const list = run([
+      { type: "page", page: { messages: [message("300.000001")], hasMore: true } },
+      {
+        type: "page",
+        before: "300.000001",
+        page: { messages: [message("100.000001"), message("200.000001")], hasMore: false },
+      },
+      {
+        type: "page",
+        page: { messages: [message("250.000001"), message("400.000001")], hasMore: true },
+      },
+    ]);
+    expect(list.messages.map((entry) => entry.ts)).toEqual([
+      "100.000001",
+      "200.000001",
+      "250.000001",
+      "400.000001",
+    ]);
+    expect(list.hasMore).toBe(false);
   });
 });

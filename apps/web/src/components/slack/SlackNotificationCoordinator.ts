@@ -7,6 +7,7 @@ import { primaryEnvironmentIdAtom } from "../../state/primaryEnvironment";
 import { slackEnvironment } from "../../state/slack";
 import { hasDesktopNotifications } from "../../threadNotifications";
 import { newlyUnreadSlackItems, unreadSlackItemTimes } from "./slackInbox.logic";
+import { openSlack } from "./slackNavigation";
 
 function notify(router: AnyRouter, snapshot: SlackSnapshot, item: SlackInboxItem) {
   const author = snapshot.users.find((user) => user.id === item.latestAuthorId)?.name;
@@ -24,7 +25,7 @@ function notify(router: AnyRouter, snapshot: SlackSnapshot, item: SlackInboxItem
       notification.close();
       window.focus();
       void window.desktopBridge?.revealWindow().catch(() => undefined);
-      void router.navigate({ to: "/slack", search: { item: item.key } });
+      void openSlack((options) => router.navigate(options), { item: item.key });
     });
   } catch {
     return;

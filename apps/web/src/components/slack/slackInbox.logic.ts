@@ -1,30 +1,4 @@
-import type {
-  SlackConversation,
-  SlackInboxItem,
-  SlackInboxState,
-  SlackUser,
-} from "@t3tools/contracts";
-
-import { compareSlackTs } from "./slackMessages.logic";
-
-export function parseSlackItemKey(key: string): {
-  readonly conversationId: string;
-  readonly rootTs?: string;
-} {
-  const separator = key.indexOf(":");
-  return separator === -1
-    ? { conversationId: key }
-    : { conversationId: key.slice(0, separator), rootTs: key.slice(separator + 1) };
-}
-
-export function slackItemsInState(
-  items: ReadonlyArray<SlackInboxItem>,
-  state: SlackInboxState,
-): ReadonlyArray<SlackInboxItem> {
-  return items
-    .filter((item) => item.state === state)
-    .toSorted((left, right) => compareSlackTs(right.latestTs, left.latestTs));
-}
+import { compareSlackTs, type SlackConversation, type SlackInboxItem } from "@t3tools/contracts";
 
 export function moveSlackSelection(
   keys: ReadonlyArray<string>,
@@ -94,16 +68,6 @@ export function newlyUnreadSlackItems(
   });
 }
 
-export function slackConversationLabel(
-  conversation: SlackConversation,
-  users: ReadonlyMap<string, SlackUser>,
-): string {
-  if (conversation.kind === "im" && conversation.userId !== undefined) {
-    return users.get(conversation.userId)?.name ?? conversation.name;
-  }
-  return conversation.name;
-}
-
 export interface SlackConversationGroups {
   readonly starred: ReadonlyArray<SlackConversation>;
   readonly channels: ReadonlyArray<SlackConversation>;
@@ -112,11 +76,8 @@ export interface SlackConversationGroups {
 
 export function groupSlackConversations(
   conversations: ReadonlyArray<SlackConversation>,
-  users: ReadonlyMap<string, SlackUser>,
 ): SlackConversationGroups {
-  const sorted = conversations.toSorted((left, right) =>
-    slackConversationLabel(left, users).localeCompare(slackConversationLabel(right, users)),
-  );
+  const sorted = conversations.toSorted((left, right) => left.name.localeCompare(right.name));
   const rest = sorted.filter((conversation) => !conversation.isStarred);
   const isChannel = (conversation: SlackConversation) =>
     conversation.kind === "channel" || conversation.kind === "private_channel";
@@ -125,9 +86,4 @@ export function groupSlackConversations(
     channels: rest.filter(isChannel),
     directMessages: rest.filter((conversation) => !isChannel(conversation)),
   };
-}
-
-export function slackWebUrl(teamId: string, conversationId: string, rootTs?: string): string {
-  const base = `https://app.slack.com/client/${teamId}/${conversationId}`;
-  return rootTs === undefined ? base : `${base}/thread/${conversationId}-${rootTs}`;
 }

@@ -9,8 +9,7 @@ import { formatRelativeTime } from "../../timestampFormat";
 import { useUiStateStore } from "../../uiStateStore";
 import { resolveThreadLastVisitedAt, resolveThreadStatusPill } from "../Sidebar.logic";
 import { ThreadStatusLabel } from "../ThreadStatusIndicators";
-import { useSlackDirectory } from "./slackDirectory";
-import { slackConversationLabel } from "./slackInbox.logic";
+import { useSlackDirectory, useSlackInbox } from "./slackDirectory";
 import { slackTsToDate } from "./slackMessages.logic";
 import { SlackConversationIcon } from "./SlackPanes";
 
@@ -52,11 +51,10 @@ function SlackInboxRow({
   readonly nowMs: number;
   readonly onSelect: (key: string) => void;
 }) {
-  const { environmentId, conversations, users, links } = useSlackDirectory();
+  const { environmentId, conversations, users } = useSlackDirectory();
   const conversation = conversations.get(item.conversationId);
-  const link = links.get(item.key);
-  const label =
-    conversation === undefined ? item.conversationId : slackConversationLabel(conversation, users);
+  const link = useSlackInbox().links.get(item.key);
+  const label = conversation?.name ?? item.conversationId;
   const author = item.latestAuthorId === undefined ? undefined : users.get(item.latestAuthorId);
   const time =
     item.state === "snoozed" && item.snoozedUntil !== undefined

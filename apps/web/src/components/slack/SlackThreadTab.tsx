@@ -1,15 +1,25 @@
-import type { SlackThreadSurface } from "../../rightPanelStore";
+import { parseSlackInboxItemKey } from "@t3tools/contracts";
+
+import { useSlackInbox } from "./slackDirectory";
 import { SlackDirectoryProvider } from "./SlackDirectoryProvider";
 import { SlackConversationView, SlackThreadView } from "./SlackPanes";
+import { useSlackItemControls } from "./useSlackItemControls";
 
-export function SlackThreadTab({ surface }: { readonly surface: SlackThreadSurface }) {
+function SlackItemThread({ itemKey }: { readonly itemKey: string }) {
+  const { items } = useSlackInbox();
+  const controls = useSlackItemControls(items.find((item) => item.key === itemKey));
+  const { conversationId, rootTs } = parseSlackInboxItemKey(itemKey);
+  return rootTs === undefined ? (
+    <SlackConversationView conversationId={conversationId} controls={controls} />
+  ) : (
+    <SlackThreadView conversationId={conversationId} rootTs={rootTs} controls={controls} />
+  );
+}
+
+export function SlackThreadTab({ itemKey }: { readonly itemKey: string }) {
   return (
     <SlackDirectoryProvider>
-      {surface.rootTs === undefined ? (
-        <SlackConversationView conversationId={surface.conversationId} />
-      ) : (
-        <SlackThreadView conversationId={surface.conversationId} rootTs={surface.rootTs} />
-      )}
+      <SlackItemThread itemKey={itemKey} />
     </SlackDirectoryProvider>
   );
 }

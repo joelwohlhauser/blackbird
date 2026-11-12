@@ -9,7 +9,7 @@ import {
   type CommandPaletteActionItem,
   type CommandPaletteSubmenuItem,
 } from "../CommandPalette.logic";
-import { slackConversationLabel } from "./slackInbox.logic";
+import { openSlack } from "./slackNavigation";
 
 export function useSlackCommandPaletteItem(): CommandPaletteSubmenuItem | null {
   const navigate = useNavigate();
@@ -19,7 +19,6 @@ export function useSlackCommandPaletteItem(): CommandPaletteSubmenuItem | null {
     return null;
   }
 
-  const users = new Map(snapshot.users.map((user) => [user.id, user]));
   const directMessageUserIds = new Set(
     snapshot.conversations.flatMap((conversation) =>
       conversation.kind === "im" && conversation.userId !== undefined ? [conversation.userId] : [],
@@ -28,7 +27,7 @@ export function useSlackCommandPaletteItem(): CommandPaletteSubmenuItem | null {
   const conversationItems: CommandPaletteActionItem[] = snapshot.conversations.map(
     (conversation) => {
       const isChannel = conversation.kind === "channel" || conversation.kind === "private_channel";
-      const label = `${isChannel ? "#" : ""}${slackConversationLabel(conversation, users)}`;
+      const label = `${isChannel ? "#" : ""}${conversation.name}`;
       return {
         kind: "action",
         value: `slack:conversation:${conversation.id}`,
@@ -40,7 +39,7 @@ export function useSlackCommandPaletteItem(): CommandPaletteSubmenuItem | null {
           <UserIcon className={ITEM_ICON_CLASS} />
         ),
         run: async () => {
-          await navigate({ to: "/slack", search: { c: conversation.id } });
+          await openSlack(navigate, { c: conversation.id });
         },
       };
     },
@@ -59,7 +58,7 @@ export function useSlackCommandPaletteItem(): CommandPaletteSubmenuItem | null {
       run: async () => {
         const result = await openDirectMessage({ environmentId, input: { userId: user.id } });
         if (result._tag === "Success") {
-          await navigate({ to: "/slack", search: { c: result.value.id } });
+          await openSlack(navigate, { c: result.value.id });
         }
       },
     }));

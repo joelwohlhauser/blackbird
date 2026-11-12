@@ -1,7 +1,7 @@
 import { RegistryContext } from "@effect/atom-react";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
-import type { SlackThreadLink } from "@t3tools/contracts";
+import { parseSlackInboxItemKey, type SlackThreadLink } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useContext } from "react";
 
@@ -13,41 +13,45 @@ import { buildThreadRouteParams } from "../../threadRoutes";
 import { toastManager } from "../ui/toast";
 import {
   beginSlackAsk,
+  slackAskItemKey,
   slackThreadContextRecord,
-  slackThreadTarget,
   slackThreadTitle,
   slackTranscript,
 } from "./slackAsk";
-import type { SlackDirectory } from "./slackDirectory";
+import { useSlackDirectory, useSlackInbox } from "./slackDirectory";
 
-export function useSlackAskAgent(directory: SlackDirectory) {
+export function useSlackAskAgent() {
   const navigate = useNavigate();
   const registry = useContext(RegistryContext);
   const handleNewThread = useNewThreadHandler();
   const { openScratchProject } = useScratchProject();
-  const { environmentId, conversations, users, mrkdwn, links } = directory;
+  const { environmentId, conversations, users, mrkdwn } = useSlackDirectory();
+  const { links } = useSlackInbox();
 
   const openChat = (link: SlackThreadLink) => {
     const threadRef = scopeThreadRef(environmentId, link.threadId);
     useRightPanelStore
       .getState()
-      .openSlackThread(threadRef, { ...link, title: slackThreadTitle(link, conversations, users) });
+      .openSlackThread(threadRef, link.itemKey, slackThreadTitle(link.itemKey, conversations));
     void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(threadRef) });
   };
 
   const askAgent = async (conversationId: string, rootTs: string | undefined) => {
-    const target = slackThreadTarget(conversations.get(conversationId), conversationId, rootTs);
-    const link = links.get(target.itemKey);
+    const itemKey = slackAskItemKey(conversations, conversationId, rootTs);
+    const link = links.get(itemKey);
     if (link !== undefined) {
       openChat(link);
       return;
     }
-    const input = { conversationId };
+    const target = parseSlackInboxItemKey(itemKey);
     const messages = await executeAtomQuery(
       registry,
       target.rootTs === undefined
-        ? slackEnvironment.history({ environmentId, input })
-        : slackEnvironment.thread({ environmentId, input: { ...input, rootTs: target.rootTs } }),
+        ? slackEnvironment.history({ environmentId, input: { conversationId } })
+        : slackEnvironment.thread({
+            environmentId,
+            input: { conversationId, rootTs: target.rootTs },
+          }),
       { reportFailure: false },
     );
     if (messages._tag !== "Success") {
@@ -63,22 +67,19 @@ export function useSlackAskAgent(directory: SlackDirectory) {
       startFromOrigin: false,
     });
     if (opened === null) return;
-    const title = slackThreadTitle(target, conversations, users);
+    const title = slackThreadTitle(itemKey, conversations);
     beginSlackAsk({
       ...opened,
-      target,
+      itemKey,
       record: slackThreadContextRecord(
-        target,
+        itemKey,
         title,
         slackTranscript(messages.value.messages, { users, mrkdwn }),
       ),
     });
     useRightPanelStore
       .getState()
-      .openSlackThread(scopeThreadRef(project.environmentId, opened.threadId), {
-        ...target,
-        title,
-      });
+      .openSlackThread(scopeThreadRef(project.environmentId, opened.threadId), itemKey, title);
   };
 
   return { askAgent, openChat };

@@ -51,30 +51,30 @@ export function useSlackBadgeCount(): number {
   return useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackBadgeCount);
 }
 
-function selectSlackThreadHomes(result: AsyncResult.AsyncResult<SlackSnapshot, unknown>): string {
+function selectSlackThreadLinks(result: AsyncResult.AsyncResult<SlackSnapshot, unknown>): string {
   const snapshot = AsyncResult.getOrElse(result, () => null);
   if (snapshot === null) return "";
-  return [...new Set(snapshot.links.map((link) => `${link.threadId} ${link.home}`))]
-    .toSorted()
-    .join("\n");
+  return snapshot.links.map((link) => `${link.threadId} ${link.home} ${link.itemKey}`).join("\n");
 }
 
-export function useSlackThreadHomes() {
+export function useSlackThreadLinks() {
   const environmentId = usePrimaryEnvironmentId();
-  const serialized = useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackThreadHomes);
-  const homes = new Map<string, SlackThreadHome>();
+  const serialized = useEnvironmentQuerySelector(useSlackSnapshotAtom(), selectSlackThreadLinks);
+  const links = new Map<string, { readonly home: SlackThreadHome; readonly itemKey: string }>();
   for (const entry of serialized.length === 0 ? [] : serialized.split("\n")) {
-    const separator = entry.lastIndexOf(" ");
-    homes.set(entry.slice(0, separator), entry.endsWith(" slack") ? "slack" : "agents");
+    const [threadId = "", home, itemKey = ""] = entry.split(" ");
+    if (!links.has(threadId)) {
+      links.set(threadId, { home: home === "slack" ? "slack" : "agents", itemKey });
+    }
   }
-  return { environmentId, homes };
+  return { environmentId, links };
 }
 
 export function useSlackHomeThreadKeys(): ReadonlySet<string> {
-  const { environmentId, homes } = useSlackThreadHomes();
+  const { environmentId, links } = useSlackThreadLinks();
   return new Set(
-    [...homes].flatMap(([threadId, home]) =>
-      home === "slack" && environmentId !== null ? [`${environmentId}:${threadId}`] : [],
+    [...links].flatMap(([threadId, link]) =>
+      link.home === "slack" && environmentId !== null ? [`${environmentId}:${threadId}`] : [],
     ),
   );
 }

@@ -1,13 +1,13 @@
-import type { SlackEvent, SlackMessage, SlackReaction } from "@t3tools/contracts";
+import {
+  compareSlackTs,
+  type SlackEvent,
+  type SlackMessage,
+  type SlackReaction,
+} from "@t3tools/contracts";
 
 export type SlackMessageScope =
   | { readonly kind: "conversation"; readonly conversationId: string }
   | { readonly kind: "thread"; readonly conversationId: string; readonly rootTs: string };
-
-export function compareSlackTs(left: string, right: string): number {
-  if (left.length !== right.length) return left.length - right.length;
-  return left < right ? -1 : left > right ? 1 : 0;
-}
 
 export function slackTsToDate(ts: string): Date {
   return new Date(Number(ts) * 1000);
@@ -130,5 +130,93 @@ export function applySlackEvent(
         const reactions = applySlackReaction(message.reactions, event);
         return reactions === message.reactions ? message : { ...message, reactions };
       });
+  }
+}
+
+export interface SlackMessagePage {
+  readonly messages: ReadonlyArray<SlackMessage>;
+  readonly hasMore?: boolean;
+}
+
+export type SlackPageSource = "first" | "older";
+
+export interface SlackMessageList {
+  readonly messages: ReadonlyArray<SlackMessage>;
+  readonly hasMore: boolean;
+  readonly loaded: boolean;
+  readonly fetching: Readonly<Record<SlackPageSource, boolean>>;
+  readonly racing: ReadonlyArray<SlackEvent>;
+}
+
+export const EMPTY_SLACK_MESSAGE_LIST: SlackMessageList = {
+  messages: [],
+  hasMore: false,
+  loaded: false,
+  fetching: { first: false, older: false },
+  racing: [],
+};
+
+export type SlackMessageListInput =
+  | { readonly type: "fetching"; readonly source: SlackPageSource; readonly on: boolean }
+  | { readonly type: "page"; readonly page: SlackMessagePage; readonly before?: string }
+  | { readonly type: "event"; readonly event: SlackEvent };
+
+function applyPage(
+  list: SlackMessageList,
+  page: SlackMessagePage,
+  before: string | undefined,
+): Pick<SlackMessageList, "messages" | "hasMore"> {
+  const hasMore = page.hasMore ?? false;
+  const from = hasMore
+    ? page.messages.reduce<string | undefined>(
+        (oldest, message) =>
+          oldest === undefined || compareSlackTs(message.ts, oldest) < 0 ? message.ts : oldest,
+        undefined,
+      )
+    : undefined;
+  if (hasMore && from === undefined) return list;
+  const older = list.messages.filter(
+    (message) => from !== undefined && compareSlackTs(message.ts, from) < 0,
+  );
+  const newer = list.messages.filter(
+    (message) => before !== undefined && compareSlackTs(message.ts, before) >= 0,
+  );
+  return {
+    messages: mergeSlackMessages([...older, ...newer], page.messages),
+    hasMore: before === undefined && older.length > 0 ? list.hasMore : hasMore,
+  };
+}
+
+export function reduceSlackMessageList(
+  list: SlackMessageList,
+  input: SlackMessageListInput,
+  scope: SlackMessageScope,
+): SlackMessageList {
+  switch (input.type) {
+    case "fetching": {
+      if (list.fetching[input.source] === input.on) return list;
+      const fetching = { ...list.fetching, [input.source]: input.on };
+      return { ...list, fetching, racing: fetching.first || fetching.older ? list.racing : [] };
+    }
+    case "page": {
+      const fetched = applyPage(list, input.page, input.before);
+      return {
+        ...list,
+        loaded: true,
+        hasMore: fetched.hasMore,
+        messages: list.racing.reduce(
+          (messages, event) => applySlackEvent(messages, event, scope),
+          fetched.messages,
+        ),
+      };
+    }
+    case "event": {
+      const messages = applySlackEvent(list.messages, input.event, scope);
+      const racing =
+        list.fetching.first || list.fetching.older ? [...list.racing, input.event] : list.racing;
+      return messages === list.messages && racing === list.racing
+        ? list
+        : { ...list, messages, racing };
+    }
   }
 }

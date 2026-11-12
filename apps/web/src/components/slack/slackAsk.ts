@@ -1,6 +1,8 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   COMPOSER_CONTEXT_SLACK_TEXT_MAX_CHARS,
+  parseSlackInboxItemKey,
+  slackInboxItemKey,
   type OrchestrationMessageContext,
   type SlackConversation,
   type SlackMessage,
@@ -13,53 +15,52 @@ import {
   toKindScopedComposerContextId,
 } from "@t3tools/shared/composerContextReferences";
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import { type DraftId, useComposerDraftStore } from "../../composerDraftStore";
 import { ensureInlineContextReferences } from "../../lib/composerContextReferences";
 import { slackThreadSurface, useRightPanelStore } from "../../rightPanelStore";
-import { slackConversationLabel } from "./slackInbox.logic";
 import { slackTsToDate } from "./slackMessages.logic";
 import { slackMrkdwnToMarkdown, type SlackMrkdwnContext } from "./slackMrkdwn";
-
-export interface SlackThreadTarget {
-  readonly itemKey: string;
-  readonly conversationId: string;
-  readonly rootTs?: string | undefined;
-}
 
 export interface PendingSlackAsk {
   readonly draftId: DraftId;
   readonly threadId: ThreadId;
-  readonly target: SlackThreadTarget;
+  readonly itemKey: string;
   readonly record: SlackThreadContextRecord;
 }
 
-export const useSlackAskStore = create<{ readonly pending: PendingSlackAsk | null }>(() => ({
-  pending: null,
-}));
+interface SlackAskState {
+  readonly pending: PendingSlackAsk | null;
+}
 
-export function slackThreadTarget(
-  conversation: Pick<SlackConversation, "id" | "kind"> | undefined,
+export const useSlackAskStore = create<SlackAskState>()(
+  persist((): SlackAskState => ({ pending: null }), { name: "blackbird:slack-ask:v1" }),
+);
+
+export function slackAskItemKey(
+  conversations: ReadonlyMap<string, Pick<SlackConversation, "kind">>,
   conversationId: string,
   rootTs: string | undefined,
-): SlackThreadTarget {
-  const isDirect = conversation?.kind === "im" || conversation?.kind === "mpim";
-  return isDirect || rootTs === undefined
-    ? { itemKey: conversationId, conversationId }
-    : { itemKey: `${conversationId}:${rootTs}`, conversationId, rootTs };
+): string {
+  return rootTs === undefined
+    ? conversationId
+    : slackInboxItemKey(
+        conversations.get(conversationId)?.kind ?? "channel",
+        conversationId,
+        rootTs,
+      );
 }
 
 export function slackThreadTitle(
-  target: SlackThreadTarget,
-  conversations: ReadonlyMap<string, SlackConversation>,
-  users: ReadonlyMap<string, SlackUser>,
+  itemKey: string,
+  conversations: ReadonlyMap<string, Pick<SlackConversation, "kind" | "name">>,
 ): string {
-  const conversation = conversations.get(target.conversationId);
+  const conversation = conversations.get(parseSlackInboxItemKey(itemKey).conversationId);
   if (conversation === undefined) return "Slack thread";
-  const label = slackConversationLabel(conversation, users);
   return conversation.kind === "channel" || conversation.kind === "private_channel"
-    ? `#${label}`
-    : label;
+    ? `#${conversation.name}`
+    : conversation.name;
 }
 
 export function slackTranscript(
@@ -93,17 +94,16 @@ export function slackTranscript(
 }
 
 export function slackThreadContextRecord(
-  target: SlackThreadTarget,
+  itemKey: string,
   title: string,
   text: string,
 ): SlackThreadContextRecord {
   return {
     version: 1,
     kind: "slack-thread",
-    contextId: toKindScopedComposerContextId("slack-thread", target.itemKey),
+    contextId: toKindScopedComposerContextId("slack-thread", itemKey),
     label: sanitizeComposerContextLabel(title, "slack-thread"),
-    conversationId: target.conversationId,
-    ...(target.rootTs === undefined ? {} : { rootTs: target.rootTs }),
+    ...parseSlackInboxItemKey(itemKey),
     text,
   };
 }
@@ -144,6 +144,6 @@ export function abandonSlackAsk(draftId: DraftId): void {
     .getState()
     .closeSurface(
       scopeThreadRef(draft.environmentId, draft.threadId),
-      slackThreadSurface(pending.target).id,
+      slackThreadSurface(pending.itemKey).id,
     );
 }

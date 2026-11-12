@@ -792,21 +792,20 @@ export function useComposerSend(input: ComposerSendInput) {
     // row, the upload id (or local id on the data-URL path) on the wire; the server
     // rebinds them to the persisted id.
     const slackAsk = isLocalDraftThread && draftId ? pendingSlackAsk(draftId) : null;
+    const buildComposerMessageContext = (attachmentIds: ReadonlyArray<string>) =>
+      buildMessageContext({
+        terminalContexts: composerTerminalContextsSnapshot,
+        reviewComments: composerReviewCommentsSnapshot,
+        previewAnnotations: composerPreviewAnnotationsSnapshot,
+        threadContexts: composerThreadContextsSnapshot,
+        environmentContexts: composerEnvironmentContextsSnapshot,
+        attachments: composerAttachmentsSnapshot.map((attachment, index) => ({
+          attachment,
+          attachmentId: attachmentIds[index] ?? attachment.id,
+        })),
+      });
     const buildOutgoingMessageContext = (attachmentIds: ReadonlyArray<string>) =>
-      withSlackAskContext(
-        buildMessageContext({
-          terminalContexts: composerTerminalContextsSnapshot,
-          reviewComments: composerReviewCommentsSnapshot,
-          previewAnnotations: composerPreviewAnnotationsSnapshot,
-          threadContexts: composerThreadContextsSnapshot,
-          environmentContexts: composerEnvironmentContextsSnapshot,
-          attachments: composerAttachmentsSnapshot.map((attachment, index) => ({
-            attachment,
-            attachmentId: attachmentIds[index] ?? attachment.id,
-          })),
-        }),
-        slackAsk,
-      );
+      withSlackAskContext(buildComposerMessageContext(attachmentIds), slackAsk);
     const outgoingMessageContext = buildOutgoingMessageContext(
       composerAttachmentsSnapshot.map((attachment) => attachment.id),
     );
@@ -1326,7 +1325,7 @@ export function useComposerSend(input: ComposerSendInput) {
         if (slackAsk) {
           void linkSlackThread({
             environmentId,
-            input: { itemKey: slackAsk.target.itemKey, threadId: threadIdForSend, home: "slack" },
+            input: { itemKey: slackAsk.itemKey, threadId: threadIdForSend, home: "slack" },
           });
         }
         setKeepFullHistory(routeThreadKey, false);

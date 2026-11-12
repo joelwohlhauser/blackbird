@@ -95,35 +95,22 @@ export type RightPanelSurface =
   | { id: "pull-requests"; kind: "pull-requests" }
   | { id: `thread:${string}`; kind: "thread"; threadId: ThreadId; title?: string }
   | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId }
-  | {
-      id: `slack-thread:${string}`;
-      kind: "slack-thread";
-      itemKey: string;
-      conversationId: string;
-      rootTs?: string;
-      title?: string;
-    };
+  | { id: `slack-thread:${string}`; kind: "slack-thread"; itemKey: string; title?: string };
 
-export type SlackThreadSurface = Extract<RightPanelSurface, { kind: "slack-thread" }>;
-
-export function slackThreadSurface(target: {
-  itemKey: string;
-  conversationId: string;
-  rootTs?: string | undefined;
-  title?: string | undefined;
-}): SlackThreadSurface {
+export function slackThreadSurface(
+  itemKey: string,
+  title?: string,
+): Extract<RightPanelSurface, { kind: "slack-thread" }> {
   return {
-    id: `slack-thread:${target.itemKey}`,
+    id: `slack-thread:${itemKey}`,
     kind: "slack-thread",
-    itemKey: target.itemKey,
-    conversationId: target.conversationId,
-    ...(target.rootTs === undefined ? {} : { rootTs: target.rootTs }),
-    ...(target.title === undefined ? {} : { title: target.title }),
+    itemKey,
+    ...(title === undefined ? {} : { title }),
   };
 }
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 16;
+const RIGHT_PANEL_STORAGE_VERSION = 15;
 
 /** The two workspace tab containers: the right panel and the main content area. */
 export type WorkspaceTabContainer = "panel" | "main";
@@ -266,7 +253,7 @@ interface RightPanelStoreState {
   ) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   openThread: (ref: ScopedThreadRef, threadId: ThreadId, title?: string) => void;
-  openSlackThread: (ref: ScopedThreadRef, target: Parameters<typeof slackThreadSurface>[0]) => void;
+  openSlackThread: (ref: ScopedThreadRef, itemKey: string, title: string) => void;
   splitTerminal: (
     ref: ScopedThreadRef,
     surfaceId: string,
@@ -749,13 +736,6 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
         }),
       ];
     }
-    if (surface.kind === "slack-thread") {
-      return typeof surface.itemKey === "string" &&
-        typeof surface.conversationId === "string" &&
-        surface.id === `slack-thread:${surface.itemKey}`
-        ? [slackThreadSurface(surface)]
-        : [];
-    }
     if (surface.kind !== "terminal") return [surface];
     if (
       !("resourceId" in surface) ||
@@ -1226,10 +1206,10 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             };
           }),
         })),
-      openSlackThread: (ref, target) =>
+      openSlackThread: (ref, itemKey, title) =>
         set((state) =>
           automaticUpdate(state, scopedThreadKey(ref), (current) => {
-            const surface = slackThreadSurface(target);
+            const surface = slackThreadSurface(itemKey, title);
             if (findSurface(current, (entry) => entry.id === surface.id)) {
               return upsertSurface(current, surface);
             }

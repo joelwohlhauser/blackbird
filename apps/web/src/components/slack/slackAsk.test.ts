@@ -2,8 +2,8 @@ import { COMPOSER_CONTEXT_SLACK_TEXT_MAX_CHARS, type SlackMessage } from "@t3too
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  slackAskItemKey,
   slackThreadContextRecord,
-  slackThreadTarget,
   slackTranscript,
   withSlackAskContext,
   withSlackAskReference,
@@ -32,17 +32,15 @@ function message(ts: string, overrides: Partial<SlackMessage> = {}): SlackMessag
   };
 }
 
-describe("slackThreadTarget", () => {
+describe("slackAskItemKey", () => {
   it("keys a channel thread by its root and a direct message by its conversation", () => {
-    expect(slackThreadTarget({ id: "C001", kind: "channel" }, "C001", "10.000001")).toEqual({
-      itemKey: "C001:10.000001",
-      conversationId: "C001",
-      rootTs: "10.000001",
-    });
-    expect(slackThreadTarget({ id: "D001", kind: "im" }, "D001", "10.000001")).toEqual({
-      itemKey: "D001",
-      conversationId: "D001",
-    });
+    const conversations = new Map([
+      ["C001", { kind: "channel" as const }],
+      ["D001", { kind: "im" as const }],
+    ]);
+    expect(slackAskItemKey(conversations, "C001", "10.000001")).toBe("C001:10.000001");
+    expect(slackAskItemKey(conversations, "D001", "10.000001")).toBe("D001");
+    expect(slackAskItemKey(conversations, "D001", undefined)).toBe("D001");
   });
 });
 
@@ -89,9 +87,8 @@ describe("slackTranscript", () => {
 });
 
 describe("pending ask on the first message", () => {
-  const target = slackThreadTarget({ id: "C001", kind: "channel" }, "C001", "10.000001");
-  const record = slackThreadContextRecord(target, "#general", "Ada: broken");
-  const ask = { target, record } as PendingSlackAsk;
+  const record = slackThreadContextRecord("C001:10.000001", "#general", "Ada: broken");
+  const ask = { itemKey: "C001:10.000001", record } as PendingSlackAsk;
 
   it("adds one reference and the transcript record, and leaves other chats alone", () => {
     const text = withSlackAskReference("fix this", ask);

@@ -90,6 +90,28 @@ export type SlackMessage = typeof SlackMessage.Type;
 export const SlackInboxItemKey = TrimmedNonEmptyString;
 export type SlackInboxItemKey = typeof SlackInboxItemKey.Type;
 
+export const slackInboxItemKey = (
+  kind: SlackConversationKind,
+  conversationId: string,
+  rootTs: string,
+) => (kind === "im" || kind === "mpim" ? conversationId : `${conversationId}:${rootTs}`);
+
+export function parseSlackInboxItemKey(key: string): {
+  readonly conversationId: string;
+  readonly rootTs?: string;
+} {
+  const separator = key.indexOf(":");
+  return separator === -1
+    ? { conversationId: key }
+    : { conversationId: key.slice(0, separator), rootTs: key.slice(separator + 1) };
+}
+
+export function compareSlackTs(left: string, right: string): number {
+  const [leftSeconds = "0", leftMicros = "0"] = left.split(".");
+  const [rightSeconds = "0", rightMicros = "0"] = right.split(".");
+  return Number(leftSeconds) - Number(rightSeconds) || Number(leftMicros) - Number(rightMicros);
+}
+
 export const SlackInboxState = Schema.Literals(["unread", "done", "snoozed"]);
 export type SlackInboxState = typeof SlackInboxState.Type;
 

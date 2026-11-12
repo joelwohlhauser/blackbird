@@ -38,27 +38,36 @@ export function SlackComposer({
   const send = async () => {
     const body = text.trim();
     if (sending || (body.length === 0 && files.length === 0)) return;
+    const submitted = { text, files };
     setSending(true);
     setError(null);
-    const target = { conversationId, ...(threadTs === undefined ? {} : { threadTs }) };
-    if (files.length === 0) {
-      const result = await postMessage({ environmentId, input: { ...target, text: body } });
+    setText("");
+    setFiles([]);
+    const fail = (message: string) => {
       setSending(false);
+      setError(message);
+      setText((typed) => (typed.length === 0 ? submitted.text : `${submitted.text}\n${typed}`));
+      setFiles((added) => [...submitted.files, ...added]);
+    };
+    const target = { conversationId, ...(threadTs === undefined ? {} : { threadTs }) };
+    if (submitted.files.length === 0) {
+      const result = await postMessage({ environmentId, input: { ...target, text: body } });
       if (result._tag !== "Success") {
-        setError("The message could not be sent. Try again.");
+        fail("The message could not be sent. Try again.");
         return;
       }
-      setText("");
+      setSending(false);
       onSent(result.value);
       return;
     }
-    const uploads = await Promise.all(files.map((file) => uploadSlackFile(environmentId, file)));
+    const uploads = await Promise.all(
+      submitted.files.map((file) => uploadSlackFile(environmentId, file)),
+    );
     const [first, ...rest] = uploads.flatMap((entry) =>
       entry.status === "uploaded" ? [{ attachmentId: entry.attachmentId, name: entry.name }] : [],
     );
     if (first === undefined || rest.length + 1 !== uploads.length) {
-      setSending(false);
-      setError("A file could not be uploaded. Try again.");
+      fail("A file could not be uploaded. Try again.");
       return;
     }
     const result = await upload({
@@ -69,13 +78,11 @@ export function SlackComposer({
         ...(body.length === 0 ? {} : { comment: body }),
       },
     });
-    setSending(false);
     if (result._tag !== "Success") {
-      setError("The files could not be sent. Try again.");
+      fail("The files could not be sent. Try again.");
       return;
     }
-    setText("");
-    setFiles([]);
+    setSending(false);
   };
 
   return (

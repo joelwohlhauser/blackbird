@@ -1,9 +1,4 @@
-import type {
-  SlackConversation,
-  SlackInboxItem,
-  SlackInboxMode,
-  SlackMessage,
-} from "@t3tools/contracts";
+import type { SlackInboxMode, SlackMessage } from "@t3tools/contracts";
 import {
   BellIcon,
   BotIcon,
@@ -28,14 +23,18 @@ import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../
 import { useSidebarVisibility } from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { slackThreadTarget } from "./slackAsk";
+import { slackAskItemKey } from "./slackAsk";
 import { SlackComposer } from "./SlackComposer";
-import { useSlackDirectory } from "./slackDirectory";
-import { slackConversationLabel, slackWebUrl } from "./slackInbox.logic";
+import {
+  type SlackDirectoryConversation,
+  useSlackDirectory,
+  useSlackInbox,
+} from "./slackDirectory";
 import type { SlackMessageScope } from "./slackMessages.logic";
 import { SlackMessageRow } from "./SlackMessage";
 import { SlackReactionPicker } from "./SlackReactionPicker";
 import { SlackSnoozeMenu } from "./SlackSnoozeMenu";
+import type { SlackItemControls } from "./useSlackItemControls";
 import { useSlackMessages } from "./useSlackMessages";
 
 const INBOX_MODE_LABELS: Readonly<Record<SlackInboxMode, string>> = {
@@ -48,7 +47,7 @@ export function SlackConversationIcon({
   conversation,
   className,
 }: {
-  readonly conversation: SlackConversation;
+  readonly conversation: SlackDirectoryConversation;
   readonly className?: string;
 }) {
   const { users } = useSlackDirectory();
@@ -128,10 +127,13 @@ function OpenInSlackAction({
   const { teamId } = useSlackDirectory();
   const openLink = useOpenLink(null);
   if (teamId === undefined) return null;
+  const url = `https://app.slack.com/client/${teamId}/${conversationId}`;
   return (
     <HeaderAction
       label="Open in Slack"
-      onClick={() => void openLink(slackWebUrl(teamId, conversationId, rootTs))}
+      onClick={() =>
+        void openLink(rootTs === undefined ? url : `${url}/thread/${conversationId}-${rootTs}`)
+      }
     >
       <ExternalLinkIcon />
     </HeaderAction>
@@ -152,28 +154,17 @@ function AskAgentAction({
   readonly rootTs?: string | undefined;
   readonly onAsk: SlackAskAgent["onAsk"];
 }) {
-  const { conversations, links } = useSlackDirectory();
-  const target = slackThreadTarget(conversations.get(conversationId), conversationId, rootTs);
+  const { conversations } = useSlackDirectory();
+  const { links } = useSlackInbox();
+  const itemKey = slackAskItemKey(conversations, conversationId, rootTs);
   return (
     <HeaderAction
-      label={links.has(target.itemKey) ? "Open chat (A)" : "Ask agent (A)"}
+      label={links.has(itemKey) ? "Open chat (A)" : "Ask agent (A)"}
       onClick={() => onAsk(conversationId, rootTs)}
     >
       <BotIcon />
     </HeaderAction>
   );
-}
-
-export interface SlackItemControls {
-  readonly item: SlackInboxItem;
-  readonly reactOpen: boolean;
-  readonly onReactOpenChange: (open: boolean) => void;
-  readonly snoozeOpen: boolean;
-  readonly onSnoozeOpenChange: (open: boolean) => void;
-  readonly onReact: (name: string) => void;
-  readonly onDone: () => void;
-  readonly onSnooze: (until: Date) => void;
-  readonly onUnsnooze: () => void;
 }
 
 function SlackItemActions({ controls }: { readonly controls: SlackItemControls }) {
@@ -212,7 +203,7 @@ function SlackItemActions({ controls }: { readonly controls: SlackItemControls }
   );
 }
 
-function InboxModeMenu({ conversation }: { readonly conversation: SlackConversation }) {
+function InboxModeMenu({ conversation }: { readonly conversation: SlackDirectoryConversation }) {
   const { environmentId } = useSlackDirectory();
   const setInboxMode = useAtomCommand(slackEnvironment.setInboxMode);
   return (
@@ -318,13 +309,13 @@ function SlackMessagePane({
 }
 
 function ConversationTitle({ conversationId }: { readonly conversationId: string }) {
-  const { conversations, users } = useSlackDirectory();
+  const { conversations } = useSlackDirectory();
   const conversation = conversations.get(conversationId);
   if (conversation === undefined) return <span className="truncate">{conversationId}</span>;
   return (
     <>
       <SlackConversationIcon conversation={conversation} className="size-4 shrink-0" />
-      <span className="truncate">{slackConversationLabel(conversation, users)}</span>
+      <span className="truncate">{conversation.name}</span>
     </>
   );
 }
@@ -344,11 +335,10 @@ export function SlackConversationView({
   readonly askAgent?: SlackAskAgent | undefined;
   readonly onOpenThread?: ((rootTs: string) => void) | undefined;
 }) {
-  const { conversations, users } = useSlackDirectory();
+  const { conversations } = useSlackDirectory();
   const conversation = conversations.get(conversationId);
   const isChannel = conversation?.kind === "channel" || conversation?.kind === "private_channel";
-  const label =
-    conversation === undefined ? conversationId : slackConversationLabel(conversation, users);
+  const label = conversation?.name ?? conversationId;
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SlackPaneHeader

@@ -1,22 +1,19 @@
-import type { SlackConversation, SlackInboxItem, SlackUser } from "@t3tools/contracts";
+import type { SlackConversation, SlackInboxItem } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   groupSlackConversations,
   moveSlackSelection,
   newlyUnreadSlackItems,
-  parseSlackItemKey,
-  slackItemsInState,
   slackSelectionAfterRemoval,
   slackSnoozeUntil,
-  slackWebUrl,
   unreadSlackItemTimes,
 } from "./slackInbox.logic";
 
 function item(key: string, overrides: Partial<SlackInboxItem> = {}): SlackInboxItem {
   return {
     key,
-    conversationId: parseSlackItemKey(key).conversationId,
+    conversationId: key,
     state: "unread",
     latestTs: "100.000001",
     latestAuthorId: "U002",
@@ -42,28 +39,6 @@ function conversation(
     ...overrides,
   };
 }
-
-describe("parseSlackItemKey", () => {
-  it("reads a direct message key and a thread key", () => {
-    expect(parseSlackItemKey("D001")).toEqual({ conversationId: "D001" });
-    expect(parseSlackItemKey("C001:100.000001")).toEqual({
-      conversationId: "C001",
-      rootTs: "100.000001",
-    });
-  });
-});
-
-describe("slackItemsInState", () => {
-  it("keeps one state, newest first", () => {
-    const items = [
-      item("D001", { latestTs: "100.000001" }),
-      item("D002", { latestTs: "300.000001" }),
-      item("D003", { state: "snoozed", latestTs: "200.000001" }),
-    ];
-    expect(slackItemsInState(items, "unread").map((entry) => entry.key)).toEqual(["D002", "D001"]);
-    expect(slackItemsInState(items, "snoozed").map((entry) => entry.key)).toEqual(["D003"]);
-  });
-});
 
 describe("moveSlackSelection", () => {
   const keys = ["a", "b", "c"];
@@ -141,30 +116,15 @@ describe("newlyUnreadSlackItems", () => {
 
 describe("groupSlackConversations", () => {
   it("splits starred, channels, and direct messages, sorted by shown name", () => {
-    const users = new Map<string, SlackUser>([
-      ["U002", { id: "U002", name: "Ada", isBot: false, isDeleted: false }],
+    const groups = groupSlackConversations([
+      conversation("C002", "random"),
+      conversation("C001", "general"),
+      conversation("C003", "announcements", { isStarred: true }),
+      conversation("G001", "Grace, Linus", { kind: "mpim" }),
+      conversation("D001", "Ada", { kind: "im", userId: "U002" }),
     ]);
-    const groups = groupSlackConversations(
-      [
-        conversation("C002", "random"),
-        conversation("C001", "general"),
-        conversation("C003", "announcements", { isStarred: true }),
-        conversation("G001", "Grace, Linus", { kind: "mpim" }),
-        conversation("D001", "U002", { kind: "im", userId: "U002" }),
-      ],
-      users,
-    );
     expect(groups.starred.map((entry) => entry.id)).toEqual(["C003"]);
     expect(groups.channels.map((entry) => entry.id)).toEqual(["C001", "C002"]);
     expect(groups.directMessages.map((entry) => entry.id)).toEqual(["D001", "G001"]);
-  });
-});
-
-describe("slackWebUrl", () => {
-  it("links a conversation and a thread", () => {
-    expect(slackWebUrl("T000", "C001")).toBe("https://app.slack.com/client/T000/C001");
-    expect(slackWebUrl("T000", "C001", "100.000001")).toBe(
-      "https://app.slack.com/client/T000/C001/thread/C001-100.000001",
-    );
   });
 });
