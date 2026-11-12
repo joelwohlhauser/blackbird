@@ -388,7 +388,7 @@ function MainChatTab(props: MainChatTabProps) {
           if (action === "find") props.onFind?.();
         });
       }}
-      className={cn(TAB_BASE_CLASS, "max-w-56", tabStateClass(props.active))}
+      className={cn(TAB_BASE_CLASS, "max-w-56 min-w-16 shrink", tabStateClass(props.active))}
     >
       <Tooltip>
         <TooltipTrigger
