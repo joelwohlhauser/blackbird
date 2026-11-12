@@ -54,6 +54,7 @@ import {
   DESKTOP_RENDERER_ORIGINS,
 } from "./httpCors.ts";
 import { requestUrl } from "./requestUrl.ts";
+import * as Slack from "./slack/Slack.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -464,6 +465,10 @@ export const layerAssetRoute = HttpRouter.add(
           }),
         ),
       );
+    }
+    if (asset.kind === "slack-file") {
+      const slack = yield* Slack.Slack;
+      return yield* slack.fileResponse(asset, request.headers);
     }
     return yield* assetFileResponse(
       asset,

@@ -624,6 +624,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
       return command.parentThreadId;
     case "secret_request.record":
     case "link_request.record":
+    case "slack_draft.record":
       return command.threadId;
     case "thread.fork":
     case "thread.merge_back":
@@ -3598,6 +3599,17 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           commandId: command.commandId,
           commandType: command.type,
           cause: `Thread ${command.threadId} is no longer empty.`,
+        });
+    }
+    if (command.type === "thread.metadata.update" && command.expectedIdle === true) {
+      const records = yield* projectionStore
+        .getThreadRecords(command.threadId, ["runs"])
+        .pipe(mapDispatchError(command));
+      if (records.runs.some((run) => isActiveRun(run) || run.status === "queued"))
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: `Thread ${command.threadId} has unfinished work.`,
         });
     }
     if (command.type === "thread.archive" && thread.archivedAt !== null) {
@@ -9500,6 +9512,112 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  const dispatchSlackDraftRecord = Effect.fn("orchestrationV2.dispatch.slackDraftRecord")(
+    function* (
+      command: Extract<OrchestrationV2InternalCommand, { readonly type: "slack_draft.record" }>,
+      events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+      effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+    ) {
+      const projection = yield* projectionStore
+        .getThreadRecords(
+          command.threadId,
+          ["runs", "nodes", "turnItems", "attempts", "providerTurns"],
+          { turnItemTypes: ["slack_draft"], messageRoles: [] },
+        )
+        .pipe(
+          Effect.mapError(
+            (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+          ),
+        );
+      const reject = (cause: string) =>
+        new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause,
+        });
+      const run = projection.runs.find((candidate) => candidate.id === command.runId);
+      if (run === undefined) return yield* reject(`Run ${command.runId} was not found.`);
+      const existing = projection.turnItems
+        .filter((item) => item.type === "slack_draft")
+        .find((item) => item.id === command.turnItemId);
+      if (
+        existing === undefined &&
+        (!isActiveRun(run) || (yield* stopReachedRun(command, command.threadId, run.id)))
+      ) {
+        return yield* reject(`Run ${command.runId} is not active.`);
+      }
+      const unchanged =
+        existing !== undefined &&
+        (existing.draftStatus === "sent" ||
+          existing.draftStatus === "discarded" ||
+          existing.draftStatus === command.draftStatus);
+      if (unchanged) return;
+      const now = yield* DateTime.now;
+      const pending = command.draftStatus === "pending" || command.draftStatus === "sending";
+      const {
+        type: _type,
+        commandId: _commandId,
+        turnItemId: _turnItemId,
+        wake,
+        ...fields
+      } = command;
+      const nodeId = existing?.nodeId ?? command.nodeId;
+      yield* emit(
+        events,
+        command,
+      )({
+        type: "turn-item.updated",
+        threadId: command.threadId,
+        runId: command.runId,
+        nodeId,
+        providerInstanceId: run.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          ...fields,
+          id: command.turnItemId,
+          nodeId,
+          providerThreadId: existing?.providerThreadId ?? run.providerThreadId,
+          providerTurnId:
+            existing === undefined
+              ? (providerTurnForRun(projection, run)?.id ?? null)
+              : existing.providerTurnId,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal: existing?.ordinal ?? (yield* nextTurnItemOrdinal(projection)),
+          status: pending ? "waiting" : command.draftStatus === "sent" ? "completed" : "cancelled",
+          title: command.targetLabel,
+          startedAt: existing?.startedAt ?? now,
+          completedAt: pending ? null : now,
+          updatedAt: now,
+          type: "slack_draft",
+        },
+      });
+      if (
+        wake === undefined ||
+        projection.thread.archivedAt !== null ||
+        projection.thread.deletedAt !== null
+      ) {
+        return;
+      }
+      yield* dispatchMessage(
+        {
+          type: "message.dispatch",
+          commandId: command.commandId,
+          threadId: command.threadId,
+          messageId: wake.messageId,
+          text: wake.text,
+          notification: wake.notification,
+          attachments: [],
+          dispatchMode: { type: "queue_after_active" },
+          createdBy: "agent",
+          creationSource: "server",
+        },
+        events,
+        effects,
+      );
+    },
+  );
+
   /**
    * Closes the link cards still waiting for the user. Their agent stopped
    * waiting long ago, so nobody is woken: stopping or archiving the thread
@@ -13884,6 +14002,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "link_request.record":
         yield* dispatchLinkRequestRecord(command, events, effects);
+        break;
+      case "slack_draft.record":
+        yield* dispatchSlackDraftRecord(command, events, effects);
         break;
       default:
         return yield* dispatchUnsupported(command);

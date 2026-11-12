@@ -11,6 +11,7 @@ import {
   Files,
   Globe2,
   MessageSquare,
+  Hash,
   MessagesSquare,
   Plus,
   Smartphone,
@@ -104,6 +105,8 @@ export function surfaceTitle(
       return surface.title ?? "Subagent";
     case "side-chat":
       return "Side chat";
+    case "slack-thread":
+      return surface.title ?? "Slack thread";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -208,6 +211,8 @@ export function SurfaceIcon({
       return <BotIcon className="size-3 shrink-0" />;
     case "side-chat":
       return <MessagesSquare className="size-3 shrink-0" />;
+    case "slack-thread":
+      return <Hash className="size-3 shrink-0" />;
   }
 }
 
@@ -383,7 +388,7 @@ function MainChatTab(props: MainChatTabProps) {
           if (action === "find") props.onFind?.();
         });
       }}
-      className={cn(TAB_BASE_CLASS, "max-w-56", tabStateClass(props.active))}
+      className={cn(TAB_BASE_CLASS, "max-w-56 min-w-16 shrink", tabStateClass(props.active))}
     >
       <Tooltip>
         <TooltipTrigger

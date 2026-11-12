@@ -7,12 +7,17 @@ export const THREAD_DETAILS_ITEMS = [
   { id: "scripts", label: "Project scripts", defaultVisible: true },
   { id: "branch", label: "Branch and pull request", defaultVisible: true },
   { id: "servers", label: "Servers", defaultVisible: true },
+  { id: "slack", label: "Slack threads", defaultVisible: true },
   { id: "automations", label: "Automations", defaultVisible: true },
   { id: "lineage", label: "Lineage", defaultVisible: true },
   { id: "sideChats", label: "Side chats", defaultVisible: true },
   { id: "usage", label: "Usage limits", defaultVisible: false },
   { id: "context", label: "Context window", defaultVisible: false },
 ] as const;
+
+export function availableThreadDetailsItems(slackIntegrationEnabled: boolean) {
+  return THREAD_DETAILS_ITEMS.filter((item) => item.id !== "slack" || slackIntegrationEnabled);
+}
 
 export type ThreadDetailsItemId = (typeof THREAD_DETAILS_ITEMS)[number]["id"];
 export type ThreadDetailsVisibility = Readonly<Record<ThreadDetailsItemId, boolean>>;

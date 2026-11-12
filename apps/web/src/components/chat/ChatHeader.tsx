@@ -14,6 +14,7 @@ import ProjectScriptsControl, {
 import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
 import { cn } from "~/lib/utils";
 import { isElectron } from "../../env";
+import { SlackChatBackLink, SlackChatHomeAction } from "../slack/SlackChatHeader";
 import { ChatNotificationToggle } from "./ChatNotificationToggle";
 import { ChatPreviewControl } from "./ChatPreviewControl";
 import { GuestShareIndicator } from "./GuestShareControls";
@@ -65,6 +66,7 @@ export const ChatHeader = memo(function ChatHeader({
   );
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+      <SlackChatBackLink environmentId={activeThreadEnvironmentId} threadId={activeThreadId} />
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
         {leading}
       </div>
@@ -81,6 +83,7 @@ export const ChatHeader = memo(function ChatHeader({
               : "pr-24",
         )}
       >
+        <SlackChatHomeAction environmentId={activeThreadEnvironmentId} threadId={activeThreadId} />
         {pullRequests.length > 0 ? (
           <ChatPreviewControl
             threadRef={scopeThreadRef(activeThreadEnvironmentId, activeThreadId)}

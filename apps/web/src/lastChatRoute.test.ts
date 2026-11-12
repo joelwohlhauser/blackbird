@@ -34,6 +34,13 @@ describe("last chat route persistence", () => {
     },
   );
 
+  it("accepts the Slack page with its search and nothing that only resembles it", () => {
+    expect(isRestorableChatPath("/slack")).toBe(true);
+    expect(isRestorableChatPath("/slack?c=C001&t=%22100.000001%22")).toBe(true);
+    expect(isRestorableChatPath("/slack#top")).toBe(false);
+    expect(isRestorableChatPath("/slacker")).toBe(false);
+  });
+
   it("restores a persisted draft or thread only from the startup index", () => {
     expect(resolveStartupChatPath("/", "/draft/draft-123")).toBe("/draft/draft-123");
     expect(resolveStartupChatPath("/", "/local/thread-123")).toBe("/local/thread-123");

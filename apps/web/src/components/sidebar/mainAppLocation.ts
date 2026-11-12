@@ -2,6 +2,8 @@ import { useNavigate, type AnyRouter } from "@tanstack/react-router";
 
 import { GUEST_PAGE_PATH } from "../../guestPage";
 import { withoutAssistantCitationHash } from "../../lib/assistantCitationNavigation";
+import { useSlackSpaceStore } from "../../slackSpaceStore";
+import { readSlackIntegrationEnabled } from "../../state/slack";
 
 /** Settings and Usage open as modals over the last main-app view. */
 export function isAppModalPage(pathname: string) {
@@ -27,7 +29,13 @@ export function startMainAppLocationTracking(router: AnyRouter): () => void {
     if (isAppModalPage(pathname) || SHELL_LESS_PATHS.has(pathname)) return;
     const href = withoutAssistantCitationHash(router.state.location.href);
     appModalReturnHref = href;
-    if (!isSidebarUtilityPage(pathname)) mainAppHref = href;
+    if (
+      !isSidebarUtilityPage(pathname) &&
+      pathname !== "/slack" &&
+      !(readSlackIntegrationEnabled() && useSlackSpaceStore.getState().space === "slack")
+    ) {
+      mainAppHref = href;
+    }
   };
   record();
   return router.subscribe("onResolved", record);

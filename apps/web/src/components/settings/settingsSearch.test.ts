@@ -170,8 +170,10 @@ describe("searchSettings", () => {
       "auto-settle-merged-threads",
       "days-before-auto-settle",
       "linked-environments",
+      "slack-connection",
     ]);
     expect(available.map((item) => item.id).filter((id) => gatedIds.has(id))).toEqual([]);
+    expect(available.map((item) => item.id)).toContain("slack-integration");
   });
 
   it("finds linked environments on a remote host without local maintenance access", () => {

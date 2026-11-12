@@ -564,6 +564,8 @@ function itemIcon(item: OrchestrationV2TurnItem): ThreadFeedActivity["icon"] {
       return "lock";
     case "link_request":
       return "globe";
+    case "slack_draft":
+      return "message";
   }
 }
 
@@ -625,6 +627,8 @@ function itemSummary(
       return item.label;
     case "link_request":
       return `Link ${item.label ?? item.url ?? "an environment"}`;
+    case "slack_draft":
+      return `Slack draft for ${item.targetLabel}`;
     case "dynamic_tool": {
       const classified = classifyToolActivity({
         itemType: "dynamic_tool_call",
@@ -685,6 +689,8 @@ function itemPreview(item: OrchestrationV2TurnItem): string | null {
     case "secret_request":
     case "link_request":
       return item.reason || null;
+    case "slack_draft":
+      return item.text;
     case "subagent":
       return item.result ?? item.progress ?? item.prompt;
     case "dynamic_tool":

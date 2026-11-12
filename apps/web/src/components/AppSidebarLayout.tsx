@@ -43,6 +43,8 @@ import { BackgroundThreadAnnouncer } from "./BackgroundThreadAnnouncer";
 import { HistorySwipeNavigation } from "./HistorySwipeNavigation";
 import ThreadSidebar from "./Sidebar";
 import LegacyThreadSidebar from "./LegacySidebar";
+import { SlackSidebar } from "./slack/SlackSidebar";
+import { useAppSpace } from "./slack/SlackSpaceSwitch";
 import { SidebarBrandWidthProbe } from "./sidebar/SidebarChrome";
 import { isAppModalPage } from "./sidebar/mainAppLocation";
 import type { SidebarRouteReveal } from "./sidebar/routeReveal";
@@ -506,6 +508,7 @@ export function AppSidebarLayout({
   showSidebar?: boolean;
 }) {
   const legacySidebarEnabled = useLegacySidebarEnabled();
+  const appSpace = useAppSpace();
   const sidebarArea = workspaceAreaProps("sidebar", 0, "Threads");
   const [sidebarRouteReveal] = useState<SidebarRouteReveal>(() => ({
     observedKey: null,
@@ -579,7 +582,9 @@ export function AppSidebarLayout({
               }}
               style={windowControlsInsetStyle}
             >
-              {legacySidebarEnabled ? (
+              {appSpace === "slack" ? (
+                <SlackSidebar />
+              ) : legacySidebarEnabled ? (
                 <LegacyThreadSidebar routeReveal={sidebarRouteReveal} />
               ) : (
                 <ThreadSidebar routeReveal={sidebarRouteReveal} />

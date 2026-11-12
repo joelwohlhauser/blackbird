@@ -7,7 +7,7 @@ import {
   useMatches,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ThreadRouteView } from "../components/ThreadRouteView";
 import { isAppModalPage } from "../components/sidebar/mainAppLocation";
@@ -23,26 +23,34 @@ import {
   writeLastChatPath,
 } from "../lastChatRoute";
 
-function LastChatRoutePersistence() {
+function readStartupChatPath(): string | null {
+  const storage = resolveBrowserStorage();
+  return storage === null
+    ? null
+    : resolveStartupChatPath(window.location.pathname, readLastChatPath(storage));
+}
+
+function LastChatRoutePersistence({
+  startupPath,
+  setStartupPath,
+}: {
+  readonly startupPath: string | null;
+  readonly setStartupPath: (path: null) => void;
+}) {
   const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const checkedStartupRoute = useRef(false);
+  const pathname = useLocation({
+    select: (location) => (location.pathname === "/slack" ? location.href : location.pathname),
+  });
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the persisted last route in localStorage in step with the router location
   useEffect(() => {
-    const storage = resolveBrowserStorage();
-    if (storage === null) return;
-
-    if (!checkedStartupRoute.current) {
-      checkedStartupRoute.current = true;
-      const startupPath = resolveStartupChatPath(pathname, readLastChatPath(storage));
-      if (startupPath !== null) {
-        void navigate({ to: startupPath as "/", replace: true });
-        return;
-      }
+    if (startupPath !== null) {
+      void navigate({ href: startupPath, replace: true }).finally(() => setStartupPath(null));
+      return;
     }
-
-    if (!isAppModalPage(pathname)) writeLastChatPath(storage, pathname);
-  }, [navigate, pathname]);
+    const storage = resolveBrowserStorage();
+    if (storage !== null && !isAppModalPage(pathname)) writeLastChatPath(storage, pathname);
+  }, [navigate, pathname, startupPath, setStartupPath]);
 
   return null;
 }
@@ -65,15 +73,16 @@ function ChatRouteLayout() {
     setBackgroundTarget(threadTarget);
   }
   const shownTarget = modalOpen ? backgroundTarget : threadTarget;
+  const [startupPath, setStartupPath] = useState(readStartupChatPath);
   return (
     <>
-      <LastChatRoutePersistence />
+      <LastChatRoutePersistence startupPath={startupPath} setStartupPath={setStartupPath} />
       {shownTarget?.kind === "server" && !modalOpen ? (
         <ThreadLinkPrompt threadRef={shownTarget.threadRef} />
       ) : null}
       {shownTarget ? (
         <ThreadRouteView target={shownTarget} background={modalOpen} />
-      ) : modalOpen ? (
+      ) : modalOpen || startupPath !== null ? (
         <SidebarInset className="h-dvh" />
       ) : (
         <Outlet />

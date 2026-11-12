@@ -56,6 +56,15 @@ describe("automation catch-up settings", () => {
   });
 });
 
+describe("Slack integration setting", () => {
+  it("is off for existing installations and can be turned on", () => {
+    expect(decodeServerSettings({}).slackIntegrationEnabled).toBe(false);
+    expect(decodeServerSettingsPatch({ slackIntegrationEnabled: true })).toEqual({
+      slackIntegrationEnabled: true,
+    });
+  });
+});
+
 describe("storage cleanup settings", () => {
   it("keeps cleanup disabled for existing installations", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();

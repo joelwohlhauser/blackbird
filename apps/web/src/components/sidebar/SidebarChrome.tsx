@@ -44,16 +44,28 @@ import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdatePill, SidebarUpdateArchitectureWarning } from "./SidebarUpdatePill";
+import { SlackSpaceSwitch } from "../slack/SlackSpaceSwitch";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
 
-export const SidebarChromeHeader = memo(function SidebarChromeHeader({
-  isElectron,
-  onBrandClick,
-}: {
+interface SidebarChromeHeaderProps {
   isElectron: boolean;
   onBrandClick?: () => void;
-}) {
+}
+
+export function SidebarChromeHeader(props: SidebarChromeHeaderProps) {
+  return (
+    <>
+      <SidebarChromeTitleBar {...props} />
+      <SlackSpaceSwitch />
+    </>
+  );
+}
+
+const SidebarChromeTitleBar = memo(function SidebarChromeTitleBar({
+  isElectron,
+  onBrandClick,
+}: SidebarChromeHeaderProps) {
   const stageLabel = useEnvironmentStageLabel();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const backdropVariant = resolveSidebarStageBackdropVariant(

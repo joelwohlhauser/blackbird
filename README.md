@@ -336,6 +336,16 @@ default browser; this is configurable in Settings → Browser.
 
 On desktop, new drafts in a Git project show a Linear issue picker in the composer. Its **Assigned to me**, **Triage**, and **All issues** views search as you type and load more issues as you scroll, with priority and status icons. A team filter, status and priority filters, and a priority sort are saved per project. Picking an issue uses its Linear branch name: a branch already checked out in a worktree selects **Existing worktree**, one checked out in the main checkout selects **Current checkout**, a local or remote branch without a worktree selects **New worktree** for it, and otherwise **New worktree & branch** is prefilled with the branch name and starts from the default branch. Nothing is created until you send. **Unlink** returns the draft to the current checkout. **Create issue** opens Linear's own new-issue page in a Linear tab and picks up the issue you create there.
 
+### Slack space
+
+The Slack integration is off by default; turn it on under Settings → General → Slack. Once Slack is connected there (a user token and an app-level token of your own Slack app), the left sidebar gets an **Agents | Slack** switch. The Slack space lists Unreads, Snoozed, and your conversations, and its **Focus mode** toggle pauses notifications in Blackbird and in Slack.
+
+Unreads is a triage inbox: the list on the left, the selected thread or direct message on the right. `J`/`K` move, `E` marks done, `H` snoozes, `R` reacts to the latest message, and `Enter` focuses the reply box. Channels and direct messages open with a compose box, threads in a side pane, reactions, edit and delete for your own messages, inline images, and file upload by button, paste, or drop. Each channel chooses what reaches the inbox: every message, mentions and your threads, or nothing. The command palette's **Slack: go to...** jumps to a channel or person.
+
+**Ask agent** (the thread header, a message's hover actions, or `A`) opens a Quick chat that carries the Slack thread as context and shows the thread as a tab next to the chat. Such a chat stays out of the Agents list: its inbox row shows the agent's status and opens the chat. **Move to Agents** in the chat header lists it with your other chats and takes the thread out of Unreads, and a new Slack reply then marks the chat unread. Marking the thread done settles the chat, and settling or archiving the chat marks the thread done. The Details tab lists a chat's Slack threads.
+
+Agents never post to Slack themselves. An agent reads the threads linked to its chat and drafts messages; a draft shows in the chat as a card with editable text, and only **Send as …** posts it, as you. A new post you send this way is linked to the chat.
+
 ## Local and remote environments
 
 Environment settings are host-specific. Remote worktrees default to `~/repositories/.worktrees`; `~`, `.env` links, and setup scripts resolve on the machine that owns the repository. Environment labels are user-chosen and can differ from the SSH hostname.

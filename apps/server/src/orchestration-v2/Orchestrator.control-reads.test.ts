@@ -1137,6 +1137,51 @@ it.effect(
         },
       });
 
+      const run = {
+        id: RunId.make("run:move-project"),
+        threadId,
+        ordinal: 1,
+        providerInstanceId: instanceId,
+        modelSelection,
+        providerThreadId: null,
+        userMessageId: MessageId.make("message:move-project"),
+        rootNodeId: null,
+        activeAttemptId: null,
+        status: "running",
+        requestedAt: now,
+        startedAt: now,
+        completedAt: null,
+        checkpointId: null,
+        contextHandoffId: null,
+      } as const;
+      yield* projections.apply({
+        id: EventId.make("move-project:run"),
+        type: "run.created",
+        threadId,
+        occurredAt: now,
+        payload: run,
+      });
+      const busy = yield* orchestrator
+        .dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("move-busy-thread"),
+          threadId,
+          projectId: destinationProjectId,
+          expectedIdle: true,
+        })
+        .pipe(Effect.flip);
+      assert.include(String(busy.cause), "unfinished work");
+      assert.equal((yield* projections.getThread(threadId)).projectId, sourceProjectId);
+      assert.lengthOf((yield* projections.getThreadProviderContext(threadId)).providerSessions, 1);
+      yield* projections.apply({
+        id: EventId.make("move-project:run-completed"),
+        type: "run.updated",
+        threadId,
+        runId: run.id,
+        occurredAt: now,
+        payload: { ...run, status: "completed", completedAt: now },
+      });
+
       const missing = yield* Effect.exit(
         orchestrator.dispatch({
           type: "thread.metadata.update",
@@ -1155,6 +1200,7 @@ it.effect(
         projectId: destinationProjectId,
         branch: "main",
         expectedWorktreePath: null,
+        expectedIdle: true,
       });
       const thread = yield* projections.getThread(threadId);
       assert.equal(thread.projectId, destinationProjectId);

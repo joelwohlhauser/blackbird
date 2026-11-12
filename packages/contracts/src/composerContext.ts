@@ -25,6 +25,7 @@ export const COMPOSER_CONTEXT_KINDS = [
   "skill",
   "thread",
   "environment",
+  "slack-thread",
 ] as const;
 export type KnownComposerContextKind = (typeof COMPOSER_CONTEXT_KINDS)[number];
 
@@ -40,6 +41,7 @@ const COMPOSER_CONTEXT_ELEMENT_STYLES_MAX_CHARS = 8_000;
 export const COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS = 16_000;
 export const COMPOSER_CONTEXT_REVIEW_DIFF_MAX_CHARS = 32_000;
 const COMPOSER_CONTEXT_PREVIEW_COMMENT_MAX_CHARS = 8_000;
+export const COMPOSER_CONTEXT_SLACK_TEXT_MAX_CHARS = 64_000;
 
 export const ComposerContextId = TrimmedNonEmptyString.check(
   Schema.isMaxLength(CONTEXT_ID_MAX_CHARS),
@@ -224,6 +226,15 @@ export const EnvironmentContextRecord = Schema.Struct({
 });
 export type EnvironmentContextRecord = typeof EnvironmentContextRecord.Type;
 
+export const SlackThreadContextRecord = Schema.Struct({
+  ...recordBase,
+  kind: Schema.Literal("slack-thread"),
+  conversationId: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  rootTs: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(64))),
+  text: BoundedString(COMPOSER_CONTEXT_SLACK_TEXT_MAX_CHARS),
+});
+export type SlackThreadContextRecord = typeof SlackThreadContextRecord.Type;
+
 const isJson = Schema.is(Schema.Json);
 
 /** Excludes known discriminators so malformed known records fail their own schema. */
@@ -255,6 +266,7 @@ export const KnownComposerContextRecord = Schema.Union([
   SkillContextRecord,
   ThreadContextRecord,
   EnvironmentContextRecord,
+  SlackThreadContextRecord,
 ]);
 export type KnownComposerContextRecord = typeof KnownComposerContextRecord.Type;
 
