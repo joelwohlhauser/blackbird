@@ -700,7 +700,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
     Layer.provide(layerServerRestart),
   ),
   layerThreadPullRequestWorker,
-  KeepAwake.layer,
+  KeepAwake.layer.pipe(Layer.provide(layerDesktopTelemetryReceiver)),
   Layer.effectDiscard(
     Effect.gen(function* () {
       const service = yield* PullRequestSyncReactor.PullRequestSyncReactor;

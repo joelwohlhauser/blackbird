@@ -86,7 +86,7 @@ import {
   uninstallCliCommand,
   addCliCommandToPath,
 } from "./methods/cliCommand.ts";
-import { getAwakeState, removeAwake, setAwakeAgentsWorking, setupAwake } from "./methods/awake.ts";
+import { getAwakeState, removeAwake, setupAwake } from "./methods/awake.ts";
 import * as LinearIpc from "./methods/linear.ts";
 import { forgetThread } from "./methods/rendererHistory.ts";
 
@@ -178,7 +178,6 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(getAwakeState);
   yield* ipc.handle(setupAwake);
   yield* ipc.handle(removeAwake);
-  yield* ipc.handle(setAwakeAgentsWorking);
   yield* ipc.handle(LinearIpc.getLinearState);
   yield* ipc.handle(LinearIpc.signInToLinear);
   yield* ipc.handle(LinearIpc.cancelLinearSignIn);

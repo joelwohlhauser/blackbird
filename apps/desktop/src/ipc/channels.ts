@@ -38,7 +38,6 @@ export const CLI_COMMAND_UNINSTALL_CHANNEL = "desktop:cli-command-uninstall";
 export const AWAKE_GET_STATE_CHANNEL = "desktop:awake-get-state";
 export const AWAKE_SETUP_CHANNEL = "desktop:awake-setup";
 export const AWAKE_REMOVE_CHANNEL = "desktop:awake-remove";
-export const AWAKE_SET_AGENTS_WORKING_CHANNEL = "desktop:awake-set-agents-working";
 export const AWAKE_STATE_CHANNEL = "desktop:awake-state";
 export const LINEAR_GET_STATE_CHANNEL = "desktop:linear-get-state";
 export const LINEAR_SIGN_IN_CHANNEL = "desktop:linear-sign-in";

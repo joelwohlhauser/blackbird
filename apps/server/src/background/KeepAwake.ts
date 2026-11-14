@@ -10,7 +10,9 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
+import * as ServerConfig from "../config.ts";
 import * as OrchestrationEventStore from "../persistence/OrchestrationEventStore.ts";
+import * as DesktopTelemetryReceiver from "../resourceTelemetry/DesktopTelemetryReceiver.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as Settings from "../serverSettings.ts";
 
@@ -94,14 +96,61 @@ class KeepAwakeInhibitorExited extends Schema.TaggedError<KeepAwakeInhibitorExit
   { exitCode: Schema.Number },
 ) {}
 
+export const resolveHold = Effect.fn("KeepAwake.resolveHold")(function* (
+  desktopOwnsKeepAwake: boolean,
+) {
+  if (desktopOwnsKeepAwake) {
+    const desktop = yield* DesktopTelemetryReceiver.DesktopTelemetryReceiver;
+    const report = (working: boolean) =>
+      desktop.setAgentsWorking(working).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("keep-awake could not report agent work to the desktop app", {
+            cause,
+          }),
+        ),
+      );
+    return Effect.acquireRelease(report(true), () => report(false)).pipe(
+      Effect.andThen(Effect.never),
+      Effect.scoped,
+    );
+  }
+  const command = inhibitorCommand(yield* HostProcess.Platform, process.pid);
+  if (command === undefined) return undefined;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const holdOnce = spawner
+    .spawn(
+      ChildProcess.make(command.command, command.args, {
+        detached: false,
+        shell: false,
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      }),
+    )
+    .pipe(
+      Effect.tap((child) =>
+        Effect.logInfo("keep-awake holding sleep inhibitor", { pid: Number(child.pid) }),
+      ),
+      Effect.tap(() =>
+        Effect.addFinalizer(() => Effect.logInfo("keep-awake released sleep inhibitor")),
+      ),
+      Effect.flatMap((child) => child.exitCode),
+      Effect.flatMap((exitCode) =>
+        Effect.fail(new KeepAwakeInhibitorExited({ exitCode: Number(exitCode) })),
+      ),
+      Effect.scoped,
+    );
+  return holdOnce.pipe(retryWithBackoff("keep-awake sleep inhibitor stopped"), Effect.ignore);
+});
+
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const command = inhibitorCommand(yield* HostProcess.Platform, process.pid);
-    if (command === undefined) return;
+    const config = yield* ServerConfig.ServerConfig;
+    const hold = yield* resolveHold(config.desktopKeepAwake === true);
+    if (hold === undefined) return;
     const settings = yield* Settings.ServerSettingsService;
     const events = yield* OrchestrationEventStore.OrchestrationEventStore;
     const sql = yield* SqlClient.SqlClient;
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
     const hasActiveRun = sql<{ readonly active: number }>`
       SELECT EXISTS (
@@ -151,34 +200,6 @@ export const layer = Layer.effectDiscard(
           Stream.map(changes, (value) => value.keepAwakeWhileAgentsWork),
         );
       }),
-    );
-
-    const holdOnce = spawner
-      .spawn(
-        ChildProcess.make(command.command, command.args, {
-          detached: false,
-          shell: false,
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "ignore",
-        }),
-      )
-      .pipe(
-        Effect.tap((child) =>
-          Effect.logInfo("keep-awake holding sleep inhibitor", { pid: Number(child.pid) }),
-        ),
-        Effect.tap(() =>
-          Effect.addFinalizer(() => Effect.logInfo("keep-awake released sleep inhibitor")),
-        ),
-        Effect.flatMap((child) => child.exitCode),
-        Effect.flatMap((exitCode) =>
-          Effect.fail(new KeepAwakeInhibitorExited({ exitCode: Number(exitCode) })),
-        ),
-        Effect.scoped,
-      );
-    const hold = holdOnce.pipe(
-      retryWithBackoff("keep-awake sleep inhibitor stopped"),
-      Effect.ignore,
     );
 
     yield* forkParked(

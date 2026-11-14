@@ -222,13 +222,13 @@ function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
 }
 
 function awakeLabel(state: DesktopAwakeState, enabled: boolean, always: boolean) {
-  if (state.active) {
+  if (state.level === "full") {
     return state.lowPower ? "Keeping the Mac awake in Low Power Mode" : "Keeping the Mac awake";
   }
-  if (!state.installed) return "Set up Keep awake";
+  if (state.level === "base") return "Keeping the Mac from idle-sleeping while agents work";
   if (state.message) return state.message;
-  if (!enabled) return "Keep awake is off";
-  return always ? "Keep awake is on" : "Keep awake starts when local agents work";
+  if (!state.installed || !enabled) return "Not keeping the Mac awake";
+  return always ? "Keep awake is on" : "Keep awake starts when agents work";
 }
 
 function SidebarUtilityItem({
@@ -335,7 +335,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 <CoffeeIcon
                   className={cn(
                     awakeEnabled && "text-info-foreground",
-                    !awakeState.active && "opacity-50",
+                    awakeState.level === "off" && "opacity-50",
                   )}
                 />
               }

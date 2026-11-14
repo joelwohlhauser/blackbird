@@ -814,13 +814,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
-    id: "keep-awake-while-agents-work",
-    title: "Keep awake while agents work",
-    to: "/settings/maintenance",
-    scope: "environment-defaults",
-    searchTerms: ["caffeinate sleep prevent stay awake power laptop lid inhibit"],
-  },
-  {
     id: "background-activity",
     title: "Background activity",
     to: "/settings/maintenance",
@@ -1062,8 +1055,15 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "snap-shot-enabled",
   },
   {
+    id: "keep-awake-while-agents-work",
+    title: "Keep awake while agents work",
+    to: "/settings/awake",
+    scope: "environment-defaults",
+    searchTerms: ["caffeinate sleep prevent stay awake power laptop idle inhibit"],
+  },
+  {
     id: "awake-enabled",
-    title: "Keep awake",
+    title: "Keep awake with the lid closed",
     to: "/settings/awake",
     searchTerms: ["sleep lid closed clamshell caffeinate insomnia agents running"],
     desktopOnly: true,

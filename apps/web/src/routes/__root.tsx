@@ -29,7 +29,6 @@ import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPrompt
 import { SnapShotCoordinator } from "../components/desktop/SnapShotCoordinator";
 import { DesktopAppActivationCoordinator } from "../components/desktop/DesktopAppActivationCoordinator";
 import { AgentStopNotifications } from "../components/AgentStopNotifications";
-import { AwakeAgentsSignal } from "../components/desktop/AwakeAgentsSignal";
 import { DesktopWebLinkCoordinator } from "../components/desktop/DesktopWebLinkCoordinator";
 import { RunningThreadKeepAlive } from "../components/desktop/RunningThreadKeepAlive";
 import { ReopenClosedViewShortcut } from "../components/ReopenClosedViewShortcut";
@@ -232,7 +231,6 @@ function RootRouteBranch() {
           ) : null}
           {primaryEnvironmentAuthenticated ? <QuickChatGlobalShortcut /> : null}
           {primaryEnvironmentAuthenticated && isElectron ? <AgentStopNotifications /> : null}
-          {primaryEnvironmentAuthenticated && isElectron ? <AwakeAgentsSignal /> : null}
           {appShell}
         </FirstRunGate>
       )}

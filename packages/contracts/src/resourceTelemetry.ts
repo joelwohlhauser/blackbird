@@ -392,8 +392,15 @@ export const DesktopTelemetryServerReady = Schema.Struct({
 });
 export type DesktopTelemetryServerReady = typeof DesktopTelemetryServerReady.Type;
 
+export const DesktopTelemetrySetAgentsWorking = Schema.Struct({
+  version: Schema.Literal(1),
+  type: Schema.Literal("setAgentsWorking"),
+  working: Schema.Boolean,
+});
+
 export const DesktopTelemetryControlMessage = Schema.Union([
   DesktopTelemetryServerReady,
+  DesktopTelemetrySetAgentsWorking,
   DesktopTelemetrySetDiagnosticsDemand,
   DesktopTelemetrySetHostPowerIntervals,
   DesktopTelemetryRequestDesktopUpdate,

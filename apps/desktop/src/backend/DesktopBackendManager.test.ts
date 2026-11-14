@@ -175,6 +175,7 @@ function makeTestInstance(input: MakeInstanceInput) {
       updateRequests: Stream.empty,
       updateCommits: Stream.empty,
       updateCancellations: Stream.empty,
+      agentsWorking: Stream.empty,
       ...input.desktopTelemetryPublisher,
     }),
     DesktopBrowserHost.layer,
@@ -419,8 +420,8 @@ describe("DesktopBackendManager", () => {
       const handled = yield* Deferred.make<boolean>();
       const controlMessage = encodeDesktopTelemetryControl({
         version: 1,
-        type: "setDiagnosticsDemand",
-        enabled: true,
+        type: "setAgentsWorking",
+        working: true,
       });
       const layerSpawner = Layer.succeed(
         ChildProcessSpawner.ChildProcessSpawner,
@@ -440,8 +441,8 @@ describe("DesktopBackendManager", () => {
         spawnerLayer: layerSpawner,
         desktopTelemetryPublisher: {
           handleControlForSource: (_sourceId, message) =>
-            message.type === "setDiagnosticsDemand"
-              ? Deferred.succeed(handled, message.enabled).pipe(Effect.asVoid)
+            message.type === "setAgentsWorking"
+              ? Deferred.succeed(handled, message.working).pipe(Effect.asVoid)
               : Effect.void,
         },
       });

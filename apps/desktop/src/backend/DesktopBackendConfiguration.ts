@@ -21,6 +21,7 @@ import serverPackageJson from "../../../server/package.json" with { type: "json"
 
 import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 import * as DesktopCliShim from "../app/DesktopCliShim.ts";
+import { desktopOwnsKeepAwake } from "../awake/AwakePolicy.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopState from "../app/DesktopState.ts";
 import * as DesktopServerExposure from "./DesktopServerExposure.ts";
@@ -545,6 +546,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       desktopTelemetryFd: 4,
       desktopTelemetryControlFd: 5,
       desktopAppUpdate: input.desktopAppUpdate,
+      desktopKeepAwake: desktopOwnsKeepAwake(environment.platform),
       desktopBrowserFd: 6,
       desktopBrowserControlFd: 7,
       ...Option.match(input.resourceMonitorPath, {

@@ -1,42 +1,35 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  AWAKE_GRACE_MS,
+  awakeLevel,
   decideAwake,
   FAILOVER_ONLINE,
   parseBattery,
   stepFailover,
-  wantsAwake,
 } from "./AwakePolicy.ts";
 
 const limits = { lowPowerBelowPercent: 40, sleepBelowPercent: 10, heatRules: true };
 const onBattery = (percent: number) => ({ percent, onBattery: true });
 
-describe("wantsAwake", () => {
-  const base = {
-    enabled: true,
-    installed: true,
-    always: false,
-    working: false,
-    workEndedAt: null,
-    now: 1_000_000,
-  };
+describe("awakeLevel", () => {
+  const setUp = { enabled: true, installed: true, failed: false, always: false, working: false };
 
-  it("stays awake for the grace period after the last agent stops", () => {
-    expect(wantsAwake({ ...base, working: true })).toBe(true);
-    expect(wantsAwake({ ...base, workEndedAt: base.now - AWAKE_GRACE_MS + 1 })).toBe(true);
-    expect(wantsAwake({ ...base, workEndedAt: base.now - AWAKE_GRACE_MS })).toBe(false);
-    expect(wantsAwake(base)).toBe(false);
+  it("keeps the Mac from idle-sleeping while agents work without any setup", () => {
+    expect(awakeLevel({ ...setUp, working: true, installed: false })).toBe("base");
+    expect(awakeLevel({ ...setUp, working: true, enabled: false })).toBe("base");
+    expect(awakeLevel({ ...setUp, installed: false })).toBe("off");
   });
 
-  it("needs the feature enabled and set up", () => {
-    expect(wantsAwake({ ...base, working: true, enabled: false })).toBe(false);
-    expect(wantsAwake({ ...base, working: true, installed: false })).toBe(false);
+  it("uses the full setup while agents work or when set to always", () => {
+    expect(awakeLevel({ ...setUp, working: true })).toBe("full");
+    expect(awakeLevel({ ...setUp, always: true })).toBe("full");
+    expect(awakeLevel(setUp)).toBe("off");
+    expect(awakeLevel({ ...setUp, always: true, enabled: false })).toBe("off");
   });
 
-  it("stays awake without agents when set to always", () => {
-    expect(wantsAwake({ ...base, always: true })).toBe(true);
-    expect(wantsAwake({ ...base, always: true, enabled: false })).toBe(false);
+  it("falls back to the base level after the full setup failed", () => {
+    expect(awakeLevel({ ...setUp, working: true, failed: true })).toBe("base");
+    expect(awakeLevel({ ...setUp, always: true, failed: true })).toBe("off");
   });
 });
 

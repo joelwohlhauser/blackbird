@@ -1,6 +1,6 @@
 import type { ElectronThermalState } from "../electron/ElectronPowerMonitor.ts";
 
-export const AWAKE_GRACE_MS = 3 * 60_000;
+export const desktopOwnsKeepAwake = (platform: NodeJS.Platform) => platform === "darwin";
 
 export interface BatteryReading {
   readonly percent: number | null;
@@ -18,21 +18,22 @@ export type AwakeDecision =
   | { readonly _tag: "Paused"; readonly reason: string }
   | { readonly _tag: "Awake"; readonly lowPower: boolean };
 
+export type AwakeLevel = "off" | "base" | "full";
+
 export interface AwakeDemand {
   readonly enabled: boolean;
   readonly installed: boolean;
+  readonly failed: boolean;
   readonly always: boolean;
   readonly working: boolean;
-  readonly workEndedAt: number | null;
-  readonly now: number;
 }
 
-export const wantsAwake = (demand: AwakeDemand): boolean =>
-  demand.enabled &&
-  demand.installed &&
-  (demand.always ||
-    demand.working ||
-    (demand.workEndedAt !== null && demand.now - demand.workEndedAt < AWAKE_GRACE_MS));
+export function awakeLevel(demand: AwakeDemand): AwakeLevel {
+  if (demand.enabled && demand.installed && !demand.failed && (demand.always || demand.working)) {
+    return "full";
+  }
+  return demand.working ? "base" : "off";
+}
 
 export function decideAwake(
   wanted: boolean,

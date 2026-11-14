@@ -361,7 +361,7 @@ export type DesktopCliCommandState = typeof DesktopCliCommandStateSchema.Type;
 export const DesktopAwakeStateSchema = Schema.Struct({
   supported: Schema.Boolean,
   installed: Schema.Boolean,
-  active: Schema.Boolean,
+  level: Schema.Literals(["off", "base", "full"]),
   lowPower: Schema.Boolean,
   message: Schema.NullOr(Schema.String),
 });
@@ -1207,7 +1207,6 @@ export interface DesktopBridge {
     getState: () => Promise<DesktopAwakeState>;
     setup: () => Promise<DesktopAwakeState>;
     remove: () => Promise<DesktopAwakeState>;
-    setAgentsWorking: (working: boolean) => Promise<void>;
     onState: (listener: (state: DesktopAwakeState) => void) => () => void;
   };
   linear?: {

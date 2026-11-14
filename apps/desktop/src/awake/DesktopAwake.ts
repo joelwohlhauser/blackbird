@@ -22,6 +22,7 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import { AWAKE_STATE_CHANNEL } from "../ipc/channels.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
+import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
 import {
   backstopPlist,
   backstopScript,
@@ -31,7 +32,9 @@ import {
   sudoersRule,
 } from "./AwakeBackstop.ts";
 import {
+  awakeLevel,
   decideAwake,
+  desktopOwnsKeepAwake,
   FAILOVER_ONLINE,
   type HotspotStay,
   IPHONE_HOTSPOT_GATEWAY,
@@ -43,7 +46,6 @@ import {
   parseWifiDevice,
   shouldLeaveHotspot,
   stepFailover,
-  wantsAwake,
 } from "./AwakePolicy.ts";
 
 export class DesktopAwakeError extends Schema.TaggedError<DesktopAwakeError>()(
@@ -56,7 +58,6 @@ export class DesktopAwake extends Context.Service<
   {
     readonly initialize: Effect.Effect<void, never, Scope.Scope>;
     readonly configure: (settings: ClientSettings) => Effect.Effect<void>;
-    readonly setAgentsWorking: (working: boolean) => Effect.Effect<void>;
     readonly state: Effect.Effect<DesktopAwakeState>;
     readonly setup: Effect.Effect<DesktopAwakeState, DesktopAwakeError>;
     readonly remove: Effect.Effect<DesktopAwakeState, DesktopAwakeError>;
@@ -95,8 +96,9 @@ export const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const clientSettings = yield* DesktopClientSettings.DesktopClientSettings;
   const electronWindow = yield* ElectronWindow.ElectronWindow;
+  const telemetryPublisher = yield* DesktopTelemetryPublisher.DesktopTelemetryPublisher;
   const path = environment.path;
-  const supported = environment.platform === "darwin";
+  const supported = desktopOwnsKeepAwake(environment.platform);
   const journalPath = path.join(environment.stateDir, "awake-journal.json");
   const scriptPath = path.join(environment.stateDir, "awake-backstop.sh");
   const label = `com.blackbird.awake-backstop${environment.isDevelopment ? ".dev" : ""}`;
@@ -110,7 +112,6 @@ export const make = Effect.gen(function* () {
 
   let settings: ClientSettings = DEFAULT_CLIENT_SETTINGS;
   let working = false;
-  let workEndedAt: number | null = null;
   let installed = false;
   let applied: Applied = NOTHING_APPLIED;
   let held: Applied = NOTHING_APPLIED;
@@ -393,7 +394,7 @@ export const make = Effect.gen(function* () {
   const currentState = (): DesktopAwakeState => ({
     supported,
     installed,
-    active: held.sleepDisabled,
+    level: held.sleepDisabled ? "full" : suspensionBlocker !== null ? "base" : "off",
     lowPower: held.lowPower,
     message: failure ?? pause ?? networkNote,
   });
@@ -403,7 +404,7 @@ export const make = Effect.gen(function* () {
     if (
       published !== null &&
       published.installed === next.installed &&
-      published.active === next.active &&
+      published.level === next.level &&
       published.lowPower === next.lowPower &&
       published.message === next.message
     ) {
@@ -415,17 +416,14 @@ export const make = Effect.gen(function* () {
 
   const reconcile = Effect.gen(function* () {
     if (!supported) return;
-    const now = yield* Clock.currentTimeMillis;
-    const wanted =
-      failure === null &&
-      wantsAwake({
-        enabled: settings.awakeEnabled,
-        installed,
-        always: settings.awakeAlways,
-        working,
-        workEndedAt,
-        now,
-      });
+    const level = awakeLevel({
+      enabled: settings.awakeEnabled,
+      installed,
+      failed: failure !== null,
+      always: settings.awakeAlways,
+      working,
+    });
+    const wanted = level !== "off";
     if (
       !wanted &&
       !held.sleepDisabled &&
@@ -452,11 +450,12 @@ export const make = Effect.gen(function* () {
     if (nextPause !== null && nextPause !== pause) yield* notify(nextPause);
     pause = nextPause;
     const awake = decision._tag === "Awake";
-    const lowPower = decision._tag === "Awake" && decision.lowPower;
+    const full = awake && level === "full";
+    const lowPower = full && decision.lowPower;
 
     const applyChanges = Effect.gen(function* () {
       if (!lowPower) yield* hold("lowPower", false);
-      if (!awake) yield* hold("sleepDisabled", false);
+      if (!full) yield* hold("sleepDisabled", false);
       else if (!held.sleepDisabled) yield* hold("sleepDisabled", true);
       if (lowPower && !held.lowPower) yield* hold("lowPower", true);
     });
@@ -470,7 +469,7 @@ export const make = Effect.gen(function* () {
       ),
     );
 
-    yield* holdAppAwake(held.sleepDisabled);
+    yield* holdAppAwake(awake);
     yield* writeJournal(applied);
     if (held.sleepDisabled) {
       yield* followLid;
@@ -574,6 +573,15 @@ export const make = Effect.gen(function* () {
     return currentState();
   }).pipe(Effect.withSpan("desktop.awake.remove"));
 
+  const setAgentsWorking = (next: boolean) =>
+    lock.withPermits(1)(
+      Effect.gen(function* () {
+        if (!working && next) failure = null;
+        working = next;
+        yield* reconcile;
+      }),
+    );
+
   const initialize: DesktopAwake["Service"]["initialize"] = Effect.gen(function* () {
     if (!supported) return;
     yield* restoreFromJournal;
@@ -587,6 +595,10 @@ export const make = Effect.gen(function* () {
       lock.withPermits(1)(Effect.andThen(restoreAll, holdAppAwake(false))),
     );
     yield* Effect.sleep(TICK).pipe(Effect.andThen(tick), Effect.forever, Effect.forkScoped);
+    yield* telemetryPublisher.agentsWorking.pipe(
+      Stream.runForEach(setAgentsWorking),
+      Effect.forkScoped,
+    );
   });
 
   const configure: DesktopAwake["Service"]["configure"] = (next) =>
@@ -599,20 +611,9 @@ export const make = Effect.gen(function* () {
       }),
     );
 
-  const setAgentsWorking: DesktopAwake["Service"]["setAgentsWorking"] = (next) =>
-    lock.withPermits(1)(
-      Effect.gen(function* () {
-        if (working && !next) workEndedAt = yield* Clock.currentTimeMillis;
-        if (!working && next) failure = null;
-        working = next;
-        yield* reconcile;
-      }),
-    );
-
   return DesktopAwake.of({
     initialize,
     configure,
-    setAgentsWorking,
     state: Effect.sync(currentState),
     setup,
     remove,

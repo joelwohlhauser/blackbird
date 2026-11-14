@@ -20,6 +20,7 @@ import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronPowerMonitor from "../electron/ElectronPowerMonitor.ts";
@@ -74,8 +75,16 @@ export class DesktopTelemetryPublisher extends Context.Service<
     readonly updateRequests: Stream.Stream<DesktopTelemetryRequestDesktopUpdate>;
     readonly updateCommits: Stream.Stream<DesktopTelemetryCommitDesktopUpdate>;
     readonly updateCancellations: Stream.Stream<DesktopTelemetryCancelDesktopUpdate>;
+    readonly agentsWorking: Stream.Stream<boolean>;
   }
 >()("@t3tools/desktop/telemetry/DesktopTelemetryPublisher") {}
+
+function withSource(sources: ReadonlySet<string>, sourceId: string, present: boolean) {
+  const next = new Set(sources);
+  if (present) next.add(sourceId);
+  else next.delete(sourceId);
+  return next;
+}
 
 function booleanState(value: boolean): HostPowerSnapshot["onBattery"] {
   return value ? "true" : "false";
@@ -177,6 +186,7 @@ export const make = Effect.fn("desktop.telemetryPublisher.make")(function* () {
   const updateRequestQueue = yield* Queue.unbounded<DesktopTelemetryRequestDesktopUpdate>();
   const updateCommitQueue = yield* Queue.unbounded<DesktopTelemetryCommitDesktopUpdate>();
   const updateCancellationQueue = yield* Queue.unbounded<DesktopTelemetryCancelDesktopUpdate>();
+  const agentsWorkingSources = yield* SubscriptionRef.make<ReadonlySet<string>>(new Set());
 
   const offer = (event: PowerEvent): void => {
     Queue.offerUnsafe(powerEvents, event);
@@ -352,6 +362,10 @@ export const make = Effect.fn("desktop.telemetryPublisher.make")(function* () {
         return Queue.offer(updateCommitQueue, message).pipe(Effect.asVoid);
       case "cancelDesktopUpdate":
         return Queue.offer(updateCancellationQueue, message).pipe(Effect.asVoid);
+      case "setAgentsWorking":
+        return SubscriptionRef.update(agentsWorkingSources, (sources) =>
+          withSource(sources, sourceId, message.working),
+        );
       case "serverReady":
         return Effect.void;
     }
@@ -369,6 +383,11 @@ export const make = Effect.fn("desktop.telemetryPublisher.make")(function* () {
         previous === enabled
           ? Effect.void
           : Queue.offer(sampleTriggers, undefined).pipe(Effect.asVoid),
+      ),
+      Effect.andThen(
+        SubscriptionRef.update(agentsWorkingSources, (sources) =>
+          withSource(sources, sourceId, false),
+        ),
       ),
     );
 
@@ -425,6 +444,10 @@ export const make = Effect.fn("desktop.telemetryPublisher.make")(function* () {
     updateRequests: Stream.fromQueue(updateRequestQueue),
     updateCommits: Stream.fromQueue(updateCommitQueue),
     updateCancellations: Stream.fromQueue(updateCancellationQueue),
+    agentsWorking: SubscriptionRef.changes(agentsWorkingSources).pipe(
+      Stream.map((sources) => sources.size > 0),
+      Stream.changes,
+    ),
   });
 });
 

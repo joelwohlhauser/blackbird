@@ -177,6 +177,7 @@ function layerPool(
           updateRequests: Stream.empty,
           updateCommits: Stream.empty,
           updateCancellations: Stream.empty,
+          agentsWorking: Stream.empty,
         }),
         DesktopBrowserHost.layer,
         Layer.succeed(DesktopBackendConfiguration.DesktopBackendConfiguration, {
