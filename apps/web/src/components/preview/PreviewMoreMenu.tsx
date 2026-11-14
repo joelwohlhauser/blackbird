@@ -6,6 +6,7 @@ import {
   Menu,
   MenuItem,
   MenuPopup,
+  MenuShortcut,
   MenuRadioGroup,
   MenuRadioItem,
   MenuGroup,
@@ -50,6 +51,7 @@ interface Props {
   onToggleDeviceToolbar: () => void;
   nativePictureInPicture: boolean;
   profileName: string | undefined;
+  findShortcutLabel?: string | null;
   move?: { readonly label: string; readonly onMove: () => void };
 }
 
@@ -77,6 +79,7 @@ export function PreviewMoreMenu({
   onToggleDeviceToolbar,
   nativePictureInPicture,
   profileName,
+  findShortcutLabel,
   move,
 }: Props) {
   const zoomLabel = `${Math.round(zoomFactor * 100)}%`;
@@ -87,7 +90,8 @@ export function PreviewMoreMenu({
       <MenuPopup align="end" sideOffset={6}>
         {actions.find ? (
           <MenuItem onClick={actions.find} disabled={disabled}>
-            Find in page
+            Find on page
+            {findShortcutLabel ? <MenuShortcut>{findShortcutLabel}</MenuShortcut> : null}
           </MenuItem>
         ) : null}
         {actions.copyUrl ? (

@@ -35,6 +35,7 @@ import { threadEnvironment } from "../state/threads";
 import { vcsEnvironment } from "../state/vcs";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { refreshArchivedThreadsForEnvironment } from "../lib/archivedThreadsState";
+import { announce } from "../lib/announce";
 import { readLocalApi } from "../localApi";
 import {
   readEnvironmentServerConfigLoaded,
@@ -575,10 +576,16 @@ export function useThreadActions() {
       sortOrder: sidebarThreadSortOrder,
       now: new Date().toISOString(),
     });
+    let navigatedDuringDelete = false;
+    // The missing-thread redirect and the index draft replace this entry; any other history
+    // action while the delete is pending is the user's own choice, which must win.
+    const stopWatchingHistory = router.history.subscribe(({ action }) => {
+      if (action.type !== "REPLACE") navigatedDuringDelete = true;
+    });
     const deleteResult = await deleteThreadMutation({
       environmentId: threadRef.environmentId,
       input: { threadId: threadRef.threadId },
-    });
+    }).finally(stopWatchingHistory);
     if (deleteResult._tag === "Failure") {
       return deleteResult;
     }
@@ -597,7 +604,7 @@ export function useThreadActions() {
     );
     forgetThread(threadRef);
 
-    if (shouldNavigateToFallback) {
+    if (shouldNavigateToFallback && !navigatedDuringDelete) {
       const fallbackThread = fallbackThreadId
         ? readThreadShell(scopeThreadRef(threadRef.environmentId, fallbackThreadId))
         : null;
@@ -710,7 +717,7 @@ export function useThreadActions() {
     });
   };
 
-  const pinThread = async (target: ScopedThreadRef, opts: { orderKey?: string } = {}) => {
+  const sendPin = async (target: ScopedThreadRef, opts: { orderKey?: string } = {}) => {
     if (!readEnvironmentServerConfigLoaded(target.environmentId)) {
       return AsyncResult.failure(
         Cause.fail(
@@ -733,6 +740,12 @@ export function useThreadActions() {
         ...(orderKey !== undefined ? { orderKey } : {}),
       },
     });
+  };
+
+  const pinThread = async (target: ScopedThreadRef, opts: { orderKey?: string } = {}) => {
+    const result = await sendPin(target, opts);
+    if (result._tag === "Success") announce("Pinned 1 thread");
+    return result;
   };
 
   const unpinThread = async (target: ScopedThreadRef) => {
@@ -930,10 +943,7 @@ export function useThreadActions() {
           case "unsnooze":
             return unsnoozeThread(target);
           case "pin":
-            return pinThread(
-              target,
-              step.orderKey === undefined ? {} : { orderKey: step.orderKey },
-            );
+            return sendPin(target, step.orderKey === undefined ? {} : { orderKey: step.orderKey });
           case "snooze":
             return snoozeThreadMutation({
               environmentId: target.environmentId,

@@ -37,6 +37,7 @@ const makeTab = (options: { focusedFrameSession?: string; focused?: boolean } = 
     insertText: async (text: string) => void insertedText.push(text),
     reload: () => void reloads.push("reload"),
     reloadIgnoringCache: () => void reloads.push("reloadIgnoringCache"),
+    stop: () => void reloads.push("stop"),
     hostWebContents: {
       isDestroyed: () => false,
       send: (channel: string, value: unknown) => void hostMessages.push([channel, value]),
@@ -143,12 +144,13 @@ describe("GuestInput", () => {
     expect(tab.nativeEvents).toEqual([]);
   });
 
-  it("reloads the guest itself instead of its embedder window", async () => {
+  it("reloads and stops the guest itself instead of its embedder window", async () => {
     const tab = makeTab();
     await tab.input.send("Page.reload", {}, undefined);
     await tab.input.send("Page.reload", { ignoreCache: true }, undefined);
+    await tab.input.send("Page.stopLoading", {}, undefined);
 
-    expect(tab.reloads).toEqual(["reload", "reloadIgnoringCache"]);
+    expect(tab.reloads).toEqual(["reload", "reloadIgnoringCache", "stop"]);
     expect(tab.commands).toEqual([]);
   });
 

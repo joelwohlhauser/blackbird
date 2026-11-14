@@ -345,7 +345,7 @@ export function HtmlRenderDocument(props: {
     }
     const imageRequest = readHtmlRenderImageRequest(event.data);
     if (imageRequest !== undefined) {
-      setExpandedImage({ images: [{ src: imageRequest.src, name: imageRequest.name }], index: 0 });
+      setExpandedImage({ images: [...imageRequest.images], index: imageRequest.index });
       return;
     }
     const message = readHtmlRenderMessage(event.data);

@@ -30,6 +30,41 @@ function state(navStatus: DesktopPreviewTabState["navStatus"]): DesktopPreviewTa
   };
 }
 
+describe("buildReportInput", () => {
+  it("reports title changes at the same URL without repeating unrelated desktop updates", () => {
+    const threadId = ThreadId.make("thread-1");
+    const tabId = "tab-1";
+    const url = "http://localhost:3000/app";
+    let lastReport = {
+      lastReportedUrl: null as string | null,
+      lastReportedKind: null as DesktopPreviewTabState["navStatus"]["kind"] | null,
+      lastReportedTitle: null as string | null,
+    };
+    const report = (nextState: DesktopPreviewTabState) => {
+      const result = buildReportInput({ threadId, tabId, state: nextState, ...lastReport });
+      if (result) {
+        lastReport = result;
+      }
+      return result?.input.navStatus ?? null;
+    };
+
+    const loaded = state({ kind: "Success", url, title: "Original title" });
+    expect(report(loaded)).toEqual({ _tag: "Success", url, title: "Original title" });
+    expect(report(loaded)).toBeNull();
+
+    const retitled = state({ kind: "Success", url, title: "Updated title" });
+    expect(report(retitled)).toEqual({ _tag: "Success", url, title: "Updated title" });
+    expect(
+      report({
+        ...retitled,
+        audible: true,
+        controller: "human",
+        updatedAt: "2026-08-09T00:00:01.000Z",
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("projectDesktopState", () => {
   it("shows a retained icon only while the current document has the captured origin", () => {
     expect(
@@ -59,6 +94,7 @@ describe("returning Home", () => {
     state: state({ kind: "Idle" }),
     lastReportedKind: "Success" as const,
     lastReportedUrl: "https://example.com",
+    lastReportedTitle: "Example",
   };
   it("reports a live browser returning to its start page and preserves Back", () => {
     const result = buildReportInput({ ...input, state: { ...input.state, canGoBack: true } });

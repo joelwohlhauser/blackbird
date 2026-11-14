@@ -24,6 +24,8 @@ import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
+import { dispatchPreviewAction } from "./preview/previewActionBus";
+import { preventThumbButtonFocus, takeThumbButtonNavigation } from "./preview/thumbButtons";
 import {
   WorkspaceTabStrip,
   surfaceTitle,
@@ -466,6 +468,17 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
       {...(props.open !== undefined ? { open: props.open } : {})}
       {...(props.widthStorageKey !== undefined ? { widthStorageKey: props.widthStorageKey } : {})}
+      onMouseDown={preventThumbButtonFocus}
+      onMouseUp={(event) =>
+        takeThumbButtonNavigation(
+          event,
+          focusedSurface?.kind === "preview" ||
+            focusedSurface?.kind === "linear" ||
+            focusedSurface?.kind === "github-pr"
+            ? dispatchPreviewAction
+            : undefined,
+        )
+      }
     >
       <div
         className={cn(

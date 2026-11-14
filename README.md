@@ -360,6 +360,8 @@ Agents can request a link to another environment, subject to the destination's a
 
 Use the Node and pnpm versions pinned in `package.json` (currently Node 26.12.1 and pnpm 12.14.0). Install dependencies and start development:
 
+This installs the `t3` command. Run `t3` to start the server and open the web app.
+
 ```bash
 pnpm install
 pnpm dev

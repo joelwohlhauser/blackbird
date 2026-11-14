@@ -188,7 +188,6 @@ const make = Effect.gen(function* () {
           projectId: ProjectId.make(uuid),
           projectCommandId: CommandId.make(part("command", "worktree-project")),
           commandId: CommandId.make(part("command", "worktree-handoff")),
-          continuationCommandId: CommandId.make(part("command", "worktree-continuation")),
           continuationMessageId: MessageId.make(part("message", "worktree-continuation")),
         };
       }),
@@ -477,16 +476,6 @@ const make = Effect.gen(function* () {
           (localStatus.isRepo ? localStatus.refName : null);
         const boundWorktreePath = worktreePath === projectCwd ? null : worktreePath;
 
-        const reportFailed = (logMessage: string) =>
-          Effect.catchCause((cause: Cause.Cause<unknown>) => {
-            const detail = errorMessage(Cause.squash(cause));
-            return Effect.logWarning(logMessage, {
-              threadId: scope.thread.threadId,
-              worktreePath,
-              detail,
-            }).pipe(Effect.as({ status: "failed", detail } as const));
-          });
-
         const removeCreatedWorktree =
           createdWorktree === null
             ? Effect.void
@@ -526,7 +515,7 @@ const make = Effect.gen(function* () {
               `Thread '${scope.thread.threadId}' was archived while the worktree was being created; the handoff was rolled back.`,
             );
           }
-          yield* threadManagement
+          return yield* threadManagement
             .dispatch({
               type: "thread.metadata.update",
               commandId: ids.commandId,
@@ -535,6 +524,13 @@ const make = Effect.gen(function* () {
               branch,
               worktreePath: boundWorktreePath,
               expectedWorktreePath: originalWorktreePath,
+              // Binding detaches the session and ends the caller; a later send could lose the race.
+              continuation: {
+                messageId: ids.continuationMessageId,
+                text:
+                  input.continuationPrompt ??
+                  `You are now in ${worktreePath}${branch === null ? "" : ` on branch ${branch}`}. Continue with the task, or briefly confirm the switch if nothing is left to do.`,
+              },
             })
             .pipe(
               Effect.catchCause((cause) =>
@@ -555,33 +551,15 @@ const make = Effect.gen(function* () {
           ),
         );
 
-        // Queue continuation immediately after binding; detachment terminates the caller, so relaunch needs a durable message.
-        const queueContinuation: Effect.Effect<WorktreeMcpContinuationStatus, WorktreeMcpFailure> =
-          Effect.suspend(() =>
-            threadManagement
-              .sendToThread({
-                projectId: project.id,
-                commandId: ids.continuationCommandId,
-                threadId: scope.thread.threadId,
-                messageId: ids.continuationMessageId,
-                text:
-                  input.continuationPrompt ??
-                  `You are now in ${worktreePath}${branch === null ? "" : ` on branch ${branch}`}. Continue with the task, or briefly confirm the switch if nothing is left to do.`,
-                attachments: [],
-                mode: "queue",
-                createdBy: "agent",
-                creationSource: "mcp",
-              })
-              .pipe(
-                Effect.map((sendResult): WorktreeMcpContinuationStatus => ({
-                  status: "scheduled",
-                  delivery: sendResult.delivery,
-                })),
-                reportFailed("worktree handoff continuation failed to queue"),
-              ),
-          );
-
-        const continuation = yield* recheckAndBind.pipe(Effect.andThen(queueContinuation));
+        const bound = yield* recheckAndBind;
+        const continuation: WorktreeMcpContinuationStatus = {
+          status: "scheduled",
+          delivery: bound.storedEvents.some(
+            ({ event }) => event.type === "run.created" && event.payload.status !== "queued",
+          )
+            ? "started"
+            : "queued",
+        };
 
         yield* vcsStatusBroadcaster
           .refreshStatus(worktreePath)
@@ -600,10 +578,7 @@ const make = Effect.gen(function* () {
           startedFromOrigin: plan.type === "create" && plan.startedFromOrigin,
           setupScript,
           continuation,
-          note:
-            continuation.status === "scheduled"
-              ? "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the queued continuation prompt then starts the next turn in the new workspace with the conversation preserved. Worktrees are not removed automatically when the thread is deleted."
-              : "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the continuation failed to queue, so the conversation continues in the new workspace when the thread receives its next message. Worktrees are not removed automatically when the thread is deleted.",
+          note: "Handoff recorded. Changing the workspace detaches this provider session, so the current turn ends shortly after this call; the queued continuation prompt then starts the next turn in the new workspace with the conversation preserved. Worktrees are not removed automatically when the thread is deleted.",
         };
         return result;
       }),

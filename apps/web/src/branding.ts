@@ -1,5 +1,5 @@
 import type { DesktopAppBranding } from "@t3tools/contracts";
-import { formatAppDisplayName } from "./branding.logic";
+import { formatAppDisplayName, resolveWebAppStageLabel } from "./branding.logic";
 
 function readInjectedDesktopAppBranding(): DesktopAppBranding | null {
   if (typeof window === "undefined") {
@@ -14,13 +14,13 @@ const hostedAppChannel = import.meta.env.VITE_HOSTED_APP_CHANNEL?.trim().toLower
 
 export const HOSTED_APP_CHANNEL =
   hostedAppChannel === "latest" || hostedAppChannel === "nightly" ? hostedAppChannel : null;
-const HOSTED_APP_CHANNEL_LABEL =
-  HOSTED_APP_CHANNEL === "nightly" ? "Nightly" : HOSTED_APP_CHANNEL === "latest" ? "Latest" : null;
 export const APP_BASE_NAME = injectedDesktopAppBranding?.baseName ?? "Blackbird";
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ??
-  HOSTED_APP_CHANNEL_LABEL ??
-  (import.meta.env.DEV ? "Dev" : "Beta");
+  resolveWebAppStageLabel({
+    hostedAppChannel: HOSTED_APP_CHANNEL,
+    development: import.meta.env.DEV,
+  });
 export const APP_DISPLAY_NAME =
   injectedDesktopAppBranding?.displayName ??
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });

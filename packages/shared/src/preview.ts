@@ -2,7 +2,7 @@ import type { BrowserSearchEngine, DesktopPreviewShortcut } from "@t3tools/contr
 import * as Schema from "effect/Schema";
 
 import { isLocalLoopbackHost } from "./hostClassification.ts";
-import { isMacPlatform, resolveEventKeys, type ShortcutEventLike } from "./keybindings.ts";
+import { resolveEventKeys, type ShortcutEventLike } from "./keybindings.ts";
 
 const TAB_ID_PREFIX = "tab_";
 let nextPreviewTabSequence = 0;
@@ -226,18 +226,5 @@ export function resolvePreviewShortcut(event: ShortcutEventLike): DesktopPreview
   if (keys.has("[")) return "back";
   if (keys.has("]")) return "forward";
   if (keys.has("f")) return "find";
-  return null;
-}
-
-export function resolvePreviewZoomShortcut(
-  event: ShortcutEventLike,
-  platform: string,
-): "zoom-in" | "zoom-out" | "reset-zoom" | null {
-  const mac = isMacPlatform(platform);
-  if (event.metaKey !== mac || event.ctrlKey === mac || event.altKey) return null;
-  if (event.key === "+" || (event.key === "=" && !event.shiftKey)) return "zoom-in";
-  if (event.shiftKey) return null;
-  if (event.key === "-") return "zoom-out";
-  if (event.key === "0") return "reset-zoom";
   return null;
 }

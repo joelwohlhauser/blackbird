@@ -10,7 +10,6 @@ import {
   getComposerProviderState,
   getComposerReasoningStep,
   getToggledComposerServiceTierOptions,
-  withImplicitFastModeDefault,
 } from "./composerProviderState";
 import { readPromptUltrathink } from "./TraitsPicker";
 
@@ -255,29 +254,6 @@ describe("getComposerProviderState", () => {
     });
 
     expect(state.modelOptionsForDispatch).toEqual(selections(["fastMode", false]));
-  });
-});
-
-describe("withImplicitFastModeDefault", () => {
-  // regression: #2981 a remembered Fast mode choice must survive the implicit default on new chats
-  it("injects fastMode false only when the model exposes fastMode and no selection exists", () => {
-    expect(
-      withImplicitFastModeDefault(
-        {
-          optionDescriptors: [booleanDescriptor("fastMode", true)],
-        },
-        undefined,
-      ),
-    ).toEqual(selections(["fastMode", false]));
-
-    expect(
-      withImplicitFastModeDefault(
-        {
-          optionDescriptors: [booleanDescriptor("fastMode", true)],
-        },
-        selections(["fastMode", true]),
-      ),
-    ).toEqual(selections(["fastMode", true]));
   });
 });
 

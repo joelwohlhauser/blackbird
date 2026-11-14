@@ -64,6 +64,8 @@ describe("searchSettings", () => {
     expect(searchSettings("sharing", ITEMS).map((item) => item.id)).toEqual(["network-access"]);
     expect(searchSettings("claude", ITEMS).map((item) => item.id)).toEqual(["providers"]);
     expect(searchSettings("long lines", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
+    const spanish = (message: string) => (message === "Word wrap" ? "Ajuste de línea" : message);
+    expect(searchSettings("ajuste", ITEMS, spanish).map((item) => item.id)).toEqual(["word-wrap"]);
     for (const query of ["fallback", "fallback agent", "fallback model"]) {
       expect(searchSettings(query)[0]).toMatchObject({
         id: "fallback-model",
@@ -78,6 +80,13 @@ describe("searchSettings", () => {
     expect(searchSettings("1password").map((item) => item.to)).not.toContain("/settings/secrets");
   });
 
+  it("finds the Scheduled tasks page", () => {
+    expect(searchSettings("scheduled tasks")[0]).toMatchObject({
+      id: "scheduled-tasks",
+      to: "/settings/scheduled-tasks",
+    });
+  });
+
   it("matches normalized title substrings", () => {
     expect(searchSettings("  WORD   WRAP  ", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
     expect(searchSettings("work").map((item) => item.id)).toEqual([
@@ -89,11 +98,13 @@ describe("searchSettings", () => {
       "worktree-branch-naming",
       "storage-worktree-keep-when",
       "worktree-fast-checkout",
+      "keep-awake-while-agents-work",
       "network-access",
       "project-defaults",
       "environment-identification",
       "thread-details",
       "tool-call-visibility",
+      "screen-reader-window-title",
       "linked-environments-beta",
       "continue-threads-after-server-update",
       "new-threads",

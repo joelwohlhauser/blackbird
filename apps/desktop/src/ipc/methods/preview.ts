@@ -5,6 +5,7 @@ import {
   DesktopPreviewPickElementInputSchema,
   DesktopPreviewArtifactInputSchema,
   DesktopPreviewConfigInputSchema,
+  DesktopPreviewFindInPageInputSchema,
   DesktopPreviewNavigateInputSchema,
   DesktopPreviewRecordingArtifactSchema,
   DesktopPreviewRecordingSaveInputSchema,
@@ -19,8 +20,6 @@ import {
   DesktopPreviewClearDataInputSchema,
   DesktopPreviewImportCookiesInputSchema,
   DesktopPreviewCreateTabInputSchema,
-  DesktopPreviewFindInputSchema,
-  DesktopPreviewFindResultSchema,
   DesktopPreviewTabInputSchema,
   DesktopPreviewWebviewConfigSchema,
   PreviewAnnotationSubmissionResultSchema,
@@ -60,6 +59,9 @@ export const installPreviewEventForwarding = Effect.fn(
   );
   yield* manager.subscribeOpenLinks((event) =>
     electronWindow.sendAll(IpcChannels.PREVIEW_OPEN_LINK_CHANNEL, event),
+  );
+  yield* manager.subscribeFindResults((event) =>
+    electronWindow.sendAll(IpcChannels.PREVIEW_FIND_RESULT_CHANNEL, event),
   );
 });
 
@@ -118,6 +120,21 @@ const navigate = DesktopIpc.makeIpcMethod({
   }),
 });
 
+const findInPage = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_FIND_IN_PAGE_CHANNEL,
+  payload: DesktopPreviewFindInPageInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.findInPage")(function* ({
+    tabId,
+    text,
+    forward,
+    newSession,
+  }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.findInPage(tabId, text, { forward, newSession });
+  }),
+});
+
 const tabMethod = (
   channel: string,
   name: string,
@@ -146,25 +163,6 @@ const goForward = tabMethod(
   "desktop.ipc.preview.goForward",
   (manager, tabId) => manager.goForward(tabId),
 );
-const findInPage = DesktopIpc.makeIpcMethod({
-  channel: IpcChannels.PREVIEW_FIND_CHANNEL,
-  payload: DesktopPreviewFindInputSchema,
-  result: Schema.NullOr(DesktopPreviewFindResultSchema),
-  handler: Effect.fn("desktop.ipc.preview.findInPage")(function* ({
-    tabId,
-    text,
-    forward,
-    findNext,
-  }) {
-    const manager = yield* PreviewManager.PreviewManager;
-    return yield* manager.findInPage(tabId, text, { forward, findNext });
-  }),
-});
-const stopFindInPage = tabMethod(
-  IpcChannels.PREVIEW_STOP_FIND_CHANNEL,
-  "desktop.ipc.preview.stopFindInPage",
-  (manager, tabId) => manager.stopFindInPage(tabId),
-);
 const copyUrl = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PREVIEW_COPY_URL_CHANNEL,
   payload: DesktopPreviewTabInputSchema,
@@ -178,6 +176,11 @@ const refresh = tabMethod(
   IpcChannels.PREVIEW_REFRESH_CHANNEL,
   "desktop.ipc.preview.refresh",
   (manager, tabId) => manager.refresh(tabId),
+);
+const stopLoading = tabMethod(
+  IpcChannels.PREVIEW_STOP_LOADING_CHANNEL,
+  "desktop.ipc.preview.stopLoading",
+  (manager, tabId) => manager.stopLoading(tabId),
 );
 const zoomIn = tabMethod(
   IpcChannels.PREVIEW_ZOOM_IN_CHANNEL,
@@ -198,6 +201,11 @@ const hardReload = tabMethod(
   IpcChannels.PREVIEW_HARD_RELOAD_CHANNEL,
   "desktop.ipc.preview.hardReload",
   (manager, tabId) => manager.hardReload(tabId),
+);
+const stopFindInPage = tabMethod(
+  IpcChannels.PREVIEW_STOP_FIND_IN_PAGE_CHANNEL,
+  "desktop.ipc.preview.stopFindInPage",
+  (manager, tabId) => manager.stopFindInPage(tabId),
 );
 const setZoomFactor = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PREVIEW_SET_ZOOM_FACTOR_CHANNEL,
@@ -487,14 +495,15 @@ export const methods = [
   navigate,
   goBack,
   goForward,
-  findInPage,
-  stopFindInPage,
   copyUrl,
   refresh,
+  stopLoading,
   zoomIn,
   zoomOut,
   resetZoom,
   hardReload,
+  findInPage,
+  stopFindInPage,
   setColorScheme,
   setZoomFactor,
   setAudioMuted,

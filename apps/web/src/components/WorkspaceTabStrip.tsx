@@ -16,9 +16,10 @@ import {
   Plus,
   Smartphone,
   TerminalSquare,
+  Volume2Icon,
+  VolumeOffIcon,
   X,
 } from "lucide-react";
-import { Volume2, VolumeOff } from "lucide";
 import {
   type MouseEvent as ReactMouseEvent,
   type WheelEvent as ReactWheelEvent,
@@ -33,7 +34,6 @@ import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { MorphIcon } from "~/components/MorphIcon";
 import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
 import { useTheme } from "~/hooks/useTheme";
 import {
@@ -358,6 +358,7 @@ function MainChatTab(props: MainChatTabProps) {
         onChange={(event) => setRenameTitle(event.currentTarget.value)}
         onBlur={() => void commitRename()}
         onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
           if (event.key === "Enter") {
             event.preventDefault();
             void commitRename();
@@ -530,7 +531,11 @@ function WorkspaceSurfaceTab(props: {
               />
             }
           >
-            <MorphIcon className="size-3" icon={audio === "muted" ? VolumeOff : Volume2} />
+            {audio === "muted" ? (
+              <VolumeOffIcon className="size-3" />
+            ) : (
+              <Volume2Icon className="size-3" />
+            )}
           </TooltipTrigger>
           <TooltipPopup>{audio === "muted" ? "Unmute tab" : "Mute tab"}</TooltipPopup>
         </Tooltip>

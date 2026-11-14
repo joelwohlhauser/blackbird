@@ -20,6 +20,7 @@ const setup = () => {
         Layer.mock(DesktopBrowserChannel)({
           available: true,
           isShown: () => false,
+          loadFailure: () => undefined,
           fetch: ({ url, form }) =>
             Effect.sync(() => {
               world.requests.push(`${new URL(url).pathname} ${form ?? ""}`);

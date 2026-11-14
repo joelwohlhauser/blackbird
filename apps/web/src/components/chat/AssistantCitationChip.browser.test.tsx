@@ -43,7 +43,6 @@ function mount(onSave: () => boolean, chipCitation: AssistantCitation = citation
     return (
       <AssistantCitationChip
         citation={chipCitation}
-        composer
         commentEditor={{ open, onOpenChange: setOpen, onSave }}
       />
     );

@@ -90,6 +90,8 @@ export type RightPanelSurface =
       repository: string;
       number: number;
       url?: string;
+      /** A clicked link waiting for the panel to show where it points; cleared once shown. */
+      revealUrl?: string;
       detailTab?: PullRequestDetailTab;
     }
   | { id: "pull-requests"; kind: "pull-requests" }
@@ -243,6 +245,8 @@ interface RightPanelStoreState {
       repository: string;
       number: number;
       url?: string;
+      /** A clicked link to reveal; reopening a surface passes only its `url`. */
+      revealUrl?: string;
       detailTab?: PullRequestDetailTab;
     },
   ) => void;
@@ -251,6 +255,8 @@ interface RightPanelStoreState {
     surfaceId: string,
     detailTab: PullRequestDetailTab,
   ) => void;
+  /** Clears the surface's pending link only while it is still `revealUrl`. */
+  settlePullRequestReveal: (ref: ScopedThreadRef, surfaceId: string, revealUrl: string) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   openThread: (ref: ScopedThreadRef, threadId: ThreadId, title?: string) => void;
   openSlackThread: (ref: ScopedThreadRef, itemKey: string, title: string) => void;
@@ -485,6 +491,14 @@ export function updatePullRequestTabStatus<Status extends { state: unknown; isDr
     ? statuses
     : { ...statuses, [surfaceId]: status };
 }
+
+/** A pending link belongs to the click that made it, not to a reload or a reopen. */
+const withoutReveal = (surface: RightPanelSurface): RightPanelSurface => {
+  if (surface.kind !== "pull-request" || surface.revealUrl === undefined) return surface;
+  const { revealUrl: _pending, ...rest } = surface;
+  return rest;
+};
+
 const upsertSurface = (
   current: ThreadRightPanelState,
   surface: RightPanelSurface,
@@ -1145,12 +1159,15 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           ...userAction(state, scopedThreadKey(ref), (current) => {
             const surface = pullRequestSurface(target);
             const existing = findSurface(current, (entry) => entry.id === surface.id);
+            const previous: PullRequestSurface =
+              existing?.kind === "pull-request" ? existing : surface;
+            const { url, revealUrl } = target;
+            // A later link replaces one not yet shown.
+            const { revealUrl: _previous, ...rest } = previous;
             const entry: PullRequestSurface =
-              existing?.kind !== "pull-request"
-                ? surface
-                : target.url
-                  ? { ...existing, ...surface }
-                  : existing;
+              url || revealUrl
+                ? { ...rest, ...surface, ...(revealUrl ? { revealUrl } : {}) }
+                : previous;
             const inPanel = current.surfaces.some((candidate) => candidate.id === surface.id);
             const base = inPanel
               ? current
@@ -1184,6 +1201,22 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             ...current,
             surfaces: current.surfaces.map(withDetailTab),
             mainSurfaces: current.mainSurfaces.map(withDetailTab),
+          }));
+        }),
+      settlePullRequestReveal: (ref, surfaceId, revealUrl) =>
+        set((state) => {
+          const threadKey = scopedThreadKey(ref);
+          const existing = findSurface(
+            state.byThreadKey[threadKey] ?? EMPTY_THREAD_STATE,
+            (surface) => surface.id === surfaceId,
+          );
+          if (existing?.kind !== "pull-request" || existing.revealUrl !== revealUrl) return state;
+          const settle = (surface: RightPanelSurface): RightPanelSurface =>
+            surface.id === surfaceId ? withoutReveal(surface) : surface;
+          return automaticUpdate(state, threadKey, (current) => ({
+            ...current,
+            surfaces: current.surfaces.map(settle),
+            mainSurfaces: current.mainSurfaces.map(settle),
           }));
         }),
       openThread: (ref, threadId, title) =>
@@ -1944,8 +1977,19 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
       ),
       partialize: (state) => ({
         byThreadKey: Object.fromEntries(
-          Object.entries(state.byThreadKey).filter(
-            ([threadKey]) => !isPullRequestsPanelKey(threadKey),
+          Object.entries(state.byThreadKey).flatMap(([threadKey, threadState]) =>
+            isPullRequestsPanelKey(threadKey)
+              ? []
+              : [
+                  [
+                    threadKey,
+                    {
+                      ...threadState,
+                      surfaces: threadState.surfaces.map(withoutReveal),
+                      mainSurfaces: threadState.mainSurfaces.map(withoutReveal),
+                    },
+                  ],
+                ],
           ),
         ),
         workspaceNavigatorOpenByThreadKey: state.workspaceNavigatorOpenByThreadKey,
@@ -1974,7 +2018,7 @@ useRightPanelStore.subscribe((next, previous) => {
       ...removed.filter((surface) => !wasActive(surface)),
       ...removed.filter(wasActive),
     ];
-    for (const surface of closedInOrder) {
+    for (const surface of closedInOrder.map(withoutReveal)) {
       if (
         surface.kind === "terminal" ||
         surface.kind === "linear" ||

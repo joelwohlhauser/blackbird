@@ -107,9 +107,10 @@ const build = (
           Layer.mock(ServerSettings.ServerSettingsService)({ getSettings: settings }),
           ManagedPolicy.layerTest(),
           Layer.mock(ThreadLaunchService.ThreadLaunchService)({ launch }),
-          Layer.mock(ThreadManagementService.ThreadManagementService)(
-            sendToThread ? { sendToThread } : {},
-          ),
+          Layer.mock(ThreadManagementService.ThreadManagementService)({
+            getThreadRecords: () => Effect.succeed({ runs: [], messages: [] } as never),
+            ...(sendToThread ? { sendToThread } : {}),
+          }),
           Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
             namedProjectsRoot: "/projects",
             isScratchProject: () => Effect.succeed(false),
@@ -159,7 +160,7 @@ it.effect.each([
     }>`SELECT * FROM scheduled_tasks WHERE task_id = 'brief'`;
     expect(row?.run_count).toBe(expected);
     expect(Date.parse(row!.next_run_at)).toBeGreaterThan(Date.parse(now));
-    expect(row?.last_run_status).toBe(expected ? "succeeded" : "never");
+    expect(row?.last_run_status).toBe(expected ? "succeeded" : "failed");
   }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
 

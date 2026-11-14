@@ -8,7 +8,10 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 
-import type { DraftId } from "../../composerDraftStore";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+
+import type { ComposerThreadTarget, DraftId } from "../../composerDraftStore";
 import { useT3ProjectFileScripts } from "../../hooks/useT3ProjectFileScripts";
 import { type EnvMode, type EnvironmentOption } from "../BranchToolbar.logic";
 import { BranchToolbar } from "../BranchToolbar";
@@ -32,6 +35,8 @@ import {
 import { ThreadDetailsItemsMenuItems } from "./ThreadDetailsItemsMenu";
 import { resolveThreadDetailsVisibility } from "./threadDetailsItems";
 import { useClientSettings } from "../../hooks/useSettings";
+import { useProject, useServerConfigs } from "../../state/entities";
+import { ThreadDetailsThreadPrRows } from "./ThreadDetailsPrRows";
 import { cn } from "../../lib/utils";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
@@ -49,6 +54,7 @@ export interface ThreadDetailsPanelProps {
   worktreePath: string | null;
   isServerThread: boolean;
   draftId?: DraftId;
+  composerDraftTarget: ComposerThreadTarget;
   activeProjectScripts: ReadonlyArray<ProjectScript> | undefined;
   preferredScriptId: string | null;
   keybindings: ResolvedKeybindingsConfig;
@@ -89,6 +95,16 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
     props.environmentId,
     props.activeProjectScripts && visible.scripts ? props.gitCwd : null,
   );
+  const activeThreadRef = { environmentId: props.environmentId, threadId: props.threadId };
+  const project = useProject(scopeProjectRef(props.environmentId, props.projectId));
+  const serverConfig = useServerConfigs().get(props.environmentId);
+  // A Quick chat sits in the shared scratch root, so it must never get git.
+  // Until the config and project load, a Quick chat looks like any other folder.
+  const offersGit =
+    props.gitCwd !== null &&
+    serverConfig !== undefined &&
+    project !== null &&
+    !isScratchProject(project, serverConfig.scratchWorkspaceRoot);
   const branchToolbarProps = {
     showGitControls: props.isGitRepo,
     environmentId: props.environmentId,
@@ -121,7 +137,9 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
     environment: visible.environment,
     openIn: visible.openIn && props.showOpenInPicker,
     scripts: visible.scripts && props.activeProjectScripts !== undefined,
-    branch: props.gitCwd !== null && props.isGitRepo && visible.branch,
+    branch: offersGit && props.isGitRepo && visible.branch,
+    // Without a branch selector, linked pull requests still need somewhere to show.
+    pullRequests: !(offersGit && props.isGitRepo) && visible.branch,
   };
 
   return (
@@ -199,7 +217,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
             </ThreadDetailsSection>
           ) : null}
 
-          {props.gitCwd && show.branch ? (
+          {show.branch || show.pullRequests ? (
             <ThreadDetailsSection
               headingId="thread-details-version-control-heading"
               title="Version Control"
@@ -209,6 +227,13 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               <div className="flex flex-col">
                 {show.branch ? (
                   <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
+                ) : null}
+                {show.pullRequests ? (
+                  <ThreadDetailsThreadPrRows
+                    threadRef={activeThreadRef}
+                    project={project}
+                    composerTarget={props.composerDraftTarget}
+                  />
                 ) : null}
               </div>
             </ThreadDetailsSection>

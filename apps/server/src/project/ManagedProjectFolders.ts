@@ -1,4 +1,4 @@
-import { CommandId, ProjectId, QUICK_CHATS_PROJECT_ID } from "@t3tools/contracts";
+import { CommandId, GitCommandError, ProjectId, QUICK_CHATS_PROJECT_ID } from "@t3tools/contracts";
 import { newProjectFolderName } from "@t3tools/shared/path";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -29,7 +29,18 @@ export class ScratchProjectError extends Schema.TaggedError<ScratchProjectError>
   }
 }
 
+export const scratchFolderRoot = (baseDir: string, path: Path.Path) =>
+  path.resolve(baseDir, "scratch");
+
 export type ScratchError = ScratchProjectError;
+
+// The spawner checks cwd before spawning, so NotFound from spawn itself means a missing executable.
+const isMissingExecutable = (cause: unknown) =>
+  PlatformError.isPlatformError(cause) &&
+  cause.reason._tag === "NotFound" &&
+  cause.reason.method === "spawn";
+
+const isGitCommandError = Schema.is(GitCommandError);
 
 export class NamedProjectFolderError extends Schema.TaggedError<NamedProjectFolderError>()(
   "NamedProjectFolderError",
@@ -39,7 +50,9 @@ export class NamedProjectFolderError extends Schema.TaggedError<NamedProjectFold
   },
 ) {
   override get message(): string {
-    return "Failed to create the project folder.";
+    return isGitCommandError(this.cause) && isMissingExecutable(this.cause.cause)
+      ? "Git isn't installed on this machine. Install Git to create a project."
+      : "Failed to create the project folder.";
   }
 }
 

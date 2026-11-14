@@ -410,6 +410,9 @@ export function makeGuestInput(
           if (params["ignoreCache"] === true) guest.reloadIgnoringCache();
           else guest.reload();
           return Promise.resolve({});
+        case "Page.stopLoading":
+          guest.stop();
+          return Promise.resolve({});
         default:
           return command(method, params, undefined);
       }

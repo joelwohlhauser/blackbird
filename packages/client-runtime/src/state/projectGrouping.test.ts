@@ -265,17 +265,6 @@ describe("buildProjectGroups", () => {
     }
   });
 
-  it("keeps the repository folder name when clones share a custom title", () => {
-    const projects = [
-      makeProject("first", "/work/t3code", { title: "Custom project" }),
-      makeProject("second", "/work/t3code-2", { title: "Custom project" }),
-    ];
-
-    expect(buildProjectGroups({ projects, settings: settings("repository") })[0]?.label).toBe(
-      "t3code",
-    );
-  });
-
   it("uses the repository folder name rather than its display name", () => {
     const projects = [
       makeProject("first", "/work/t3code", { title: "t3code" }),
@@ -309,6 +298,63 @@ describe("buildProjectGroups", () => {
     ]);
     expect(groups[1]?.members.map((member) => member.project.id)).toEqual(["fork", "fork-2"]);
     expect(groups[1]?.label).toBe("t3code");
+  });
+
+  it("labels a group by the title its user renamed it to", () => {
+    const sharedTitles = [
+      makeProject("t3code", "/work/t3code", { title: "Custom project" }),
+      makeProject("t3code-2", "/work/t3code-2", { title: "Custom project" }),
+    ];
+    const renamed = sharedTitles.map((project) => ({ ...project, hasCustomTitle: true }));
+
+    const label = (projects: ReadonlyArray<EnvironmentProject>) =>
+      buildProjectGroups({ projects, settings: settings("repository") })[0]?.label;
+    expect(label(sharedTitles)).toBe("t3code");
+    expect(label(renamed)).toBe("Custom project");
+  });
+
+  it("labels a group by its repository when clones disagree on its casing", () => {
+    // A subfolder project, its repository root, and a clone whose remote URL is
+    // lowercased: no shared title or display name, but one repository.
+    const subfolder = makeProject("design-study", "/work/NewCo/reference/design-study");
+    const root = makeProject("NewCo", "/work/NewCo");
+    const lowercasedClone = makeProject("NewCo", "/remote/NewCo", {
+      environmentId: EnvironmentId.make("remote"),
+      repositoryIdentity: { ...repositoryIdentity, name: "T3CODE", displayName: "t3 code" },
+    });
+
+    const groups = buildProjectGroups({
+      projects: [subfolder, root, lowercasedClone],
+      settings: settings("repository"),
+      preferredEnvironmentId: environmentId,
+    });
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.label).toBe("t3code");
+
+    // A subfolder group in repository_path mode keeps its own title.
+    const localIdentity = { ...repositoryIdentity, rootPath: "/work/t3code" };
+    const pathGroups = buildProjectGroups({
+      projects: [
+        makeProject("design", "/work/t3code/design", {
+          title: "Design docs",
+          hasCustomTitle: true,
+          repositoryIdentity: localIdentity,
+        }),
+        makeProject("design", "/remote/t3code/design", {
+          environmentId: EnvironmentId.make("remote"),
+          repositoryIdentity: {
+            ...repositoryIdentity,
+            rootPath: "/remote/t3code",
+            name: "T3CODE",
+            displayName: "t3 code",
+          },
+        }),
+        makeProject("t3code", "/work/t3code", { repositoryIdentity: localIdentity }),
+      ],
+      settings: settings("repository_path"),
+      preferredEnvironmentId: environmentId,
+    });
+    expect(pathGroups.map((group) => group.label)).toEqual(["Design docs", "t3code"]);
   });
 
   it("applies a physical-project override without dropping its siblings", () => {

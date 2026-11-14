@@ -4,6 +4,7 @@ import { memo, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 
 import { Button } from "../ui/button";
+import { useMobileSidebarSheetMounted } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export interface PanelLayoutControlsProps {
@@ -129,11 +130,13 @@ export function WorkspaceTitlebarControls(props: {
   readonly besideRightSurface: boolean;
   readonly children: ReactNode;
 }) {
+  const mobileSidebarSheetMounted = useMobileSidebarSheetMounted();
   return (
     <div
       className={cn(
         "absolute top-[var(--workspace-controls-top)] z-50 mr-px flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
         props.besideRightSurface ? "right-3" : "right-[var(--workspace-controls-right)]",
+        mobileSidebarSheetMounted && "hidden",
       )}
       data-workspace-titlebar-controls
     >

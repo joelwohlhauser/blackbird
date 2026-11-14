@@ -3,6 +3,8 @@ import type { DesktopPreviewShortcut } from "@t3tools/contracts";
 export type PreviewAction =
   | "toggle-panel"
   | "refresh"
+  | "back"
+  | "forward"
   | "focus-url"
   | "zoom-in"
   | "zoom-out"

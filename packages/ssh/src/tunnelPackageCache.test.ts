@@ -50,11 +50,16 @@ ${body}
         { stdin: { stream: Stream.make(new TextEncoder().encode(script)), endOnDone: true } },
       ),
     );
-    const [stdout, stderr, exitCode] = yield* Effect.all(
-      [collectProcessOutput(child.stdout), collectProcessOutput(child.stderr), child.exitCode],
+    const output = { stdout: "", stderr: "" };
+    const [, , exitCode] = yield* Effect.all(
+      [
+        collectProcessOutput(child.stdout, output, "stdout"),
+        collectProcessOutput(child.stderr, output, "stderr"),
+        child.exitCode,
+      ],
       { concurrency: "unbounded" },
     );
-    assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
+    assert.equal(exitCode, 0, `${output.stdout}\n${output.stderr}`);
   },
   Effect.scoped,
   Effect.provide(NodeServices.layer),

@@ -11,6 +11,7 @@ import {
 import {
   AuthOrchestrationOperateScope,
   DEFAULT_BROWSER_PROFILE_ID,
+  INCOGNITO_BROWSER_PROFILE_ID,
   FILL_PREVIEW_VIEWPORT,
   type DesktopPreviewShortcut,
   type PreviewAnnotationPayload,
@@ -62,7 +63,7 @@ import {
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { useRightPanelStore } from "~/rightPanelStore";
 
-import { effectiveShortcutsForCommand } from "~/keybindings";
+import { effectiveShortcutsForCommand, shortcutLabelForCommand } from "~/keybindings";
 import { randomUUID } from "~/lib/utils";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { PreviewAnnotationSpeech } from "./PreviewAnnotationSpeech";
@@ -90,8 +91,7 @@ import {
 } from "./attachBrowserScreenshot";
 import { buildDraftThreadRouteParams, buildThreadRouteParams } from "~/threadRoutes";
 import { dispatchSnapShotComposerFocus } from "~/lib/desktopSnapShot";
-import { MorphIcon } from "~/components/MorphIcon";
-import { Check, Copy, Link as LinkGlyph, MessageSquarePlus } from "lucide";
+import { CheckIcon, CopyIcon, LinkIcon, MessageSquarePlusIcon } from "lucide-react";
 import { shouldShowPreviewEmptyState } from "./previewEmptyStateLogic";
 import { Badge } from "~/components/ui/badge";
 import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
@@ -160,6 +160,18 @@ function ServerTabFileNotShown(props: {
   );
 }
 
+function focusPreviewWebview(runtimeTabId: string) {
+  document
+    .querySelector<HTMLElement>(`[data-preview-viewport="${CSS.escape(runtimeTabId)}"] webview`)
+    ?.focus();
+}
+
+function focusPreviewPage(runtimeTabId: string) {
+  const active = document.activeElement;
+  if (active && active !== document.body && !active.closest("[data-preview-panel-mode]")) return;
+  focusPreviewWebview(runtimeTabId);
+}
+
 export function PreviewView({
   threadRef,
   tabId: requestedTabId,
@@ -172,8 +184,7 @@ export function PreviewView({
 }: Props) {
   const navigate = useNavigate();
   const urlInputRef = useRef<HTMLInputElement | null>(null);
-  const [findTarget, setFindTarget] = useState<{ tabId: string; url: string } | null>(null);
-  const [findFocusNonce, setFindFocusNonce] = useState(0);
+  const [find, setFind] = useState<{ tabId: string; requestId: number } | null>(null);
   const [pickActive, setPickActive] = useState(false);
   const canSendAnnotation =
     useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope) &&
@@ -207,6 +218,7 @@ export function PreviewView({
   const runtimeTabId = tabId
     ? previewRuntimeTabId(threadRef, previewState.serverEpoch, tabId)
     : null;
+  if (find !== null && find.tabId !== runtimeTabId) setFind(null);
   const recordingRuntimeTabId =
     tabId && runtimeTabId
       ? activeRecordingTabIds.has(runtimeTabId)
@@ -218,6 +230,7 @@ export function PreviewView({
   const isServerTab = snapshot?.runtime === "server" && !nativeServerTab;
   const serverOwnsRendering = snapshot?.runtime === "server";
   const serverSurfaceRef = useRef<ServerBrowserHandle | null>(null);
+  const serverSurfaceBoxRef = useRef<HTMLDivElement | null>(null);
   const [serverAspectRatioLocked, setServerAspectRatioLocked] = useState(false);
   const [serverToolbarWidth, setServerToolbarWidth] = useState(0);
   const serverToolbarShown =
@@ -258,17 +271,19 @@ export function PreviewView({
     runtimeTabId ? (state.byTabId[runtimeTabId]?.rect ?? null) : null,
   );
 
+  /** Resolves to the profile of the tab that loaded the URL, or null when nothing opened. */
   const navigateToResolvedUrl = async (resolvedUrl: string) => {
     if (isServerTab && serverSurfaceRef.current) {
-      if (serverInputDisabled) return false;
+      if (serverInputDisabled) return null;
       serverSurfaceRef.current.navigate(resolvedUrl);
       rememberPreviewUrl(threadRef, resolvedUrl);
-      return true;
+      return activeProfileId;
     }
     if (runtimeTabId && previewBridge) {
       await previewBridge.navigate(runtimeTabId, resolvedUrl);
       rememberPreviewUrl(threadRef, resolvedUrl);
-      return true;
+      focusPreviewPage(runtimeTabId);
+      return activeProfileId;
     }
     const result = await openPreviewSession({ openPreview: open, threadRef, url: resolvedUrl });
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
@@ -281,13 +296,19 @@ export function PreviewView({
         });
       }
     }
-    return result._tag === "Success";
+    return result._tag === "Success"
+      ? (result.value.profileId ?? DEFAULT_BROWSER_PROFILE_ID)
+      : null;
   };
+
+  // Incognito visits stay out of the project's persisted history.
+  const isHistoryProfile = (profileId: string | null) =>
+    profileId !== null && profileId !== INCOGNITO_BROWSER_PROFILE_ID;
 
   const handleSubmitUrl = async (next: string) => {
     try {
       const resolved = resolveAddressBarInput(next, resolveSearchUrlTemplate(getClientSettings()));
-      if (await navigateToResolvedUrl(resolved)) {
+      if (isHistoryProfile(await navigateToResolvedUrl(resolved))) {
         recordVisitForThread(threadRef, resolved);
       }
     } catch (error) {
@@ -309,7 +330,7 @@ export function PreviewView({
         isServerTab || !previewBridge
           ? normalizePreviewUrl(next)
           : resolveDiscoveredServerUrl(threadRef.environmentId, next);
-      if (await navigateToResolvedUrl(resolved)) {
+      if (isHistoryProfile(await navigateToResolvedUrl(resolved))) {
         recordVisitForThread(threadRef, next);
       }
     } catch (error) {
@@ -328,6 +349,11 @@ export function PreviewView({
   const handleRefresh = () => {
     if (isServerTab) serverSurfaceRef.current?.reload();
     else if (previewBridge && runtimeTabId) void previewBridge.refresh(runtimeTabId);
+  };
+
+  const handleStopLoading = () => {
+    if (isServerTab) serverSurfaceRef.current?.stopLoading();
+    else if (previewBridge && runtimeTabId) void previewBridge.stopLoading(runtimeTabId);
   };
 
   const adjustServerTab = async (change: Omit<PreviewAdjustInput, "threadId" | "tabId">) => {
@@ -363,6 +389,27 @@ export function PreviewView({
     if (next !== serverZoomFactor) void adjustServerTab({ zoomFactor: next });
   };
 
+  const canFindInPage =
+    previewBridge !== null &&
+    runtimeTabId !== null &&
+    desktopOverlay !== null &&
+    !isServerTab &&
+    !showEmptyState &&
+    !isUnreachable;
+  const handleFind = () => {
+    if (!canFindInPage) {
+      toastManager.add({ type: "info", title: "Find on page isn't available for this page" });
+      return;
+    }
+    setFind((previous) => ({ tabId: runtimeTabId, requestId: (previous?.requestId ?? 0) + 1 }));
+  };
+
+  // Otherwise focus falls to the body and the next find shortcut misses the preview.
+  const closeFind = () => {
+    setFind(null);
+    if (runtimeTabId) focusPreviewPage(runtimeTabId);
+  };
+
   const handleZoomIn = () => {
     if (serverOwnsRendering) stepServerZoom(1);
     else if (previewBridge && runtimeTabId) void previewBridge.zoomIn(runtimeTabId);
@@ -390,7 +437,10 @@ export function PreviewView({
       target,
       browserResponsiveViewportForToggle({
         defaults: browserDefaults,
-        panelRect,
+        // Only BrowserSurfaceSlot publishes a store rect; streamed tabs measure their own box.
+        panelRect: isServerTab
+          ? (serverSurfaceBoxRef.current?.getBoundingClientRect() ?? null)
+          : panelRect,
         zoomFactor: isServerTab ? serverZoomFactor : layoutZoomFactor,
       }),
     ).catch(() => undefined);
@@ -404,13 +454,6 @@ export function PreviewView({
   const handleForward = () => {
     if (isServerTab) serverSurfaceRef.current?.history(1);
     else if (previewBridge && runtimeTabId) void previewBridge.goForward(runtimeTabId);
-  };
-
-  const handleFind = () => {
-    if (!previewBridge || !runtimeTabId || isServerTab) return;
-    if (!desktopOverlay?.hasWebContents || showEmptyState || isUnreachable) return;
-    setFindTarget({ tabId: runtimeTabId, url });
-    setFindFocusNonce((nonce) => nonce + 1);
   };
 
   const handleCopyUrl = () => {
@@ -444,18 +487,6 @@ export function PreviewView({
       case "copy-url":
         return handleCopyUrl();
     }
-  };
-
-  const findOpen =
-    visible && !loading && findTarget?.tabId === runtimeTabId && findTarget.url === url;
-
-  if (!findOpen && findTarget !== null) setFindTarget(null);
-
-  const closeFind = () => {
-    setFindTarget(null);
-    Array.from(document.querySelectorAll<HTMLElement>("webview[data-preview-tab]"))
-      .find((element) => element.dataset.previewTab === runtimeTabId)
-      ?.focus();
   };
 
   const handleOpenInBrowser = () => {
@@ -527,15 +558,14 @@ export function PreviewView({
         copyUrl: handleCopyUrl,
         ...(nativeServerTab && previewBridge
           ? {
-              find: handleFind,
               openDevTools: desktopCall(previewBridge.openDevTools),
               toggleNativePictureInPicture: () => handleNativePictureInPicture(),
+              ...(canFindInPage ? { find: handleFind } : {}),
             }
           : {}),
       }
     : previewBridge
       ? {
-          find: handleFind,
           copyUrl: handleCopyUrl,
           hardReload: desktopCall(previewBridge.hardReload),
           setColorScheme: (colorScheme) => {
@@ -555,6 +585,7 @@ export function PreviewView({
               .catch(() => undefined),
           openDevTools: desktopCall(previewBridge.openDevTools),
           toggleNativePictureInPicture: () => handleNativePictureInPicture(),
+          ...(canFindInPage ? { find: handleFind } : {}),
         }
       : null;
 
@@ -696,7 +727,7 @@ export function PreviewView({
             actionProps: {
               children: (
                 <>
-                  <MorphIcon icon={pasteState === "pasted" ? Check : MessageSquarePlus} />
+                  {pasteState === "pasted" ? <CheckIcon /> : <MessageSquarePlusIcon />}
                   {pasteState === "pasted" ? "Pasted" : "Paste in chat"}
                 </>
               ),
@@ -709,12 +740,7 @@ export function PreviewView({
                   id: "copy-image",
                   label: imageCopied ? "Copied image" : "Copy image",
                   props: {
-                    children: (
-                      <MorphIcon
-                        className={cn(imageCopied && "text-success")}
-                        icon={imageCopied ? Check : Copy}
-                      />
-                    ),
+                    children: imageCopied ? <CheckIcon className="text-success" /> : <CopyIcon />,
                     disabled: imageCopied,
                     onClick: copyImage,
                   },
@@ -723,12 +749,7 @@ export function PreviewView({
                   id: "copy-path",
                   label: pathCopied ? "Copied path" : "Copy path",
                   props: {
-                    children: (
-                      <MorphIcon
-                        className={cn(pathCopied && "text-success")}
-                        icon={pathCopied ? Check : LinkGlyph}
-                      />
-                    ),
+                    children: pathCopied ? <CheckIcon className="text-success" /> : <LinkIcon />,
                     disabled: pathCopied,
                     onClick: copyPath,
                   },
@@ -903,6 +924,9 @@ export function PreviewView({
           readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
       );
       if (pickRequest.cancelled) return;
+      // Main's WebContents.focus() cannot move the embedder's DOM focus into a guest, so key
+      // presses would stay in the app; only focusing the <webview> element hands them to the page.
+      focusPreviewWebview(runtimeTabId);
       const result = await bridge.pickElement(runtimeTabId, voice);
       if (!result || pickRequest.cancelled) return;
       // The accepted pick must survive further clicks, tab changes, and unmount; stop cancellation here.
@@ -986,6 +1010,12 @@ export function PreviewView({
         case "refresh":
           handleRefresh();
           return;
+        case "back":
+          handleBack();
+          return;
+        case "forward":
+          handleForward();
+          return;
         case "focus-url":
           urlInputRef.current?.focus();
           urlInputRef.current?.select();
@@ -999,25 +1029,31 @@ export function PreviewView({
         case "reset-zoom":
           handleResetZoom();
           return;
-        case "back":
-        case "forward":
         case "find":
+          handleFind();
+          return;
         case "copy-url":
-          handleBrowserCommand(action);
+          handleCopyUrl();
           return;
         case "toggle-panel":
           return;
       }
     },
   );
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to preview actions while the view is visible
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to preview and desktop menu actions while the view is visible
   useEffect(() => {
     if (!visible) return;
     const unsubscribeAction = subscribePreviewAction((action, targetTabId) =>
       onPreviewAction(action, targetTabId),
     );
+    // A focused page swallows its own keydowns, so the desktop forwards these
+    // shortcuts from the guest as menu actions instead.
     const unsubscribeMenu = window.desktopBridge?.onMenuAction((action) => {
       if (action === "preview.focusUrl") onPreviewAction("focus-url", undefined);
+      if (action === "preview.zoomIn") onPreviewAction("zoom-in", undefined);
+      if (action === "preview.zoomOut") onPreviewAction("zoom-out", undefined);
+      if (action === "preview.resetZoom") onPreviewAction("reset-zoom", undefined);
+      if (action === "preview.find") onPreviewAction("find", undefined);
     });
     return () => {
       unsubscribeAction();
@@ -1062,6 +1098,7 @@ export function PreviewView({
           onBack={handleBack}
           onForward={handleForward}
           onRefresh={handleRefresh}
+          onStopLoading={handleStopLoading}
           onHome={
             runtimeTabId && (isServerTab ? !serverInputDisabled : previewBridge)
               ? () => {
@@ -1115,6 +1152,9 @@ export function PreviewView({
                   ? { move: { label: moveLabel, onMove: () => void handleMoveTab() } }
                   : {})}
                 profileName={activeProfileName}
+                findShortcutLabel={shortcutLabelForCommand(keybindings, "preview.find", {
+                  context: { previewFocus: true },
+                })}
                 zoomFactor={
                   serverOwnsRendering ? serverZoomFactor : (desktopOverlay?.zoomFactor ?? 1)
                 }
@@ -1132,15 +1172,6 @@ export function PreviewView({
         />
       ) : null}
 
-      {findOpen && runtimeTabId && previewBridge ? (
-        <PreviewFindBar
-          key={`${runtimeTabId}:${url}`}
-          tabId={runtimeTabId}
-          bridge={previewBridge}
-          focusNonce={findFocusNonce}
-          onClose={closeFind}
-        />
-      ) : null}
       <div ref={serverBodyRef} className="relative min-h-0 flex-1 overflow-hidden">
         {runtimeTabId && snapshot && isServerTab ? (
           <>
@@ -1161,7 +1192,11 @@ export function PreviewView({
               </div>
             ) : null}
             <div
-              className="absolute inset-x-0 bottom-0"
+              ref={serverSurfaceBoxRef}
+              className={cn(
+                "absolute inset-x-0 bottom-0",
+                (showEmptyState || isUnreachable) && "invisible",
+              )}
               style={{ top: viewport._tag !== "fill" ? BROWSER_DEVICE_TOOLBAR_HEIGHT : 0 }}
             >
               <ServerBrowserSurface
@@ -1182,10 +1217,7 @@ export function PreviewView({
                 }
                 onPopup={(popupTabId) => showPreviewPopup(threadRef, popupTabId, "panel")}
                 // Stays connected under the empty state so a URL picked there reaches the page.
-                className={cn(
-                  "absolute inset-0 h-full w-full",
-                  (showEmptyState || isUnreachable) && "invisible",
-                )}
+                className="absolute inset-0 h-full w-full"
               />
             </div>
           </>
@@ -1228,6 +1260,14 @@ export function PreviewView({
             tabId={runtimeTabId}
             zoomFactor={layoutZoomFactor}
             controller={controller}
+          />
+        ) : null}
+        {find && canFindInPage && find.tabId === runtimeTabId ? (
+          <PreviewFindBar
+            key={find.tabId}
+            tabId={find.tabId}
+            focusRequestId={find.requestId}
+            onClose={closeFind}
           />
         ) : null}
         {navStatus._tag === "LoadFailed" && navStatus.download ? (

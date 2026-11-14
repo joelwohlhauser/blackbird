@@ -24,6 +24,7 @@ import {
   isListedThreadLineage,
   type ContextMenuItem,
   type EnvironmentId,
+  type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
@@ -42,10 +43,17 @@ import {
 import type { SidebarThreadSummary, Thread } from "../types";
 import { cn, normalizeSearchText } from "../lib/utils";
 import { isLatestRunSettled } from "../session-logic";
+import { THREAD_STATUS_TEXT } from "@t3tools/client-runtime/state/thread-activity-announcement";
 import { observeIntersection } from "../lib/observeIntersection";
 import { deadlineStore } from "@t3tools/client-runtime/clock";
 import { useDeadlinePassed } from "../hooks/useDeadline";
 import { legacyProjectCwdPreferenceKey } from "../uiStateStore";
+import { isElectron } from "../env";
+import { isTerminalFocused } from "../lib/terminalFocus";
+import { isPreviewFocused } from "../lib/previewFocus";
+import { isModelPickerOpen } from "../modelPickerVisibility";
+import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 
 const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 
@@ -155,6 +163,13 @@ export function useSnoozeWakeClock(
     return nextClockMs;
   }
   return clockMs;
+}
+
+// Live status that says the cwd is not a repository means the checkout was removed.
+export function withoutRemovedCheckout<
+  T extends { readonly branch: string | null; readonly worktreePath: string | null },
+>(thread: T, gitStatus: { readonly isRepo?: boolean | undefined } | null): T {
+  return gitStatus?.isRepo === false ? { ...thread, branch: null, worktreePath: null } : thread;
 }
 
 export function useRetainedValue<T>(key: string | null, value: T | null): T | null {
@@ -735,6 +750,26 @@ type ThreadStatusInput = Pick<
   blockedOnThreadWait?: boolean | undefined;
 };
 
+// Read at event time: subscribing Sidebar to terminal or modifier state re-renders every row.
+export function threadShortcutContext(routeThreadRef: ScopedThreadRef | null) {
+  return {
+    terminalFocus: isTerminalFocused(),
+    terminalOpen:
+      routeThreadRef !== null &&
+      selectThreadTerminalUiState(
+        useTerminalUiStateStore.getState().terminalUiStateByThreadKey,
+        routeThreadRef,
+      ).terminalOpen,
+    previewFocus: isPreviewFocused(),
+    previewOpen:
+      selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, routeThreadRef) ===
+      "preview",
+    modelPickerOpen: isModelPickerOpen(),
+    isWeb: !isElectron,
+    isDesktop: isElectron,
+  };
+}
+
 export function resolveThreadLastVisitedAt(
   serverLastVisitedAt: string | null | undefined,
   localLastVisitedAt: string | undefined,
@@ -1015,6 +1050,25 @@ export function resolveSidebarThreadStatus(thread: SidebarThreadStatusInput): Si
     return thread.runtime.lastErrorClass === "usage_limit" ? "limited" : "failed";
   }
   return "ready";
+}
+
+/** What the window title says the open thread is doing, in the words its announcer uses. */
+export function resolveWindowTitleThreadStatus(thread: SidebarThreadStatusInput): string | null {
+  // A guest waiting doesn't hide that the agent is still working.
+  switch (resolveSidebarThreadStatus({ ...thread, pendingGuestMessageCount: 0 })) {
+    case "approval":
+      return THREAD_STATUS_TEXT.approval;
+    case "input":
+      return THREAD_STATUS_TEXT.input;
+    case "preparing":
+    case "working":
+      return THREAD_STATUS_TEXT.working;
+    case "waiting":
+      // Waiting on a child thread is still this turn, so it must not read as finished.
+      return thread.runtime?.status === "running" ? THREAD_STATUS_TEXT.working : null;
+    default:
+      return null;
+  }
 }
 
 /**
