@@ -25,12 +25,6 @@ export const DesktopBrowserEvent = Schema.Union([
   }),
   /** Its `<webview>` started or stopped being on screen in a desktop window. */
   Schema.Struct({ type: Schema.Literal("shown"), ...TabKey, shown: Schema.Boolean }),
-  Schema.Struct({
-    type: Schema.Literal("fetched"),
-    requestId: TrimmedNonEmptyString,
-    status: Schema.optionalKey(Schema.Int),
-    body: Schema.String,
-  }),
 ]);
 export type DesktopBrowserEvent = typeof DesktopBrowserEvent.Type;
 
@@ -49,13 +43,6 @@ export const DesktopBrowserCommand = Schema.Union([
     type: Schema.Literal("turn"),
     threadId: TrimmedNonEmptyString,
     active: Schema.Boolean,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("fetch"),
-    requestId: TrimmedNonEmptyString,
-    partitionScope: TrimmedNonEmptyString,
-    url: TrimmedNonEmptyString,
-    form: Schema.optionalKey(Schema.String),
   }),
 ]);
 export type DesktopBrowserCommand = typeof DesktopBrowserCommand.Type;

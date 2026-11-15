@@ -11,7 +11,6 @@ import {
   Files,
   Globe2,
   MessageSquare,
-  Hash,
   MessagesSquare,
   Plus,
   Smartphone,
@@ -105,8 +104,6 @@ export function surfaceTitle(
       return surface.title ?? "Subagent";
     case "side-chat":
       return "Side chat";
-    case "slack-thread":
-      return surface.title ?? "Slack thread";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -211,8 +208,6 @@ export function SurfaceIcon({
       return <BotIcon className="size-3 shrink-0" />;
     case "side-chat":
       return <MessagesSquare className="size-3 shrink-0" />;
-    case "slack-thread":
-      return <Hash className="size-3 shrink-0" />;
   }
 }
 

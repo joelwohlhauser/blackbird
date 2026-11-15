@@ -108,6 +108,7 @@ import Migration0098 from "./Migrations/098_TurnItemTypeStatusIndex.ts";
 import Migration0099 from "./Migrations/099_ShellThreadReadIndexes.ts";
 import Migration0100 from "./Migrations/100_AuthConnectDevices.ts";
 import Migration0101 from "./Migrations/101_AuthConnectDeniedRequests.ts";
+import Migration0102 from "./Migrations/102_DropSlack.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -212,6 +213,7 @@ const migrationEntries = [
   [99, "ShellThreadReadIndexes", Migration0099],
   [100, "AuthConnectDevices", Migration0100],
   [101, "AuthConnectDeniedRequests", Migration0101],
+  [102, "DropSlack", Migration0102],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

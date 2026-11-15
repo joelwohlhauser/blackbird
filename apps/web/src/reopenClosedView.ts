@@ -170,7 +170,6 @@ export async function reopenClosedView(
     case "linear":
     case "github-pr":
     case "file-diff":
-    case "slack-thread":
       return false;
   }
   return true;

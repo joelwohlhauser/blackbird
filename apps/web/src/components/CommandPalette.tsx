@@ -228,7 +228,6 @@ import {
   reduceCommandPaletteSearchState,
   type SearchOverlayMode,
 } from "./CommandPalette.logic";
-import { useSlackCommandPaletteItem } from "./slack/slackCommandPalette";
 import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { isSidebarHiddenThread } from "./Sidebar.logic";
 import { CommandPaletteContent, type PendingInputSelection } from "./CommandPaletteContent";
@@ -414,7 +413,6 @@ function OpenCommandPaletteDialog(props: {
   readonly initialContext: CommandPaletteReturnContext | undefined;
 }) {
   const navigate = useNavigate();
-  const slackJumpItem = useSlackCommandPaletteItem();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { openChildSearch, setOpen } = props;
   // Keyed by palette session: the intent and restored search only seed this
@@ -1717,8 +1715,6 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
-
-  if (slackJumpItem !== null) actionItems.push(slackJumpItem);
 
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   // Every setting goes to the palette's own matcher, so settings get the same

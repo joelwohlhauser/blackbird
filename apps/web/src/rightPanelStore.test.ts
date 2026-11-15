@@ -813,7 +813,7 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("keeps Blackbird v12 workspace tabs and navigator state while dropping agents tabs", () => {
+  it("keeps Blackbird v12 workspace tabs and navigator state while dropping agents and Slack tabs", () => {
     expect(
       migratePersistedRightPanelState({
         byThreadKey: {
@@ -822,6 +822,7 @@ describe("rightPanelStore", () => {
             activeSurfaceId: "agents",
             surfaces: [
               { id: "agents", kind: "agents" },
+              { id: "slack-thread:C001", kind: "slack-thread", itemKey: "C001" },
               { id: "browser:tab-1", kind: "preview", resourceId: "tab-1", url: "https://a.test" },
             ],
             mainSurfaces: [

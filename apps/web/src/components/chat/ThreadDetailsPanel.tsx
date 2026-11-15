@@ -26,7 +26,6 @@ import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 import { ThreadServersPanel } from "./ThreadServersPanel";
-import { ThreadSlackPanel } from "./ThreadSlackPanel";
 import {
   ThreadDetailsContext,
   ThreadDetailsUsage,
@@ -241,10 +240,6 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
 
           {!props.draftId && visible.servers ? (
             <ThreadServersPanel environmentId={props.environmentId} threadId={props.threadId} />
-          ) : null}
-
-          {!props.draftId && visible.slack ? (
-            <ThreadSlackPanel environmentId={props.environmentId} threadId={props.threadId} />
           ) : null}
 
           {!props.draftId && visible.automations ? (

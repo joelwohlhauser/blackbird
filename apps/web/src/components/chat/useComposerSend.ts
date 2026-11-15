@@ -118,15 +118,6 @@ import { fileAttachmentCapabilityBlockReason } from "./composerAttachmentFiles";
 import { useLinkedEnvironments } from "../../state/peerLinks";
 import { readEnvironmentScope } from "../../state/session";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
-import { slackEnvironment } from "../../state/slack";
-import { useAtomCommand } from "../../state/use-atom-command";
-import {
-  beginSlackAsk,
-  endSlackAsk,
-  pendingSlackAsk,
-  withSlackAskContext,
-  withSlackAskReference,
-} from "../slack/slackAsk";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
   threadContextsOutsideEnvironment,
@@ -360,7 +351,6 @@ export function useComposerSend(input: ComposerSendInput) {
   const uploadThreadFeedback = useOrchestrationCommand(threadEnvironment.uploadFeedback, {
     reportFailure: false,
   });
-  const linkSlackThread = useAtomCommand(slackEnvironment.linkThread, { reportFailure: true });
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const sendToMultipleModels = useMultipleModelSend({
@@ -839,14 +829,7 @@ export function useComposerSend(input: ComposerSendInput) {
     // Records bind attachments by the id each side knows: the local id for the optimistic
     // row, the upload id (or local id on the data-URL path) on the wire; the server
     // rebinds them to the persisted id.
-    sendInFlightRef.current = true;
-    const slackAsk = isLocalDraftThread && draftId ? await pendingSlackAsk(draftId) : null;
-    sendInFlightRef.current = false;
-    if (slackAsk === "unknown") {
-      setThreadError(threadIdForSend, "Slack is still loading. Send again in a moment.");
-      return;
-    }
-    const buildComposerMessageContext = (attachmentIds: ReadonlyArray<string>) =>
+    const buildOutgoingMessageContext = (attachmentIds: ReadonlyArray<string>) =>
       buildMessageContext({
         terminalContexts: composerTerminalContextsSnapshot,
         reviewComments: composerReviewCommentsSnapshot,
@@ -859,8 +842,6 @@ export function useComposerSend(input: ComposerSendInput) {
           attachmentId: attachmentIds[index] ?? attachment.id,
         })),
       });
-    const buildOutgoingMessageContext = (attachmentIds: ReadonlyArray<string>) =>
-      withSlackAskContext(buildComposerMessageContext(attachmentIds), slackAsk);
     const outgoingMessageContext = buildOutgoingMessageContext(
       composerAttachmentsSnapshot.map((attachment) => attachment.id),
     );
@@ -871,7 +852,7 @@ export function useComposerSend(input: ComposerSendInput) {
       model: ctxSelectedModel,
       models: ctxSelectedProviderModels,
       effort: ctxSelectedPromptEffort,
-      text: withSlackAskReference(messageTextForSend, slackAsk) || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
+      text: messageTextForSend || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
     });
     if (composerRef.current?.validateProviderInput(outgoingMessageText) === false) {
       return;
@@ -1205,7 +1186,6 @@ export function useComposerSend(input: ComposerSendInput) {
       : null;
     // Keep new-thread flows from reusing this draft while attachments and worktree setup settle.
     if (sentDraftThreadRef) markPromotedDraftThreadByRef(sentDraftThreadRef);
-    if (isLocalDraftThread && draftId) endSlackAsk(draftId);
     promptRef.current = "";
     clearComposerDraftContent(composerDraftTarget);
     composerRef.current?.resetCursorState();
@@ -1380,12 +1360,6 @@ export function useComposerSend(input: ComposerSendInput) {
           messageCreatedAt,
         );
         turnStartSucceeded = true;
-        if (slackAsk) {
-          void linkSlackThread({
-            environmentId,
-            input: { itemKey: slackAsk.itemKey, threadId: threadIdForSend, home: "slack" },
-          });
-        }
         if (checkoutPullRequestUrl) {
           linkCheckoutPullRequest(
             scopeThreadRef(environmentId, threadIdForSend),
@@ -1443,7 +1417,6 @@ export function useComposerSend(input: ComposerSendInput) {
             : threadIdForSend,
         );
         clearBackgroundDraftSubmissionByRef(scopeThreadRef(environmentId, threadIdForSend));
-        if (slackAsk) beginSlackAsk(slackAsk);
       }
       // Only an acknowledged send replaces its optimistic row, so a failed one leaves here.
       setOptimisticUserMessages((existing) => {

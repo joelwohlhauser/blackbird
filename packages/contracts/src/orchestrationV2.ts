@@ -1686,28 +1686,6 @@ const OrchestrationV2LinkRequestFields = {
   failure: Schema.optional(Schema.String),
 } as const;
 
-export const OrchestrationV2SlackDraftStatus = Schema.Literals([
-  "pending",
-  "sending",
-  "sent",
-  "discarded",
-]);
-export type OrchestrationV2SlackDraftStatus = typeof OrchestrationV2SlackDraftStatus.Type;
-
-const OrchestrationV2SlackDraftContentFields = {
-  conversationId: TrimmedNonEmptyString,
-  threadTs: Schema.optional(TrimmedNonEmptyString),
-  linkedItemKey: Schema.optional(TrimmedNonEmptyString),
-  targetLabel: Schema.String,
-  text: Schema.String,
-  draftStatus: OrchestrationV2SlackDraftStatus,
-} as const;
-
-const OrchestrationV2SlackDraftFields = {
-  type: Schema.Literal("slack_draft"),
-  ...OrchestrationV2SlackDraftContentFields,
-} as const;
-
 export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -1910,10 +1888,6 @@ export const OrchestrationV2TurnItem = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
     ...OrchestrationV2LinkRequestFields,
-  }),
-  Schema.Struct({
-    ...OrchestrationV2TurnItemBaseFields,
-    ...OrchestrationV2SlackDraftFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemBaseFields,
@@ -2796,10 +2770,6 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
     ...OrchestrationV2LinkRequestFields,
-  }),
-  Schema.Struct({
-    ...OrchestrationV2TurnItemJsonBaseFields,
-    ...OrchestrationV2SlackDraftFields,
   }),
   Schema.Struct({
     ...OrchestrationV2TurnItemJsonBaseFields,
@@ -3802,22 +3772,6 @@ const OrchestrationV2InternalCommand = Schema.Union([
      */
     answeringTurnItemIds: Schema.optional(Schema.Array(TurnItemId)),
     /** Tells the agent how the card ended, in the same commit that closes it. */
-    wake: Schema.optional(
-      Schema.Struct({
-        messageId: MessageId,
-        text: Schema.String,
-        notification: OrchestrationV2Notification,
-      }),
-    ),
-  }),
-  Schema.Struct({
-    type: Schema.Literal("slack_draft.record"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    runId: RunId,
-    nodeId: NodeId,
-    turnItemId: TurnItemId,
-    ...OrchestrationV2SlackDraftContentFields,
     wake: Schema.optional(
       Schema.Struct({
         messageId: MessageId,

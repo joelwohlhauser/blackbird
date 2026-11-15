@@ -73,7 +73,6 @@ export interface SettingsSearchItem {
   readonly peerLinksOnly?: boolean;
   readonly fastWorktreeCheckoutOnly?: boolean;
   readonly textGeneratorsOnly?: boolean;
-  readonly slackIntegrationOnly?: boolean;
   readonly secondary?: boolean;
   readonly requiresThreadAutoSettlement?: boolean;
 }
@@ -91,7 +90,6 @@ export interface SettingsSearchAvailability {
   readonly hasFastWorktreeCheckoutEnvironment?: boolean;
   /** An environment without a provider allow-list, which hides text generators. */
   readonly hasTextGeneratorsEnvironment?: boolean;
-  readonly slackIntegrationEnabled?: boolean;
   readonly hasPrimaryEnvironment?: boolean;
 }
 
@@ -947,26 +945,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
-    id: "slack-integration",
-    title: "Slack integration",
-    to: "/settings/general",
-    searchTerms: ["slack enable disable turn on off space inbox messages"],
-  },
-  {
-    id: "slack-connection",
-    title: "Slack connection",
-    to: "/settings/general",
-    searchTerms: ["slack token connect disconnect inbox messages"],
-    slackIntegrationOnly: true,
-  },
-  {
-    id: "slack-browser-session",
-    title: "Follow my Slack",
-    to: "/settings/general",
-    searchTerms: ["slack browser session sections muted channels read unread sidebar"],
-    slackIntegrationOnly: true,
-  },
-  {
     id: "gemini-api-key",
     title: "Gemini API key",
     to: "/settings/general",
@@ -1697,8 +1675,7 @@ export function filterAvailableSettingsSearchItems(
       (!item.peerLinksOnly || availability.hasPeerLinkHost === true) &&
       (!item.fastWorktreeCheckoutOnly ||
         availability.hasFastWorktreeCheckoutEnvironment === true) &&
-      (!item.textGeneratorsOnly || availability.hasTextGeneratorsEnvironment === true) &&
-      (!item.slackIntegrationOnly || availability.slackIntegrationEnabled === true),
+      (!item.textGeneratorsOnly || availability.hasTextGeneratorsEnvironment === true),
   );
 }
 

@@ -32,7 +32,6 @@ const RIGHT_PANEL_KINDS = [
   "pull-requests",
   "thread",
   "side-chat",
-  "slack-thread",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -96,20 +95,7 @@ export type RightPanelSurface =
     }
   | { id: "pull-requests"; kind: "pull-requests" }
   | { id: `thread:${string}`; kind: "thread"; threadId: ThreadId; title?: string }
-  | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId }
-  | { id: `slack-thread:${string}`; kind: "slack-thread"; itemKey: string; title?: string };
-
-export function slackThreadSurface(
-  itemKey: string,
-  title?: string,
-): Extract<RightPanelSurface, { kind: "slack-thread" }> {
-  return {
-    id: `slack-thread:${itemKey}`,
-    kind: "slack-thread",
-    itemKey,
-    ...(title === undefined ? {} : { title }),
-  };
-}
+  | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 const RIGHT_PANEL_STORAGE_VERSION = 15;
@@ -199,7 +185,6 @@ interface RightPanelStoreState {
       | "pull-request"
       | "thread"
       | "side-chat"
-      | "slack-thread"
     >,
   ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null, url?: string | null) => void;
@@ -259,7 +244,6 @@ interface RightPanelStoreState {
   settlePullRequestReveal: (ref: ScopedThreadRef, surfaceId: string, revealUrl: string) => void;
   openTerminal: (ref: ScopedThreadRef, terminalId: string) => void;
   openThread: (ref: ScopedThreadRef, threadId: ThreadId, title?: string) => void;
-  openSlackThread: (ref: ScopedThreadRef, itemKey: string, title: string) => void;
   splitTerminal: (
     ref: ScopedThreadRef,
     surfaceId: string,
@@ -308,7 +292,6 @@ interface RightPanelStoreState {
       | "pull-request"
       | "thread"
       | "side-chat"
-      | "slack-thread"
     >,
   ) => void;
   setWorkspaceNavigatorTab: (ref: ScopedThreadRef, tab: WorkspaceNavigatorTab) => void;
@@ -336,7 +319,6 @@ const singletonSurface = (
     | "pull-request"
     | "thread"
     | "side-chat"
-    | "slack-thread"
   >,
 ): RightPanelSurface => {
   switch (kind) {
@@ -701,7 +683,7 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
   return (persistedSurfaces as RightPanelSurface[]).flatMap<RightPanelSurface>((surface) => {
     if (!surface || typeof surface !== "object") return [];
     const kind = (surface as { kind?: string }).kind;
-    if (kind === "plan" || kind === "agents") return [];
+    if (kind === "plan" || kind === "agents" || kind === "slack-thread") return [];
     if (
       (surface.kind === "file" || surface.kind === "files") &&
       "folderTrail" in surface &&
@@ -1239,21 +1221,6 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             };
           }),
         })),
-      openSlackThread: (ref, itemKey, title) =>
-        set((state) =>
-          automaticUpdate(state, scopedThreadKey(ref), (current) => {
-            const surface = slackThreadSurface(itemKey, title);
-            if (findSurface(current, (entry) => entry.id === surface.id)) {
-              return upsertSurface(current, surface);
-            }
-            return {
-              ...current,
-              isOpen: true,
-              surfaces: [...current.surfaces, surface],
-              activeSurfaceId: surface.id,
-            };
-          }),
-        ),
       openFile: (ref, requestedPath, line) =>
         set((state) => ({
           ...userAction(state, scopedThreadKey(ref), (current) => {
@@ -2026,7 +1993,6 @@ useRightPanelStore.subscribe((next, previous) => {
         surface.kind === "file-diff" ||
         surface.kind === "new-tab" ||
         surface.kind === "thread" ||
-        surface.kind === "slack-thread" ||
         (surface.kind === "preview" && surface.resourceId !== null)
       )
         continue;

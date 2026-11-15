@@ -665,12 +665,10 @@ export function filterSidebarV2VisibleThreads<
   threads: readonly T[],
   scopedProjectKeys: ReadonlySet<string> | null,
   delegatedUnderParent: ReadonlySet<string>,
-  slackHomeThreadKeys?: ReadonlySet<string>,
 ): T[] {
   return threads.filter(
     (thread) =>
       thread.archivedAt === null &&
-      slackHomeThreadKeys?.has(`${thread.environmentId}:${thread.id}`) !== true &&
       !isShownUnderParent(
         { environmentId: thread.environmentId, threadId: thread.id },
         thread.lineage,

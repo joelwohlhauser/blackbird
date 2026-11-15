@@ -2,8 +2,6 @@ import { useNavigate, useRouter, type AnyRouter } from "@tanstack/react-router";
 
 import { GUEST_PAGE_PATH } from "../../guestPage";
 import { withoutAssistantCitationHash } from "../../lib/assistantCitationNavigation";
-import { useSlackSpaceStore } from "../../slackSpaceStore";
-import { readSlackIntegrationEnabled } from "../../state/slack";
 import { resolveThreadRouteTarget, type ThreadRouteTarget } from "../../threadRoutes";
 
 /** Settings and Usage open as modals over the last main-app view. */
@@ -38,13 +36,7 @@ export function startMainAppLocationTracking(router: AnyRouter): () => void {
     appModalReturnThreadTarget = resolveThreadRouteTarget(
       router.state.matches.at(-1)?.params ?? {},
     );
-    if (
-      !isSidebarUtilityPage(pathname) &&
-      pathname !== "/slack" &&
-      !(readSlackIntegrationEnabled() && useSlackSpaceStore.getState().space === "slack")
-    ) {
-      mainAppHref = href;
-    }
+    if (!isSidebarUtilityPage(pathname)) mainAppHref = href;
   };
   record();
   return router.subscribe("onResolved", record);

@@ -35,9 +35,7 @@ function LastChatRoutePersistence({
   readonly setStartupPath: (path: null) => void;
 }) {
   const navigate = useNavigate();
-  const pathname = useLocation({
-    select: (location) => (location.pathname === "/slack" ? location.href : location.pathname),
-  });
+  const pathname = useLocation({ select: (location) => location.pathname });
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the persisted last route in localStorage in step with the router location
   useEffect(() => {

@@ -38,8 +38,6 @@ import { PullRequestReviewGuideService } from "../pullRequest/PullRequestReviewG
 import { PullRequestService } from "../pullRequest/PullRequestService.ts";
 import { ScheduledTaskService } from "../scheduledTasks/ScheduledTaskService.ts";
 import { SecretRequests } from "../secrets/SecretRequests.ts";
-import { Slack } from "../slack/Slack.ts";
-import { SlackDrafts } from "../slack/SlackDrafts.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { SourceControlRepositoryService } from "../sourceControl/SourceControlRepositoryService.ts";
 import { GitVcsDriver } from "../vcs/GitVcsDriver.ts";
@@ -78,8 +76,6 @@ const toolHandlerServices = Layer.mergeAll(
   Layer.mock(RemoteDelegation)({}),
   Layer.mock(ScheduledTaskService)({}),
   Layer.mock(SecretRequests)({}),
-  Layer.mock(Slack)({}),
-  Layer.mock(SlackDrafts)({}),
   ServerConfig.layerTest(process.cwd(), { prefix: "t3-agent-context-budget-" }),
   Layer.mock(ServerEnvironment)({}),
   Layer.mock(ServerSecretStore)({}),

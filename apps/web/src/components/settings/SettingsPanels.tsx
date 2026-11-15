@@ -30,7 +30,6 @@ import { HOSTED_APP_CHANNEL } from "../../branding";
 import { AboutVersionTitle } from "./AboutVersionTitle";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import { LinearAccountSettingsRow } from "./LinearAccountSettingsRow";
-import { SlackSettingsSection } from "../slack/SlackSettingsSection";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
 import {
   canCheckForUpdate,
@@ -1143,8 +1142,6 @@ export function GeneralSettingsPanel() {
         />
         <LinearAccountSettingsRow />
       </SettingsSection>
-
-      <SlackSettingsSection />
 
       <TextToSpeechSettings />
     </SettingsPageContainer>

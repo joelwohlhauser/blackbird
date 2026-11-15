@@ -44,7 +44,6 @@ import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdatePill, SidebarUpdateArchitectureWarning } from "./SidebarUpdatePill";
-import { SlackSpaceSwitch } from "../slack/SlackSpaceSwitch";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
 
@@ -53,16 +52,7 @@ interface SidebarChromeHeaderProps {
   onBrandClick?: () => void;
 }
 
-export function SidebarChromeHeader(props: SidebarChromeHeaderProps) {
-  return (
-    <>
-      <SidebarChromeTitleBar {...props} />
-      <SlackSpaceSwitch />
-    </>
-  );
-}
-
-const SidebarChromeTitleBar = memo(function SidebarChromeTitleBar({
+export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
   onBrandClick,
 }: SidebarChromeHeaderProps) {
