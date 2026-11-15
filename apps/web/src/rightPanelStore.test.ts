@@ -809,6 +809,34 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("drops Slack tabs saved by version 15 when the store hydrates", async () => {
+    const { storage, name } = useRightPanelStore.persist.getOptions();
+    await storage!.setItem(name!, {
+      version: 15,
+      state: {
+        byThreadKey: {
+          "env-1:thread-A": {
+            isOpen: true,
+            activeSurfaceId: "slack-thread:C001",
+            surfaces: [
+              { id: "slack-thread:C001", kind: "slack-thread", itemKey: "C001" },
+              { id: "diff", kind: "diff" },
+            ],
+            mainSurfaces: [],
+            activeMainSurfaceId: null,
+          },
+        },
+      },
+    });
+    await useRightPanelStore.persist.rehydrate();
+
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces.map(
+        (surface) => surface.id,
+      ),
+    ).toEqual(["diff"]);
+  });
+
   it("keeps Blackbird v12 workspace tabs while dropping agents and Slack tabs", () => {
     expect(
       migratePersistedRightPanelState({
