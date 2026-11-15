@@ -342,9 +342,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.externalLinkOpenMode !== DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode
       ? ["Open web links"]
       : []),
-    ...(settings.pinnedSitesEnabled !== DEFAULT_UNIFIED_SETTINGS.pinnedSitesEnabled
-      ? ["Pinned sites"]
-      : []),
     ...(settings.notificationMode !== DEFAULT_UNIFIED_SETTINGS.notificationMode
       ? ["Thread notifications"]
       : []),
@@ -530,7 +527,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       language: DEFAULT_UNIFIED_SETTINGS.language,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       externalLinkOpenMode: DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode,
-      pinnedSitesEnabled: DEFAULT_UNIFIED_SETTINGS.pinnedSitesEnabled,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
@@ -653,29 +649,6 @@ function AutoSettleDaysInput({
       }}
       aria-label="Days of inactivity before auto-settle"
     />
-  );
-}
-
-export function LegacyFeaturesSection() {
-  const settings = useScopedSettings();
-  const updateSettings = useUpdateScopedSettings();
-
-  return (
-    <SettingsSection id="legacy-features" title="Legacy">
-      <SettingsRow
-        {...searchableSetting("legacy-sidebar")}
-        description="Restore per-project thread trees instead of the default flat sidebar."
-        control={
-          <Switch
-            checked={settings.legacySidebarEnabled}
-            onCheckedChange={(checked) =>
-              updateSettings({ legacySidebarEnabled: Boolean(checked) })
-            }
-            aria-label="Sidebar (legacy)"
-          />
-        }
-      />
-    </SettingsSection>
   );
 }
 
@@ -839,45 +812,22 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-        {settings.legacySidebarEnabled ? null : (
-          <SettingsRow
-            {...setting("working-shelf")}
-            description="Fold working and monitoring threads into a Working section. They return to the top of the inbox when they need you."
-            resetAction={
-              settings.sidebarWorkingShelfEnabled !==
-              DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled ? (
-                <SettingResetButton
-                  label="working section"
-                  onClick={() =>
-                    updateSettings({
-                      sidebarWorkingShelfEnabled:
-                        DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
-                    })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Switch
-                checked={settings.sidebarWorkingShelfEnabled}
-                onCheckedChange={(checked) =>
-                  updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
-                }
-                aria-label={gt("Working section")}
-              />
-            }
-          />
-        )}
         <SettingsRow
-          {...searchableSetting("pinned-sites")}
-          description="Show a Pinned sites section in the left sidebar for websites that open in dedicated browser views."
+          {...setting("working-shelf")}
+          description={
+            <T>
+              Fold working and monitoring threads into a Working section. They return to the top of
+              the inbox when they need you. The boring sidebar in Labs has no Working section.
+            </T>
+          }
           resetAction={
-            settings.pinnedSitesEnabled !== DEFAULT_UNIFIED_SETTINGS.pinnedSitesEnabled ? (
+            settings.sidebarWorkingShelfEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled ? (
               <SettingResetButton
-                label="pinned sites"
+                label="working section"
                 onClick={() =>
                   updateSettings({
-                    pinnedSitesEnabled: DEFAULT_UNIFIED_SETTINGS.pinnedSitesEnabled,
+                    sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
                   })
                 }
               />
@@ -885,11 +835,11 @@ export function GeneralSettingsPanel() {
           }
           control={
             <Switch
-              checked={settings.pinnedSitesEnabled}
+              checked={settings.sidebarWorkingShelfEnabled}
               onCheckedChange={(checked) =>
-                updateSettings({ pinnedSitesEnabled: Boolean(checked) })
+                updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
               }
-              aria-label="Enable pinned sites"
+              aria-label={gt("Working section")}
             />
           }
         />

@@ -37,7 +37,7 @@ vi.mock(import("~/state/server"), async (original) => {
   const { Atom } = await import("effect/reactivity");
   const { compileResolvedKeybindingsConfig } = await import("@t3tools/shared/keybindings");
   const keybindings = compileResolvedKeybindingsConfig([
-    { key: "mod+shift+]", command: "thread.previous", when: "!previewFocus && !previewOpen" },
+    { key: "mod+shift+]", command: "thread.next", when: "!previewFocus && !previewOpen" },
   ]);
   return { ...actual, primaryServerKeybindingsAtom: Atom.make(keybindings) };
 });

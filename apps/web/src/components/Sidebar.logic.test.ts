@@ -14,11 +14,9 @@ import {
   resolveSidebarRowThreadId,
   orderItemsByPreferredIds,
   pinOrderKeyBetween,
-  reorderSidebarThreads,
   resolveAdjacentThreadId,
   resolveSidebarSweepKeys,
   resolveSidebarThreadStatus,
-  resolveThreadRowClassName,
   resolveThreadStatusPill,
   resolveWindowTitleThreadStatus,
   resolveWorkingStartedAt,
@@ -236,44 +234,6 @@ describe("shouldCreateNewThreadInCurrentProject", () => {
     expect(shouldCreateNewThreadInCurrentProject(false, 1, 3)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(true, 1, 3)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(true, 0, 0)).toBe(true);
-  });
-});
-
-describe("reorderSidebarThreads", () => {
-  it("moves chats up and down in the main list", () => {
-    const keys = ["local:a", "local:b", "remote:a"];
-    const reordered = reorderSidebarThreads(keys, keys, "remote:a", "local:a");
-    expect(reordered).toEqual(["remote:a", "local:a", "local:b"]);
-    expect(reorderSidebarThreads(reordered, reordered, "remote:a", "local:b")).toEqual(keys);
-  });
-
-  it("preserves hidden chats when reordering a filtered project", () => {
-    const keys = ["hidden:a", "local:a", "hidden:b", "local:b", "hidden:c"];
-    const reordered = reorderSidebarThreads(keys, ["local:a", "local:b"], "local:b", "local:a");
-    expect(reordered).toEqual(["hidden:a", "local:b", "hidden:b", "local:a", "hidden:c"]);
-    // The same preference restores the global list and the filtered view.
-    expect(
-      orderItemsByPreferredIds({
-        items: keys,
-        preferredIds: reordered,
-        getId: (key) => key,
-      }),
-    ).toEqual(reordered);
-    expect(
-      orderItemsByPreferredIds({
-        items: ["local:a", "local:b"],
-        preferredIds: reordered,
-        getId: (key) => key,
-      }),
-    ).toEqual(["local:b", "local:a"]);
-  });
-
-  it("ignores canceled, stale, or cross-section drop targets", () => {
-    const keys = ["pinned:a", "local:a", "local:b"];
-    const visible = ["local:a", "local:b"];
-    expect(reorderSidebarThreads(keys, visible, "local:a", "local:a")).toBe(keys);
-    expect(reorderSidebarThreads(keys, visible, "missing", "local:b")).toBe(keys);
-    expect(reorderSidebarThreads(keys, visible, "local:a", "pinned:a")).toBe(keys);
   });
 });
 
@@ -684,47 +644,6 @@ describe("resolveThreadStatusPill", () => {
         },
       }),
     ).toBeNull();
-  });
-});
-
-describe("resolveThreadRowClassName", () => {
-  it("uses the active sidebar surface when a thread is both selected and active", () => {
-    const className = resolveThreadRowClassName({ isActive: true, isSelected: true });
-    expect(className).toContain("bg-sidebar-row-active");
-    expect(className).toContain("text-sidebar-foreground/85");
-    expect(className).toContain("font-normal");
-    expect(className).not.toContain("font-medium");
-    expect(className).not.toContain("font-semibold");
-    expect(className).not.toContain("bg-primary");
-  });
-
-  it("uses selected hover colors for selected threads", () => {
-    const className = resolveThreadRowClassName({ isActive: false, isSelected: true });
-    expect(className).toContain("bg-sidebar-row-selected");
-    expect(className).toContain("text-sidebar-foreground/85");
-    expect(className).toContain("font-normal");
-    expect(className).not.toContain("font-medium");
-    expect(className).toContain("hover:bg-sidebar-row-active");
-    expect(className).not.toContain("bg-primary");
-  });
-
-  it("uses the active sidebar surface for active-only threads", () => {
-    const className = resolveThreadRowClassName({ isActive: true, isSelected: false });
-    expect(className).toContain("bg-sidebar-row-active");
-    expect(className).toContain("text-sidebar-foreground/85");
-    expect(className).toContain("font-normal");
-    expect(className).not.toContain("font-medium");
-    expect(className).not.toContain("font-semibold");
-    expect(className).toContain("hover:bg-sidebar-row-active");
-  });
-
-  it("uses the same softened regular-weight title treatment for inactive threads", () => {
-    const className = resolveThreadRowClassName({ isActive: false, isSelected: false });
-    expect(className).toContain("text-sidebar-foreground/85");
-    expect(className).toContain("font-normal");
-    expect(className).not.toContain("font-medium");
-    expect(className).not.toContain("text-sidebar-muted-foreground");
-    expect(className).not.toContain("font-semibold");
   });
 });
 

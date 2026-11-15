@@ -1,10 +1,4 @@
-import {
-  FolderPlusIcon,
-  MessageCirclePlusIcon,
-  SearchIcon,
-  SquarePenIcon,
-  XIcon,
-} from "lucide-react";
+import { FolderPlusIcon, SearchIcon, SquarePenIcon, XIcon } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -26,9 +20,6 @@ export interface SidebarThreadHeaderProps {
   newThreadDisabled: boolean;
   newThreadShortcutLabel: string | null | undefined;
   showNewThreadInProjectHint: boolean;
-  onNewQuickChat: () => void;
-  newQuickChatDisabled: boolean;
-  quickChatShortcutLabel: string | null | undefined;
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -47,9 +38,6 @@ export function SidebarThreadHeader({
   newThreadDisabled,
   newThreadShortcutLabel,
   showNewThreadInProjectHint,
-  onNewQuickChat,
-  newQuickChatDisabled,
-  quickChatShortcutLabel,
   searchInputRef,
   searchQuery,
   onSearchQueryChange,
@@ -131,14 +119,6 @@ export function SidebarThreadHeader({
           onClick={onNewThread}
         >
           <SquarePenIcon />
-        </SidebarHeaderIconButton>
-        <SidebarHeaderIconButton
-          label="New quick chat"
-          tooltip={quickChatShortcutLabel ? `Quick chat (${quickChatShortcutLabel})` : "Quick chat"}
-          disabled={newQuickChatDisabled}
-          onClick={onNewQuickChat}
-        >
-          <MessageCirclePlusIcon />
         </SidebarHeaderIconButton>
       </div>
     </div>

@@ -6,7 +6,7 @@ import {
 
 import { isDesktopLocalConnectionTarget } from "../connection/desktopLocal";
 import { useClientSettings } from "../hooks/useSettings";
-import { getProjectOrderKey } from "../logicalProject";
+import { getProjectOrderKey } from "@t3tools/client-runtime/state/project-grouping";
 import { isQuickChatsProject } from "../quickChats";
 import { useProjects, useVisibleThreadShells } from "../state/entities";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";

@@ -395,22 +395,17 @@ describe("ClientSettings Linear integration", () => {
   });
 });
 
-describe("ClientSettings pinned sites", () => {
-  it("disables pinned sites by default", () => {
-    expect(decodeClientSettings({}).pinnedSitesEnabled).toBe(false);
-  });
-
-  it.each([true, false])("accepts pinnedSitesEnabled=%s", (enabled) => {
-    expect(decodeClientSettingsPatch({ pinnedSitesEnabled: enabled }).pinnedSitesEnabled).toBe(
-      enabled,
-    );
-  });
-});
-
 describe("ClientSettings sidebar", () => {
-  it("keeps Blackbird's customized sidebar as the default", () => {
-    const settings = decodeClientSettings({});
-    expect(settings.legacySidebarEnabled).toBe(true);
+  it("loads saved settings from the removed legacy sidebar and pinned sites", () => {
+    const settings = decodeClientSettings({
+      legacySidebarEnabled: true,
+      pinnedSitesEnabled: true,
+      pinnedSites: [{ id: "site-1", url: "https://example.com" }],
+      sidebarThreadPreviewCount: 6,
+      sidebarShowThreadDetails: false,
+    });
+    expect(settings.sidebarShowThreadDetails).toBe(false);
+    expect(settings).not.toHaveProperty("pinnedSites");
   });
 
   it("shows sidebar thread details by default and lets them be hidden", () => {

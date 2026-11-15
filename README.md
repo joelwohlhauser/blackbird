@@ -27,19 +27,10 @@ panels that reveal tools without dominating the conversation.
 
 The left sidebar includes:
 
-- one compact header row: the search field, then icon buttons for the project filter, New project, **New chat**, and **Quick chat**. New chat uses the current project; Shift-click opens the project picker;
+- one compact header row: the search field, then icon buttons for the project filter, New project, and **New chat**. New chat uses the current project; Shift-click opens the project picker;
 - Command+N on the new-chat page opens the project picker. Blackbird does not offer repository initialization; add an existing Git repository to use Git actions;
-- a dedicated, collapsible **Quick chats** section above Projects;
-- an optional, collapsible **Pinned sites** section for persistent full-window browser views;
-- a collapsible **Projects** section with local and remote copies grouped under
-  the human folder name rather than a GitHub `owner/repo` name (an open-folder
-  icon marks expanded projects without a favicon);
-- section header actions (new quick chat, sort/options, add project) that stay
-  hidden until the header row is hovered or focused;
-- manual drag-and-drop chat ordering within a project, saved locally; sidebar v2 saves active and pinned order on the server and supports dragging between sections;
-- lightweight status **dots only** — the status text lives in the tooltip and
-  is never rendered next to the dot, and there is no per-chat PR-state icon;
-- consistent full-width folder and chat rows;
+- upstream T3 Code's Pinned, Active, Working, Snoozed, and Settled sections, with drag-and-drop between and within them (the server saves the order). Quick chats appear there like any other chat;
+- the Labs **Boring sidebar** mode, which groups chats into project folders (Quick chats get their own folder), with local and remote copies grouped under the human folder name rather than a GitHub `owner/repo` name;
 - an optional compact mode (Settings → General → Thread details) that hides
   each chat's third row with the worktree, branch, PR, and agent;
 - a desktop update indicator with download progress and an explicit restart action;
@@ -47,7 +38,7 @@ The left sidebar includes:
 - resizing while docked or while temporarily overlaid; and
 - edge-hover reveal when the sidebar is hidden, without reflowing the app.
 
-Option+Tab immediately opens the next chat in the Active chats list; Shift+Option+Tab opens the previous one. Navigation follows the displayed order and stops at either end. There is no chat switcher or recent-chat ordering. Command+Shift+N opens the Quick-chat start page.
+Option+Tab immediately opens the next chat in the sidebar; Shift+Option+Tab opens the previous one. Navigation follows the sidebar's displayed order and stops at either end. There is no chat switcher or recent-chat ordering. Command+Shift+N opens the Quick-chat start page.
 
 Control+Tab opens the **tab switcher** for tabs inside the current chat (the pinned chat tab, main-area tabs, and right-panel tabs). It only engages when the chat has two or more tabs. There is no Command-held numbered chat-jump hint overlay (the ⌘1–9 shortcuts still work quietly and appear in the command palette).
 
@@ -143,7 +134,7 @@ Choosing Browser focuses the address bar immediately. Command+L focuses and sele
 
 While a browser tab's page or toolbar has focus on macOS, Command+[ and Command+] go back and forward in that tab, Command+F opens Find in page (Enter and Shift+Enter move between matches, Escape closes it), and Command+Shift+C copies the page URL. Find and Copy URL are also in the browser's More menu. Find isn't available for pages streamed from a remote environment. With focus anywhere else, these shortcuts keep their app meaning.
 
-To save memory, the desktop app keeps browser pages loaded only in the four chats opened most recently, chats whose agent is working, pinned sites, and tabs in picture-in-picture or being recorded. Linear issue tabs are the exception: they load only once shown and unload after five minutes hidden. Other tabs keep their URL and title and load the page again when their chat is opened, so scroll position and unsaved form input are lost while logins stay.
+To save memory, the desktop app keeps browser pages loaded only in the four chats opened most recently, chats whose agent is working, and tabs in picture-in-picture or being recorded. Linear issue tabs are the exception: they load only once shown and unload after five minutes hidden. Other tabs keep their URL and title and load the page again when their chat is opened, so scroll position and unsaved form input are lost while logins stay.
 
 The second surface is the narrow, independently resizable **workspace
 navigator**, also referred to as the new right sidebar or sidepanel. It has
@@ -243,8 +234,8 @@ draft can be moved into a project from the picker under its heading.
 
 The orchestration layer still requires a project, so the server creates a
 reserved internal `blackbird-quick-chats` project on demand
-(`projects.ensureScratch`) on the primary environment. That project is
-deliberately hidden from Projects and project pickers. The legacy
+(`projects.ensureScratch`) on the primary environment. The sidebar lists its
+chats like any project's, and new-chat project pickers leave it out. The legacy
 `blackboard-quick-chats` id is recognized only for migration.
 
 ### Thread deletion
@@ -252,28 +243,6 @@ deliberately hidden from Projects and project pickers. The legacy
 Deleting a thread is a hard delete. After the deletion's cleanup effects finish, `ThreadPurge` removes every row of the thread and its subagent threads, their attachments, provider event logs, checkpoint refs, matching server trace lines, and the provider's own transcript (Claude, Codex, and Grok, including imported terminal sessions). SQLite runs with `secure_delete`, so removed rows are zeroed. Clients drop their cached copy and per-thread state, and reconcile cached threads against the server after reconnecting. A failed cleanup effect or a live provider session postpones the purge to the next storage sweep.
 
 Deletion of a delegated child on a linked environment waits through temporary outages. If the link expires, is revoked, is replaced, or no longer permits controlling the child, local deletion still finishes; delete the remote child chat on its owning environment.
-
-### Pinned sites
-
-The **Pinned sites** section sits above Quick chats and pins websites — for
-example a Linear inbox — behind their favicons. Clicking a pin opens the site
-in a dedicated full-window in-app browser view: only the page and the browser
-controls, with no chat header, tab strip, or right-side surfaces. The left
-sidebar stays available. The feature is disabled by default and can be enabled
-under **Settings → General → Pinned sites**; disabling it hides the section and
-its routes without deleting saved pins.
-
-- The hover **+** in the section header opens a small dialog with the URL and
-  an optional name; the name defaults to the site's hostname.
-- Hovering a row reveals an **x** that unpins the site and closes its browser
-  session.
-- Each pin keeps its own browser session between visits, so switching to a
-  chat and back restores the exact page.
-- While the tab shows a page other than the pinned URL, the row's title gains
-  a muted `/` prefix; clicking the row again returns the tab to the pinned
-  URL.
-- Pins persist in client settings and appear only in the desktop app, since
-  the web build has no in-app browser.
 
 ### Read aloud
 

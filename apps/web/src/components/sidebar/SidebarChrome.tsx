@@ -49,12 +49,10 @@ import { observeResize } from "~/lib/observeResize";
 
 interface SidebarChromeHeaderProps {
   isElectron: boolean;
-  onBrandClick?: () => void;
 }
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
-  onBrandClick,
 }: SidebarChromeHeaderProps) {
   const stageLabel = useEnvironmentStageLabel();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
@@ -83,10 +81,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
         />
       </div>
       <div className="relative z-10 flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden py-0.5">
-        <SidebarBrand
-          onBackdrop={backdropVariant !== null}
-          {...(onBrandClick ? { onClick: onBrandClick } : {})}
-        />
+        <SidebarBrand onBackdrop={backdropVariant !== null} />
         {pillLabel ? (
           <div className="ml-1 flex h-7 items-center">
             <Badge data-environment-identification="pill" size="sm" variant="secondary">
@@ -174,27 +169,18 @@ function HistoryNavigationButton({
   );
 }
 
-function SidebarBrand({ onBackdrop, onClick }: { onBackdrop: boolean; onClick?: () => void }) {
-  const className = cn(
-    "flex relative z-10 ml-[var(--workspace-titlebar-content-left)] h-7 w-fit min-w-0 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset",
-    onBackdrop ? "text-white" : "text-foreground",
-  );
-  if (!onClick) {
-    return (
-      <Link aria-label="Go to chats" className={className} to="/">
-        <SidebarBrandMark onBackdrop={onBackdrop} />
-      </Link>
-    );
-  }
+function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
   return (
-    <button
-      type="button"
-      aria-label="Start a new quick chat"
-      className={className}
-      onClick={onClick}
+    <Link
+      aria-label="Go to chats"
+      className={cn(
+        "flex relative z-10 ml-[var(--workspace-titlebar-content-left)] h-7 w-fit min-w-0 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset",
+        onBackdrop ? "text-white" : "text-foreground",
+      )}
+      to="/"
     >
       <SidebarBrandMark onBackdrop={onBackdrop} />
-    </button>
+    </Link>
   );
 }
 

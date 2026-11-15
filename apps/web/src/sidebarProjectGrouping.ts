@@ -6,10 +6,9 @@ import type {
 import {
   buildProjectGroups,
   derivePhysicalProjectKey,
+  resolveScratchProjectScopeKey,
   type ProjectGroupingSettings,
-} from "./logicalProject";
-import { resolveScratchProjectScopeKey } from "@t3tools/client-runtime/state/project-grouping";
-import { sortThreads, type ThreadSortInput } from "@t3tools/client-runtime/state/thread-sort";
+} from "@t3tools/client-runtime/state/project-grouping";
 import type { Project } from "./types";
 
 export const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> = {
@@ -117,12 +116,6 @@ export function resolveSidebarProjectScopeKeys(input: {
   return [
     ...new Set(input.keys.flatMap((key) => resolveSidebarProjectScopeKey({ ...input, key }) ?? [])),
   ];
-}
-
-interface ProjectUsageThread extends ThreadSortInput {
-  readonly id: string;
-  readonly environmentId: string;
-  readonly projectId: string;
 }
 
 export function buildPhysicalToLogicalProjectKeyMap(input: {
@@ -250,40 +243,4 @@ export function buildSidebarProjectPickerEntries(input: {
   const preferred = entries.find((entry) => entry.isPreferred);
   if (!preferred) return entries;
   return [preferred, ...entries.filter((entry) => entry !== preferred)];
-}
-
-/** Choose the physical project used for a new chat in a grouped repository.
- * The latest chat is the durable record of whether the user most recently
- * worked locally or in a remote environment. */
-export function resolveProjectGroupNewThreadTarget(input: {
-  group: SidebarProjectSnapshot;
-  threads: ReadonlyArray<ProjectUsageThread>;
-}): SidebarProjectGroupMember | null {
-  const memberByProjectRef = new Map<string, SidebarProjectGroupMember>(
-    input.group.memberProjects.map(
-      (member) => [`${member.environmentId}\0${member.id}`, member] as const,
-    ),
-  );
-  const latestMatchingThread = sortThreads(
-    input.threads.filter((thread) =>
-      memberByProjectRef.has(`${thread.environmentId}\0${thread.projectId}`),
-    ),
-    "updated_at",
-  )[0];
-  if (latestMatchingThread) {
-    return (
-      memberByProjectRef.get(
-        `${latestMatchingThread.environmentId}\0${latestMatchingThread.projectId}`,
-      ) ?? null
-    );
-  }
-
-  return (
-    input.group.memberProjects.find(
-      (member) =>
-        member.environmentId === input.group.environmentId && member.id === input.group.id,
-    ) ??
-    input.group.memberProjects[0] ??
-    null
-  );
 }

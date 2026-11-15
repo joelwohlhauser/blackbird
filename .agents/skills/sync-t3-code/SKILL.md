@@ -24,7 +24,7 @@ Use the upstream commits that touched each conflicted file to understand intent.
 Watch for these recurring hazards:
 
 - Keep the Blackbird name and existing migration compatibility identifiers.
-- Keep Quick chats outside normal Projects UI.
+- Keep Quick chats out of new-chat project pickers. The sidebar shows them like any project; drop any reintroduced Quick chats or Pinned sites section.
 - Keep the two distinct right-side surfaces and Blackbird's keyboard shortcuts.
 - Keep GitHub and Linear links inside Blackbird's internal browser-backed tabs.
 - Keep GitHub Actions unnecessary for the personal fork.

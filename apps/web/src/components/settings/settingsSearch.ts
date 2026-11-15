@@ -483,12 +483,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["hide fold running monitoring threads inbox sidebar shelf"],
   },
   {
-    id: "legacy-sidebar",
-    title: "Sidebar (legacy)",
-    to: "/settings/labs",
-    searchTerms: ["project trees classic sidebar quick chats"],
-  },
-  {
     id: "boring-sidebar",
     title: "Boring sidebar (group by project)",
     to: "/settings/labs",
@@ -732,11 +726,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Open web links",
     to: "/settings/browser",
     searchTerms: ["links default browser in-app browser right panel external open"],
-  },
-  {
-    id: "pinned-sites",
-    title: "Pinned sites",
-    to: "/settings/general",
   },
   {
     id: "response-streaming",

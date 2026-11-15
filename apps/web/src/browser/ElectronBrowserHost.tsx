@@ -11,7 +11,6 @@ import { useAtomValue } from "@effect/atom-react";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { type ComponentProps, useEffect, useState } from "react";
 
-import { isPinnedSiteThreadId } from "~/pinnedSites";
 import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 
 import { isElectron } from "~/env";
@@ -212,9 +211,7 @@ export function ElectronBrowserHost() {
               threadKey={threadKey}
               pinned={pictureInPicture || recordingTabIds.has(runtimeTabId)}
               loadWhenShown={linearTabKeys.has(linearTabKey(threadKey, snapshot.tabId))}
-              retained={
-                recentThreadKeys.includes(threadKey) || isPinnedSiteThreadId(threadRef.threadId)
-              }
+              retained={recentThreadKeys.includes(threadKey)}
               threadRef={threadRef}
               tabId={snapshot.tabId}
               runtimeTabId={runtimeTabId}
@@ -278,6 +275,7 @@ function useRecentlyShown(runtimeTabId: string, enabled: boolean): boolean {
   );
   const [recentlyShown, setRecentlyShown] = useState(false);
   if (enabled && shown && !recentlyShown) setRecentlyShown(true);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- runs the idle timer that unloads a hidden Linear tab
   useEffect(() => {
     if (!enabled || shown || !recentlyShown) return;
     const timer = window.setTimeout(() => setRecentlyShown(false), IDLE_LINEAR_TAB_UNLOAD_MS);

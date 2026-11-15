@@ -584,19 +584,6 @@ export default defineConfig({
         },
       },
       {
-        // Blackbird's retained sidebar composes its own compact spacing and row treatments.
-        files: [
-          "apps/web/src/components/LegacySidebar.tsx",
-          "apps/web/src/components/Sidebar.tsx",
-          "apps/web/src/components/sidebar/SidebarPinnedSites.tsx",
-        ],
-        rules: {
-          "shadcn/no-restyle": "off",
-          "shadcn/no-arbitrary-values": "off",
-          "shadcn/require-static-classes": "off",
-        },
-      },
-      {
         // These Blackbird surfaces share flat borders and native window insets with the tab workspace.
         files: [
           "apps/web/src/components/BranchToolbar.tsx",

@@ -24,7 +24,7 @@ if that project exists there. Otherwise it selects an environment that has it.
 
 ### Quick chats
 
-A Quick chat is a thread without a project. It runs in your home folder and is listed in the separate **Quick chats** section of the sidebar. Start one with the sidebar's Quick chat button or `mod+shift+n`, click **or start a quick chat** under a new thread's heading, or pick **Quick chat** from **New thread in...** in the command palette. On mobile, pick **Quick chat** from the project list. To move a Quick chat draft into a project, pick the project under its heading. Branch, worktree, and diff controls stay hidden.
+A Quick chat is a thread without a project. It runs in your home folder and appears in the sidebar like any other thread, under a **Quick chats** folder when the sidebar groups threads by project. Start one with `mod+shift+n`, click **or start a quick chat** under a new thread's heading, or pick **Quick chat** from **New thread in...** in the command palette. On mobile, pick **Quick chat** from the project list. To move a Quick chat draft into a project, pick the project under its heading. Branch, worktree, and diff controls stay hidden.
 
 ### Start in the background
 
