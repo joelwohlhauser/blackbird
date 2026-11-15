@@ -127,12 +127,6 @@ const DEFAULT_BINDINGS = compile([
     },
     command: "rightPanel.previousTab",
   },
-  { shortcut: modShortcut("b", { shiftKey: true }), command: "workspaceNavigator.toggle" },
-  { shortcut: modShortcut("g", { shiftKey: true }), command: "workspaceNavigator.changes" },
-  {
-    shortcut: modShortcut("h", { shiftKey: true }),
-    command: "workspaceNavigator.pullRequest",
-  },
   {
     shortcut: modShortcut("d"),
     command: "terminal.split",
@@ -382,21 +376,6 @@ describe("split/new/close terminal shortcuts", () => {
 });
 
 describe("shortcutLabelForCommand", () => {
-  it("labels the workspace navigator shortcuts", () => {
-    assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "workspaceNavigator.toggle", "MacIntel"),
-      "⇧⌘B",
-    );
-    assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "workspaceNavigator.changes", "MacIntel"),
-      "⇧⌘G",
-    );
-    assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "workspaceNavigator.pullRequest", "MacIntel"),
-      "⇧⌘H",
-    );
-  });
-
   it("returns null for commands shadowed by a later conflicting shortcut", () => {
     const bindings = compile([
       { shortcut: modShortcut("1", { shiftKey: true }), command: "thread.jump.1" },
@@ -528,16 +507,52 @@ describe("chat/editor shortcuts", () => {
     );
   });
 
-  it("resolves a user-configured thread panel shortcut without assigning a default", () => {
-    const bindings = compile([
-      { shortcut: modShortcut("b", { shiftKey: true }), command: "threadPanel.toggle" },
-    ]);
+  it("toggles the thread panel by default without taking terminal keystrokes", () => {
+    for (const platform of ["MacIntel", "Win32", "Linux"]) {
+      const input = event({
+        key: "b",
+        metaKey: platform === "MacIntel",
+        ctrlKey: platform !== "MacIntel",
+        shiftKey: true,
+      });
+      assert.strictEqual(
+        resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+          platform,
+          context: { terminalFocus: false, editableFocus: true },
+        }),
+        "threadPanel.toggle",
+      );
+      assert.isNull(
+        resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
+          platform,
+          context: { terminalFocus: true },
+        }),
+      );
+    }
+  });
+
+  it("preserves a user-configured thread panel shortcut instead of its default", () => {
+    const bindings = mergeWithDefaultKeybindings(
+      compile([
+        {
+          shortcut: modShortcut("b", { altKey: true, shiftKey: true }),
+          command: "threadPanel.toggle",
+        },
+      ]),
+    );
 
     assert.strictEqual(
+      resolveShortcutCommand(
+        event({ key: "b", metaKey: true, altKey: true, shiftKey: true }),
+        bindings,
+        { platform: "MacIntel" },
+      ),
+      "threadPanel.toggle",
+    );
+    assert.isNull(
       resolveShortcutCommand(event({ key: "b", metaKey: true, shiftKey: true }), bindings, {
         platform: "MacIntel",
       }),
-      "threadPanel.toggle",
     );
   });
 });
@@ -820,58 +835,6 @@ describe("resolveShortcutCommand", () => {
         { platform: "MacIntel" },
       ),
       "rightPanel.toggle",
-    );
-  });
-
-  it("matches Command-Shift-B for the workspace navigator", () => {
-    assert.strictEqual(
-      resolveShortcutCommand(
-        event({ key: "b", code: "KeyB", metaKey: true, shiftKey: true }),
-        DEFAULT_BINDINGS,
-        { platform: "MacIntel" },
-      ),
-      "workspaceNavigator.toggle",
-    );
-  });
-
-  it("matches Command-Shift-G for workspace changes", () => {
-    assert.strictEqual(
-      resolveShortcutCommand(
-        event({ key: "g", code: "KeyG", metaKey: true, shiftKey: true }),
-        DEFAULT_BINDINGS,
-        { platform: "MacIntel" },
-      ),
-      "workspaceNavigator.changes",
-    );
-  });
-
-  it("matches Command-Shift-H for the pull request", () => {
-    assert.strictEqual(
-      resolveShortcutCommand(
-        event({ key: "h", code: "KeyH", metaKey: true, shiftKey: true }),
-        DEFAULT_BINDINGS,
-        { platform: "MacIntel" },
-      ),
-      "workspaceNavigator.pullRequest",
-    );
-  });
-
-  it("matches Command-Shift-I for workspace details by default", () => {
-    assert.strictEqual(
-      resolveShortcutCommand(
-        event({ key: "i", code: "KeyI", metaKey: true, shiftKey: true }),
-        DEFAULT_RESOLVED_KEYBINDINGS,
-        { platform: "MacIntel" },
-      ),
-      "workspaceNavigator.details",
-    );
-    assert.strictEqual(
-      shortcutLabelForCommand(
-        DEFAULT_RESOLVED_KEYBINDINGS,
-        "workspaceNavigator.details",
-        "MacIntel",
-      ),
-      "⇧⌘I",
     );
   });
 

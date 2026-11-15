@@ -116,10 +116,6 @@ describe("searchSettings", () => {
       "keybinding-composer.workspace",
       "keybinding-workspace.focusNext",
       "keybinding-workspace.focusPrevious",
-      "keybinding-workspaceNavigator.changes",
-      "keybinding-workspaceNavigator.details",
-      "keybinding-workspaceNavigator.pullRequest",
-      "keybinding-workspaceNavigator.toggle",
     ]);
     expect(searchSettings("glass").map((item) => item.id)).toEqual(["setting-glass-opacity"]);
     expect(searchSettings("panel animations").map((item) => item.id)).toEqual(["panel-animations"]);

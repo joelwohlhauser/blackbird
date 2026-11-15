@@ -244,8 +244,6 @@ function tabAudioState(overlay: DesktopPreviewOverlay | null): TabAudioState {
   return overlay.audioMuted ? "muted" : "audible";
 }
 
-// Matches the Files/Changes/PR tabs in the workspace navigator (h-7, px-2,
-// text-xs font-medium), with a leading icon.
 const TAB_BASE_CLASS =
   "group/tab flex h-7 max-w-40 shrink-0 items-center gap-1 rounded-md text-xs font-medium [-webkit-app-region:no-drag]";
 

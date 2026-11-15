@@ -31,7 +31,7 @@ const snapshot = (tabId: string): PreviewSessionSnapshot => ({
 beforeEach(() => {
   __setClientSettingsForTests(DEFAULT_CLIENT_SETTINGS);
   resetPreviewStateForTests();
-  useRightPanelStore.setState({ byThreadKey: {}, workspaceNavigatorTabByThreadKey: {} });
+  useRightPanelStore.setState({ byThreadKey: {}, threadPanelVisibilityByThreadKey: {} });
 });
 
 describe("addBrowserSurface", () => {

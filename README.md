@@ -78,9 +78,9 @@ character-level highlights and change markers alongside the scrollbar. Large
 diffs report complete file counts up front and load their patches
 progressively, file by file, so the aggregate Diff view stays responsive.
 
-The Diff view can review a selected local commit as well as working-tree and branch changes. File tabs opened from the workspace navigator continue to show the whole-file diff.
+The Diff view can review a selected local commit as well as working-tree and branch changes.
 
-### Workspace tabs and two right-side surfaces
+### Workspace tabs and thread details
 
 The chat area and the **normal right panel** form one tab workspace with two
 containers, deliberately limited to exactly those two (no arbitrary docking or
@@ -106,9 +106,8 @@ When the chat branch identifies a Linear issue, a Linear browser tab is created 
 
 Tabs are draggable: reorder them within a container or drag them between the
 chat area and the right panel. Dragging toward the chat column's right edge
-while the panel is closed reveals a drop zone that opens the panel on drop;
-the zone sits left of the workspace navigator when that is open. Moving or
-closing the panel's last tab closes the panel. A dropped tab activates in its
+while the panel is closed reveals a drop zone that opens the panel on drop.
+Moving or closing the panel's last tab closes the panel. A dropped tab activates in its
 new container, and tab layout persists per chat across restarts.
 
 Tabs opened without a specific container, including browser sessions opened by
@@ -116,8 +115,8 @@ agents, place themselves automatically: an open panel receives them; with the
 panel closed they open in the chat area unless the window is very wide
 (`WIDE_WORKSPACE_MIN_WIDTH`, 2200px — above any MacBook fullscreen), in which
 case the panel opens. Both tab bars have a Plus button that opens the full New
-Tab page in that container (Browser, Terminal, Diff, Linear, GitHub PR, and Pull
-request).
+Tab page in that container (Browser, Terminal, Files, Diff, Linear, GitHub PR,
+and Pull request).
 Clicking a subagent in the chat always opens it as a read-only, live transcript tab in the right panel, with an Open chat button for the full conversation.
 Side chats (`/side` or `/btw` in the composer, or **Side chat** on the New Tab page) open as a workspace tab with their own composer, placed like other new tabs, beside the chat they started from. They stay out of the sidebar, are listed under Details, and closing one you never used deletes it.
 A title-bar button toggles the normal right panel; there is no ⌥⌘B binding or
@@ -128,7 +127,7 @@ browser controls. Zoom shortcuts (Command+=, Command+-, Command+0) also work whi
 open it in the default browser, or copy it. Selected text and editable fields
 offer the usual copy, cut, paste, and select-all actions.
 Command+T opens a **New Tab** page with the available Browser, Terminal,
-Diff, Linear, GitHub PR, and Pull request surfaces.
+Files, Diff, Linear, GitHub PR, and Pull request surfaces.
 
 Choosing Browser focuses the address bar immediately. Command+L focuses and selects the address while browsing. Home returns pinned GitHub PR and Linear tabs to their linked page; other browser tabs return to the browser start page.
 
@@ -136,36 +135,12 @@ While a browser tab's page or toolbar has focus on macOS, Command+[ and Command+
 
 To save memory, the desktop app keeps browser pages loaded only in the four chats opened most recently, chats whose agent is working, and tabs in picture-in-picture or being recorded. Linear issue tabs are the exception: they load only once shown and unload after five minutes hidden. Other tabs keep their URL and title and load the page again when their chat is opened, so scroll position and unsaved form input are lost while logins stay.
 
-The second surface is the narrow, independently resizable **workspace
-navigator**, also referred to as the new right sidebar or sidepanel. It has
-four tabs:
-
-- **Details** (the default) — the chat's environment, worktree mode, branch,
-  PR status and watches, editor and project-script actions, automations, and
-  related chats (no Git actions; Changes owns those);
-- **Files** — the repository tree, search, new-file, and new-folder actions;
-- **Changes** — live branch changes including uncommitted and untracked work,
-  colored per-file line counts, a branch-vs-base summary, and the primary
-  commit/push/PR action;
-- **PR** — the exact files changed by the pull request associated with the
-  current branch, with an explicit refresh action for the PR and its files and
-  an All / Implementation / Tests switcher that filters the tree to or away from
-  test files.
-
-Selecting a file opens it in the normal right panel. Selecting an item from
-Changes or PR opens a dedicated whole-file diff tab rather than replacing the
-aggregate Diff surface. Opening a changed file centers its first changed line,
-while returning to an existing diff tab restores the scroll position where it
-was left. The workspace navigator's visibility, selected tab, and size belong
-to the current chat and survive chat switches/restarts.
+**Thread details** is T3 Code's card for the current chat: environment, worktree mode, branch, PR status and watches, Git actions (commit, push, and create PR), a Changes row that opens the Diff tab, editor and project-script actions, servers, automations, and related chats. It sits beside the conversation when the chat column has room and opens as a popover from the title-bar button otherwise. Whether it is shown is remembered per chat. Command+Shift+B or the title-bar button toggles it. The New Tab page's **Files** card opens the repository file browser.
 
 Useful shortcuts on macOS:
 
 - Command+. toggles Standard/Fast service tier while the composer is focused, on start pages and in chats, for models that offer both tiers.
-- Command+Shift+B — toggle the workspace navigator
-- Command+Shift+G — open the workspace navigator on Changes
-- Command+Shift+H — open the workspace navigator on PR
-- Command+Shift+I — open the workspace navigator on Details
+- Command+Shift+B — toggle thread details
 - Control+Tab / Control+Shift+Tab — tab switcher for the current chat's tabs;
   when the chat has no extra tabs, the shortcut does nothing
 - Command+T — open the New Tab page
@@ -287,9 +262,8 @@ The normal right panel has browser-backed integration tabs:
   branch and opens it in the configured organization. The organization slug is
   configurable and empty by default. Set it under Settings → General → Linear to open and pin issue tabs; until then, the Linear action opens its home page.
 - **PR** uses the authenticated GitHub CLI (`gh`) to detect the pull request for
-  the current branch, open the GitHub page inside Blackbird, and populate the
-  workspace navigator's PR file tree from the same PR.
-- **Previews** pills at the top of the navigator's PR tab list the preview
+  the current branch and open the GitHub page inside Blackbird.
+- **Previews** pills in a pull request's Summary tab list the preview
   deployment links found in the PR's comments. Click opens one in an in-app
   browser tab; right-click copies it. The matched hosts are configurable in
   Settings → Diffs & pull requests and default to `*.vercel.app`; Vercel branch previews are
@@ -311,7 +285,7 @@ Environment settings are host-specific. Remote worktrees default to `~/repositor
 
 The desktop app bundles a matching remote server. Desktop and mobile share an existing remote service through its Remote link. Keep desktop and remote versions aligned rather than starting a separate upstream backend against the same database.
 
-Agents can request a link to another environment, subject to the destination's access approval. Linked environments use the same scoped tool permissions as other remote connections. The Details navigator also lists development servers started by the thread so they can be inspected or stopped.
+Agents can request a link to another environment, subject to the destination's access approval. Linked environments use the same scoped tool permissions as other remote connections. Thread details also lists development servers started by the thread so they can be inspected or stopped.
 
 ## Development and deployment
 

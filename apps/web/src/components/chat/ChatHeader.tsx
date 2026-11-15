@@ -29,7 +29,6 @@ interface ChatHeaderProps {
   showProjectActions: boolean;
   preferredScriptId: string | null;
   rightPanelOpen: boolean;
-  workspaceNavigatorOpen: boolean;
   /** Leading header content: the main-area tab strip with the chat tab. */
   leading: ReactNode;
   onRunProjectScript: ((script: ProjectScript) => void) | undefined;
@@ -52,7 +51,6 @@ export const ChatHeader = memo(function ChatHeader({
   showProjectActions,
   preferredScriptId,
   rightPanelOpen,
-  workspaceNavigatorOpen,
   leading,
   onRunProjectScript,
   onAddProjectScript,
@@ -72,13 +70,7 @@ export const ChatHeader = memo(function ChatHeader({
         data-chat-header-actions
         className={cn(
           "flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3",
-          // The main header always owns the terminal control and also owns
-          // each right-side surface control until that surface opens.
-          rightPanelOpen && workspaceNavigatorOpen
-            ? "pr-8"
-            : rightPanelOpen || workspaceNavigatorOpen
-              ? "pr-16"
-              : "pr-24",
+          rightPanelOpen ? "pr-16" : "pr-24",
         )}
       >
         {pullRequests.length > 0 ? (

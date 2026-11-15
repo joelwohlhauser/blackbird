@@ -2,7 +2,6 @@ import { assert, describe, expect, it } from "vite-plus/test";
 import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import {
   compileResolvedKeybindingsConfig,
-  DEFAULT_RESOLVED_KEYBINDINGS,
   parseKeybindingShortcut,
 } from "@t3tools/shared/keybindings";
 
@@ -13,7 +12,6 @@ import {
   buildKeybindingRows,
   buildWhenVariableOptions,
   commandLabel,
-  groupKeybindingRows,
   keybindingConflictLabels,
   keybindingFromKeyboardEvent,
   parseWhenExpressionDraft,
@@ -23,19 +21,6 @@ import {
 } from "./KeybindingsSettings.logic";
 
 describe("KeybindingsSettings.logic", () => {
-  it("groups the workspace navigator commands under Navigation", () => {
-    const groups = groupKeybindingRows(buildKeybindingRows(DEFAULT_RESOLVED_KEYBINDINGS));
-    const navigation = groups.find((group) => group.id === "navigation");
-    expect(navigation?.rows.map((row) => row.command)).toEqual(
-      expect.arrayContaining([
-        "workspaceNavigator.toggle",
-        "workspaceNavigator.changes",
-        "workspaceNavigator.pullRequest",
-        "workspaceNavigator.details",
-      ]),
-    );
-  });
-
   it("keeps sibling row identities when a saved binding moves to the end", () => {
     const bindings = compileResolvedKeybindingsConfig([
       { command: "chat.new", key: "mod+n" },
@@ -246,12 +231,8 @@ describe("KeybindingsSettings.logic", () => {
     });
   });
 
-  it("labels Quick chat and workspace navigator commands", () => {
+  it("labels Quick chat commands", () => {
     expect(commandLabel("chat.newLocal")).toBe("New Quick Chat");
-    expect(commandLabel("workspaceNavigator.toggle")).toBe("Toggle Files Sidebar");
-    expect(commandLabel("workspaceNavigator.changes")).toBe("Open Changes Sidebar");
-    expect(commandLabel("workspaceNavigator.pullRequest")).toBe("Open Pull Request Sidebar");
-    expect(commandLabel("workspaceNavigator.details")).toBe("Open Details Sidebar");
   });
 
   it("offers chat traversal commands without a chat switcher", () => {

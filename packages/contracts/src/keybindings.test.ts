@@ -14,15 +14,11 @@ const decode = <S extends Schema.Top>(
     never
   >;
 
-it.effect("parses the workspace tab and navigator commands", () =>
+it.effect("parses the workspace tab commands", () =>
   Effect.gen(function* () {
     for (const [key, command] of [
       ["ctrl+tab", "rightPanel.nextTab"],
       ["ctrl+shift+tab", "rightPanel.previousTab"],
-      ["mod+shift+b", "workspaceNavigator.toggle"],
-      ["mod+shift+g", "workspaceNavigator.changes"],
-      ["mod+shift+h", "workspaceNavigator.pullRequest"],
-      ["mod+shift+i", "workspaceNavigator.details"],
     ] as const) {
       const parsed = yield* decode(KeybindingRule, { key, command });
       assert.strictEqual(parsed.command, command);

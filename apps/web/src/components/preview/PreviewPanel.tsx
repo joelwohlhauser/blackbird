@@ -19,7 +19,6 @@ interface Props {
   visible: boolean;
   showChrome?: boolean;
   homeUrl?: string | null;
-  layoutVersion?: string | number;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
     image: ComposerImageAttachment | null,
@@ -34,7 +33,6 @@ export function PreviewPanel({
   visible,
   showChrome,
   homeUrl,
-  layoutVersion,
   onSendAnnotation,
 }: Props) {
   const available = usePreviewAvailable(threadRef.environmentId);
@@ -62,7 +60,6 @@ export function PreviewPanel({
         visible={visible}
         {...(homeUrl !== undefined ? { homeUrl } : {})}
         {...(showChrome !== undefined ? { showChrome } : {})}
-        {...(layoutVersion !== undefined ? { layoutVersion } : {})}
         {...(onSendAnnotation ? { onSendAnnotation } : {})}
       />
     </PreviewPanelShell>

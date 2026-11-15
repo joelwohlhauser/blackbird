@@ -17,7 +17,7 @@ Run this workflow from the Blackbird repository root. Read the repository's `AGE
 
 Merge with `git merge --no-ff upstream/main`. Keep upstream history visible. Do not rebase or squash.
 
-Resolve conflicts by combining compatible behavior. Preserve Blackbird's custom behavior in the sidebar, chat switcher, unified workspace tabs, workspace navigator, composer and worktree flows, preview and diff rendering, settings, persistence, remote environment handling, and branding. Do not resolve heavily customized files by blindly taking `ours` or `theirs`.
+Resolve conflicts by combining compatible behavior. Preserve Blackbird's custom behavior in the sidebar, chat switcher, unified workspace tabs, composer and worktree flows, preview and diff rendering, settings, persistence, remote environment handling, and branding. Do not resolve heavily customized files by blindly taking `ours` or `theirs`. Thread details (`ThreadDetailsPanel`, `ThreadDetailsCard`, `GitActionsControl`) tracks upstream closely, so prefer upstream's changes there.
 
 Use the upstream commits that touched each conflicted file to understand intent. Port compatible fixes into Blackbird's structure when upstream replaced a component that Blackbird has redesigned.
 

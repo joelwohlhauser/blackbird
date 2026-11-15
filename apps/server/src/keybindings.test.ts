@@ -170,9 +170,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       // rightPanel.toggle intentionally ships unbound: the panel opens through
       // tab placement and closes when its last tab closes.
       assert.equal(defaultsByCommand.get("rightPanel.toggle"), undefined);
-      assert.equal(defaultsByCommand.get("workspaceNavigator.toggle"), "mod+shift+b");
-      assert.equal(defaultsByCommand.get("workspaceNavigator.changes"), "mod+shift+g");
-      assert.equal(defaultsByCommand.get("workspaceNavigator.pullRequest"), "mod+shift+h");
+      assert.equal(defaultsByCommand.get("threadPanel.toggle"), "mod+shift+b");
       assert.equal(defaultsByCommand.get("rightPanel.close"), "mod+w");
       assert.equal(defaultsByCommand.get("terminal.splitVertical"), "mod+shift+d");
       assert.equal(defaultsByCommand.get("modelPicker.jump.1"), "mod+1");

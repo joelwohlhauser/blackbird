@@ -4,7 +4,15 @@ import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
-import { FileDiff, Globe2, MessagesSquare, Plus, Smartphone, TerminalSquare } from "lucide-react";
+import {
+  FileDiff,
+  Files,
+  Globe2,
+  MessagesSquare,
+  Plus,
+  Smartphone,
+  TerminalSquare,
+} from "lucide-react";
 import {
   type ElementType,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -59,7 +67,6 @@ export interface RightPanelTabsProps {
   onAddGitHubPullRequest: () => void;
   onAddTerminal: () => void;
   onAddDiff: () => void;
-  /** Retained for persisted legacy Files surfaces; new browsing uses WorkspaceNavigator. */
   onAddFiles: () => void;
   onAddPullRequest?: () => void;
   onAddPullRequests?: () => void;
@@ -104,6 +111,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   linear: "Only available in the desktop app.",
   githubPullRequest: "No pull request detected for this branch yet.",
   terminal: "Available when a project is open.",
+  files: "Available when a project is open.",
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
@@ -203,6 +211,7 @@ export function NewTabPage(props: {
   onAddLinear: () => void;
   onAddGitHubPullRequest: () => void;
   onAddTerminal: () => void;
+  onAddFiles: () => void;
   onAddDiff: () => void;
   onAddPullRequest?: () => void;
   onAddPullRequests?: () => void;
@@ -213,6 +222,7 @@ export function NewTabPage(props: {
   githubPullRequestDetected: boolean;
   githubPullRequestAvailable: boolean;
   terminalAvailable?: boolean;
+  filesAvailable: boolean;
   diffAvailable: boolean;
   pullRequestAvailable?: boolean;
   pullRequestsAvailable?: boolean;
@@ -247,6 +257,15 @@ export function NewTabPage(props: {
       available: props.terminalAvailable !== false,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.terminal,
       onClick: props.onAddTerminal,
+    },
+    {
+      label: "Files",
+      description: "Browse and open files in this workspace.",
+      icon: Files,
+      shortcut: "F",
+      available: props.filesAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.files,
+      onClick: props.onAddFiles,
     },
     {
       label: "Diff",
@@ -535,6 +554,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddLinear={props.onAddLinear}
             onAddGitHubPullRequest={props.onAddGitHubPullRequest}
             onAddTerminal={props.onAddTerminal}
+            onAddFiles={props.onAddFiles}
             onAddDiff={props.onAddDiff}
             {...(props.onAddPullRequest !== undefined
               ? { onAddPullRequest: props.onAddPullRequest }
@@ -551,6 +571,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             {...(props.terminalAvailable !== undefined
               ? { terminalAvailable: props.terminalAvailable }
               : {})}
+            filesAvailable={props.filesAvailable === true}
             diffAvailable={props.diffAvailable}
             {...(props.pullRequestAvailable !== undefined
               ? { pullRequestAvailable: props.pullRequestAvailable }

@@ -12,7 +12,7 @@ const THREAD_REF = scopeThreadRef(
 
 describe("openDiffFilePrimaryAction", () => {
   beforeEach(() => {
-    useRightPanelStore.setState({ byThreadKey: {}, workspaceNavigatorTabByThreadKey: {} });
+    useRightPanelStore.setState({ byThreadKey: {}, threadPanelVisibilityByThreadKey: {} });
   });
 
   it("opens repository-relative diff files from a nested project", () => {

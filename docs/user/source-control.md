@@ -300,10 +300,9 @@ worktree root, link the main checkout's `.env` files, and install dependencies o
 
 ## Review changes in Blackbird
 
-The workspace navigator's **Changes** tab follows local edits as they happen. Its **PR** tab shows
-the exact files from the pull request associated with the current branch. Selecting a file opens its
-whole-file diff in the normal right panel, while pull request links open in Blackbird's internal
-browser-backed tabs.
+Thread details (Command+Shift+B) holds the Git actions and a **Changes** row that opens the Diff
+tab. A pull request's **Code** tab shows the exact files it changes. Pull request links open in
+Blackbird's internal browser-backed tabs.
 
 ## Troubleshooting
 

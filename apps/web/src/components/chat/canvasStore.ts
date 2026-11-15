@@ -1,5 +1,6 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { createStore } from "zustand";
+import type { ThreadPanelPresentation } from "../../rightPanelLayout";
 import type { DetailsCardMeasurement } from "./ChatCanvasContext";
 import { resolveChatCanvasLayout, type ChatCanvasPreview } from "./chatCanvasLayout";
 import { resolveThreadDetailsCardLayout } from "./threadDetailsCardLayout";
@@ -143,7 +144,7 @@ export function resolveChatCanvasModel({
     overlapsDetailsCard: layout.overlapsDetailsCard,
     topInset: detailsCardTopInset,
   });
-  const detailsCardMode: "inline" | "popover" = detailsCardPlacement ? "inline" : "popover";
+  const detailsCardMode: ThreadPanelPresentation = detailsCardPlacement ? "inline" : "popover";
   return {
     container,
     lane,

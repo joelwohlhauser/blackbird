@@ -65,11 +65,8 @@ export function usePreviewPanelInlineSize(
     // flash on mount. Only derived bounds are stored: the row resizes every frame
     // of a sidebar drag, but unchanged bounds skip re-rendering the owner.
     const measure = () => {
-      const navigatorWidth =
-        row?.querySelector<HTMLElement>("[data-workspace-navigator]")?.offsetWidth ?? 0;
-      const sharedWidth = row ? row.clientWidth - navigatorWidth : undefined;
-      setMaxWidth(getPreviewPanelMaxWidth(window.innerWidth, sharedWidth));
-      setDefaultWidth(getPreviewPanelDefaultWidth(window.innerWidth, sharedWidth));
+      setMaxWidth(getPreviewPanelMaxWidth(window.innerWidth, row?.clientWidth));
+      setDefaultWidth(getPreviewPanelDefaultWidth(window.innerWidth, row?.clientWidth));
     };
     measure();
     let frame = 0;

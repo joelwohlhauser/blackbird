@@ -12,12 +12,10 @@ import {
   pullRequestSurfaceId,
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
+  selectThreadPanelVisibility,
   selectThreadRightPanelState,
-  selectWorkspaceNavigatorOpen,
-  selectWorkspaceNavigatorTab,
   useRightPanelStore,
   workspaceLayoutProbe,
-  type WorkspaceNavigatorTab,
 } from "./rightPanelStore";
 
 const refA = scopeThreadRef("env-1" as EnvironmentId, ThreadId.make("thread-A"));
@@ -29,8 +27,7 @@ beforeEach(() => {
   useClosedViewStore.setState({ entries: [] });
   useRightPanelStore.setState({
     byThreadKey: {},
-    workspaceNavigatorOpenByThreadKey: {},
-    workspaceNavigatorTabByThreadKey: {},
+    threadPanelVisibilityByThreadKey: {},
     userActionRevisionByThreadKey: {},
     closeRevisionByThreadKey: {},
   });
@@ -163,7 +160,6 @@ describe("rightPanelStore", () => {
 
   it("leaves tabs that cannot be reopened out of the closed-tab history", () => {
     const store = useRightPanelStore.getState();
-    store.openDiffFile(refA, "branch", "src/app.ts", "main", "feature");
     store.open(refA, "new-tab");
     store.openLinear(refA, "linear-tab");
     store.openGitHubPullRequest(refA, "github-tab");
@@ -657,7 +653,7 @@ describe("rightPanelStore", () => {
           surfaces: [{ id: "browser:tab-a", kind: "preview", resourceId: "tab-a" }],
         },
       },
-      workspaceNavigatorOpenByThreadKey: {},
+      threadPanelVisibilityByThreadKey: {},
     });
   });
 
@@ -689,7 +685,7 @@ describe("rightPanelStore", () => {
           ],
         },
       },
-      workspaceNavigatorOpenByThreadKey: {},
+      threadPanelVisibilityByThreadKey: {},
     });
   });
 
@@ -734,7 +730,7 @@ describe("rightPanelStore", () => {
           ],
         },
       },
-      workspaceNavigatorOpenByThreadKey: {},
+      threadPanelVisibilityByThreadKey: {},
     });
   });
 
@@ -767,7 +763,7 @@ describe("rightPanelStore", () => {
       }),
     ).toEqual({
       byThreadKey: { "env-1:thread-A": panelState },
-      workspaceNavigatorOpenByThreadKey: {},
+      threadPanelVisibilityByThreadKey: {},
     });
   });
 
@@ -809,11 +805,11 @@ describe("rightPanelStore", () => {
           surfaces: [{ id: "diff", kind: "diff" }],
         },
       },
-      workspaceNavigatorOpenByThreadKey: {},
+      threadPanelVisibilityByThreadKey: {},
     });
   });
 
-  it("keeps Blackbird v12 workspace tabs and navigator state while dropping agents and Slack tabs", () => {
+  it("keeps Blackbird v12 workspace tabs while dropping agents and Slack tabs", () => {
     expect(
       migratePersistedRightPanelState({
         byThreadKey: {
@@ -840,7 +836,6 @@ describe("rightPanelStore", () => {
             activeMainSurfaceId: "file:src/app.ts",
           },
         },
-        workspaceNavigatorOpenByThreadKey: { "env-1:thread-A": true },
       }),
     ).toEqual({
       byThreadKey: {
@@ -872,7 +867,7 @@ describe("rightPanelStore", () => {
           activeMainSurfaceId: "file:src/app.ts",
         },
       },
-      workspaceNavigatorOpenByThreadKey: { "env-1:thread-A": true },
+      threadPanelVisibilityByThreadKey: {},
     });
   });
 
@@ -899,62 +894,53 @@ describe("rightPanelStore", () => {
           surfaces: [{ id: "diff", kind: "diff" }],
         },
       },
-      workspaceNavigatorOpenByThreadKey: {},
+      threadPanelVisibilityByThreadKey: {
+        "env-1:thread-A": { inlineOpen: false, popoverOpen: false },
+      },
     });
   });
 
-  it("remembers the selected navigator tab per thread", () => {
+  it("persists inline preference without restoring an open popover", () => {
+    expect(
+      migratePersistedRightPanelState({
+        threadPanelVisibilityByThreadKey: {
+          "env-1:thread-A": { inlineOpen: false, popoverOpen: true },
+          "env-1:thread-B": { inlineOpen: true, popoverOpen: true },
+        },
+      }),
+    ).toEqual({
+      byThreadKey: {},
+      threadPanelVisibilityByThreadKey: {
+        "env-1:thread-A": { inlineOpen: false, popoverOpen: false },
+      },
+    });
+  });
+
+  it("closes the popover atomically when the real right panel opens", () => {
+    useRightPanelStore.getState().setThreadPanelOpen(refA, "popover", true);
+    useRightPanelStore.getState().open(refA, "diff");
+
+    expect(
+      selectThreadPanelVisibility(
+        useRightPanelStore.getState().threadPanelVisibilityByThreadKey,
+        refA,
+      ),
+    ).toEqual({ inlineOpen: true, popoverOpen: false });
+  });
+
+  it("keeps an open popover visible by promoting it to inline when the real panel closes", () => {
     const store = useRightPanelStore.getState();
+    store.open(refA, "diff");
+    store.setThreadPanelOpen(refA, "inline", false);
+    store.setThreadPanelOpen(refA, "popover", true);
+    store.close(refA);
+
     expect(
-      selectWorkspaceNavigatorTab(
-        useRightPanelStore.getState().workspaceNavigatorTabByThreadKey,
+      selectThreadPanelVisibility(
+        useRightPanelStore.getState().threadPanelVisibilityByThreadKey,
         refA,
       ),
-    ).toBe("details");
-
-    store.setWorkspaceNavigatorTab(refA, "file");
-    store.setWorkspaceNavigatorTab(refB, "changes");
-
-    const tabs = useRightPanelStore.getState().workspaceNavigatorTabByThreadKey;
-    expect(selectWorkspaceNavigatorTab(tabs, refA)).toBe("file");
-    expect(selectWorkspaceNavigatorTab(tabs, refB)).toBe("changes");
-    expect(
-      selectWorkspaceNavigatorOpen(
-        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
-        refA,
-      ),
-    ).toBe(false);
-
-    store.setWorkspaceNavigatorTab(refA, "details");
-    expect(useRightPanelStore.getState().workspaceNavigatorTabByThreadKey).toEqual({
-      "env-1:thread-B": "changes",
-    });
-  });
-
-  it("opens the navigator on the requested tab and keeps it open", () => {
-    const store = useRightPanelStore.getState();
-    store.openWorkspaceNavigatorTab(refA, "details");
-    store.openWorkspaceNavigatorTab(refA, "pr");
-
-    const state = useRightPanelStore.getState();
-    expect(selectWorkspaceNavigatorOpen(state.workspaceNavigatorOpenByThreadKey, refA)).toBe(true);
-    expect(selectWorkspaceNavigatorTab(state.workspaceNavigatorTabByThreadKey, refA)).toBe("pr");
-  });
-
-  it("persists the navigator tab and ignores unknown persisted tabs", () => {
-    useRightPanelStore.getState().setWorkspaceNavigatorTab(refA, "pr");
-    const persisted = useRightPanelStore.persist
-      .getOptions()
-      .partialize?.(useRightPanelStore.getState());
-    expect(persisted).toMatchObject({
-      workspaceNavigatorTabByThreadKey: { "env-1:thread-A": "pr" },
-    });
-    expect(
-      selectWorkspaceNavigatorTab(
-        { "env-1:thread-A": "agents" } as unknown as Record<string, WorkspaceNavigatorTab>,
-        refA,
-      ),
-    ).toBe("details");
+    ).toEqual({ inlineOpen: true, popoverOpen: true });
   });
 
   it("opens a subagent thread in the panel and reuses its tab", () => {
@@ -1118,21 +1104,6 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("reopens a closed panel when opening a file diff surface", () => {
-    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/App.tsx");
-    useRightPanelStore.getState().close(refA);
-
-    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/routes.ts");
-    useRightPanelStore.getState().show(refA);
-
-    expect(
-      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA),
-    ).toMatchObject({
-      isOpen: true,
-      activeSurfaceId: "file-diff:unstaged::src%2Froutes.ts",
-    });
-  });
-
   it.each([
     ["generated\\", "generated"],
     ["notes/meeting ", "notes/meeting"],
@@ -1203,45 +1174,6 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("opens one reusable diff surface per file and comparison scope", () => {
-    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/App.tsx");
-    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/App.tsx");
-    useRightPanelStore.getState().openDiffFile(refA, "branch", "src/App.tsx", " origin/main ");
-    useRightPanelStore.getState().openDiffFile(refA, "unstaged", "src/routes.ts");
-
-    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
-      ...EMPTY_MAIN_TAB_STATE,
-      isOpen: true,
-      activeSurfaceId: "file-diff:unstaged::src%2Froutes.ts",
-      surfaces: [
-        {
-          id: "file-diff:unstaged::src%2FApp.tsx",
-          kind: "file-diff",
-          relativePath: "src/App.tsx",
-          scope: "unstaged",
-          baseRef: null,
-          headRef: null,
-        },
-        {
-          id: "file-diff:branch:origin%2Fmain:src%2FApp.tsx",
-          kind: "file-diff",
-          relativePath: "src/App.tsx",
-          scope: "branch",
-          baseRef: "origin/main",
-          headRef: null,
-        },
-        {
-          id: "file-diff:unstaged::src%2Froutes.ts",
-          kind: "file-diff",
-          relativePath: "src/routes.ts",
-          scope: "unstaged",
-          baseRef: null,
-          headRef: null,
-        },
-      ],
-    });
-  });
-
   it("removes persisted file surfaces when their workspace no longer exists", () => {
     useRightPanelStore.getState().openFile(refA, "src/index.ts");
     useRightPanelStore.getState().open(refA, "device");
@@ -1296,52 +1228,12 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("tracks workspace navigator visibility independently for each thread", () => {
-    useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
-
-    expect(
-      selectWorkspaceNavigatorOpen(
-        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
-        refA,
-      ),
-    ).toBe(true);
-    expect(
-      selectWorkspaceNavigatorOpen(
-        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
-        refB,
-      ),
-    ).toBe(false);
-
-    useRightPanelStore.getState().toggleWorkspaceNavigator(refB);
-    useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
-
-    expect(
-      selectWorkspaceNavigatorOpen(
-        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
-        refA,
-      ),
-    ).toBe(false);
-    expect(
-      selectWorkspaceNavigatorOpen(
-        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
-        refB,
-      ),
-    ).toBe(true);
-  });
-
   it("removeThread clears persisted state", () => {
     useRightPanelStore.getState().open(refA, "device");
-    useRightPanelStore.getState().toggleWorkspaceNavigator(refA);
-    useRightPanelStore.getState().setWorkspaceNavigatorTab(refA, "pr");
+    useRightPanelStore.getState().setThreadPanelOpen(refA, "inline", false);
     useRightPanelStore.getState().removeThread(refA);
-    expect(useRightPanelStore.getState().workspaceNavigatorTabByThreadKey).toEqual({});
+    expect(useRightPanelStore.getState().threadPanelVisibilityByThreadKey).toEqual({});
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBeNull();
-    expect(
-      selectWorkspaceNavigatorOpen(
-        useRightPanelStore.getState().workspaceNavigatorOpenByThreadKey,
-        refA,
-      ),
-    ).toBe(false);
   });
 
   it("keeps preview URLs and tab order while replacing restored runtime sessions", () => {

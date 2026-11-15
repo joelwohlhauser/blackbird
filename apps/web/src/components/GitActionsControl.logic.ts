@@ -48,7 +48,7 @@ export interface GitActionResultToastTiming {
   readonly dismissAfterVisibleMs: number | null;
 }
 
-const GIT_ACTION_SUCCESS_VISIBLE_MS = 10_000;
+export const GIT_ACTION_SUCCESS_VISIBLE_MS = 10_000;
 
 export function resolveGitActionResultToastTiming(
   type: "error" | "success",

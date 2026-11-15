@@ -67,10 +67,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   // tab placement and closes when its last tab closes.
   { key: "ctrl+tab", command: "rightPanel.nextTab" },
   { key: "ctrl+shift+tab", command: "rightPanel.previousTab" },
-  { key: "mod+shift+b", command: "workspaceNavigator.toggle" },
-  { key: "mod+shift+g", command: "workspaceNavigator.changes" },
-  { key: "mod+shift+h", command: "workspaceNavigator.pullRequest" },
-  { key: "mod+shift+i", command: "workspaceNavigator.details" },
+  { key: "mod+shift+b", command: "threadPanel.toggle", when: "!terminalFocus" },
   { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
   { key: "mod+shift+d", command: "terminal.splitVertical", when: "terminalFocus" },
   { key: "mod+shift+d", command: "composer.dictation", when: "!terminalFocus" },
@@ -128,9 +125,11 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "alt+shift+tab", command: "thread.previous", when: "!terminalFocus" },
   { key: "mod+f", command: "chat.find", when: "!terminalFocus && !previewFocus" },
   { key: "mod+shift+m", command: "modelPicker.toggle", when: "!terminalFocus" },
+  { key: "mod+shift+h", command: "composer.host", when: "!terminalFocus" },
   { key: "mod+shift+e", command: "composer.effort", when: "!terminalFocus" },
   { key: "mod+shift+a", command: "composer.mode", when: "!terminalFocus" },
   { key: "mod+shift+x", command: "composer.workspace", when: "!terminalFocus" },
+  { key: "mod+shift+g", command: "composer.branch", when: "!terminalFocus" },
   {
     key: "mod+shift+l",
     command: "composer.previousWorktree",

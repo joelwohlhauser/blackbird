@@ -7,6 +7,7 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import { type ScopedThreadRef, type RunId } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { useEffect } from "react";
+import { type ThreadPanelPresentation } from "../../rightPanelLayout";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -14,9 +15,11 @@ import {
 import { useDiffPanelStore } from "../../diffPanelStore";
 import {
   type RightPanelSurface,
+  selectThreadPanelOpen,
   type WorkspaceTabContainer,
   useRightPanelStore,
 } from "../../rightPanelStore";
+import { requestWorkspaceContentFocus, requestWorkspaceFocus } from "../../lib/workspaceFocus";
 import { setActivePreviewTab } from "../../previewStateStore";
 import { isBrowserSettingsReadError } from "../../browser/openFileInPreview";
 import { addBrowserSurface } from "../preview/addBrowserSurface";
@@ -39,6 +42,7 @@ interface RightPanelActionsInput {
   readonly deviceState: ReturnType<typeof useDeviceState>["state"];
   readonly deviceStateLoaded: boolean;
   readonly pullRequestPanelTarget: ReturnType<typeof threadPullRequestPanelTarget> | null;
+  readonly threadPanelPresentation: ThreadPanelPresentation;
   readonly isServerThread: boolean;
   /** A side chat pane; the main view already answers preview bus actions. */
   readonly embedded: boolean;
@@ -72,6 +76,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     deviceState,
     deviceStateLoaded,
     pullRequestPanelTarget,
+    threadPanelPresentation,
     isServerThread,
     embedded,
     isGitRepo,
@@ -130,6 +135,10 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     onDiffPanelOpen?.();
   };
   const addDiffSurfaceStable = useStableCallback(addDiffSurface);
+  const openChangesFromThreadPanel = () => {
+    addDiffSurface();
+  };
+  const openChangesFromThreadPanelStable = useStableCallback(openChangesFromThreadPanel);
   const addFilesSurface = () => {
     if (!activeThreadRef || !activeProject) return;
     useRightPanelStore.getState().open(activeThreadRef, "files");
@@ -228,6 +237,22 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     focusActivePanelTerminal(activeThreadRef);
   };
   const toggleRightPanelStable = useStableCallback(toggleRightPanel);
+  const toggleThreadPanel = () => {
+    if (!activeThreadRef) return;
+    const store = useRightPanelStore.getState();
+    if (threadPanelPresentation === "inline") {
+      const open = selectThreadPanelOpen(
+        store.threadPanelVisibilityByThreadKey,
+        activeThreadRef,
+        "inline",
+      );
+      if (!open) requestWorkspaceFocus({ area: "details" });
+      else if (document.activeElement?.closest('[data-workspace-area="details"]'))
+        requestWorkspaceContentFocus();
+    }
+    store.toggleThreadPanel(activeThreadRef, threadPanelPresentation);
+  };
+  const toggleThreadPanelStable = useStableCallback(toggleThreadPanel);
   const copyRightPanelFilePath = (relativePath: string) => {
     if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
       toastManager.add(
@@ -292,6 +317,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
       if (!event.repeat) closeRightPanelSurface(activeRightPanelSurface);
     },
     "diff.toggle": () => onToggleDiff(),
+    "threadPanel.toggle": () => toggleThreadPanel(),
   } satisfies ChatShortcutCommands;
 
   return {
@@ -312,7 +338,9 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     onOpenToolDiffStable,
     onOpenTurnDiffStable,
     onToggleDiffStable,
+    openChangesFromThreadPanelStable,
     openFileSurfaceStable,
     toggleRightPanelStable,
+    toggleThreadPanelStable,
   };
 }

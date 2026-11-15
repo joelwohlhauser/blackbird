@@ -180,7 +180,6 @@ import { useComposerDraftStore } from "~/composerDraftStore";
 import { commitBrowserViewportChange } from "~/browser/browserViewportActions";
 import { resolveResponsiveBrowserViewportSize } from "~/browser/browserViewportLayout";
 import { useBrowserPointerStore } from "~/browser/browserPointerStore";
-import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
 import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
 import { usePreviewMiniPlayerStore } from "~/previewMiniPlayerStore";
 import { dispatchPreviewAction } from "./previewActionBus";
@@ -347,27 +346,6 @@ describe("PreviewView", () => {
     );
     expect(screen.container.querySelector("[data-browser-surface-slot]")).not.toBeNull();
     expect(screen.container.querySelector('input[placeholder="Search or enter URL"]')).toBeNull();
-  });
-
-  it("re-presents the browser surface when a parent layout change moves it", async () => {
-    const layout = (layoutVersion: string) => (
-      <PreviewView
-        threadRef={TEST_THREAD_REF}
-        tabId="tab-1"
-        visible
-        layoutVersion={layoutVersion}
-      />
-    );
-    const surfaceX = () => useBrowserSurfaceStore.getState().byTabId[TEST_RUNTIME_TAB_ID]?.rect?.x;
-    setup();
-    await using screen = await render(layout("workspace-navigator-closed"));
-    const initialX = surfaceX();
-    expect(initialX).toBeTypeOf("number");
-
-    screen.container.style.position = "relative";
-    screen.container.style.left = "40px";
-    await screen.rerender(layout("workspace-navigator-open"));
-    expect(surfaceX()).toBe(initialX! + 40);
   });
 
   it("lets the pointer reach a local server card above an idle server-rendered tab", async () => {

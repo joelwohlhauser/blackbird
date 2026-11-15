@@ -120,7 +120,6 @@ interface Props {
   visible: boolean;
   showChrome?: boolean;
   homeUrl?: string | null;
-  layoutVersion?: string | number;
   onSendAnnotation?: (
     annotation: PreviewAnnotationPayload,
     image: ComposerImageAttachment | null,
@@ -179,7 +178,6 @@ export function PreviewView({
   visible,
   showChrome = true,
   homeUrl,
-  layoutVersion,
   onSendAnnotation,
 }: Props) {
   const navigate = useNavigate();
@@ -1227,7 +1225,6 @@ export function PreviewView({
               key={runtimeTabId}
               tabId={runtimeTabId}
               visible={visible && !isUnreachable}
-              {...(layoutVersion !== undefined ? { layoutVersion } : {})}
               className="absolute inset-0 h-full w-full"
             />
           ) : (

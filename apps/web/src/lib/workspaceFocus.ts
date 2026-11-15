@@ -418,6 +418,12 @@ export function requestWorkspaceFocus(target: WorkspaceFocusTarget) {
   controller?.request(target);
 }
 
+export function requestWorkspaceContentFocus() {
+  // Resolve after the layout commits: closing a maximized panel makes the
+  // composer available again, while hiding a sidebar may leave only the panel.
+  requestWorkspaceFocus({ area: "content" });
+}
+
 let pendingPaletteDirection: 1 | -1 | undefined;
 export function queueWorkspaceFocusFromPalette(direction: 1 | -1) {
   pendingPaletteDirection = direction;

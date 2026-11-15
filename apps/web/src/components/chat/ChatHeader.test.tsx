@@ -17,12 +17,7 @@ vi.mock("./GuestShareControls", () => ({
 
 import { ChatHeader } from "./ChatHeader";
 
-function renderHeader(
-  showProjectActions: boolean,
-  rightPanelOpen = false,
-  workspaceNavigatorOpen = false,
-  isServerThread = true,
-) {
+function renderHeader(showProjectActions: boolean, rightPanelOpen = false, isServerThread = true) {
   return renderToStaticMarkup(
     <ChatHeader
       activeThreadEnvironmentId={"local" as EnvironmentId}
@@ -35,7 +30,6 @@ function renderHeader(
       showProjectActions={showProjectActions}
       preferredScriptId={null}
       rightPanelOpen={rightPanelOpen}
-      workspaceNavigatorOpen={workspaceNavigatorOpen}
       leading={<span>Chat tab strip</span>}
       onRunProjectScript={() => {}}
       onAddProjectScript={async () => undefined as never}
@@ -59,24 +53,16 @@ describe("ChatHeader project actions", () => {
     expect(html).toContain("Add action");
   });
 
-  it("reserves room for panel toggles while both right panels are closed", () => {
+  it("reserves room for panel toggles while the right panel is closed", () => {
     expect(renderHeader(true)).toContain("pr-24");
   });
 
-  it("reserves room for terminal and navigator controls while the right panel is open", () => {
+  it("reserves room for thread details and terminal controls while the right panel is open", () => {
     expect(renderHeader(true, true)).toContain("pr-16");
-  });
-
-  it("reserves room for terminal and right-panel controls while the navigator is open", () => {
-    expect(renderHeader(true, false, true)).toContain("pr-16");
-  });
-
-  it("keeps the terminal control inset when both right-side surfaces are open", () => {
-    expect(renderHeader(true, true, true)).toContain("pr-8");
   });
 
   it("leaves the guest share indicator out of drafts, which the server does not know yet", () => {
     expect(renderHeader(true)).toContain("Guest share");
-    expect(renderHeader(true, false, false, false)).not.toContain("Guest share");
+    expect(renderHeader(true, false, false)).not.toContain("Guest share");
   });
 });

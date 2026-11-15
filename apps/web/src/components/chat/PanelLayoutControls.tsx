@@ -1,54 +1,87 @@
-import { PanelBottomIcon, PanelRightDashedIcon, PanelRightIcon } from "lucide-react";
+import { PanelBottomIcon, PanelRightIcon, SquareMenuIcon } from "lucide-react";
 import { memo, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
 
+import type { ThreadPanelPresentation } from "../../rightPanelLayout";
 import { Button } from "../ui/button";
+import { PopoverCreateHandle, PopoverTrigger } from "../ui/popover";
 import { useMobileSidebarSheetMounted } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export interface PanelLayoutControlsProps {
+  showThreadPanelControl?: boolean;
   showTerminalControl?: boolean;
   showRightPanelControl?: boolean;
-  showWorkspaceNavigatorControl?: boolean;
   terminalAvailable: boolean;
   terminalOpen: boolean;
   terminalShortcutLabel: string | null;
+  threadPanelOpen: boolean;
+  threadPanelPresentation: ThreadPanelPresentation;
+  threadPanelPopoverHandle?: ReturnType<typeof PopoverCreateHandle>;
+  threadPanelShortcutLabel: string | null;
   rightPanelAvailable: boolean;
   rightPanelOpen: boolean;
-  workspaceNavigatorAvailable?: boolean;
-  workspaceNavigatorOpen?: boolean;
   rightPanelShortcutLabel?: string | null;
   rightPanelUnavailableLabel?: string;
   onToggleTerminal: () => void;
+  onToggleThreadPanel: () => void;
   onToggleRightPanel: () => void;
-  onToggleWorkspaceNavigator?: () => void;
 }
 
-const NOOP = () => undefined;
-
 export const PanelLayoutControls = memo(function PanelLayoutControls({
+  showThreadPanelControl = true,
   showTerminalControl = true,
   showRightPanelControl = true,
-  showWorkspaceNavigatorControl = true,
   terminalAvailable,
   terminalOpen,
   terminalShortcutLabel,
+  threadPanelOpen,
+  threadPanelPresentation,
+  threadPanelPopoverHandle,
+  threadPanelShortcutLabel,
   rightPanelAvailable,
   rightPanelOpen,
-  workspaceNavigatorAvailable = false,
-  workspaceNavigatorOpen = false,
   rightPanelShortcutLabel,
   rightPanelUnavailableLabel = "Right panel is unavailable",
   onToggleTerminal,
+  onToggleThreadPanel,
   onToggleRightPanel,
-  onToggleWorkspaceNavigator = NOOP,
 }: PanelLayoutControlsProps) {
+  const threadPanelToggle = (
+    <Button
+      className="relative shrink-0 [-webkit-app-region:no-drag]"
+      aria-pressed={threadPanelOpen}
+      onClick={threadPanelPresentation === "popover" ? undefined : onToggleThreadPanel}
+      aria-label="Toggle thread details panel"
+      variant="ghost"
+      size="icon-sm"
+    >
+      <SquareMenuIcon className="size-4" />
+    </Button>
+  );
+  const threadPanelControl = (
+    <Tooltip>
+      <TooltipTrigger render={<span className="flex shrink-0" />}>
+        {threadPanelPresentation === "popover" ? (
+          <PopoverTrigger handle={threadPanelPopoverHandle} render={threadPanelToggle} />
+        ) : (
+          threadPanelToggle
+        )}
+      </TooltipTrigger>
+      <TooltipPopup side="bottom">
+        Toggle thread details
+        {threadPanelShortcutLabel ? ` (${threadPanelShortcutLabel})` : ""}
+      </TooltipPopup>
+    </Tooltip>
+  );
+
   return (
     <div
       className="flex h-full shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
       data-panel-layout-controls
     >
+      {showThreadPanelControl ? threadPanelControl : null}
       {showTerminalControl ? (
         <Tooltip>
           <TooltipTrigger
@@ -95,30 +128,6 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
             {rightPanelAvailable
               ? `Toggle right panel${rightPanelShortcutLabel ? ` (${rightPanelShortcutLabel})` : ""}`
               : rightPanelUnavailableLabel}
-          </TooltipPopup>
-        </Tooltip>
-      ) : null}
-      {showWorkspaceNavigatorControl ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                className="shrink-0 [-webkit-app-region:no-drag]"
-                aria-pressed={workspaceNavigatorOpen}
-                onClick={onToggleWorkspaceNavigator}
-                aria-label="Toggle workspace navigator"
-                variant="ghost"
-                size="icon-sm"
-                disabled={!workspaceNavigatorAvailable}
-              >
-                <PanelRightDashedIcon className="size-4" />
-              </Button>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {workspaceNavigatorAvailable
-              ? "Toggle Files, Changes, and PR sidebar"
-              : "Workspace navigator is unavailable"}
           </TooltipPopup>
         </Tooltip>
       ) : null}

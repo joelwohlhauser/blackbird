@@ -141,6 +141,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useStore } from "zustand";
 import { BackgroundThreadContext } from "./chat/backgroundThread";
 import { WorkspaceMutationIdContext } from "./chat/ChatMarkdownMedia";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -182,10 +183,8 @@ import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectSelectedRightPanelSurface,
+  selectThreadPanelOpen,
   selectThreadRightPanelState,
-  selectWorkspaceNavigatorOpen,
-  selectWorkspaceNavigatorTab,
-  rightPanelFileDiffSurfaceId,
   type RightPanelSurface,
   type WorkspaceTabContainer,
   updatePullRequestTabStatus,
@@ -235,7 +234,7 @@ import {
   ThreadPreviewMiniPlayer,
   useThreadPreviewCanvasSource,
 } from "./preview/ThreadPreviewMiniPlayer";
-import { createChatCanvasStore } from "./chat/canvasStore";
+import { createChatCanvasStore, resolveChatCanvasModel } from "./chat/canvasStore";
 import { usePreviewSession } from "./preview/usePreviewSession";
 import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
 import { githubPullRequestFromStatus } from "../githubPullRequestIntegration";
@@ -252,11 +251,6 @@ import {
 } from "./RightPanelTabs";
 import { RightPanelSheet } from "./RightPanelSheet";
 import { AnimatedRightSurface } from "./AnimatedRightSurface";
-import WorkspaceNavigator, {
-  type WorkspaceNavigatorDiffTarget,
-  type WorkspaceNavigatorTab,
-} from "./workspace/WorkspaceNavigator";
-import { checkoutPullRequestReference } from "./workspace/WorkspaceNavigator.logic";
 import {
   pullRequestPanelContext,
   threadPullRequestPanelTarget,
@@ -279,6 +273,7 @@ import { shortcutLabelForCommand } from "../keybindings";
 import { cn } from "~/lib/utils";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { PopoverCreateHandle } from "./ui/popover";
 import { projectScriptIdFromCommand } from "~/projectScripts";
 import { newMessageId } from "~/lib/utils";
 import { isInSideChatPane, type SideChatParentPanel } from "~/lib/sideChatPane";
@@ -1192,17 +1187,6 @@ export default function ChatView(props: ChatViewProps) {
   const rightPanelState = useRightPanelStore((state) =>
     selectThreadRightPanelState(state.byThreadKey, activeThreadRef),
   );
-  const workspaceNavigatorOpen = useRightPanelStore((state) =>
-    selectWorkspaceNavigatorOpen(state.workspaceNavigatorOpenByThreadKey, activeThreadRef),
-  );
-  const workspaceNavigatorTab = useRightPanelStore((state) =>
-    selectWorkspaceNavigatorTab(state.workspaceNavigatorTabByThreadKey, activeThreadRef),
-  );
-  const setWorkspaceNavigatorTab = (tab: WorkspaceNavigatorTab) => {
-    if (!activeThreadRef) return;
-    useRightPanelStore.getState().setWorkspaceNavigatorTab(activeThreadRef, tab);
-  };
-  const setWorkspaceNavigatorTabStable = useStableCallback(setWorkspaceNavigatorTab);
   const previewSurfaceRestoreInFlightRef = useRef(new Set<string>());
   const attachedSurfaceOpenInFlightRef = useRef(new Set<string>());
   const activeRightPanelSurface = useRightPanelStore((state) =>
@@ -1225,12 +1209,6 @@ export default function ChatView(props: ChatViewProps) {
     reportFailure: false,
   });
   const sidebarPrRefreshKeyRef = useRef<string | null>(null);
-  const activeFileSurface =
-    activeRightPanelSurface?.kind === "file"
-      ? activeRightPanelSurface
-      : activeMainSurface?.kind === "file"
-        ? activeMainSurface
-        : null;
   const activePreviewState = useThreadPreviewState(activeThreadRef);
   const activePreviewServerEpoch = activePreviewState.serverEpoch;
   const resolvePreviewRuntimeTabId = activeThreadRef
@@ -1376,6 +1354,8 @@ export default function ChatView(props: ChatViewProps) {
       usePreviewMiniPlayerStore.getState().close(activeThreadRef);
     }
   }, [activePreviewMiniPlayer, activePreviewState.sessions, activeThreadRef, previewSessionsReady]);
+  const threadPanelPopoverAnchorRef = useRef<HTMLElement | null>(null);
+  const [threadPanelPopoverHandle] = useState(PopoverCreateHandle);
   const [chatCanvasStore] = useState(createChatCanvasStore);
 
   const latestRunSettled = isLatestRunSettled(activeLatestRun, activeRuntime);
@@ -2031,27 +2011,6 @@ export default function ChatView(props: ChatViewProps) {
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
-  const workspaceNavigatorAvailable =
-    !shouldUsePlanSidebarSheet &&
-    activeThreadRef !== null &&
-    activeProject !== null &&
-    activeWorkspaceRoot !== undefined;
-  const showWorkspaceNavigator = workspaceNavigatorAvailable && workspaceNavigatorOpen;
-  const refreshNavigatorGitStatus = gitStatusQuery.refresh;
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- refreshes checkout status when the Changes navigator opens or a checkpoint completes
-  useEffect(() => {
-    if (!showWorkspaceNavigator || workspaceNavigatorTab !== "changes" || gitStatusCwd === null) {
-      return;
-    }
-    refreshNavigatorGitStatus();
-  }, [
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- completed checkpoints invalidate the navigator's checkout status
-    turnDiffSummaries,
-    gitStatusCwd,
-    refreshNavigatorGitStatus,
-    showWorkspaceNavigator,
-    workspaceNavigatorTab,
-  ]);
   const liveIsGitRepo = gitStatusQuery.data?.isRepo;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records live git repo status in the session cache read while the status query is unavailable
   useEffect(() => {
@@ -2357,29 +2316,6 @@ export default function ChatView(props: ChatViewProps) {
     window.addEventListener(NEW_WORKSPACE_TAB_EVENT, openNewMainTab);
     return () => window.removeEventListener(NEW_WORKSPACE_TAB_EVENT, openNewMainTab);
   }, [openNewTabPageStable]);
-  const openWorkspaceDiffFile = (target: WorkspaceNavigatorDiffTarget) => {
-    if (!activeThreadRef || !activeThreadKey || !isServerThread || !isGitRepo) return;
-    const baseRef = target.scope === "branch" ? target.baseRef?.trim() || null : null;
-    const headRef = target.scope === "branch" ? target.headRef?.trim() || null : null;
-    const surfaceId = rightPanelFileDiffSurfaceId(target.scope, target.filePath, baseRef, headRef);
-    const current = selectThreadRightPanelState(
-      useRightPanelStore.getState().byThreadKey,
-      activeThreadRef,
-    );
-    const alreadyOpen = [...current.surfaces, ...current.mainSurfaces].some(
-      (surface) => surface.id === surfaceId,
-    );
-    if (!alreadyOpen) {
-      rememberWorkspaceDiffScrollState(workspaceDiffTabKey(activeThreadKey, surfaceId), {
-        kind: "reveal-first-change",
-      });
-    }
-    useRightPanelStore
-      .getState()
-      .openDiffFile(activeThreadRef, target.scope, target.filePath, baseRef, headRef);
-    onDiffPanelOpen?.();
-  };
-  const openWorkspaceDiffFileStable = useStableCallback(openWorkspaceDiffFile);
   const shownPreviewMiniPlayer =
     activeThreadRef &&
     activePreviewMiniPlayer &&
@@ -2387,6 +2323,29 @@ export default function ChatView(props: ChatViewProps) {
       ? activePreviewMiniPlayer
       : null;
   const canvasPreview = useThreadPreviewCanvasSource(activeThreadRef, shownPreviewMiniPlayer);
+  const threadPanelInlineOpen = useRightPanelStore((state) =>
+    selectThreadPanelOpen(state.threadPanelVisibilityByThreadKey, activeThreadRef, "inline"),
+  );
+  // Selects only the mode, so canvas resizes rerender the chat view only when the
+  // card switches presentation.
+  const threadPanelPresentation = useStore(
+    chatCanvasStore,
+    (state) =>
+      resolveChatCanvasModel({
+        measurements: state.measurements,
+        detailsCardMeasurement: state.detailsCardMeasurement,
+        threadRef: activeThreadRef,
+        preview: canvasPreview,
+        detailsCardInlineOpen: threadPanelInlineOpen,
+      }).detailsCardMode,
+  );
+  const threadPanelOpen = useRightPanelStore((state) =>
+    selectThreadPanelOpen(
+      state.threadPanelVisibilityByThreadKey,
+      activeThreadRef,
+      threadPanelPresentation,
+    ),
+  );
   const supportsThreadPullRequests = serverConfig !== null;
   const visiblePullRequests = visibleThreadPullRequests(
     (activeThreadShell ?? activeThread)?.pullRequests ?? [],
@@ -2404,13 +2363,6 @@ export default function ChatView(props: ChatViewProps) {
   const activeProjectRepository = sourceControlClients.repositorySelector(
     activeProject?.repositoryIdentity,
   );
-  const workspaceNavigatorPullRequestReference = supportsPullRequests
-    ? checkoutPullRequestReference(
-        gitStatusQuery.data,
-        activeProject?.id ?? null,
-        activeProjectRepository,
-      )
-    : null;
   const {
     linked: linkedThreadPullRequest,
     linkedKey: linkedThreadPullRequestKey,
@@ -3117,8 +3069,10 @@ export default function ChatView(props: ChatViewProps) {
     createBrowserSurfaceStable,
     onOpenToolDiffStable,
     onOpenTurnDiffStable,
+    openChangesFromThreadPanelStable,
     openFileSurfaceStable,
     toggleRightPanelStable,
+    toggleThreadPanelStable,
     shortcuts: rightPanelShortcuts,
   } = useRightPanelActions({
     activeThreadRef,
@@ -3128,6 +3082,7 @@ export default function ChatView(props: ChatViewProps) {
     deviceState,
     deviceStateLoaded,
     pullRequestPanelTarget,
+    threadPanelPresentation,
     isServerThread,
     embedded,
     isGitRepo,
@@ -3242,16 +3197,6 @@ export default function ChatView(props: ChatViewProps) {
       window.removeEventListener("keydown", onWindowKeyDown, true);
     };
   }, [activateWorkspaceTabSwitcherItemStable, workspaceTabSwitcher]);
-  const toggleWorkspaceNavigator = () => {
-    if (!workspaceNavigatorAvailable || !activeThreadRef) return;
-    useRightPanelStore.getState().toggleWorkspaceNavigator(activeThreadRef);
-  };
-  const toggleWorkspaceNavigatorStable = useStableCallback(toggleWorkspaceNavigator);
-  const openWorkspaceNavigatorTab = (tab: WorkspaceNavigatorTab) => {
-    if (!workspaceNavigatorAvailable || !activeThreadRef) return;
-    useRightPanelStore.getState().openWorkspaceNavigatorTab(activeThreadRef, tab);
-  };
-  const openWorkspaceNavigatorTabStable = useStableCallback(openWorkspaceNavigatorTab);
   const tabDragSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
@@ -3684,10 +3629,6 @@ export default function ChatView(props: ChatViewProps) {
       "rightPanel.previousTab": () => {
         openOrAdvanceWorkspaceTabSwitcherStable("previous");
       },
-      "workspaceNavigator.toggle": () => toggleWorkspaceNavigatorStable(),
-      "workspaceNavigator.changes": () => openWorkspaceNavigatorTabStable("changes"),
-      "workspaceNavigator.pullRequest": () => openWorkspaceNavigatorTabStable("pr"),
-      "workspaceNavigator.details": () => openWorkspaceNavigatorTabStable("details"),
       "composer.cycleHost": ({ event }) => {
         if (!canChangeEnvironment) return false;
         if (event.repeat) return;
@@ -4148,43 +4089,34 @@ export default function ChatView(props: ChatViewProps) {
     terminalAvailable: activeProject !== null,
     terminalOpen: terminalUiState.terminalOpen,
     terminalShortcutLabel: shortcutLabelForCommand(keybindings, "terminal.toggle"),
+    threadPanelOpen,
+    threadPanelPresentation,
+    threadPanelPopoverHandle,
+    threadPanelShortcutLabel: shortcutLabelForCommand(keybindings, "threadPanel.toggle"),
     rightPanelAvailable: activeThreadRef !== null,
     rightPanelOpen,
-    workspaceNavigatorAvailable,
-    workspaceNavigatorOpen: showWorkspaceNavigator,
     onToggleTerminal: toggleTerminalVisibilityStable,
+    onToggleThreadPanel: toggleThreadPanelStable,
     onToggleRightPanel: toggleRightPanelStable,
-    onToggleWorkspaceNavigator: toggleWorkspaceNavigatorStable,
   } satisfies PanelLayoutControlsProps;
   const mainPanelLayoutControls = (
-    <WorkspaceTitlebarControls besideRightSurface={rightPanelOpen || showWorkspaceNavigator}>
-      <PanelLayoutControls
-        {...panelToggleControlProps}
-        showRightPanelControl={!rightPanelOpen}
-        showWorkspaceNavigatorControl={!showWorkspaceNavigator}
-      />
+    <WorkspaceTitlebarControls besideRightSurface={rightPanelOpen}>
+      <PanelLayoutControls {...panelToggleControlProps} showRightPanelControl={!rightPanelOpen} />
     </WorkspaceTitlebarControls>
   );
   const rightPanelLayoutControls = (
     <div className="ml-auto flex h-full items-center [-webkit-app-region:no-drag]">
       <PanelLayoutControls
         {...panelToggleControlProps}
+        showThreadPanelControl={false}
         showTerminalControl={false}
-        showWorkspaceNavigatorControl={false}
       />
     </div>
   );
-  const workspaceNavigatorLayoutControls = (
-    <div className="flex h-full items-center gap-1 [-webkit-app-region:no-drag]">
-      <PanelLayoutControls
-        {...panelToggleControlProps}
-        showTerminalControl={false}
-        showRightPanelControl={false}
-      />
-    </div>
-  );
-  const workspaceNavigatorDetails = (
+  const threadDetailsPanel = (
     <ThreadDetailsPanel
+      anchor={threadPanelPopoverAnchorRef}
+      handle={threadPanelPopoverHandle}
       forceNewWorktree={multipleModelSelections !== null}
       environmentId={activeThread.environmentId}
       threadId={activeThread.id}
@@ -4193,6 +4125,7 @@ export default function ChatView(props: ChatViewProps) {
       isServerThread={isServerThread}
       {...(draftId ? { draftId } : {})}
       composerDraftTarget={composerDraftTarget}
+      activeProjectName={activeProject?.title}
       activeProjectScripts={activeProject && !isQuickChat ? activeProjectScripts : undefined}
       preferredScriptId={
         activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
@@ -4206,6 +4139,7 @@ export default function ChatView(props: ChatViewProps) {
         )
       }
       gitCwd={gitCwd}
+      workspaceMutationId={workspaceMutationId}
       isGitRepo={isGitRepo}
       envLocked={envLocked}
       availableEnvironments={logicalProjectEnvironments}
@@ -4235,6 +4169,7 @@ export default function ChatView(props: ChatViewProps) {
         ? { onCheckoutPullRequestRequest: openPullRequestDialogStable }
         : {})}
       onComposerFocusRequest={scheduleComposerFocusStable}
+      {...(isServerThread && isGitRepo ? { onOpenChanges: openChangesFromThreadPanelStable } : {})}
       onRunProjectScript={runProjectScriptStable}
       onAddProjectScript={saveProjectScriptStable}
       onUpdateProjectScript={updateProjectScriptStable}
@@ -4267,6 +4202,7 @@ export default function ChatView(props: ChatViewProps) {
             onAddLinear={choose(createLinearSurfaceStable)}
             onAddGitHubPullRequest={choose(createGitHubPullRequestSurfaceStable)}
             onAddTerminal={choose(addTerminalSurfaceStable)}
+            onAddFiles={choose(addFilesSurfaceStable)}
             onAddDiff={choose(addDiffSurfaceStable)}
             onAddPullRequest={choose(addPullRequestSurfaceStable)}
             {...(sideChatsOffered ? { onAddSideChat: choose(openSideChatStable) } : {})}
@@ -4279,6 +4215,7 @@ export default function ChatView(props: ChatViewProps) {
               githubPullRequest !== null && canOperatePreview && browserAvailable
             }
             terminalAvailable={activeProject !== null && canOperateTerminal}
+            filesAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}
             pullRequestAvailable={pullRequestSurfaceAvailable}
           />
@@ -4293,9 +4230,6 @@ export default function ChatView(props: ChatViewProps) {
               tabId={surface.resourceId}
               configuredUrls={configuredPreviewUrls}
               visible={visible}
-              layoutVersion={
-                showWorkspaceNavigator ? "workspace-navigator-open" : "workspace-navigator-closed"
-              }
               onSendAnnotation={sendPreviewAnnotationStable}
             />
           </Suspense>
@@ -4319,9 +4253,6 @@ export default function ChatView(props: ChatViewProps) {
                   : null
               }
               visible={visible}
-              layoutVersion={
-                showWorkspaceNavigator ? "workspace-navigator-open" : "workspace-navigator-closed"
-              }
             />
           </Suspense>
         );
@@ -4653,6 +4584,7 @@ export default function ChatView(props: ChatViewProps) {
         >
           {embedded ? null : (
             <header
+              ref={threadPanelPopoverAnchorRef}
               data-chat-header
               className={cn(
                 "bg-background transition-[padding-left] duration-200 ease-linear motion-reduce:transition-none",
@@ -4683,7 +4615,6 @@ export default function ChatView(props: ChatViewProps) {
                   activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
                 }
                 rightPanelOpen={rightPanelOpen}
-                workspaceNavigatorOpen={showWorkspaceNavigator}
                 leading={mainTabStrip}
                 onRunProjectScript={runProjectScriptStable}
                 onAddProjectScript={saveProjectScriptStable}
@@ -5220,6 +5151,8 @@ export default function ChatView(props: ChatViewProps) {
                     onConfirm={handleSwitchCheckoutToThreadStable}
                   />
 
+                  {threadDetailsPanel}
+
                   <PullRequestThreadDialogHost
                     threadKey={activeThreadKey}
                     environmentId={activeThread.environmentId}
@@ -5251,8 +5184,6 @@ export default function ChatView(props: ChatViewProps) {
             />
           )}
 
-          {/* Lives inside the chat column so it never overlays the workspace
-              navigator; the panel opens exactly at this column's right edge. */}
           {draggingTabSurface && !rightPanelOpen && !shouldUsePlanSidebarSheet ? (
             <PanelEdgeDropZone />
           ) : null}
@@ -5269,7 +5200,6 @@ export default function ChatView(props: ChatViewProps) {
             <RightPanelTabs
               mode="inline"
               environmentId={activeThreadRef.environmentId}
-              reserveNativeControlsInset={!showWorkspaceNavigator}
               layoutControls={rightPanelLayoutControls}
               surfaces={rightPanelState.surfaces}
               activeSurfaceId={selectedRightPanelSurface?.id ?? null}
@@ -5316,45 +5246,6 @@ export default function ChatView(props: ChatViewProps) {
             >
               {rightPanelContent}
             </RightPanelTabs>
-          ) : null}
-        </AnimatedRightSurface>
-        <AnimatedRightSurface
-          key={`${activeThreadKey}:workspace-navigator`}
-          animateOnMount={false}
-          open={
-            !embedded &&
-            showWorkspaceNavigator &&
-            activeThreadRef !== null &&
-            activeProject !== null &&
-            activeWorkspaceRoot !== undefined
-          }
-        >
-          {activeThreadRef && activeProject && activeWorkspaceRoot ? (
-            <WorkspaceNavigator
-              environmentId={activeProject.environmentId}
-              activeThreadRef={activeThreadRef}
-              {...(routeKind === "draft" && draftId ? { draftId } : {})}
-              cwd={activeWorkspaceRoot}
-              projectName={activeProject.title}
-              pullRequestReference={workspaceNavigatorPullRequestReference}
-              selectedPath={activeFileSurface?.relativePath ?? null}
-              selectedPathRevealId={activeFileSurface?.revealRequestId ?? 0}
-              gitStatus={gitStatusQuery.data ?? null}
-              gitStatusError={gitStatusQuery.error}
-              gitStatusPending={gitStatusQuery.isPending}
-              workspaceMutationId={workspaceMutationId}
-              activeTab={workspaceNavigatorTab}
-              layoutControls={workspaceNavigatorLayoutControls}
-              details={workspaceNavigatorDetails}
-              onRefreshPullRequest={() =>
-                gitStatusCwd === null
-                  ? Promise.resolve()
-                  : refreshVcsStatus({ environmentId, input: { cwd: gitStatusCwd } })
-              }
-              onActiveTabChange={setWorkspaceNavigatorTabStable}
-              onOpenFile={openFileSurfaceStable}
-              onOpenDiffFile={openWorkspaceDiffFileStable}
-            />
           ) : null}
         </AnimatedRightSurface>
         {shouldUsePlanSidebarSheet && activeThreadRef && !embedded ? (

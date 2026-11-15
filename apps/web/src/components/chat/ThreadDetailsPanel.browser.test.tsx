@@ -82,12 +82,18 @@ vi.mock(import("~/state/vcs"), async (importOriginal) => {
 });
 
 import { render } from "../../../test/render";
+import { useRightPanelStore } from "../../rightPanelStore";
+import { PopoverCreateHandle } from "../ui/popover";
+import { ChatCanvasContext } from "./ChatCanvasContext";
+import { resolveChatCanvasLayout } from "./chatCanvasLayout";
 import { ThreadDetailsPanel } from "./ThreadDetailsPanel";
 
 const threadRef: ScopedThreadRef = {
   environmentId: EnvironmentId.make("environment"),
   threadId: ThreadId.make("thread"),
 };
+const container = { width: 1200, height: 800 };
+const placement = { x: 908, y: 0, right: 12, width: 280, height: 400 } as const;
 const linkedPullRequest: ThreadPullRequestLink = {
   host: "github.com",
   repository: "pingdotgg/t3code",
@@ -99,55 +105,91 @@ const linkedPullRequest: ThreadPullRequestLink = {
   stack: null,
 };
 
-function Panel() {
+function setup(input: {
+  workspaceRoot: string;
+  folder: string;
+  pullRequests?: ThreadPullRequestLink[];
+  configLoaded?: boolean;
+}) {
+  state.configLoaded = input.configLoaded ?? true;
+  state.workspaceRoot = input.workspaceRoot;
+  state.folder = input.folder;
+  state.pullRequests = input.pullRequests ?? [];
+  useRightPanelStore.setState({ threadPanelVisibilityByThreadKey: {} });
+  const anchor = document.createElement("div");
+  document.body.append(anchor);
+  return {
+    anchor: { current: anchor },
+    handle: PopoverCreateHandle(),
+    [Symbol.dispose]: () => anchor.remove(),
+  };
+}
+
+function Panel({ fixture }: { fixture: ReturnType<typeof setup> }) {
   const noop = () => {};
   const scriptResult = async () => ({ ok: true }) as never;
   return (
-    <ThreadDetailsPanel
-      environmentId={threadRef.environmentId}
-      threadId={threadRef.threadId}
-      projectId={ProjectId.make("project")}
-      composerDraftTarget={threadRef}
-      worktreePath={state.folder}
-      isServerThread
-      activeProjectScripts={undefined}
-      preferredScriptId={null}
-      keybindings={[]}
-      availableEditors={[]}
-      showOpenInPicker={false}
-      openInShortcutEnabled={false}
-      gitCwd={state.folder}
-      isGitRepo={false}
-      envLocked
-      availableEnvironments={[]}
-      onEnvModeChange={noop}
-      envMode="local"
-      startFromOrigin={false}
-      onStartFromOriginChange={noop}
-      newBranchName=""
-      onNewBranchNameChange={noop}
-      onComposerFocusRequest={noop}
-      onRunProjectScript={noop}
-      onAddProjectScript={scriptResult}
-      onUpdateProjectScript={scriptResult}
-      onDeleteProjectScript={scriptResult}
-      usage={{} as never}
-    />
+    <ChatCanvasContext
+      value={{
+        container,
+        lane: { padding: 48, minChatWidth: 640 },
+        layout: resolveChatCanvasLayout({ container, preview: null }),
+        previewKey: null,
+        registerTimeline: noop,
+        measureDetailsCard: noop,
+        detailsCardTopInset: 0,
+        preferredDetailsCard: placement,
+        detailsCardPlacement: placement,
+      }}
+    >
+      <ThreadDetailsPanel
+        anchor={fixture.anchor}
+        handle={fixture.handle}
+        environmentId={threadRef.environmentId}
+        threadId={threadRef.threadId}
+        projectId={ProjectId.make("project")}
+        composerDraftTarget={threadRef}
+        worktreePath={state.folder}
+        isServerThread
+        activeProjectName={state.workspaceRoot === SCRATCH_ROOT ? "Quick chats" : "plain"}
+        activeProjectScripts={undefined}
+        preferredScriptId={null}
+        keybindings={[]}
+        availableEditors={[]}
+        showOpenInPicker={false}
+        openInShortcutEnabled={false}
+        gitCwd={state.folder}
+        workspaceMutationId={null}
+        isGitRepo={false}
+        envLocked
+        availableEnvironments={[]}
+        onEnvModeChange={noop}
+        envMode="local"
+        startFromOrigin={false}
+        onStartFromOriginChange={noop}
+        newBranchName=""
+        onNewBranchNameChange={noop}
+        onComposerFocusRequest={noop}
+        onRunProjectScript={noop}
+        onAddProjectScript={scriptResult}
+        onUpdateProjectScript={scriptResult}
+        onDeleteProjectScript={scriptResult}
+        usage={{} as never}
+      />
+    </ChatCanvasContext>
   );
 }
 
 it.each([
-  { name: "a Quick chat", workspaceRoot: SCRATCH_ROOT, folder: SCRATCH_ROOT },
-  {
-    name: "a folder that is not a git repository",
-    workspaceRoot: "/work/plain",
-    folder: "/work/plain",
-  },
-])("shows a linked pull request in $name", async ({ workspaceRoot, folder }) => {
-  state.configLoaded = true;
-  state.workspaceRoot = workspaceRoot;
-  state.folder = folder;
-  state.pullRequests = [linkedPullRequest];
-  await using _screen = await render(<Panel />);
+  { name: "a Quick chat", workspaceRoot: SCRATCH_ROOT },
+  { name: "a folder that is not a git repository", workspaceRoot: "/work/plain" },
+])("shows a linked pull request in $name", async ({ workspaceRoot }) => {
+  using fixture = setup({
+    workspaceRoot,
+    folder: workspaceRoot,
+    pullRequests: [linkedPullRequest],
+  });
+  await using _screen = await render(<Panel fixture={fixture} />);
+  await expect.element(page.getByRole("region", { name: "Workspace" })).toBeVisible();
   await expect.element(page.getByText("#27513")).toBeVisible();
 });
