@@ -507,7 +507,7 @@ describe("chat/editor shortcuts", () => {
     );
   });
 
-  it("toggles the thread panel by default without taking terminal keystrokes", () => {
+  it("toggles the thread panel by default, also from a focused terminal", () => {
     for (const platform of ["MacIntel", "Win32", "Linux"]) {
       const input = event({
         key: "b",
@@ -522,11 +522,12 @@ describe("chat/editor shortcuts", () => {
         }),
         "threadPanel.toggle",
       );
-      assert.isNull(
+      assert.strictEqual(
         resolveShortcutCommand(input, DEFAULT_RESOLVED_KEYBINDINGS, {
           platform,
           context: { terminalFocus: true },
         }),
+        "threadPanel.toggle",
       );
     }
   });

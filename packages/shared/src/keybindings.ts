@@ -67,7 +67,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   // tab placement and closes when its last tab closes.
   { key: "ctrl+tab", command: "rightPanel.nextTab" },
   { key: "ctrl+shift+tab", command: "rightPanel.previousTab" },
-  { key: "mod+shift+b", command: "threadPanel.toggle", when: "!terminalFocus" },
+  { key: "mod+shift+b", command: "threadPanel.toggle" },
   { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
   { key: "mod+shift+d", command: "terminal.splitVertical", when: "terminalFocus" },
   { key: "mod+shift+d", command: "composer.dictation", when: "!terminalFocus" },

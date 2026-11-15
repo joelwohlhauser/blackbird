@@ -18,6 +18,10 @@ import {
 } from "./threadDetailsCardLayout";
 import { observeResize } from "../../lib/observeResize";
 import { requestWorkspaceFocus } from "../../lib/workspaceFocus";
+import { usePanelNavigationSuppressed, usePanelPresence } from "../../panelAnimations";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+
+const THREAD_DETAILS_CARD_ANIMATION_MS = 200;
 
 export function ThreadDetailsCard({
   threadRef,
@@ -69,6 +73,18 @@ export function ThreadDetailsCard({
   }, [mode, popoverOpen, threadRef]);
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
   const { environmentId, threadId } = threadRef;
+  const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const navigationSuppressed = usePanelNavigationSuppressed();
+  const animated = !prefersReducedMotion && !navigationSuppressed;
+  const inlineShown = placement !== null && inlineOpen;
+  const inlinePresence = usePanelPresence(
+    inlineShown,
+    placement,
+    animated && placement !== null,
+    `${environmentId}:${threadId}`,
+    THREAD_DETAILS_CARD_ANIMATION_MS,
+  );
+  const inlinePlacement = inlinePresence.value;
   // Re-measures when the density or measurement key changes, so each density's
   // height is measured once it renders.
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the card's DOM height via ResizeObserver and reports it to the canvas
@@ -146,19 +162,26 @@ export function ThreadDetailsCard({
         useRightPanelStore.getState().setThreadPanelOpen(threadRef, "popover", open);
       }}
     >
-      {placement && inlineOpen ? (
+      {inlinePresence.present && inlinePlacement ? (
         <aside
           {...detailsArea}
           data-workspace-focus-key={`details:${threadRef.environmentId}:${threadRef.threadId}`}
+          inert={!inlineShown}
           // Skip the return transition to avoid overlapping the rising preview.
           className={cn(
-            "absolute z-20",
-            topInset > 0 && "transition-[top] duration-150 ease-out motion-reduce:transition-none",
+            "absolute z-20 origin-top-right duration-200 ease-out",
+            animated
+              ? cn(
+                  topInset > 0 ? "transition-[opacity,scale,top]" : "transition-[opacity,scale]",
+                  "starting:scale-98 starting:opacity-0",
+                )
+              : "transition-none",
+            !inlineShown && "pointer-events-none scale-98 opacity-0",
           )}
           style={{
-            right: placement.right,
-            top: placement.y,
-            width: placement.width,
+            right: inlinePlacement.right,
+            top: inlinePlacement.y,
+            width: inlinePlacement.width,
             maxHeight: height,
           }}
           data-density={density}

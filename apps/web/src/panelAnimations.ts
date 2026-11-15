@@ -28,6 +28,10 @@ export function usePanelNavigationSuppression(navigationKey: string): boolean {
   return suppressed;
 }
 
+export function usePanelNavigationSuppressed(): boolean {
+  return useContext(PanelAnimationSuppressionContext);
+}
+
 export function usePanelAnimationSettings(): {
   active: boolean;
   durationMs: PanelAnimationDurationMs;
