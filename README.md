@@ -135,7 +135,7 @@ While a browser tab's page or toolbar has focus on macOS, Command+[ and Command+
 
 To save memory, the desktop app keeps browser pages loaded only in the four chats opened most recently, chats whose agent is working, and tabs in picture-in-picture or being recorded. Linear issue tabs are the exception: they load only once shown and unload after five minutes hidden. Other tabs keep their URL and title and load the page again when their chat is opened, so scroll position and unsaved form input are lost while logins stay.
 
-**Thread details** is T3 Code's card for the current chat: environment, worktree mode, branch, PR status and watches, Git actions (commit, push, and create PR), a Changes row that opens the Diff tab, editor and project-script actions, servers, automations, and related chats. It sits beside the conversation when the chat column has room and opens as a popover from the title-bar button otherwise. Whether it is shown is remembered per chat. Command+Shift+B or the title-bar button toggles it. The New Tab page's **Files** card opens the repository file browser.
+**Thread details** is T3 Code's card for the current chat: environment, worktree mode, branch, PR status and watches, Git actions (commit, push, and create PR), a Changes row that opens the Diff tab, editor and project-script actions, servers, automations, and related chats. It sits beside the conversation when the chat column has room and opens as a popover from the title-bar button otherwise. It starts closed, and whether it is shown is remembered per chat. Command+Shift+B or the title-bar button toggles it. The New Tab page's **Files** card opens the repository file browser.
 
 Useful shortcuts on macOS:
 
