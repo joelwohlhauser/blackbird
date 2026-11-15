@@ -23,7 +23,6 @@ const RIGHT_PANEL_KINDS = [
   "diff",
   "files",
   "file",
-  "file-diff",
   "preview",
   "device",
   "terminal",
@@ -62,14 +61,6 @@ export type RightPanelSurface =
     }
   | { id: "diff"; kind: "diff" }
   | { id: "files"; kind: "files"; folderTrail?: string }
-  | {
-      id: `file-diff:${string}`;
-      kind: "file-diff";
-      relativePath: string;
-      scope: "unstaged" | "branch";
-      baseRef: string | null;
-      headRef: string | null;
-    }
   | {
       id: `file:${string}` | `attachment:${string}`;
       kind: "file";
@@ -178,14 +169,7 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      | "file"
-      | "file-diff"
-      | "terminal"
-      | "linear"
-      | "github-pr"
-      | "pull-request"
-      | "thread"
-      | "side-chat"
+      "file" | "terminal" | "linear" | "github-pr" | "pull-request" | "thread" | "side-chat"
     >,
   ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null, url?: string | null) => void;
@@ -277,14 +261,7 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      | "file"
-      | "file-diff"
-      | "terminal"
-      | "linear"
-      | "github-pr"
-      | "pull-request"
-      | "thread"
-      | "side-chat"
+      "file" | "terminal" | "linear" | "github-pr" | "pull-request" | "thread" | "side-chat"
     >,
   ) => void;
   setThreadPanelOpen: (
@@ -313,7 +290,6 @@ const singletonSurface = (
   kind: Exclude<
     RightPanelKind,
     | "file"
-    | "file-diff"
     | "preview"
     | "terminal"
     | "linear"
@@ -663,7 +639,8 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
   return (persistedSurfaces as RightPanelSurface[]).flatMap<RightPanelSurface>((surface) => {
     if (!surface || typeof surface !== "object") return [];
     const kind = (surface as { kind?: string }).kind;
-    if (kind === "plan" || kind === "agents" || kind === "slack-thread") return [];
+    if (kind === "plan" || kind === "agents" || kind === "slack-thread" || kind === "file-diff")
+      return [];
     if (
       (surface.kind === "file" || surface.kind === "files") &&
       "folderTrail" in surface &&
@@ -684,15 +661,6 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
           ? surface.revealRequestId
           : 0;
       return [{ ...surface, revealLine, revealRequestId }];
-    }
-    if (surface.kind === "file-diff") {
-      return [
-        {
-          ...surface,
-          headRef:
-            "headRef" in surface && typeof surface.headRef === "string" ? surface.headRef : null,
-        },
-      ];
     }
     if (surface.kind === "pull-request") {
       if (
@@ -1803,7 +1771,6 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             if (workspaceAvailable) return current;
             const isWorkspaceSurface = (surface: RightPanelSurface) =>
               surface.kind === "files" ||
-              surface.kind === "file-diff" ||
               (surface.kind === "file" && surface.attachment === undefined);
             const surfaces = current.surfaces.filter((surface) => !isWorkspaceSurface(surface));
             const mainSurfaces = current.mainSurfaces.filter(
@@ -1973,7 +1940,6 @@ useRightPanelStore.subscribe((next, previous) => {
         surface.kind === "terminal" ||
         surface.kind === "linear" ||
         surface.kind === "github-pr" ||
-        surface.kind === "file-diff" ||
         surface.kind === "new-tab" ||
         surface.kind === "thread" ||
         (surface.kind === "preview" && surface.resourceId !== null)

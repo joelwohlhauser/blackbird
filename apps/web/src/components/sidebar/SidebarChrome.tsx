@@ -10,9 +10,9 @@ import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
+import { useAtomValue } from "@effect/atom-react";
 import { useClientSettings, useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { useDesktopAwakeState } from "../../lib/desktopAwake";
-import { useAtomValue } from "@effect/atom-react";
 import { shortcutLabelForCommand } from "../../keybindings";
 import {
   navigateHistory,
@@ -43,17 +43,15 @@ import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPr
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
-import { SidebarUpdatePill, SidebarUpdateArchitectureWarning } from "./SidebarUpdatePill";
+import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
 
-interface SidebarChromeHeaderProps {
-  isElectron: boolean;
-}
-
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
-}: SidebarChromeHeaderProps) {
+}: {
+  isElectron: boolean;
+}) {
   const stageLabel = useEnvironmentStageLabel();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const backdropVariant = resolveSidebarStageBackdropVariant(

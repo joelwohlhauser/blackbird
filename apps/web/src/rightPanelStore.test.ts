@@ -809,7 +809,7 @@ describe("rightPanelStore", () => {
     });
   });
 
-  it("drops Slack tabs saved by version 15 when the store hydrates", async () => {
+  it("drops Slack and per-file diff tabs saved by version 15 when the store hydrates", async () => {
     const { storage, name } = useRightPanelStore.persist.getOptions();
     await storage!.setItem(name!, {
       version: 15,
@@ -822,19 +822,27 @@ describe("rightPanelStore", () => {
               { id: "slack-thread:C001", kind: "slack-thread", itemKey: "C001" },
               { id: "diff", kind: "diff" },
             ],
-            mainSurfaces: [],
-            activeMainSurfaceId: null,
+            mainSurfaces: [
+              {
+                id: "file-diff:src/app.ts",
+                kind: "file-diff",
+                relativePath: "src/app.ts",
+                scope: "unstaged",
+                baseRef: null,
+                headRef: null,
+              },
+            ],
+            activeMainSurfaceId: "file-diff:src/app.ts",
           },
         },
       },
     });
     await useRightPanelStore.persist.rehydrate();
 
-    expect(
-      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces.map(
-        (surface) => surface.id,
-      ),
-    ).toEqual(["diff"]);
+    const thread = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(thread.surfaces.map((surface) => surface.id)).toEqual(["diff"]);
+    expect(thread.mainSurfaces).toEqual([]);
+    expect(thread.activeMainSurfaceId).toBeNull();
   });
 
   it("keeps Blackbird v12 workspace tabs while dropping agents and Slack tabs", () => {

@@ -78,7 +78,7 @@ export interface RightPanelTabsProps {
   githubPullRequestAvailable: boolean;
   terminalAvailable?: boolean;
   diffAvailable: boolean;
-  filesAvailable?: boolean;
+  filesAvailable: boolean;
   pullRequestAvailable?: boolean;
   pullRequestsAvailable?: boolean;
   deviceAvailable?: boolean;
@@ -86,7 +86,6 @@ export interface RightPanelTabsProps {
   sideChatDisabledReason?: string | null;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   pinnedSurfaceIds?: ReadonlySet<string>;
-  reserveNativeControlsInset?: boolean;
   children: ReactNode;
 }
 
@@ -506,9 +505,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           "pr-3",
           // The control is in this row; only native window controls need a
           // separate inset when the panel reaches the window edge.
-          ownsDesktopTitleBar &&
-            props.reserveNativeControlsInset !== false &&
-            "wco:pr-(--workspace-native-controls-inset)",
+          ownsDesktopTitleBar && "wco:pr-(--workspace-native-controls-inset)",
         )}
         data-right-panel-tabbar
       >
@@ -571,7 +568,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             {...(props.terminalAvailable !== undefined
               ? { terminalAvailable: props.terminalAvailable }
               : {})}
-            filesAvailable={props.filesAvailable === true}
+            filesAvailable={props.filesAvailable}
             diffAvailable={props.diffAvailable}
             {...(props.pullRequestAvailable !== undefined
               ? { pullRequestAvailable: props.pullRequestAvailable }

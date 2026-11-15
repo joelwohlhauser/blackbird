@@ -169,7 +169,6 @@ export async function reopenClosedView(
       break;
     case "linear":
     case "github-pr":
-    case "file-diff":
       return false;
   }
   return true;

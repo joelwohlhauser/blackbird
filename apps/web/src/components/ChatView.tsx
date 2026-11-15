@@ -490,27 +490,6 @@ const DevicePanel = lazy(() =>
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
 
-type WorkspaceDiffScrollState =
-  | { readonly kind: "reveal-first-change" }
-  | { readonly kind: "position"; readonly scrollTop: number };
-
-const MAX_REMEMBERED_WORKSPACE_DIFF_SCROLL_POSITIONS = 200;
-const workspaceDiffScrollStateByTabKey = new Map<string, WorkspaceDiffScrollState>();
-
-function workspaceDiffTabKey(threadKey: string, surfaceId: string): string {
-  return `${threadKey}:${surfaceId}`;
-}
-
-function rememberWorkspaceDiffScrollState(tabKey: string, state: WorkspaceDiffScrollState): void {
-  workspaceDiffScrollStateByTabKey.delete(tabKey);
-  workspaceDiffScrollStateByTabKey.set(tabKey, state);
-  while (workspaceDiffScrollStateByTabKey.size > MAX_REMEMBERED_WORKSPACE_DIFF_SCROLL_POSITIONS) {
-    const oldestTabKey = workspaceDiffScrollStateByTabKey.keys().next().value;
-    if (oldestTabKey === undefined) break;
-    workspaceDiffScrollStateByTabKey.delete(oldestTabKey);
-  }
-}
-
 type ChatViewProps =
   | {
       environmentId: EnvironmentId;
@@ -1183,7 +1162,7 @@ export default function ChatView(props: ChatViewProps) {
   const activeRightPanelKind = useRightPanelStore((state) =>
     selectActiveRightPanel(state.byThreadKey, activeThreadRef),
   );
-  const diffOpen = activeRightPanelKind === "diff" || activeRightPanelKind === "file-diff";
+  const diffOpen = activeRightPanelKind === "diff";
   const rightPanelState = useRightPanelStore((state) =>
     selectThreadRightPanelState(state.byThreadKey, activeThreadRef),
   );
@@ -2419,9 +2398,6 @@ export default function ChatView(props: ChatViewProps) {
   const cleanupRightPanelSurfaces = (surfaces: readonly RightPanelSurface[]) => {
     if (!activeThreadRef) return;
     for (const surface of surfaces) {
-      if (activeThreadKey && surface.kind === "file-diff") {
-        workspaceDiffScrollStateByTabKey.delete(workspaceDiffTabKey(activeThreadKey, surface.id));
-      }
       // Without preview access only the local surface goes away. The
       // server record is in-memory bookkeeping, not a live view, and stays
       // listed until a client with the scope closes it or the server restarts.
@@ -4309,13 +4285,6 @@ export default function ChatView(props: ChatViewProps) {
           />
         );
       case "diff":
-      case "file-diff":
-        const diffTabKey = activeThreadKey
-          ? workspaceDiffTabKey(activeThreadKey, surface.id)
-          : null;
-        const diffScrollState = diffTabKey
-          ? workspaceDiffScrollStateByTabKey.get(diffTabKey)
-          : undefined;
         return (
           <Suspense fallback={null}>
             <DiffPanel
@@ -4325,30 +4294,6 @@ export default function ChatView(props: ChatViewProps) {
               initialGitScope={initialDiffPanelGitScope}
               workspaceMutationId={workspaceMutationId}
               visible={visible}
-              {...(surface.kind === "file-diff" && diffTabKey
-                ? {
-                    ...(diffScrollState?.kind === "position"
-                      ? { initialScrollTop: diffScrollState.scrollTop }
-                      : {}),
-                    revealFirstChange: diffScrollState?.kind === "reveal-first-change",
-                    onScrollPositionChange: (scrollTop: number) => {
-                      rememberWorkspaceDiffScrollState(diffTabKey, {
-                        kind: "position",
-                        scrollTop,
-                      });
-                    },
-                  }
-                : {})}
-              {...(surface.kind === "file-diff"
-                ? {
-                    fixedGitSelection: {
-                      scope: surface.scope,
-                      filePath: surface.relativePath,
-                      baseRef: surface.baseRef,
-                      headRef: surface.headRef,
-                    },
-                  }
-                : {})}
             />
           </Suspense>
         );

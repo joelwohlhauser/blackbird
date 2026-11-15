@@ -44,6 +44,7 @@ function panel(activeSurface: RightPanelSurface) {
     githubPullRequestDetected: false,
     githubPullRequestAvailable: true,
     diffAvailable: true,
+    filesAvailable: true,
     children: (
       <div data-testid="surface-content">
         {/* Stands in for ServerBrowserSurface, whose page canvas handles thumb buttons itself. */}

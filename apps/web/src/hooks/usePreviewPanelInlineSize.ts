@@ -78,7 +78,7 @@ export function usePreviewPanelInlineSize(
       });
     };
     window.addEventListener("resize", onResize);
-    const stopObserving = row ? observeResize([row, ...row.children], measure) : undefined;
+    const stopObserving = row ? observeResize(row, measure) : undefined;
     return () => {
       window.removeEventListener("resize", onResize);
       if (frame !== 0) window.cancelAnimationFrame(frame);

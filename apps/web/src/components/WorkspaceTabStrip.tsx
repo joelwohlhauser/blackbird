@@ -81,10 +81,6 @@ export function surfaceTitle(
       return "Files";
     case "file":
       return surface.relativePath.slice(surface.relativePath.lastIndexOf("/") + 1);
-    case "file-diff": {
-      const filename = surface.relativePath.slice(surface.relativePath.lastIndexOf("/") + 1);
-      return `${filename} (${surface.scope === "unstaged" ? "Working Tree" : "Pull Request"})`;
-    }
     case "linear":
       return "Linear Issue";
     case "github-pr":
@@ -169,7 +165,6 @@ export function SurfaceIcon({
     case "files":
       return <Files className="size-3 shrink-0" />;
     case "file":
-    case "file-diff":
       return (
         <PierreEntryIcon
           pathValue={surface.relativePath}
@@ -594,7 +589,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     if (props.pinnedSurfaceIds?.has(surface.id)) return;
 
     const items: ContextMenuItem<TabContextMenuAction>[] = [];
-    if (surface.kind === "file" || surface.kind === "file-diff") {
+    if (surface.kind === "file") {
       items.push({ id: "copy-path", label: "Copy path" });
     }
     const menuPreviewTabId = previewTabIdOf(surface, props.previewSessions);
@@ -634,7 +629,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     });
     switch (action) {
       case "copy-path":
-        if (surface.kind === "file" || surface.kind === "file-diff") {
+        if (surface.kind === "file") {
           props.onCopyFilePath(surface.relativePath);
         }
         break;

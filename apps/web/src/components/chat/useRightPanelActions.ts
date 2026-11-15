@@ -208,7 +208,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     if (surface.kind === "terminal") {
       focusTerminal(activeThreadRef, surface.activeTerminalId);
     }
-    if ((surface.kind === "diff" || surface.kind === "file-diff") && !diffOpen) {
+    if (surface.kind === "diff" && !diffOpen) {
       onDiffPanelOpen?.();
     }
   };

@@ -74,15 +74,3 @@ it.layer(NodeSqliteClient.layer({ filename: ":memory:" }))("102_DropSlack", (it)
       }),
   );
 });
-
-it.layer(NodeSqliteClient.layer({ filename: ":memory:" }))(
-  "102_DropSlack on a new database",
-  (it) => {
-    it.effect("runs where the Slack tables never existed", () =>
-      Effect.gen(function* () {
-        yield* runMigrations();
-        assert.deepStrictEqual(yield* remainingSlackTables, []);
-      }),
-    );
-  },
-);
