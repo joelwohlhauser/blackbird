@@ -8,7 +8,7 @@ import {
 import type { DesktopAwakeState } from "@t3tools/contracts";
 import type { ReactNode } from "react";
 import { memo } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useAtomValue } from "@effect/atom-react";
 import { useClientSettings, useEnvironmentIdentificationMode } from "../../hooks/useSettings";
@@ -169,16 +169,9 @@ function HistoryNavigationButton({
 
 function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
   return (
-    <Link
-      aria-label="Go to chats"
-      className={cn(
-        "flex relative z-10 ml-[var(--workspace-titlebar-content-left)] h-7 w-fit min-w-0 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset",
-        onBackdrop ? "text-white" : "text-foreground",
-      )}
-      to="/"
-    >
+    <div className="relative z-10 ml-[var(--workspace-titlebar-content-left)] flex h-7 w-fit min-w-0 shrink-0 items-center select-none">
       <SidebarBrandMark onBackdrop={onBackdrop} />
-    </Link>
+    </div>
   );
 }
 
