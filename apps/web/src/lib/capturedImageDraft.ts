@@ -10,6 +10,7 @@ import {
   useComposerDraftStore,
 } from "../composerDraftStore";
 import { countQuestionRequestAttachments } from "../questionAttachments";
+import { readComposerImageBytes } from "../components/chat/composerAttachmentFiles";
 
 export async function fitCapturedImage(capture: {
   readonly name: string;
@@ -37,8 +38,9 @@ export async function addCapturedImageToDraft(
     readonly source?: ComposerImageAttachment["source"];
   },
 ): Promise<void> {
-  const store = useComposerDraftStore.getState();
   const { id, file, dataUrl, source } = image;
+  await readComposerImageBytes(file);
+  const store = useComposerDraftStore.getState();
   const alreadyAttached =
     store.getComposerDraft(target)?.images.some((existing) => existing.id === id) ?? false;
   if (!alreadyAttached) {

@@ -107,6 +107,19 @@ describe("citation comment caret", () => {
     await userEvent.keyboard("!");
     expect(input.value).toBe(`${comment}!`);
   });
+
+  it("saves with Tab then Enter after typing a comment", async () => {
+    setup();
+    const onSave = vi.fn(() => true);
+    await using _screen = await mount(onSave);
+    await vi.waitFor(() => expect(document.activeElement).toBe(textarea()));
+
+    await userEvent.keyboard("agreed");
+    await userEvent.keyboard("{Tab}");
+    await userEvent.keyboard("{Enter}");
+
+    expect(onSave).toHaveBeenCalledWith("agreed");
+  });
 });
 
 describe("citation comment popup position", () => {

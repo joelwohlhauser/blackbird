@@ -528,16 +528,14 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                       disabled={reservedDestinationProject !== null}
                       onPress={() => void selectProject(selectionTarget)}
                       leading={
-                        scope.representative.faviconPath || scope.representative.projectIcon ? (
-                          <ProjectFavicon
-                            environmentId={scope.representative.environmentId}
-                            faviconPath={scope.representative.faviconPath}
-                            projectIcon={scope.representative.projectIcon}
-                            size={24}
-                            projectTitle={scope.title}
-                            workspaceRoot={scope.representative.workspaceRoot}
-                          />
-                        ) : undefined
+                        <ProjectFavicon
+                          environmentId={scope.representative.environmentId}
+                          faviconPath={scope.representative.faviconPath}
+                          projectIcon={scope.representative.projectIcon}
+                          size={24}
+                          projectTitle={scope.representative.title}
+                          workspaceRoot={scope.representative.workspaceRoot}
+                        />
                       }
                     />
                   );
@@ -554,18 +552,16 @@ export function NewTaskRouteScreen({ route }: StaticScreenProps<NewTaskRoutePara
                       onPress={() => void selectProject(selectionTarget)}
                       className="flex-row items-center gap-3 bg-grouped-card px-4 py-3.5"
                     >
-                      {scope.representative.faviconPath || scope.representative.projectIcon ? (
-                        <View className="h-7 w-7 items-center justify-center">
-                          <ProjectFavicon
-                            environmentId={scope.representative.environmentId}
-                            faviconPath={scope.representative.faviconPath}
-                            projectIcon={scope.representative.projectIcon}
-                            size={20}
-                            projectTitle={scope.title}
-                            workspaceRoot={scope.representative.workspaceRoot}
-                          />
-                        </View>
-                      ) : null}
+                      <View className="h-7 w-7 items-center justify-center">
+                        <ProjectFavicon
+                          environmentId={scope.representative.environmentId}
+                          faviconPath={scope.representative.faviconPath}
+                          projectIcon={scope.representative.projectIcon}
+                          size={20}
+                          projectTitle={scope.representative.title}
+                          workspaceRoot={scope.representative.workspaceRoot}
+                        />
+                      </View>
                       <View className="min-w-0 flex-1">
                         <Text className={cn("text-base leading-snug", "font-t3-bold")}>
                           {scope.title}
