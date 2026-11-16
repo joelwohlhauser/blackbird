@@ -25,8 +25,8 @@
         <p class="lede">
           Blackbird is Joel Wohlhauser's personal IDE. It keeps
           <a href="https://github.com/pingdotgg/t3code">T3 Code</a>'s architecture and updates, and
-          adds its own workflow and desktop experience. It's an open-source hobby project under the
-          MIT license.
+          adds its own workflow and desktop experience. It sends no analytics. It's an open-source
+          hobby project under the MIT license.
         </p>
         <div class="actions">
           <a
@@ -36,7 +36,9 @@
           >
           <a class="button" href="https://github.com/joelwohlhauser/blackbird">View on GitHub</a>
         </div>
-        <p class="note">Apple Silicon only. Free and open source.</p>
+        <p class="note">
+          Apple Silicon only. Installs next to T3 Code and can import its conversations.
+        </p>
       </header>
 
       <img
@@ -51,8 +53,8 @@
         <article>
           <h2>Bring your own agents</h2>
           <p>
-            Use the subscriptions you already have: Claude Code, Codex, Cursor, Grok Build,
-            OpenCode, and Google Antigravity.
+            Use the subscriptions you already have: Claude Code, Codex, Cursor, OpenCode, Grok
+            Build, Google Antigravity, and agents from the ACP registry.
           </p>
         </article>
         <article>
@@ -72,12 +74,33 @@
           <h2>Worktrees built in</h2>
           <p>
             Start a chat in the current checkout, an existing worktree, or a new worktree and
-            branch.
+            branch. New worktrees get your <code>.env</code> files.
+          </p>
+        </article>
+        <article>
+          <h2>Linear and GitHub inside</h2>
+          <p>
+            Pick a Linear issue in the composer to start on its branch. The issue and the pull
+            request open as tabs next to the chat.
+          </p>
+        </article>
+        <article>
+          <h2>Agents use your browser</h2>
+          <p>
+            Agents drive the same browser tabs you see, with saved sign-ins, so they can test their
+            own changes.
           </p>
         </article>
         <article>
           <h2>Quick chats</h2>
           <p>Ask a question or hand off a small task without picking a project first.</p>
+        </article>
+        <article>
+          <h2>Works with the lid closed</h2>
+          <p>
+            Optionally keeps your MacBook awake while agents work, lid closed included, and joins
+            your iPhone's hotspot when the internet drops.
+          </p>
         </article>
         <article>
           <h2>Several machines</h2>
@@ -227,9 +250,12 @@
               </p>
               <ul>
                 <li>Merges and follows the deploy until production runs the change.</li>
-                <li>Checks that the change works in production, without changing data.</li>
+                <li>
+                  Checks that the change works in production, without changing data, then closes the
+                  issue.
+                </li>
                 <li>Comes back later to look for regressions under real traffic.</li>
-                <li>Reverts or fixes forward when something broke, then closes the issue.</li>
+                <li>Reverts or fixes forward when something broke.</li>
               </ul>
               <p class="panel-end">
                 <span>Ends with</span> a change that has proven itself in production.

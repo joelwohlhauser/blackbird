@@ -139,6 +139,15 @@ h1 {
   color: var(--muted);
 }
 
+.features code {
+  font:
+    13px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  color: var(--text);
+}
+
 footer {
   padding: 32px 24px 48px;
   text-align: center;
