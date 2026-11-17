@@ -55,6 +55,7 @@ import {
   startThreadTurn,
   stopThreadSession,
   unarchiveThread,
+  setThreadTag,
   unlinkThreadPullRequest,
   unpinThread,
   unsettleThread,
@@ -265,6 +266,12 @@ export function createThreadEnvironmentAtoms<R, E>(
     updateMetadata: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:update-metadata",
       execute: updateThreadMetadata,
+      scheduler,
+      concurrency,
+    }),
+    setTag: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:set-tag",
+      execute: setThreadTag,
       scheduler,
       concurrency,
     }),

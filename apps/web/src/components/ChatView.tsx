@@ -84,6 +84,7 @@ import {
   ProviderInteractionMode,
   resolveIdleCompaction,
   RuntimeMode,
+  linearIssueIdFromBranch,
 } from "@t3tools/contracts";
 import {
   canResumeThread,
@@ -293,7 +294,8 @@ import {
   useEnvironmentSettings,
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
-import { linearIssueIdFromBranch, linearUrl } from "../linearIntegration";
+import { linearUrl } from "../linearIntegration";
+import { useLinkedLinearIssues } from "./linear/ThreadLinearIssues";
 import { isQuickChatsProject } from "../quickChats";
 import { usePanelAnimationSettings } from "../panelAnimations";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
@@ -1907,9 +1909,12 @@ export default function ChatView(props: ChatViewProps) {
   const attachedBranch =
     activeThread?.branch ?? draftThread?.branch ?? gitStatusQuery.data?.refName ?? null;
   const linearOrganizationSlug = useClientSettings((settings) => settings.linearOrganizationSlug);
-  const attachedLinearIssueId = linearOrganizationSlug
-    ? linearIssueIdFromBranch(attachedBranch)
-    : null;
+  const linkedLinearIssues = useLinkedLinearIssues(serverThread?.source.tags);
+  const attachedLinearIssueId = !linearOrganizationSlug
+    ? null
+    : serverThread
+      ? linkedLinearIssues.pinnedIssueId
+      : linearIssueIdFromBranch(attachedBranch);
   useWorkspaceMutationRefresh({
     enabled: gitStatusCwd !== null,
     mutationId: workspaceMutationId,
@@ -2221,7 +2226,7 @@ export default function ChatView(props: ChatViewProps) {
       openPreview,
       url: linearUrl({
         organizationSlug: linearOrganizationSlug,
-        branch: activeThread?.branch ?? draftThread?.branch ?? gitStatusQuery.data?.refName ?? null,
+        issueId: attachedLinearIssueId,
       }),
     });
   };
@@ -2262,7 +2267,7 @@ export default function ChatView(props: ChatViewProps) {
       openPreview,
       url: linearUrl({
         organizationSlug: linearOrganizationSlug,
-        branch: attachedBranch,
+        issueId: attachedLinearIssueId,
       }),
       pinned: true,
     }).finally(() => {
@@ -2272,7 +2277,6 @@ export default function ChatView(props: ChatViewProps) {
   }, [
     activeThreadRef,
     activeThreadSettled,
-    attachedBranch,
     attachedLinearIssueId,
     browserAvailable,
     canOperatePreview,
@@ -4149,6 +4153,7 @@ export default function ChatView(props: ChatViewProps) {
         ? { onCheckoutPullRequestRequest: openPullRequestDialogStable }
         : {})}
       onComposerFocusRequest={scheduleComposerFocusStable}
+      {...(canOperatePreview && browserAvailable ? { onOpenLinearUrl: openLinearUrlStable } : {})}
       {...(isServerThread && isGitRepo ? { onOpenChanges: openChangesFromThreadPanelStable } : {})}
       onRunProjectScript={runProjectScriptStable}
       onAddProjectScript={saveProjectScriptStable}
@@ -4228,7 +4233,7 @@ export default function ChatView(props: ChatViewProps) {
                     ? (githubPullRequest?.url ?? null)
                     : linearUrl({
                         organizationSlug: linearOrganizationSlug,
-                        branch: attachedBranch,
+                        issueId: attachedLinearIssueId,
                       })
                   : null
               }

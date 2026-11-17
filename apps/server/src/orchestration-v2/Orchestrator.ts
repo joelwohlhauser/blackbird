@@ -75,6 +75,7 @@ import {
   RuntimeMode,
   ThreadLinkedPullRequest,
   ThreadId,
+  withBranchLinearIssueTag,
   TurnItemId,
   TrimmedNonEmptyString,
   managedRuntimeModeCeilingMessage,
@@ -3777,6 +3778,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
 
     const now = yield* DateTime.now;
     const emitEvent = emit(events, command);
+    const branchIssueTags = withBranchLinearIssueTag([], command.branch);
     const thread: OrchestrationV2AppThread = {
       createdBy: command.createdBy,
       creationSource: command.creationSource,
@@ -3791,6 +3793,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       worktreePath: command.worktreePath,
       activeProviderThreadId: null,
       pullRequests: [],
+      ...(branchIssueTags.length === 0 ? {} : { tags: branchIssueTags }),
       ...(command.linkOrigin === undefined ? {} : { linkOrigin: command.linkOrigin }),
       // Only stamped work names a remote parent, so a client cannot claim one.
       ...(command.linkOrigin === undefined || command.delegatedFrom === undefined
@@ -4894,6 +4897,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 : {}),
             ...(command.projectId === undefined ? {} : { projectId: command.projectId }),
             ...(command.branch === undefined ? {} : { branch: command.branch }),
+            ...(command.branch == null || command.branch === thread.branch
+              ? {}
+              : { tags: withBranchLinearIssueTag(thread.tags ?? [], command.branch) }),
             ...(command.worktreePath === undefined ? {} : { worktreePath: command.worktreePath }),
             ...(command.linkedPullRequest === undefined
               ? {}

@@ -26,10 +26,11 @@ import { flushSync } from "react-dom";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { getDesktopLinearBridge } from "../lib/desktopLinear";
-import { linearIssueIdFromBranch } from "../linearIntegration";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { vcsEnvironment } from "../state/vcs";
+import { linearIssueIdFromBranch } from "@t3tools/contracts";
 import { LinearIssuePicker } from "./linear/LinearIssuePicker";
+import { ThreadLinearIssueControl } from "./linear/ThreadLinearIssues";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { useProject, useThreadShellsForProjectRefs } from "../state/entities";
 import {
@@ -842,17 +843,22 @@ export const BranchToolbar = memo(function BranchToolbar({
     setDraftThreadContext(draftId ?? threadRef, { branch: null, worktreePath: null });
     onNewBranchNameChange("");
   };
-  const linearIssuePicker =
-    showGitControls && canReuseExistingWorktree && !forceNewWorktree && getDesktopLinearBridge() ? (
-      <LinearIssuePicker
-        label={selectedLinearIssueId ?? "Issue"}
-        disabled={resolvingLinearIssue}
-        preferencesKey={`${environmentId}:${projectId}`}
-        onSelect={(issue) => void onLinearIssueSelect(issue)}
-        onUnlink={selectedLinearIssueId ? onLinearIssueUnlink : undefined}
-        onOpenLinear={onOpenLinearUrl}
-      />
-    ) : null;
+  const linearIssuePicker = !showGitControls ? null : isServerThread ? (
+    <ThreadLinearIssueControl
+      threadRef={threadRef}
+      preferencesKey={`${environmentId}:${projectId}`}
+      onOpenLinearUrl={onOpenLinearUrl}
+    />
+  ) : canReuseExistingWorktree && !forceNewWorktree && getDesktopLinearBridge() ? (
+    <LinearIssuePicker
+      label={selectedLinearIssueId ?? "Issue"}
+      disabled={resolvingLinearIssue}
+      preferencesKey={`${environmentId}:${projectId}`}
+      onSelect={(issue) => void onLinearIssueSelect(issue)}
+      onUnlink={selectedLinearIssueId ? onLinearIssueUnlink : undefined}
+      onOpenLinear={onOpenLinearUrl}
+    />
+  ) : null;
 
   if (!activeProject) return null;
 

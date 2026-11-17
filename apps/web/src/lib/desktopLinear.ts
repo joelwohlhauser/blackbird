@@ -17,6 +17,7 @@ export function linearErrorMessage(cause: unknown): string {
 
 export function useDesktopLinearAccount() {
   const [account, setAccount] = useState<LinearAccount | null | undefined>(undefined);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to the desktop app's Linear account
   useEffect(() => {
     const bridge = getDesktopLinearBridge();
     if (!bridge) return;
@@ -73,6 +74,22 @@ export type LinearIssueStatusesState =
   | "failed"
   | "ready";
 
+const issueStatusRequests = new Map<string, Promise<ReadonlyArray<LinearIssueStatus> | null>>();
+
+function requestIssueStatuses(
+  bridge: NonNullable<DesktopBridge["linear"]>,
+  requestKey: string,
+  issueIdsKey: string,
+) {
+  const pending = issueStatusRequests.get(requestKey);
+  if (pending) return pending;
+  const request = bridge
+    .issueStatuses(issueIdsKey.length === 0 ? [] : issueIdsKey.split(","))
+    .finally(() => issueStatusRequests.delete(requestKey));
+  issueStatusRequests.set(requestKey, request);
+  return request;
+}
+
 export function useLinearIssueStatuses(issueIds: ReadonlyArray<string>) {
   const [account] = useDesktopLinearAccount();
   const [generation, setGeneration] = useState(0);
@@ -80,27 +97,29 @@ export function useLinearIssueStatuses(issueIds: ReadonlyArray<string>) {
     readonly requestKey: string;
     readonly status: "signed-out" | "failed" | "ready";
     readonly issues: ReadonlyArray<LinearIssueStatus>;
-  }>({ requestKey: "", status: "ready", issues: [] });
+    readonly issueIdsKey: string;
+  }>({ requestKey: "", status: "ready", issues: [], issueIdsKey: "" });
   const issueIdsKey = [...new Set(issueIds.map((issueId) => issueId.toUpperCase()))]
     .toSorted()
     .join(",");
   const requestKey = `${account?.id ?? ""}|${generation}|${issueIdsKey}`;
   const bridge = getDesktopLinearBridge();
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads issue statuses from the desktop app's Linear connection
   useEffect(() => {
     if (!bridge || !account) return;
     let disposed = false;
-    void bridge.issueStatuses(issueIdsKey.length === 0 ? [] : issueIdsKey.split(",")).then(
+    void requestIssueStatuses(bridge, requestKey, issueIdsKey).then(
       (issues) => {
         if (disposed) return;
         setResult(
           issues === null
-            ? { requestKey, status: "signed-out", issues: [] }
-            : { requestKey, status: "ready", issues },
+            ? { requestKey, status: "signed-out", issues: [], issueIdsKey: "" }
+            : { requestKey, status: "ready", issues, issueIdsKey },
         );
       },
       () => {
-        if (!disposed) setResult({ requestKey, status: "failed", issues: [] });
+        if (!disposed) setResult((previous) => ({ ...previous, requestKey, status: "failed" }));
       },
     );
     return () => {
@@ -116,5 +135,8 @@ export function useLinearIssueStatuses(issueIds: ReadonlyArray<string>) {
       : result.requestKey === requestKey
         ? result.status
         : "pending";
-  return { status, issues: result.issues, refresh } as const;
+  const signedOut = status === "signed-out";
+  const resolvedIssueIds =
+    !signedOut && result.issueIdsKey.length > 0 ? result.issueIdsKey.split(",") : [];
+  return { status, issues: signedOut ? [] : result.issues, resolvedIssueIds, refresh } as const;
 }

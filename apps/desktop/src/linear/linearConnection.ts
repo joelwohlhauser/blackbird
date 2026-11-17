@@ -119,7 +119,10 @@ const decodeStatuses = Schema.decodeUnknownSync(
             nodes: Schema.Array(
               Schema.Struct({
                 identifier: Schema.String,
-                state: Schema.NullOr(Schema.Struct({ name: Schema.String, type: Schema.String })),
+                title: Schema.String,
+                state: Schema.NullOr(
+                  Schema.Struct({ name: Schema.String, type: Schema.String, color: Schema.String }),
+                ),
               }),
             ),
           }),
@@ -190,7 +193,8 @@ const STATUSES_QUERY = `
       issues(filter: $filter, first: 200, includeArchived: true) {
         nodes {
           identifier
-          state { name type }
+          title
+          state { name type color }
         }
       }
     }
@@ -510,11 +514,13 @@ export function createLinearConnection(dependencies: LinearConnectionDependencie
       const graphqlError = response.errors?.[0]?.message.trim();
       if (graphqlError && !response.data) throw new Error(graphqlError);
       return (response.data?.issues.nodes ?? []).flatMap((issue) => {
+        const { state } = issue;
+        if (!state) return [];
         const issueId = issue.identifier.trim().toUpperCase();
-        const stateName = issue.state?.name.trim();
-        const stateType = issue.state?.type.trim();
+        const stateName = state.name.trim();
+        const stateType = state.type.trim();
         if (!issueId || !stateName || !stateType) return [];
-        return [{ issueId, stateName, stateType }];
+        return [{ issueId, title: issue.title, stateName, stateType, stateColor: state.color }];
       });
     });
   };

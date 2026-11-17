@@ -78,14 +78,26 @@ describe("workspace settings", () => {
     expect(
       linearWorkspaceStatusLabel(
         "AI-42",
-        { issueId: "AI-42", stateName: "In Progress", stateType: "started" },
+        {
+          issueId: "AI-42",
+          title: "Add a member",
+          stateName: "In Progress",
+          stateType: "started",
+          stateColor: "#f2c94c",
+        },
         "ready",
       ).detail,
     ).toBe("Open · In Progress");
     expect(
       linearWorkspaceStatusLabel(
         "AI-42",
-        { issueId: "AI-42", stateName: "Done", stateType: "completed" },
+        {
+          issueId: "AI-42",
+          title: "Add a member",
+          stateName: "Done",
+          stateType: "completed",
+          stateColor: "#5e6ad2",
+        },
         "ready",
       ).detail,
     ).toBe("Closed · Done");

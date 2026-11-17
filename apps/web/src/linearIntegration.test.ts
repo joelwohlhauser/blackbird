@@ -1,20 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { linearIssueIdForWorkspace, linearIssueIdFromBranch, linearUrl } from "./linearIntegration";
+import { linearIssueIdForWorkspace, linearUrl } from "./linearIntegration";
 
 describe("Linear integration", () => {
-  it.each([
-    ["app-123-add-member", "APP-123"],
-    ["feature/app-123-add-member", "APP-123"],
-    ["fix/ops2-42", "OPS2-42"],
-  ])("extracts an issue id from %s", (branch, expected) => {
-    expect(linearIssueIdFromBranch(branch)).toBe(expected);
-  });
-
-  it.each([null, "main", "feature/no-ticket"])("does not invent an issue id for %s", (branch) => {
-    expect(linearIssueIdFromBranch(branch)).toBeNull();
-  });
-
   it("uses the branch before falling back to the worktree folder", () => {
     expect(
       linearIssueIdForWorkspace({
@@ -27,17 +15,15 @@ describe("Linear integration", () => {
     ).toBe("OPS-42");
   });
 
-  it("opens the issue when the branch contains an issue id", () => {
-    expect(linearUrl({ organizationSlug: " Acme ", branch: "app-123-add-member" })).toBe(
+  it("opens the issue in the configured workspace", () => {
+    expect(linearUrl({ organizationSlug: " Acme ", issueId: "APP-123" })).toBe(
       "https://linear.app/acme/issue/APP-123/",
     );
-    expect(linearUrl({ organizationSlug: "", branch: "app-123-add-member" })).toBe(
-      "https://linear.app",
-    );
+    expect(linearUrl({ organizationSlug: "", issueId: "APP-123" })).toBe("https://linear.app");
   });
 
   it("falls back to the organization workspace", () => {
-    expect(linearUrl({ organizationSlug: "acme", branch: "main" })).toBe("https://linear.app/acme");
-    expect(linearUrl({ organizationSlug: "  ", branch: "main" })).toBe("https://linear.app");
+    expect(linearUrl({ organizationSlug: "acme", issueId: null })).toBe("https://linear.app/acme");
+    expect(linearUrl({ organizationSlug: "  ", issueId: null })).toBe("https://linear.app");
   });
 });

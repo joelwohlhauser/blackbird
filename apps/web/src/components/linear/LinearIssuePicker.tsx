@@ -20,6 +20,7 @@ import { useComposerMenuProps } from "../chat/composerEventScope";
 import { ComposerContextLabel } from "../ComposerContextLabel";
 import { LinearIcon } from "../Icons";
 import { ComposerControl } from "../chat/ComposerControl";
+import { ThreadDetailsControl } from "../chat/ThreadDetailsControl";
 import { Button } from "../ui/button";
 import {
   Combobox,
@@ -129,6 +130,7 @@ function LoadMoreRow({ onVisible }: { onVisible: () => void }) {
 
 interface LinearIssuePickerProps {
   readonly label: string;
+  readonly displayMode?: "toolbar" | "panel";
   readonly disabled: boolean;
   readonly preferencesKey: string;
   readonly onSelect: (issue: LinearIssue) => void;
@@ -138,6 +140,7 @@ interface LinearIssuePickerProps {
 
 export const LinearIssuePicker = memo(function LinearIssuePicker({
   label,
+  displayMode = "toolbar",
   disabled,
   preferencesKey,
   onSelect,
@@ -313,16 +316,30 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
       disabled={disabled}
     >
       <ComboboxTrigger
-        render={<ComposerControl size="xs" />}
+        render={
+          displayMode === "panel" ? (
+            <ThreadDetailsControl variant="ghost" size="sm" tone="muted" className="w-full" />
+          ) : (
+            <ComposerControl size="xs" />
+          )
+        }
         aria-label="Linear issue"
         data-composer-context-control
       >
-        <LinearIcon className="size-2.5" />
-        <ComposerContextLabel>
+        {displayMode === "panel" ? (
+          <PlusIcon aria-hidden className="size-4 shrink-0" />
+        ) : (
+          <LinearIcon className="size-2.5" />
+        )}
+        <ComposerContextLabel displayMode={displayMode}>
           {waitingForCreation ? "Waiting for new issue…" : label}
         </ComposerContextLabel>
       </ComboboxTrigger>
-      <ComboboxPopup side="top" className="flex w-[30rem] flex-col" {...composerMenuProps}>
+      <ComboboxPopup
+        side={displayMode === "panel" ? "left" : "top"}
+        className="flex w-[30rem] flex-col"
+        {...composerMenuProps}
+      >
         {account === null ? (
           <div className="flex flex-col items-center gap-2 px-3 py-4 text-center text-sm text-muted-foreground">
             {signIn.waiting ? (

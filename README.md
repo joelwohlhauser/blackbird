@@ -102,7 +102,7 @@ renames the chat, replacing the old header title text — the project name is
 gone from the header), never scrolls out of view, and cannot be closed or
 moved to the panel.
 
-When the chat branch identifies a Linear issue, a Linear browser tab is created automatically and pinned beside the chat tab. It stays visible, cannot be closed or moved, and disappears when the chat no longer identifies that issue. Its page loads the first time the tab is shown. Pull request views, including the chat's own PR, always open in the right panel, as in T3 Code. GitHub browser tabs remain available from New Tab.
+When a chat has a linked Linear issue, a Linear browser tab for the first one is created automatically and pinned beside the chat tab. It stays visible and cannot be closed or moved while the chat has a linked issue. When the first linked issue changes, the tab keeps its page and Home goes to the new issue. Its page loads the first time the tab is shown. Pull request views, including the chat's own PR, always open in the right panel, as in T3 Code. GitHub browser tabs remain available from New Tab.
 
 Tabs are draggable: reorder them within a container or drag them between the
 chat area and the right panel. Dragging toward the chat column's right edge
@@ -258,9 +258,9 @@ Scheduled tasks don't start while the machine is offline, because their runs wou
 
 The normal right panel has browser-backed integration tabs:
 
-- **Issue** extracts a Linear issue id such as `ENG-123` from the current
-  branch and opens it in the configured organization. The organization slug is
+- **Issue** opens a chat's linked Linear issue in the configured organization. The organization slug is
   configurable and empty by default. Set it under Settings → General → Linear to open and pin issue tabs; until then, the Linear action opens its home page.
+- A chat can link several Linear issues. A branch named after an issue, such as `eng-123-add-login`, links it when the chat starts on that branch or moves to it. Link more from the composer's **Issue** picker or **Link issue** in the thread details card, and agents can link one with the `link_linear_issue` tool. Linked issues show with their status below the composer and in the thread details card; unlink one there and it stays unlinked. The status needs the desktop app's Sign in with Linear.
 - **PR** uses the authenticated GitHub CLI (`gh`) to detect the pull request for
   the current branch and open the GitHub page inside Blackbird.
 - **Previews** pills in a pull request's Summary tab list the preview

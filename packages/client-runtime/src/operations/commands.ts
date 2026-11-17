@@ -1187,6 +1187,21 @@ export const editQueuedRun = Effect.fn("EnvironmentCommands.editQueuedRun")(func
   });
 });
 
+export type SetThreadTagInput = Omit<
+  Extract<OrchestrationV2Command, { type: "thread.tag.set" }>,
+  "type" | "commandId"
+> &
+  CommandMetadata;
+export const setThreadTag = Effect.fn("EnvironmentCommands.setThreadTag")(function* (
+  input: SetThreadTagInput,
+) {
+  return yield* dispatch({
+    ...input,
+    type: "thread.tag.set",
+    commandId: yield* allocateCommandId(input),
+  });
+});
+
 export type LinkThreadPullRequestInput = Omit<
   Extract<OrchestrationV2Command, { type: "thread.pull-request.link" }>,
   "type" | "commandId"

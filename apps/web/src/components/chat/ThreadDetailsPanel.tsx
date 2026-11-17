@@ -36,6 +36,7 @@ import { resolveThreadDetailsVisibility, THREAD_DETAILS_ITEMS } from "./threadDe
 import { useClientSettings } from "../../hooks/useSettings";
 import { useProject, useServerConfigs } from "../../state/entities";
 import { ThreadDetailsThreadPrRows } from "./ThreadDetailsPrRows";
+import { ThreadDetailsLinearRows } from "../linear/ThreadLinearIssues";
 import { cn } from "../../lib/utils";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
@@ -84,6 +85,7 @@ interface ThreadDetailsPanelProps extends Pick<
   onNewBranchNameChange: (newBranchName: string) => void;
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onComposerFocusRequest: () => void;
+  onOpenLinearUrl?: ((url: string) => void) | undefined;
   onOpenChanges?: () => void;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<ProjectScriptActionResult>;
@@ -250,6 +252,13 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                         threadRef={activeThreadRef}
                         project={project}
                         composerTarget={props.composerDraftTarget}
+                      />
+                    ) : null}
+                    {(show.branch || show.pullRequests) && props.isServerThread ? (
+                      <ThreadDetailsLinearRows
+                        threadRef={activeThreadRef}
+                        preferencesKey={`${props.environmentId}:${props.projectId}`}
+                        onOpenLinearUrl={props.onOpenLinearUrl}
                       />
                     ) : null}
                     {show.git && props.gitCwd ? (
