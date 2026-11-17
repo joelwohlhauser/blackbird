@@ -413,7 +413,6 @@ function WorkspaceSurfaceTab(props: {
   surface: RightPanelSurface;
   active: boolean;
   pending: boolean;
-  pinned: boolean;
   title: string;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   desktopByTabId: Readonly<Record<string, DesktopPreviewOverlay>>;
@@ -428,7 +427,6 @@ function WorkspaceSurfaceTab(props: {
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
     id: props.surface.id,
     data: { type: "workspace-tab", container: props.container },
-    disabled: { draggable: props.pinned },
   });
   const previewTabId = previewTabIdOf(props.surface, props.previewSessions);
   const audio = tabAudioState(previewTabId ? (props.desktopByTabId[previewTabId] ?? null) : null);
@@ -452,13 +450,13 @@ function WorkspaceSurfaceTab(props: {
         isDragging && "opacity-40",
       )}
     >
-      {props.pinned ? (
-        <button
-          type="button"
-          className="relative flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-muted"
-          aria-label={`Open ${props.title}`}
-          onClick={() => props.onActivate(props.surface)}
-        >
+      <button
+        type="button"
+        className="group/close relative flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
+        aria-label={`Close ${props.title}`}
+        onClick={() => props.onCloseSurface(props.surface)}
+      >
+        <span className="relative flex size-3 items-center justify-center group-hover/tab:hidden group-focus-visible/close:hidden">
           <SurfaceIcon
             surface={props.surface}
             sessions={props.previewSessions}
@@ -470,38 +468,13 @@ function WorkspaceSurfaceTab(props: {
           />
           {props.pending ? (
             <span
-              className="absolute right-0 bottom-0 size-1.5 rounded-full bg-current"
+              className="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full bg-current"
               aria-hidden
             />
           ) : null}
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="group/close relative flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
-          aria-label={`Close ${props.title}`}
-          onClick={() => props.onCloseSurface(props.surface)}
-        >
-          <span className="relative flex size-3 items-center justify-center group-hover/tab:hidden group-focus-visible/close:hidden">
-            <SurfaceIcon
-              surface={props.surface}
-              sessions={props.previewSessions}
-              desktopByTabId={props.desktopByTabId}
-              theme={props.theme}
-              {...(props.pullRequestStatuses !== undefined
-                ? { pullRequestStatuses: props.pullRequestStatuses }
-                : {})}
-            />
-            {props.pending ? (
-              <span
-                className="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full bg-current"
-                aria-hidden
-              />
-            ) : null}
-          </span>
-          <X className="hidden size-3 group-hover/tab:block group-focus-visible/close:block" />
-        </button>
-      )}
+        </span>
+        <X className="hidden size-3 group-hover/tab:block group-focus-visible/close:block" />
+      </button>
       {audio === "none" || !audioRuntimeTabId ? null : (
         <Tooltip>
           <TooltipTrigger
@@ -557,7 +530,6 @@ export interface WorkspaceTabStripProps {
   terminalLabelsById: ReadonlyMap<string, string>;
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
   /** Surface ids fixed beside the chat tab and protected from close/drag. */
-  pinnedSurfaceIds?: ReadonlySet<string>;
   onActivate: (surface: RightPanelSurface) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
   onCloseOtherSurfaces: (surface: RightPanelSurface) => void;
@@ -586,7 +558,6 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
 
     const surfaceIndex = props.surfaces.findIndex((entry) => entry.id === surface.id);
     if (surfaceIndex < 0) return;
-    if (props.pinnedSurfaceIds?.has(surface.id)) return;
 
     const items: ContextMenuItem<TabContextMenuAction>[] = [];
     if (surface.kind === "file") {
@@ -663,7 +634,6 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     if (event.button !== 1) return;
     event.preventDefault();
     event.stopPropagation();
-    if (props.pinnedSurfaceIds?.has(surface.id)) return;
     props.onCloseSurface(surface);
   };
   const handleTabListWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
@@ -708,12 +678,6 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     ...(props.chatTab ? [MAIN_CHAT_TAB_ID] : []),
     ...props.surfaces.map((surface) => surface.id),
   ];
-  const pinnedSurfaces = props.surfaces.filter((surface) =>
-    props.pinnedSurfaceIds?.has(surface.id),
-  );
-  const scrollingSurfaces = props.surfaces.filter(
-    (surface) => !props.pinnedSurfaceIds?.has(surface.id),
-  );
   const renderSurfaceTab = (surface: RightPanelSurface) => (
     <WorkspaceSurfaceTab
       key={surface.id}
@@ -721,7 +685,6 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       surface={surface}
       active={surface.id === props.activeSurfaceId}
       pending={props.pendingSurfaceIds.has(surface.id)}
-      pinned={props.pinnedSurfaceIds?.has(surface.id) ?? false}
       title={surfaceTitle(surface, props.previewSessions, props.terminalLabelsById)}
       previewSessions={props.previewSessions}
       desktopByTabId={props.desktopByTabId}
@@ -758,21 +721,20 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
         {/* The chat tab is pinned outside the scroll viewport so it stays
             visible however many tabs are open. */}
         {props.chatTab ? <MainChatTab key={props.chatTab.renameKey} {...props.chatTab} /> : null}
-        {pinnedSurfaces.map(renderSurfaceTab)}
         <ScrollArea
           ref={tabListRef}
           hideScrollbars
           scrollFade
           className={cn(
             "h-full w-fit min-w-0 max-w-full flex-[0_1_auto] rounded-none",
-            scrollingSurfaces.length === 0 && "-ml-1",
+            props.surfaces.length === 0 && "-ml-1",
           )}
         >
           <div
             ref={setBlankSpaceDropRef}
             className="flex h-full w-max min-w-full items-center gap-1"
           >
-            {scrollingSurfaces.map(renderSurfaceTab)}
+            {props.surfaces.map(renderSurfaceTab)}
           </div>
         </ScrollArea>
       </SortableContext>

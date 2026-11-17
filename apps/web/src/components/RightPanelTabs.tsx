@@ -85,7 +85,6 @@ export interface RightPanelTabsProps {
   sideChatAvailable?: boolean;
   sideChatDisabledReason?: string | null;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
-  pinnedSurfaceIds?: ReadonlySet<string>;
   children: ReactNode;
 }
 
@@ -517,9 +516,6 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           terminalLabelsById={props.terminalLabelsById}
           {...(props.pullRequestStatuses !== undefined
             ? { pullRequestStatuses: props.pullRequestStatuses }
-            : {})}
-          {...(props.pinnedSurfaceIds !== undefined
-            ? { pinnedSurfaceIds: props.pinnedSurfaceIds }
             : {})}
           onActivate={props.onActivate}
           onCloseSurface={props.onCloseSurface}

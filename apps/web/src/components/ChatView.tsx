@@ -1175,7 +1175,6 @@ export default function ChatView(props: ChatViewProps) {
     selectThreadRightPanelState(state.byThreadKey, activeThreadRef),
   );
   const previewSurfaceRestoreInFlightRef = useRef(new Set<string>());
-  const attachedSurfaceOpenInFlightRef = useRef(new Set<string>());
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
@@ -1910,11 +1909,9 @@ export default function ChatView(props: ChatViewProps) {
     activeThread?.branch ?? draftThread?.branch ?? gitStatusQuery.data?.refName ?? null;
   const linearOrganizationSlug = useClientSettings((settings) => settings.linearOrganizationSlug);
   const linkedLinearIssues = useLinkedLinearIssues(serverThread?.source.tags);
-  const attachedLinearIssueId = !linearOrganizationSlug
-    ? null
-    : serverThread
-      ? linkedLinearIssues.pinnedIssueId
-      : linearIssueIdFromBranch(attachedBranch);
+  const linkedLinearIssueId = serverThread
+    ? linkedLinearIssues.firstIssueId
+    : linearIssueIdFromBranch(attachedBranch);
   useWorkspaceMutationRefresh({
     enabled: gitStatusCwd !== null,
     mutationId: workspaceMutationId,
@@ -2210,81 +2207,11 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadRef?.environmentId ?? null,
     AuthPreviewOperateScope,
   );
-  const createLinearSurface = () => {
-    if (!activeThreadRef || !canOperatePreview || !browserAvailable) return;
-    const threadState = useRightPanelStore.getState().byThreadKey[scopedThreadKey(activeThreadRef)];
-    const existing = [...(threadState?.mainSurfaces ?? []), ...(threadState?.surfaces ?? [])].find(
-      (surface) => surface.kind === "linear",
-    );
-    if (existing && activePreviewState.sessions[existing.resourceId]) {
-      useRightPanelStore.getState().activateSurface(activeThreadRef, existing.id);
-      setActivePreviewTab(activeThreadRef, existing.resourceId);
-      return;
-    }
-    void addLinearSurface({
-      threadRef: activeThreadRef,
-      openPreview,
-      url: linearUrl({
-        organizationSlug: linearOrganizationSlug,
-        issueId: attachedLinearIssueId,
-      }),
-    });
-  };
-  const createLinearSurfaceStable = useStableCallback(createLinearSurface);
-  const openLinearUrl = (url: string) => {
-    if (!activeThreadRef) return;
-    void addLinearSurface({ threadRef: activeThreadRef, openPreview, url });
-  };
-  const openLinearUrlStable = useStableCallback(openLinearUrl);
   const createGitHubPullRequestSurface = () => {
     if (!githubPullRequest) return;
     openGitHubPullRequestSurface(githubPullRequest.url);
   };
   const createGitHubPullRequestSurfaceStable = useStableCallback(createGitHubPullRequestSurface);
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens and pins the attached issue in the preview server
-  useEffect(() => {
-    if (
-      !activeThreadRef ||
-      !attachedLinearIssueId ||
-      activeThreadSettled ||
-      !canOperatePreview ||
-      !browserAvailable
-    ) {
-      return;
-    }
-
-    const threadKey = scopedThreadKey(activeThreadRef);
-    const surfaces = [...rightPanelState.mainSurfaces, ...rightPanelState.surfaces];
-    if (surfaces.some((surface) => surface.id === "linear")) {
-      useRightPanelStore.getState().pinDedicatedSurface(activeThreadRef, "linear");
-      return;
-    }
-    const inFlightKey = `${threadKey}:linear`;
-    if (attachedSurfaceOpenInFlightRef.current.has(inFlightKey)) return;
-    attachedSurfaceOpenInFlightRef.current.add(inFlightKey);
-    void addLinearSurface({
-      threadRef: activeThreadRef,
-      openPreview,
-      url: linearUrl({
-        organizationSlug: linearOrganizationSlug,
-        issueId: attachedLinearIssueId,
-      }),
-      pinned: true,
-    }).finally(() => {
-      useRightPanelStore.getState().pinDedicatedSurface(activeThreadRef, "linear");
-      attachedSurfaceOpenInFlightRef.current.delete(inFlightKey);
-    });
-  }, [
-    activeThreadRef,
-    activeThreadSettled,
-    attachedLinearIssueId,
-    browserAvailable,
-    canOperatePreview,
-    linearOrganizationSlug,
-    openPreview,
-    rightPanelState.mainSurfaces,
-    rightPanelState.surfaces,
-  ]);
   const openNewTabPage = (container: WorkspaceTabContainer) => {
     if (!activeThreadRef) return;
     const store = useRightPanelStore.getState();
@@ -2375,7 +2302,6 @@ export default function ChatView(props: ChatViewProps) {
         (linkedThreadPullRequest === null && gitStatusQuery.data?.refName === activeThread?.branch
           ? (gitStatusQuery.data?.pr ?? null)
           : null));
-  const attachedWorkspaceSurfaceIds = new Set<string>(attachedLinearIssueId ? ["linear"] : []);
   const proactivePullRequestsKey = pullRequestsSurfaceAvailable
     ? JSON.stringify(
         visiblePullRequests.map((link) => [link.host, link.repository, link.number]).sort(),
@@ -2428,6 +2354,19 @@ export default function ChatView(props: ChatViewProps) {
       closeSurfaceTerminals(surface);
     }
   };
+  const openLinearUrl = (url: string) => {
+    if (!activeThreadRef || !canOperatePreview || !browserAvailable) return;
+    void addLinearSurface({ threadRef: activeThreadRef, openPreview, url }).then((result) => {
+      if (result._tag === "Success" && result.value) cleanupRightPanelSurfaces([result.value]);
+    });
+  };
+  const linkedLinearIssueUrl = linearUrl({
+    organizationSlug: linearOrganizationSlug,
+    issueId: linkedLinearIssueId,
+  });
+  const createLinearSurface = () => openLinearUrl(linkedLinearIssueUrl);
+  const createLinearSurfaceStable = useStableCallback(createLinearSurface);
+  const openLinearUrlStable = useStableCallback(openLinearUrl);
   const syncActivePreviewSurface = () => {
     if (!activeThreadRef) return;
     const nextActiveSurface = selectActiveRightPanelSurface(
@@ -2462,7 +2401,6 @@ export default function ChatView(props: ChatViewProps) {
   };
   const closeRightPanelSurface = (surface: RightPanelSurface) => {
     if (!activeThreadRef) return;
-    if (attachedWorkspaceSurfaceIds.has(surface.id)) return;
     const finishClose = () => finishRightPanelSurfaceClose([surface]);
     if (
       surface.kind !== "terminal" ||
@@ -2552,7 +2490,6 @@ export default function ChatView(props: ChatViewProps) {
       if (container === "main") settleChatAndOpenNewThread();
       return;
     }
-    if (attachedWorkspaceSurfaceIds.has(surface.id)) return;
     closeRightPanelSurface(surface);
   };
   const closeActiveWorkspaceTabStable = useStableCallback(closeActiveWorkspaceTab);
@@ -2568,9 +2505,7 @@ export default function ChatView(props: ChatViewProps) {
       : rightPanelState.surfaces;
   const closeOtherRightPanelSurfaces = (surface: RightPanelSurface) => {
     if (!activeThreadRef) return;
-    const surfaces = surfacesInContainerOf(surface).filter(
-      (entry) => entry.id !== surface.id && !attachedWorkspaceSurfaceIds.has(entry.id),
-    );
+    const surfaces = surfacesInContainerOf(surface).filter((entry) => entry.id !== surface.id);
     for (const entry of surfaces) {
       useRightPanelStore.getState().closeSurface(activeThreadRef, entry.id);
     }
@@ -2584,9 +2519,7 @@ export default function ChatView(props: ChatViewProps) {
     const containerSurfaces = surfacesInContainerOf(surface);
     const surfaceIndex = containerSurfaces.findIndex((entry) => entry.id === surface.id);
     if (surfaceIndex < 0) return;
-    const surfaces = containerSurfaces
-      .slice(surfaceIndex + 1)
-      .filter((entry) => !attachedWorkspaceSurfaceIds.has(entry.id));
+    const surfaces = containerSurfaces.slice(surfaceIndex + 1);
     for (const entry of surfaces) {
       useRightPanelStore.getState().closeSurface(activeThreadRef, entry.id);
     }
@@ -2596,9 +2529,7 @@ export default function ChatView(props: ChatViewProps) {
   const closeRightPanelSurfacesToRightStable = useStableCallback(closeRightPanelSurfacesToRight);
   const closeAllRightPanelSurfaces = () => {
     if (!activeThreadRef) return;
-    const surfaces = rightPanelState.surfaces.filter(
-      (surface) => !attachedWorkspaceSurfaceIds.has(surface.id),
-    );
+    const surfaces = rightPanelState.surfaces;
     for (const surface of surfaces) {
       useRightPanelStore.getState().closeSurface(activeThreadRef, surface.id);
     }
@@ -2607,9 +2538,7 @@ export default function ChatView(props: ChatViewProps) {
   const closeAllRightPanelSurfacesStable = useStableCallback(closeAllRightPanelSurfaces);
   const closeAllMainSurfaces = () => {
     if (!activeThreadRef) return;
-    const surfaces = rightPanelState.mainSurfaces.filter(
-      (surface) => !attachedWorkspaceSurfaceIds.has(surface.id),
-    );
+    const surfaces = rightPanelState.mainSurfaces;
     for (const surface of surfaces) {
       useRightPanelStore.getState().closeSurface(activeThreadRef, surface.id);
     }
@@ -3186,7 +3115,6 @@ export default function ChatView(props: ChatViewProps) {
     // A completed drag must not fire the click that follows pointerup.
     workspaceTabDragState.suppressClickAfterDrag = true;
     const surfaceId = String(event.active.id);
-    if (attachedWorkspaceSurfaceIds.has(surfaceId)) return;
     setDraggingTabSurface(
       rightPanelState.surfaces.find((entry) => entry.id === surfaceId) ??
         rightPanelState.mainSurfaces.find((entry) => entry.id === surfaceId) ??
@@ -3202,7 +3130,6 @@ export default function ChatView(props: ChatViewProps) {
     setDraggingTabSurface(null);
     if (!activeThreadRef) return;
     const surfaceId = String(event.active.id);
-    if (attachedWorkspaceSurfaceIds.has(surfaceId)) return;
     const surface =
       rightPanelState.surfaces.find((entry) => entry.id === surfaceId) ??
       rightPanelState.mainSurfaces.find((entry) => entry.id === surfaceId);
@@ -3225,16 +3152,7 @@ export default function ChatView(props: ChatViewProps) {
     const sourceContainer = rightPanelState.mainSurfaces.some((entry) => entry.id === surfaceId)
       ? "main"
       : "panel";
-    const targetSurfaces =
-      target.container === "main" ? rightPanelState.mainSurfaces : rightPanelState.surfaces;
-    const pinnedTargetCount = targetSurfaces.filter((entry) =>
-      attachedWorkspaceSurfaceIds.has(entry.id),
-    ).length;
-    const constrainedTarget = {
-      ...target,
-      index: Math.max(target.index, pinnedTargetCount),
-    };
-    useRightPanelStore.getState().moveSurface(activeThreadRef, surfaceId, constrainedTarget);
+    useRightPanelStore.getState().moveSurface(activeThreadRef, surfaceId, target);
     // Cross-container drops activate the moved tab in its new container.
     if (sourceContainer !== target.container) {
       applySurfaceActivationEffects(surface);
@@ -4227,16 +4145,7 @@ export default function ChatView(props: ChatViewProps) {
               mode="embedded"
               threadRef={activeThreadRef}
               tabId={surface.resourceId}
-              homeUrl={
-                attachedWorkspaceSurfaceIds.has(surface.id)
-                  ? surface.kind === "github-pr"
-                    ? (githubPullRequest?.url ?? null)
-                    : linearUrl({
-                        organizationSlug: linearOrganizationSlug,
-                        issueId: attachedLinearIssueId,
-                      })
-                  : null
-              }
+              homeUrl={surface.kind === "linear" ? linkedLinearIssueUrl : null}
               visible={visible}
             />
           </Suspense>
@@ -4477,7 +4386,6 @@ export default function ChatView(props: ChatViewProps) {
           : {})}
         terminalLabelsById={activeTerminalLabelsById}
         pullRequestStatuses={pullRequestTabStatuses}
-        pinnedSurfaceIds={attachedWorkspaceSurfaceIds}
         onActivate={activateRightPanelSurfaceStable}
         onCloseSurface={closeRightPanelSurfaceStable}
         onCloseOtherSurfaces={closeOtherRightPanelSurfacesStable}
@@ -5162,7 +5070,6 @@ export default function ChatView(props: ChatViewProps) {
                 : {})}
               terminalLabelsById={activeTerminalLabelsById}
               pullRequestStatuses={pullRequestTabStatuses}
-              pinnedSurfaceIds={attachedWorkspaceSurfaceIds}
               onActivate={activateRightPanelSurfaceStable}
               onCloseSurface={closeRightPanelSurfaceStable}
               onCloseOtherSurfaces={closeOtherRightPanelSurfacesStable}
@@ -5219,7 +5126,6 @@ export default function ChatView(props: ChatViewProps) {
                 : {})}
               terminalLabelsById={activeTerminalLabelsById}
               pullRequestStatuses={pullRequestTabStatuses}
-              pinnedSurfaceIds={attachedWorkspaceSurfaceIds}
               onActivate={activateRightPanelSurfaceStable}
               onCloseSurface={closeRightPanelSurfaceStable}
               onCloseOtherSurfaces={closeOtherRightPanelSurfacesStable}

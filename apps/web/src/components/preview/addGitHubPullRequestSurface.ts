@@ -14,7 +14,6 @@ export async function addGitHubPullRequestSurface<E>(input: {
   readonly threadRef: ScopedThreadRef;
   readonly openPreview: OpenPreviewMutation<E>;
   readonly url: string;
-  readonly pinned?: boolean;
 }): Promise<AtomCommandResult<void, E | BrowserSettingsReadError>> {
   const result = await openPreviewSession({
     openPreview: input.openPreview,
@@ -22,10 +21,6 @@ export async function addGitHubPullRequestSurface<E>(input: {
     url: input.url,
   });
   return mapAtomCommandResult(result, (snapshot) => {
-    useRightPanelStore
-      .getState()
-      .openGitHubPullRequest(input.threadRef, snapshot.tabId, input.url, {
-        ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
-      });
+    useRightPanelStore.getState().openGitHubPullRequest(input.threadRef, snapshot.tabId, input.url);
   });
 }

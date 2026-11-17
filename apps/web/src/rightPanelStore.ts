@@ -173,19 +173,8 @@ interface RightPanelStoreState {
     >,
   ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null, url?: string | null) => void;
-  openLinear: (
-    ref: ScopedThreadRef,
-    tabId: string,
-    url?: string | null,
-    options?: { pinned?: boolean },
-  ) => void;
-  openGitHubPullRequest: (
-    ref: ScopedThreadRef,
-    tabId: string,
-    url?: string | null,
-    options?: { pinned?: boolean },
-  ) => void;
-  pinDedicatedSurface: (ref: ScopedThreadRef, surfaceId: "linear" | "github-pr") => void;
+  openLinear: (ref: ScopedThreadRef, tabId: string, url?: string | null) => void;
+  openGitHubPullRequest: (ref: ScopedThreadRef, tabId: string, url?: string | null) => void;
   openSideChat: (ref: ScopedThreadRef, threadId: ThreadId) => void;
   openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
   renameDevice: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
@@ -498,18 +487,17 @@ const withoutSurfaces = (
 };
 
 /**
- * Opens a Linear/GitHub-PR surface that owns a dedicated browser tab: drops
- * plain preview surfaces pointing at the same tab, then replaces the surface
- * in place (keeping its container) or upserts it into the panel.
+ * Opens the GitHub-PR surface that owns a dedicated browser tab: drops plain
+ * preview surfaces pointing at the same tab, then replaces the surface in
+ * place (keeping its container) or upserts it by layout.
  */
-const openDedicatedBrowserSurface = (
+const openGitHubPullRequestSurface = (
   current: ThreadRightPanelState,
-  surface: Extract<RightPanelSurface, { kind: "linear" | "github-pr" }>,
-  tabId: string,
+  surface: Extract<RightPanelSurface, { kind: "github-pr" }>,
 ): ThreadRightPanelState => {
   const base = withoutSurfaces(
     current,
-    (entry) => entry.id !== surface.id && entry.kind === "preview" && entry.resourceId === tabId,
+    (entry) => entry.kind === "preview" && entry.resourceId === surface.resourceId,
   );
   if (base.mainSurfaces.some((entry) => entry.id === surface.id)) {
     return {
@@ -527,66 +515,6 @@ const openDedicatedBrowserSurface = (
     };
   }
   return upsertSurface(base, surface);
-};
-
-const dedicatedSurfaceRank = (surface: RightPanelSurface): number =>
-  surface.kind === "linear" ? 0 : surface.kind === "github-pr" ? 1 : 2;
-
-/**
- * Keeps an attached Linear surface beside the chat tab without stealing
- * focus. Attached surfaces are ordered before ordinary tabs and removed from
- * the secondary panel if an older persisted workspace placed them there.
- */
-const pinDedicatedSurface = (
-  current: ThreadRightPanelState,
-  surfaceId: "linear" | "github-pr",
-): ThreadRightPanelState => {
-  const surface = findSurface(current, (entry) => entry.id === surfaceId);
-  if (!surface || (surface.kind !== "linear" && surface.kind !== "github-pr")) return current;
-
-  const surfaces = current.surfaces.filter((entry) => entry.id !== surfaceId);
-  const mainSurfaces = [
-    ...current.mainSurfaces.filter((entry) => entry.id !== surfaceId),
-    surface,
-  ].sort((left, right) => dedicatedSurfaceRank(left) - dedicatedSurfaceRank(right));
-  const alreadyPinned =
-    !current.surfaces.some((entry) => entry.id === surfaceId) &&
-    mainSurfaces.length === current.mainSurfaces.length &&
-    mainSurfaces.every((entry, index) => entry.id === current.mainSurfaces[index]?.id);
-  if (alreadyPinned) return current;
-  const removedActivePanelSurface = current.activeSurfaceId === surfaceId;
-  return {
-    ...current,
-    surfaces,
-    mainSurfaces,
-    isOpen: surfaces.length > 0 && current.isOpen,
-    activeSurfaceId: removedActivePanelSurface
-      ? (surfaces[0]?.id ?? null)
-      : current.activeSurfaceId,
-  };
-};
-
-const pinDedicatedSurfaceWithoutActivation = (
-  current: ThreadRightPanelState,
-  opened: ThreadRightPanelState,
-  surfaceId: "linear" | "github-pr",
-): ThreadRightPanelState => {
-  const pinned = pinDedicatedSurface(opened, surfaceId);
-  const isOpen = current.isOpen && pinned.surfaces.length > 0;
-  return {
-    ...pinned,
-    isOpen,
-    activeSurfaceId: isOpen
-      ? pinned.surfaces.some((surface) => surface.id === current.activeSurfaceId)
-        ? current.activeSurfaceId
-        : (pinned.surfaces[0]?.id ?? null)
-      : null,
-    activeMainSurfaceId: pinned.mainSurfaces.some(
-      (surface) => surface.id === current.activeMainSurfaceId,
-    )
-      ? current.activeMainSurfaceId
-      : null,
-  };
 };
 
 const updateThread = (
@@ -1074,48 +1002,40 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             return upsertSurface(current, surface);
           }),
         })),
-      openLinear: (ref, tabId, url, options) =>
+      openLinear: (ref, tabId, url) =>
         set((state) => ({
-          ...(options?.pinned ? automaticUpdate : userAction)(
-            state,
-            scopedThreadKey(ref),
-            (current) => {
-              const surface: RightPanelSurface = {
-                id: "linear",
-                kind: "linear",
-                resourceId: tabId,
-                ...(url !== undefined ? { url } : {}),
-              };
-              const opened = openDedicatedBrowserSurface(current, surface, tabId);
-              return options?.pinned
-                ? pinDedicatedSurfaceWithoutActivation(current, opened, "linear")
-                : opened;
-            },
-          ),
+          ...userAction(state, scopedThreadKey(ref), (current) => {
+            const surface: RightPanelSurface = {
+              id: "linear",
+              kind: "linear",
+              resourceId: tabId,
+              ...(url !== undefined ? { url } : {}),
+            };
+            const inPanel = current.surfaces.some((entry) => entry.id === surface.id);
+            const base = withoutSurfaces(current, (entry) =>
+              entry.id === surface.id
+                ? !inPanel
+                : entry.kind === "preview" && entry.resourceId === tabId,
+            );
+            return {
+              ...base,
+              isOpen: true,
+              surfaces: inPanel
+                ? base.surfaces.map((entry) => (entry.id === surface.id ? surface : entry))
+                : [...base.surfaces, surface],
+              activeSurfaceId: surface.id,
+            };
+          }),
         })),
-      openGitHubPullRequest: (ref, tabId, url, options) =>
+      openGitHubPullRequest: (ref, tabId, url) =>
         set((state) => ({
-          ...(options?.pinned ? automaticUpdate : userAction)(
-            state,
-            scopedThreadKey(ref),
-            (current) => {
-              const surface: RightPanelSurface = {
-                id: "github-pr",
-                kind: "github-pr",
-                resourceId: tabId,
-                ...(url !== undefined ? { url } : {}),
-              };
-              const opened = openDedicatedBrowserSurface(current, surface, tabId);
-              return options?.pinned
-                ? pinDedicatedSurfaceWithoutActivation(current, opened, "github-pr")
-                : opened;
-            },
-          ),
-        })),
-      pinDedicatedSurface: (ref, surfaceId) =>
-        set((state) => ({
-          ...automaticUpdate(state, scopedThreadKey(ref), (current) =>
-            pinDedicatedSurface(current, surfaceId),
+          ...userAction(state, scopedThreadKey(ref), (current) =>
+            openGitHubPullRequestSurface(current, {
+              id: "github-pr",
+              kind: "github-pr",
+              resourceId: tabId,
+              ...(url !== undefined ? { url } : {}),
+            }),
           ),
         })),
       openPullRequest: (ref, target) =>

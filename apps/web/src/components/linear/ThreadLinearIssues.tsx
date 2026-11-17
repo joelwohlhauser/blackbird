@@ -57,7 +57,7 @@ export function useLinkedLinearIssues(tags: ReadonlyArray<string> | undefined) {
   return {
     signedIn,
     issues,
-    pinnedIssueId:
+    firstIssueId:
       (signedIn ? issues.find((issue) => issue.status !== undefined) : issues[0])?.id ?? null,
   };
 }

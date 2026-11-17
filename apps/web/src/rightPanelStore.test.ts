@@ -536,52 +536,34 @@ describe("rightPanelStore", () => {
     }
   });
 
-  it("does not treat automatic attached tabs as a manual panel choice", () => {
-    const store = useRightPanelStore.getState();
-    const revision = store.getUserActionRevision(refA);
-    store.openLinear(refA, "linear-tab", null, { pinned: true });
-    store.openGitHubPullRequest(refA, "github-tab", null, { pinned: true });
-    store.pinDedicatedSurface(refA, "github-pr");
-    expect(store.getUserActionRevision(refA)).toBe(revision);
-    expect(store.openProactive(refA, completedDiff, revision)).toBe(true);
-  });
-
-  it("adds attached surfaces as pinned tabs without leaving the chat", () => {
+  it("opens Linear in the panel, also when its tab sits in the main tab bar", () => {
     const originalIsWide = workspaceLayoutProbe.isWide;
     try {
       workspaceLayoutProbe.isWide = () => false;
-      useRightPanelStore.getState().openLinear(refA, "linear-tab", null, { pinned: true });
-      useRightPanelStore
-        .getState()
-        .openGitHubPullRequest(refA, "github-tab", null, { pinned: true });
+      const store = useRightPanelStore.getState();
+      store.openLinear(refA, "linear-tab", "https://linear.app/acme/issue/APP-1/");
+      const opened = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      expect(opened.mainSurfaces).toEqual([]);
+      expect(opened.isOpen).toBe(true);
+      expect(opened.activeSurfaceId).toBe("linear");
 
-      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
-      expect(state.mainSurfaces.map((surface) => surface.id)).toEqual(["linear", "github-pr"]);
-      expect(state.activeMainSurfaceId).toBeNull();
-      expect(state.isOpen).toBe(false);
-      expect(state.activeSurfaceId).toBeNull();
+      store.moveSurface(refA, "linear", { container: "main", index: 0 });
+      store.openLinear(refA, "linear-tab-2", "https://linear.app/acme/issue/APP-2/");
+      const reopened = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+      expect(reopened.mainSurfaces).toEqual([]);
+      expect(reopened.activeMainSurfaceId).toBeNull();
+      expect(reopened.surfaces).toEqual([
+        {
+          id: "linear",
+          kind: "linear",
+          resourceId: "linear-tab-2",
+          url: "https://linear.app/acme/issue/APP-2/",
+        },
+      ]);
+      expect(reopened.activeSurfaceId).toBe("linear");
     } finally {
       workspaceLayoutProbe.isWide = originalIsWide;
     }
-  });
-
-  it("pins attached Linear and GitHub surfaces beside the chat without activating them", () => {
-    useRightPanelStore.getState().open(refA, "diff");
-    useRightPanelStore.getState().openGitHubPullRequest(refA, "github-tab");
-    useRightPanelStore.getState().openLinear(refA, "linear-tab");
-
-    useRightPanelStore.getState().pinDedicatedSurface(refA, "github-pr");
-    useRightPanelStore.getState().pinDedicatedSurface(refA, "linear");
-
-    const pinned = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
-    expect(pinned.mainSurfaces.map((surface) => surface.id)).toEqual(["linear", "github-pr"]);
-    expect(pinned.surfaces.map((surface) => surface.id)).toEqual(["diff"]);
-    expect(pinned.activeMainSurfaceId).toBeNull();
-    expect(pinned.activeSurfaceId).toBe("diff");
-
-    const stableState = useRightPanelStore.getState().byThreadKey;
-    useRightPanelStore.getState().pinDedicatedSurface(refA, "linear");
-    expect(useRightPanelStore.getState().byThreadKey).toBe(stableState);
   });
 
   it("opens a PR in the panel even when the panel is closed on a narrow window", () => {

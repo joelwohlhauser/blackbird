@@ -184,9 +184,7 @@ describe("ElectronBrowserHost", () => {
     });
     useRightPanelStore
       .getState()
-      .openLinear(threadRef, "tab_linear", "https://linear.app/acme/issue/APP-1", {
-        pinned: true,
-      });
+      .openLinear(threadRef, "tab_linear", "https://linear.app/acme/issue/APP-1");
     markBrowserThreadViewed(scopedThreadKey(threadRef));
     await using screen = await renderHost();
     const loadedTabs = () =>
