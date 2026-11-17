@@ -18,7 +18,6 @@ import {
   resolveDefaultWorktreeBaseBranch,
   resolveLinearIssueWorkspace,
   resolveLocalCheckoutBranchMismatch,
-  resolveLockedWorkspaceLabel,
   reusesExistingWorktree,
   sanitizeNewRefName,
   shouldIncludeBranchPickerItem,
@@ -313,16 +312,6 @@ describe("resolveEnvModeLabel", () => {
     expect(createsNewWorktreeBranch("worktree")).toBe(true);
     expect(reusesExistingWorktree("worktree-reuse")).toBe(true);
     expect(reusesExistingWorktree("worktree")).toBe(false);
-  });
-});
-
-describe("resolveLockedWorkspaceLabel", () => {
-  it.each([
-    ["/home/me/.t3/worktrees/app/t3-ff466c42", "t3-ff466c42"],
-    ["/home/me/.t3/worktrees/app/t3-ff466c42/", "t3-ff466c42"],
-    ["C:\\Users\\me\\worktrees\\feature-x", "feature-x"],
-  ])("names the worktree at %s", (path, label) => {
-    expect(resolveLockedWorkspaceLabel(path, "worktree")).toBe(label);
   });
 });
 

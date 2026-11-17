@@ -63,7 +63,6 @@ import {
   THREAD_DETAILS_PANEL_LOCKED_ROW_CLASS,
 } from "./chat/threadDetailsPanelStyles";
 import { ComposerControl } from "./chat/ComposerControl";
-import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import {
   Menu,
@@ -112,9 +111,6 @@ interface BranchToolbarProps {
   onStartFromOriginChange: (startFromOrigin: boolean) => void;
   newBranchName: string;
   onNewBranchNameChange: (newBranchName: string) => void;
-  onDeleteWorktreeRequest?: () => void;
-  deleteWorktreeDisabled?: boolean;
-  deleteWorktreePending?: boolean;
   autoEnvironmentLabel?: string | undefined;
   onAutoEnvironment?: (() => void) | undefined;
   envLocked: boolean;
@@ -646,9 +642,6 @@ export const BranchToolbar = memo(function BranchToolbar({
   onStartFromOriginChange,
   newBranchName,
   onNewBranchNameChange,
-  onDeleteWorktreeRequest,
-  deleteWorktreeDisabled = false,
-  deleteWorktreePending = false,
   autoEnvironmentLabel,
   onAutoEnvironment,
   envLocked,
@@ -942,18 +935,6 @@ export const BranchToolbar = memo(function BranchToolbar({
             onAddToMachine={onAddToMachine}
           />
           {linearIssuePicker}
-          {activeWorktreePath !== null && onDeleteWorktreeRequest ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              disabled={deleteWorktreeDisabled || deleteWorktreePending}
-              className="h-6 shrink-0 px-1.5 text-2xs font-medium text-muted-foreground/55 hover:bg-destructive/8 hover:text-destructive"
-              onClick={onDeleteWorktreeRequest}
-            >
-              {deleteWorktreePending ? "Deleting…" : "Delete it"}
-            </Button>
-          ) : null}
           {showNewBranchNameInput ? (
             <span className="mr-1 shrink-0 text-xs text-muted-foreground/60">called</span>
           ) : null}
@@ -1011,18 +992,6 @@ export const BranchToolbar = memo(function BranchToolbar({
             />
           ) : null}
           {linearIssuePicker}
-          {activeWorktreePath !== null && onDeleteWorktreeRequest ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              disabled={deleteWorktreeDisabled || deleteWorktreePending}
-              className="h-6 shrink-0 px-1.5 text-2xs font-medium text-muted-foreground/55 hover:bg-destructive/8 hover:text-destructive"
-              onClick={onDeleteWorktreeRequest}
-            >
-              {deleteWorktreePending ? "Deleting…" : "Delete it"}
-            </Button>
-          ) : null}
           {showNewBranchNameInput ? (
             <span className="mr-1 shrink-0 text-xs text-muted-foreground/60">called</span>
           ) : null}

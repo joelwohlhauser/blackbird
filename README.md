@@ -174,14 +174,6 @@ New worktrees:
 
 Agents can start the same workflow from an active chat with two MCP tools. `create_worktree` creates or reuses a worktree for a branch and returns its path: an existing branch reuses its checkout or gets a new worktree, a remote-only branch is checked out, and an unknown branch creates a new one. `switch_directory` moves the chat to any existing folder, such as that worktree or another repository (Blackbird finds or creates the project for it), which also takes a Quick chat into a repository. The same conversation keeps its history; the current turn ends after the switch, and a new turn always resumes work in the destination, using the agent's `continuationPrompt` when it gives one. `worktree_handoff` does both in one call. Paths and worktree setup run on the owning local or remote environment. New worktrees honor the environment's **Start from origin** setting and project setup script.
 
-An active worktree chat shows a **Delete it** action. It removes the worktree
-directly, including when it has uncommitted changes, without a confirmation
-dialog. The chat keeps its branch, worktree path, archive state, and other
-metadata unchanged. If a normal workflow later creates a worktree at that
-exact path again, every associated chat can use it again.
-Deletion stays unavailable while an associated chat session or worktree
-terminal is live, so cleanup never stops either one as a side effect.
-
 **Settings → Workspaces** lists the existing registered worktrees on one
 selected environment at a time. Main checkouts are omitted. Each row shows the
 worktree's storage use, associated active and archived chat count, Git state,

@@ -51,7 +51,6 @@ import { useStableCallback } from "../hooks/useStableCallback";
 import { useProjectScriptEditing } from "./chat/useProjectScriptEditing";
 import { usePendingThreadRequests } from "./chat/usePendingThreadRequests";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
-import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
 import { feedbackBannerItem } from "./chat/ComposerFeedback";
@@ -348,7 +347,6 @@ import {
   useThreadStatus,
   useThreadHistory,
   useQuietThreadShell,
-  useQuietThreadShells,
   useThreadCheckpointSummaries,
 } from "../state/entities";
 import { useEnvironmentShellHasSnapshot } from "../state/shell";
@@ -552,7 +550,6 @@ export default function ChatView(props: ChatViewProps) {
     reportFailure: false,
   });
   const canWriteSourceControl = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
-  const removeWorktree = useAtomCommand(vcsEnvironment.removeWorktree, { reportFailure: false });
   const setThreadRuntimeMode = useOrchestrationCommand(threadEnvironment.setRuntimeMode, {
     reportFailure: false,
   });
@@ -592,11 +589,6 @@ export default function ChatView(props: ChatViewProps) {
         ? store.getDraftSession(draftId)
         : null,
   );
-  const threadShells = useQuietThreadShells();
-  const environmentTerminalSessions = useKnownTerminalSessions({
-    environmentId,
-    threadId: null,
-  });
   const serverThreadShell = useQuietThreadShell(routeThreadRef);
   const routeThreadDetailRef = resolveThreadDetailRef(routeThreadRef, {
     shellExists: serverThreadShell !== null,
@@ -2698,74 +2690,6 @@ export default function ChatView(props: ChatViewProps) {
   }
 
   const activeWorktreePath = activeThread?.worktreePath ?? null;
-  const worktreeDeletionBlocked =
-    activeWorktreePath !== null &&
-    (environmentTerminalSessions === null ||
-      environmentTerminalSessions.some(
-        (terminal) =>
-          (terminal.state.status === "starting" || terminal.state.status === "running") &&
-          terminal.state.summary?.worktreePath === activeWorktreePath,
-      ) ||
-      threadShells.some(
-        (thread) =>
-          thread.environmentId === environmentId &&
-          thread.worktreePath === activeWorktreePath &&
-          threadRuntimeIsActive(thread.runtime),
-      ));
-  const [isDeletingWorktree, setIsDeletingWorktree] = useState(false);
-  const handleDeleteActiveWorktree = async () => {
-    if (
-      !isServerThread ||
-      !activeThread ||
-      !activeProjectCwd ||
-      !activeWorktreePath ||
-      !gitStatusQuery.data ||
-      worktreeDeletionBlocked ||
-      isDeletingWorktree
-    ) {
-      return;
-    }
-
-    const worktreePath = activeWorktreePath;
-    const worktreeBranch = activeThread.branch;
-
-    setIsDeletingWorktree(true);
-    setThreadError(activeThread.id, null);
-    const showFailure = (title: string, result: AtomCommandResult<unknown, unknown>) => {
-      if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title,
-          description: chatActionErrorMessage(squashAtomCommandFailure(result)),
-        }),
-      );
-    };
-
-    const removeResult = await removeWorktree({
-      environmentId,
-      input: {
-        cwd: activeProjectCwd,
-        path: worktreePath,
-        force: true,
-      },
-    });
-    if (removeResult._tag === "Failure") {
-      showFailure("Could not delete the worktree", removeResult);
-      setIsDeletingWorktree(false);
-      return;
-    }
-
-    toastManager.add(
-      stackedThreadToast({
-        type: "success",
-        title: "Worktree deleted",
-        description: worktreeBranch ?? worktreePath,
-      }),
-    );
-    setIsDeletingWorktree(false);
-    scheduleComposerFocusStable();
-  };
   const derivedEnvMode: DraftThreadEnvMode = resolveEffectiveEnvMode({
     activeWorktreePath,
     hasServerThread: isServerThread,
@@ -4916,15 +4840,6 @@ export default function ChatView(props: ChatViewProps) {
                                     onStartFromOriginChange={onStartFromOriginChange}
                                     newBranchName={newBranchName}
                                     onNewBranchNameChange={onNewBranchNameChangeStable}
-                                    {...(isServerThread && activeWorktreePath !== null
-                                      ? {
-                                          onDeleteWorktreeRequest: () =>
-                                            void handleDeleteActiveWorktree(),
-                                          deleteWorktreeDisabled:
-                                            gitStatusQuery.data === null || worktreeDeletionBlocked,
-                                          deleteWorktreePending: isDeletingWorktree,
-                                        }
-                                      : {})}
                                     envMode={envMode}
                                     {...(canOverrideServerThreadEnvMode
                                       ? {
