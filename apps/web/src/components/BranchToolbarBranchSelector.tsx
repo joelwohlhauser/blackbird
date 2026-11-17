@@ -24,6 +24,7 @@ import {
   useState,
   useTransition,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type Ref,
 } from "react";
 
@@ -96,6 +97,7 @@ interface BranchToolbarBranchSelectorProps {
   onCheckoutPullRequestRequest?: (reference: string) => void;
   onOpenPullRequestRequest?: () => void;
   onComposerFocusRequest?: () => void;
+  leading?: ReactNode;
 }
 
 const WORKTREE_CHANGE_BLOCKED_MESSAGE = "Stop the current turn to switch worktrees.";
@@ -120,6 +122,7 @@ export function BranchToolbarBranchSelector({
   onStartFromOriginChange,
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
+  leading,
 }: BranchToolbarBranchSelectorProps) {
   const composerFloatingLayerProps = useComposerMenuProps();
   const canWriteSourceControl = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
@@ -826,6 +829,7 @@ export function BranchToolbarBranchSelector({
           className,
         )}
       >
+        {displayMode !== "panel" ? leading : null}
         {displayMode !== "panel" ? (
           <ThreadPullRequestBadgeControl
             render={<ComposerControl size="xs" />}

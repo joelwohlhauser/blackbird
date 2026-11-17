@@ -272,7 +272,7 @@ export function NewTabPage(props: {
     },
     {
       label: "Linear",
-      description: "Open the issue for this branch.",
+      description: "Open this chat's linked issue.",
       icon: LinearIcon,
       shortcut: "L",
       available: props.linearAvailable,

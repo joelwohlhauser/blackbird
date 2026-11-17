@@ -110,20 +110,23 @@ function IssueIcon({ issue, className }: { issue: ThreadLinearIssue; className?:
 const issueSummary = (issue: ThreadLinearIssue) =>
   issue.status ? `${issue.id}: ${issue.status.title}` : issue.id;
 
-export function ThreadLinearIssueControl(props: ThreadLinearIssuesProps) {
-  const { canOperate, issues, setLinked, linkProps } = useThreadLinearIssues(props);
+export function ThreadLinearIssuePicker(props: ThreadLinearIssuesProps) {
+  const { canOperate, issues, setLinked } = useThreadLinearIssues(props);
+  return issues.length === 0 && canOperate && getDesktopLinearBridge() ? (
+    <LinearIssuePicker
+      label="Issue"
+      disabled={false}
+      preferencesKey={props.preferencesKey}
+      onSelect={(issue) => setLinked(issue.identifier, true)}
+      onOpenLinear={props.onOpenLinearUrl}
+    />
+  ) : null;
+}
+
+export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
+  const { issues, linkProps } = useThreadLinearIssues(props);
   const [first, ...others] = issues;
-  if (first === undefined) {
-    return canOperate && getDesktopLinearBridge() ? (
-      <LinearIssuePicker
-        label="Issue"
-        disabled={false}
-        preferencesKey={props.preferencesKey}
-        onSelect={(issue) => setLinked(issue.identifier, true)}
-        onOpenLinear={props.onOpenLinearUrl}
-      />
-    ) : null;
-  }
+  if (first === undefined) return null;
   if (others.length === 0) {
     return (
       <Tooltip>
@@ -153,7 +156,7 @@ export function ThreadLinearIssueControl(props: ThreadLinearIssuesProps) {
           {first.id} +{others.length}
         </ComposerContextLabel>
       </MenuTrigger>
-      <MenuPopup side="top" align="start" className="max-w-96" {...composerFloatingLayerProps}>
+      <MenuPopup side="top" align="end" className="max-w-96" {...composerFloatingLayerProps}>
         {issues.map((issue) => (
           <MenuItem key={issue.id} render={<a {...linkProps(issue.id)} />}>
             <IssueIcon issue={issue} />

@@ -763,7 +763,10 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
           ref={tabListRef}
           hideScrollbars
           scrollFade
-          className="h-full w-fit min-w-0 max-w-full flex-[0_1_auto] rounded-none"
+          className={cn(
+            "h-full w-fit min-w-0 max-w-full flex-[0_1_auto] rounded-none",
+            scrollingSurfaces.length === 0 && "-ml-1",
+          )}
         >
           <div
             ref={setBlankSpaceDropRef}

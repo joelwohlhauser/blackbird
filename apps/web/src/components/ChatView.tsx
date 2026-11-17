@@ -4464,7 +4464,7 @@ export default function ChatView(props: ChatViewProps) {
   // drop target for tabs dragged into the main area.
   const chatTabTitle = activeThread.title.trim().length > 0 ? activeThread.title : "Chat";
   const mainTabStrip = (
-    <>
+    <div className="flex h-full min-w-0 items-center gap-1">
       <WorkspaceTabStrip
         container="main"
         surfaces={rightPanelState.mainSurfaces}
@@ -4496,7 +4496,7 @@ export default function ChatView(props: ChatViewProps) {
         }}
       />
       <NewTabButton ariaLabel="New tab" onClick={() => openNewTabPage("main")} />
-    </>
+    </div>
   );
 
   const workspaceFileDropHandlers = makeWorkspaceFileDropHandlers({
