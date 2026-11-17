@@ -21,5 +21,5 @@ These rules hold in every stage:
 - The model that didn't write the code reviews it for correctness. Two models must agree it's ready for production.
 - Feature docs record why something exists and what was decided, never how the code works.
 - A test that didn't run never counts as passed.
-- Link the tracker issue a thread works on to that thread as soon as you know it, in any stage, with `link_linear_issue` when the tracker is Linear. Never unlink an issue, also not once it's done.
+- Link the tracker issue a thread works on to that thread as soon as you know it, in any stage, with `link_linear_issue` when the tracker is Linear. Unlink one only when the user asks for it or it was linked by mistake. A done issue stays linked.
 - Never delete branches.
