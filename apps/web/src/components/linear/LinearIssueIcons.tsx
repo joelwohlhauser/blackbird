@@ -4,6 +4,8 @@ import {
   type LinearPriority,
 } from "@t3tools/contracts";
 
+import { cn } from "../../lib/utils";
+
 export const LINEAR_PRIORITY_LABELS: Record<LinearPriority, string> = {
   0: "No priority",
   1: "Urgent",
@@ -50,11 +52,17 @@ function StatusShape({ state }: { state: LinearIssue["state"] }) {
   );
 }
 
-export function LinearStatusIcon({ state }: { state: LinearIssue["state"] }) {
+export function LinearStatusIcon({
+  state,
+  className,
+}: {
+  state: LinearIssue["state"];
+  className?: string;
+}) {
   return (
     <svg
       viewBox="0 0 16 16"
-      className="size-3.5 shrink-0"
+      className={cn("size-3.5 shrink-0", className)}
       fill="currentColor"
       style={{ color: state.color }}
       role="img"

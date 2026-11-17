@@ -25,7 +25,6 @@ import {
   THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
   THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
 } from "../chat/threadDetailsPanelStyles";
-import { ComposerContextLabel } from "../ComposerContextLabel";
 import { LinearIcon } from "../Icons";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -101,6 +100,7 @@ function IssueIcon({ issue, className }: { issue: ThreadLinearIssue; className?:
         color: issue.status.stateColor,
         progress: 0.5,
       }}
+      {...(className ? { className } : {})}
     />
   ) : (
     <LinearIcon aria-hidden className={cn("size-2.5 shrink-0", className)} />
@@ -123,6 +123,15 @@ export function ThreadLinearIssuePicker(props: ThreadLinearIssuesProps) {
   ) : null;
 }
 
+function IssueBadgeContent({ issue, text }: { issue: ThreadLinearIssue; text: string }) {
+  return (
+    <span className="contents font-normal text-xs tabular-nums">
+      <IssueIcon issue={issue} className="size-3" />
+      <span className="text-secondary-label">{text}</span>
+    </span>
+  );
+}
+
 export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
   const { issues, linkProps } = useThreadLinearIssues(props);
   const [first, ...others] = issues;
@@ -135,8 +144,7 @@ export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
           aria-label={`Open ${first.id} in Linear`}
           data-composer-context-control
         >
-          <IssueIcon issue={first} />
-          <ComposerContextLabel>{first.id}</ComposerContextLabel>
+          <IssueBadgeContent issue={first} text={first.id} />
         </TooltipTrigger>
         <TooltipPopup side="top">
           {first.status ? `${first.status.title} · ${first.status.stateName}` : first.id}
@@ -151,10 +159,7 @@ export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
         aria-label="Linked Linear issues"
         data-composer-context-control
       >
-        <IssueIcon issue={first} />
-        <ComposerContextLabel>
-          {first.id} +{others.length}
-        </ComposerContextLabel>
+        <IssueBadgeContent issue={first} text={`${first.id} +${others.length}`} />
       </MenuTrigger>
       <MenuPopup side="top" align="end" className="max-w-96" {...composerFloatingLayerProps}>
         {issues.map((issue) => (
