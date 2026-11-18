@@ -1,5 +1,6 @@
 import { useSyncLayout } from "@legendapp/list/react";
 import { type OrchestrationV2CheckpointFileTotals, type RunId } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 import {
   type MouseEvent,
   type ReactNode,
@@ -52,6 +53,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
     onOpenTurnDiff,
     onFileContextMenu,
   } = props;
+  const gt = useGT();
   const hiddenFileCount = totals.count - files.length;
   const treeId = useId();
 
@@ -80,7 +82,10 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
             className={cn("size-3.5 shrink-0", expanded && "rotate-90")}
           />
           <span className="truncate">
-            {totals.count} changed file{totals.count === 1 ? "" : "s"}
+            {gt(
+              "{count, plural, one {{formattedCount} changed file} other {{formattedCount} changed files}}",
+              { count: totals.count, formattedCount: totals.count.toLocaleString() },
+            )}
           </span>
           {hasNonZeroStat(totals) && (
             <DiffStatLabel
@@ -99,15 +104,19 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
                 size="xs"
                 variant="ghost-muted"
                 className="shrink-0"
-                aria-label="Open diff"
+                aria-label={gt("Open diff")}
                 onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
               />
             }
           >
             <FileDiffIcon className="size-3" />
-            <span>Open diff</span>
+            <span>
+              <T>Open diff</T>
+            </span>
           </TooltipTrigger>
-          <TooltipPopup side="top">Open the full diff</TooltipPopup>
+          <TooltipPopup side="top">
+            <T>Open the full diff</T>
+          </TooltipPopup>
         </Tooltip>
       </div>
       {expanded && (
@@ -128,8 +137,10 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
                 variant="ghost-muted"
                 onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
               >
-                {hiddenFileCount.toLocaleString()} more file{hiddenFileCount === 1 ? "" : "s"} in
-                the full diff
+                {gt(
+                  "{count, plural, one {{formattedCount} more file in the full diff} other {{formattedCount} more files in the full diff}}",
+                  { count: hiddenFileCount, formattedCount: hiddenFileCount.toLocaleString() },
+                )}
               </Button>
             </div>
           )}

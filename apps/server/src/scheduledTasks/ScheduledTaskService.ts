@@ -933,8 +933,10 @@ export const layer = Layer.effect(
     );
 
     // A dispatch is recorded once the message is accepted; the provider can still
-    // reject the turn after that, so follow the run and record its failure.
-    const recordRunFailure = Effect.fn("ScheduledTaskService.recordRunFailure")(function* (
+    // reject the turn after that, so follow the run and record its failure. A one-time
+    // task whose turn completed at or after its runAt is spent, so it is removed; its
+    // thread stays. A paused task always has a NULL next_run_at, so that alone proves nothing.
+    const recordRunOutcome = Effect.fn("ScheduledTaskService.recordRunOutcome")(function* (
       taskId: ScheduledTaskId,
       startedAtIso: string,
       threadId: ThreadId,
@@ -951,12 +953,19 @@ export const layer = Layer.effect(
         runId: dispatched.id,
         timeoutMs: RUN_OUTCOME_WAIT_MS,
       });
-      if (
-        run === null ||
-        run.status === "completed" ||
-        !ThreadManagementService.isTerminalRunStatus(run.status)
-      )
+      if (run === null || !ThreadManagementService.isTerminalRunStatus(run.status)) return;
+      if (run.status === "completed") {
+        const removed = yield* sql`
+          DELETE FROM scheduled_tasks
+          WHERE task_id = ${taskId} AND last_run_at = ${startedAtIso}
+            AND last_run_status = 'succeeded' AND next_run_at IS NULL
+            AND json_extract(schedule_json, '$.type') = 'once'
+            AND julianday(last_run_at) >= julianday(json_extract(schedule_json, '$.runAt'))
+          RETURNING task_id
+        `;
+        if (removed.length > 0) yield* notifyChanged;
         return;
+      }
       const { turnItems, messages } = yield* threadManagement.getProjectThreadRecords(thread, [
         "turnItems",
         "messages",
@@ -1215,7 +1224,7 @@ export const layer = Layer.effect(
             lastRunError,
             runCount: scheduleSource.runCount + 1,
           };
-          if (current === null) return { recorded: completed, written: false, deleted: false };
+          if (current === null) return { recorded: completed, written: false };
           // startedAtIso in the guard ensures this writes only to the row this
           // run marked as running — a task deleted mid-run and recreated with
           // the same id (idempotent commandId replay) must not be stamped.
@@ -1227,25 +1236,6 @@ export const layer = Layer.effect(
             error: lastRunError,
             startedAtIso,
           });
-          if (
-            trigger === "scheduled" &&
-            runSucceeded &&
-            webhook === undefined &&
-            current.schedule.type === "once" &&
-            isSameSchedule(current.schedule, active.schedule)
-          ) {
-            const removed = yield* sql`
-              DELETE FROM scheduled_tasks
-              WHERE task_id = ${task.id}
-                AND last_run_status = 'running'
-                AND last_run_at = ${startedAtIso}
-              RETURNING task_id
-            `;
-            if (removed.length > 0) {
-              yield* sql`DELETE FROM scheduled_task_webhook_deliveries WHERE task_id = ${task.id}`;
-              return { recorded: completed, written: true, deleted: true };
-            }
-          }
           let written = false;
           if (webhook === undefined) written = yield* completion;
           else {
@@ -1260,9 +1250,9 @@ export const layer = Layer.effect(
             }
           }
           // A row recreated mid-run is not this run's, so report what is stored.
-          return { recorded: written ? completed : current, written, deleted: false };
+          return { recorded: written ? completed : current, written };
         });
-        const { recorded, written, deleted } = yield* sql
+        const { recorded, written } = yield* sql
           .withTransaction(record)
           .pipe(
             Effect.mapError((cause) =>
@@ -1276,10 +1266,9 @@ export const layer = Layer.effect(
                   ),
             ),
           );
-        if (deleted) yield* forgetWebhookTask(task.id);
         if (written) yield* notifyChanged;
-        if (written && !deleted && threadId !== null) {
-          yield* recordRunFailure(active.id, startedAtIso, threadId, messageId).pipe(
+        if (written && threadId !== null) {
+          yield* recordRunOutcome(active.id, startedAtIso, threadId, messageId).pipe(
             Effect.catchCause((cause) =>
               Effect.logWarning("Could not record scheduled run outcome", {
                 taskId: active.id,

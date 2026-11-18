@@ -1960,7 +1960,6 @@ const make = Effect.gen(function* () {
           )
             return Effect.void;
         }
-        if (event.type === "thread.deleted") return requestSweep;
         if (!anyWorktreePolicy(lastSettings, (rules) => rules.worktreeOnDelete)) return Effect.void;
         return event.type === "provider-session.updated" && event.payload.status === "error"
           ? providerSessions

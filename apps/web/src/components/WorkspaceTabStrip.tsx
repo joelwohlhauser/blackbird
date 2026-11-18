@@ -42,6 +42,7 @@ import {
 } from "~/workspaceTabs";
 
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
+import { IssueGlyph } from "./issue/issuePresentation";
 import { AndroidIcon, AppleIcon, GitHubIcon, LinearIcon } from "./Icons";
 import { PullRequestGlyph } from "./pullRequest/pullRequestIcons";
 import { FaviconImage } from "./preview/PreviewFaviconIcon";
@@ -94,6 +95,8 @@ export function surfaceTitle(
       return `#${surface.number}`;
     case "pull-requests":
       return "Pull Requests";
+    case "issue":
+      return /^\d+$/.test(surface.key) ? `#${surface.key}` : surface.key;
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
     case "thread":
@@ -191,6 +194,8 @@ export function SurfaceIcon({
     }
     case "pull-requests":
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
+    case "issue":
+      return <IssueGlyph.issue className="size-3 shrink-0" />;
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />

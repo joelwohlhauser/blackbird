@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Queue from "effect/Queue";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -15,7 +16,10 @@ const runHold = Effect.fn("runHold")(function* (desktopOwnsKeepAwake: boolean) {
   const reports = yield* Queue.unbounded<boolean>();
   const spawned = yield* Queue.unbounded<string>();
   const spawner = ChildProcessSpawner.make((command) =>
-    Queue.offer(spawned, "command" in command ? command.command : "piped").pipe(
+    Queue.offer(
+      spawned,
+      "command" in command ? [command.command, ...command.args].join(" ") : "piped",
+    ).pipe(
       Effect.as(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
@@ -41,6 +45,7 @@ const runHold = Effect.fn("runHold")(function* (desktopOwnsKeepAwake: boolean) {
     ),
     Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     Effect.provideService(HostProcess.Platform, "darwin"),
+    Effect.provide(FileSystem.layerNoop({})),
   );
   if (hold === undefined) return yield* Effect.die("expected a keep-awake hold");
   yield* KeepAwake.holdWhileWanted(Stream.fromQueue(wanted), hold, "60 seconds").pipe(
@@ -96,7 +101,7 @@ describe("KeepAwake.holdWhileWanted", () => {
       const { wanted, reports, spawned } = yield* runHold(false);
 
       yield* Queue.offer(wanted, true);
-      expect(yield* Queue.take(spawned)).toBe("caffeinate");
+      expect(yield* Queue.take(spawned)).toContain("caffeinate -i");
       expect(yield* Queue.size(reports)).toBe(0);
     }),
   );

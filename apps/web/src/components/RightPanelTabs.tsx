@@ -1,5 +1,6 @@
 import type { EnvironmentId, PreviewSessionSnapshot } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
@@ -105,16 +106,16 @@ const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
   .join(",");
 
 const SURFACE_UNAVAILABLE_HINTS = {
-  browser: "Only available in the desktop app.",
-  linear: "Only available in the desktop app.",
-  githubPullRequest: "No pull request detected for this branch yet.",
-  terminal: "Available when a project is open.",
-  files: "Available when a project is open.",
-  diff: "Available for Git repositories.",
-  pullRequest: "No pull request on this branch yet.",
-  pullRequests: "No linked pull requests available.",
-  device: "Available from a chat.",
-  sideChat: "Available after the first message.",
+  browser: msg("Only available in the desktop app."),
+  linear: msg("Only available in the desktop app."),
+  githubPullRequest: msg("No pull request detected for this branch yet."),
+  terminal: msg("Available when a project is open."),
+  files: msg("Available when a project is open."),
+  diff: msg("Available for Git repositories."),
+  pullRequest: msg("No pull request on this branch yet."),
+  pullRequests: msg("No linked pull requests available."),
+  device: msg("Available from a chat."),
+  sideChat: msg("Available after the first message."),
 } as const;
 
 type SurfaceShortcutEvent = Pick<
@@ -174,6 +175,7 @@ export function resolvePullRequestTabLink(
 }
 
 export function NewTabButton(props: { ariaLabel: string; onClick: () => void }) {
+  const gt = useGT();
   return (
     <Tooltip>
       <TooltipTrigger
@@ -188,7 +190,7 @@ export function NewTabButton(props: { ariaLabel: string; onClick: () => void }) 
       >
         <Plus className="size-4" />
       </TooltipTrigger>
-      <TooltipPopup side="bottom">New tab</TooltipPopup>
+      <TooltipPopup side="bottom">{gt("New tab")}</TooltipPopup>
     </Tooltip>
   );
 }
@@ -223,6 +225,8 @@ export function NewTabPage(props: {
   sideChatAvailable?: boolean;
   sideChatDisabledReason?: string | null;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const [highlight, setHighlight] = useState(-1);
   const actions: Array<{
     label: string;
@@ -234,59 +238,59 @@ export function NewTabPage(props: {
     onClick: () => void;
   }> = [
     {
-      label: "Browser",
-      description: "Open a local app or URL.",
+      label: gt("Browser"),
+      description: gt("Open a local app or URL."),
       icon: Globe2,
       shortcut: "B",
       available: props.browserAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.browser,
+      disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.browser),
       onClick: props.onAddBrowser,
     },
     {
-      label: "Terminal",
-      description: "Start a shell in this workspace.",
+      label: gt("Terminal"),
+      description: gt("Start a shell in this workspace."),
       icon: TerminalSquare,
       shortcut: "T",
       available: props.terminalAvailable !== false,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.terminal,
+      disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.terminal),
       onClick: props.onAddTerminal,
     },
     {
-      label: "Files",
-      description: "Browse and open files in this workspace.",
+      label: gt("Files"),
+      description: gt("Browse and open files in this workspace."),
       icon: Files,
       shortcut: "F",
       available: props.filesAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.files,
+      disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.files),
       onClick: props.onAddFiles,
     },
     {
-      label: "Diff",
-      description: "Review changes in this thread.",
+      label: gt("Diff"),
+      description: gt("Review changes in this thread."),
       icon: FileDiff,
       shortcut: "D",
       available: props.diffAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.diff,
+      disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.diff),
       onClick: props.onAddDiff,
     },
     {
-      label: "Linear",
-      description: "Open this chat's linked issue.",
+      label: gt("Linear"),
+      description: gt("Open this chat's linked issue."),
       icon: LinearIcon,
       shortcut: "L",
       available: props.linearAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.linear,
+      disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.linear),
       onClick: props.onAddLinear,
     },
     ...(props.onAddPullRequest
       ? [
           {
-            label: "Pull request",
-            description: "Open this branch's pull request.",
+            label: gt("Pull request"),
+            description: gt("Open this branch's pull request."),
             icon: PullRequestGlyph.pullRequest,
             shortcut: "P",
             available: props.pullRequestAvailable === true,
-            disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequest,
+            disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.pullRequest),
             onClick: props.onAddPullRequest,
           },
         ]
@@ -294,12 +298,12 @@ export function NewTabPage(props: {
     ...(props.onAddPullRequests
       ? [
           {
-            label: "Linked pull requests",
-            description: "Browse the pull requests linked to this chat.",
+            label: gt("Linked pull requests"),
+            description: gt("Browse the pull requests linked to this chat."),
             icon: PullRequestGlyph.link,
             shortcut: "R",
             available: props.pullRequestsAvailable === true,
-            disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequests,
+            disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.pullRequests),
             onClick: props.onAddPullRequests,
           },
         ]
@@ -307,12 +311,12 @@ export function NewTabPage(props: {
     ...(props.onAddDevice
       ? [
           {
-            label: "Device",
-            description: "Watch an iOS Simulator or Android Emulator.",
+            label: gt("Device"),
+            description: gt("Watch an iOS Simulator or Android Emulator."),
             icon: Smartphone,
             shortcut: "M",
             available: props.deviceAvailable === true,
-            disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
+            disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.device),
             onClick: props.onAddDevice,
           },
         ]
@@ -320,12 +324,13 @@ export function NewTabPage(props: {
     ...(props.onAddSideChat
       ? [
           {
-            label: "Side chat",
-            description: "Ask a side question while this chat keeps working.",
+            label: gt("Side chat"),
+            description: gt("Ask a side question while this chat keeps working."),
             icon: MessagesSquare,
             shortcut: "S",
             available: props.sideChatAvailable === true && !props.sideChatDisabledReason,
-            disabledReason: props.sideChatDisabledReason ?? SURFACE_UNAVAILABLE_HINTS.sideChat,
+            disabledReason:
+              props.sideChatDisabledReason ?? messages(SURFACE_UNAVAILABLE_HINTS.sideChat),
             onClick: props.onAddSideChat,
           },
         ]
@@ -333,12 +338,12 @@ export function NewTabPage(props: {
   ];
   if (props.githubPullRequestDetected) {
     actions.push({
-      label: "GitHub PR",
-      description: "View this branch's pull request on GitHub.",
+      label: gt("GitHub PR"),
+      description: gt("View this branch's pull request on GitHub."),
       icon: GitHubIcon,
       shortcut: "G",
       available: props.githubPullRequestAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.githubPullRequest,
+      disabledReason: messages(SURFACE_UNAVAILABLE_HINTS.githubPullRequest),
       onClick: props.onAddGitHubPullRequest,
     });
   }
@@ -398,15 +403,17 @@ export function NewTabPage(props: {
       data-workspace-focus-default
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      aria-label="Open a surface"
+      aria-label={gt("Open a surface")}
       data-surface-launcher-keys={availableActions.map((action) => action.shortcut).join("")}
       className="scrollbar-gutter-both flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 pt-6 pb-[calc(var(--workspace-topbar-height)+--spacing(6))] outline-none"
     >
       <div className="relative w-full max-w-lg">
         <div className="absolute inset-x-0 bottom-full mb-5 text-center">
-          <h3 className="font-medium text-foreground text-sm">New Tab</h3>
+          <h3 className="font-medium text-foreground text-sm">
+            <T>New Tab</T>
+          </h3>
           <p className="mt-1 text-muted-foreground text-xs">
-            Choose what to open in this workspace.
+            <T>Choose what to open in this workspace.</T>
           </p>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -464,6 +471,7 @@ export function NewTabPage(props: {
 }
 
 export function RightPanelTabs(props: RightPanelTabsProps) {
+  const gt = useGT();
   const focusedSurface = props.surfaces.find((surface) => surface.id === props.activeSurfaceId);
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
 
@@ -473,8 +481,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       workspaceFocusKey={`panel:${props.environmentId}:${props.activeSurfaceId ?? "empty"}`}
       workspaceLabel={
         focusedSurface
-          ? `Workspace panel: ${surfaceTitle(focusedSurface, props.previewSessions, props.terminalLabelsById)}`
-          : "Workspace panel"
+          ? gt("Workspace panel: {title}", {
+              title: surfaceTitle(focusedSurface, props.previewSessions, props.terminalLabelsById),
+            })
+          : gt("Workspace panel")
       }
       mode={props.mode}
       {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
@@ -525,7 +535,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           onCopyFilePath={props.onCopyFilePath}
         />
         {props.onOpenNewTab ? (
-          <NewTabButton ariaLabel="New panel tab" onClick={props.onOpenNewTab} />
+          <NewTabButton ariaLabel={gt("New panel tab")} onClick={props.onOpenNewTab} />
         ) : null}
         {props.layoutControls}
         {ownsDesktopTitleBar ? (

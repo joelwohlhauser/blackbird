@@ -27,6 +27,10 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/http/HttpClient";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Option from "effect/Option";
+import serverPackageJson from "../../../server/package.json" with { type: "json" };
+
+import type * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 
 import * as DesktopSshPasswordPrompts from "./DesktopSshPasswordPrompts.ts";
 
@@ -73,6 +77,24 @@ export interface DesktopSshEnvironmentLayerOptions {
   readonly resolveCliRunner?: Effect.Effect<SshTunnel.RemoteT3RunnerOptions>;
   readonly resolveLauncherId?: Effect.Effect<string | null>;
 }
+
+export const resolveDesktopSshCliRunner = (
+  environment: DesktopEnvironment.DesktopEnvironment["Service"],
+): SshTunnel.RemoteT3RunnerOptions => {
+  const devRemoteEntryPath = Option.getOrUndefined(environment.devRemoteT3ServerEntryPath);
+  if (environment.isDevelopment && devRemoteEntryPath !== undefined) {
+    return {
+      nodeScriptPath: devRemoteEntryPath,
+      nodeEngineRange: serverPackageJson.engines.node,
+    };
+  }
+  // Blackbird ships the matching server as a bundled npm archive that the SSH
+  // launch installs on the remote host; there is no public release archive.
+  return {
+    localPackageArchivePath: environment.remoteServerPackageArchivePath,
+    nodeEngineRange: serverPackageJson.engines.node,
+  };
+};
 
 // Remote servers record this ID as their owner, so it has to outlive restarts,
 // updates and edits to a saved connection. Without a stored one there is none.

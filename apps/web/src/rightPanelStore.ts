@@ -10,10 +10,12 @@ import {
   type ScopedThreadRef,
   type PreviewSessionSnapshot,
 } from "@t3tools/contracts";
+import { msg } from "gt-react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import { useClosedViewStore } from "./closedViewStore";
+import { m } from "./i18n/messages";
 import { resolveStorage } from "./lib/storage";
 import type { ThreadPanelPresentation } from "./rightPanelLayout";
 import type { ChatFileAttachment } from "./types";
@@ -30,6 +32,7 @@ const RIGHT_PANEL_KINDS = [
   "github-pr",
   "pull-request",
   "pull-requests",
+  "issue",
   "thread",
   "side-chat",
 ] as const;
@@ -86,6 +89,21 @@ export type RightPanelSurface =
       detailTab?: PullRequestDetailTab;
     }
   | { id: "pull-requests"; kind: "pull-requests" }
+  /**
+   * An issue opened in the issues list's shared panel, or beside a thread. Like `pull-request`,
+   * the reference lives in the id so several issues can stay open as peer tabs.
+   */
+  | {
+      id: `issue:${string}`;
+      kind: "issue";
+      environmentId?: string;
+      projectId: string;
+      tracker: string;
+      host?: string;
+      scope: string;
+      key: string;
+      url?: string;
+    }
   | { id: `thread:${string}`; kind: "thread"; threadId: ThreadId; title?: string }
   | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId };
 
@@ -110,7 +128,18 @@ export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
   ThreadId.make("pull-requests-panel"),
 );
 
-const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
+/** The issues page's shared panel, with the same fixed sentinel ref as the pull-request list. */
+export const ISSUES_PANEL_REF = scopeThreadRef(
+  EnvironmentId.make("issues-panel"),
+  ThreadId.make("issues-panel"),
+);
+
+/**
+ * The pull-request and issues lists' shared panels are session
+ * state: reopening the app should show the list, not last session's tabs and detail fetches.
+ */
+const isPullRequestsPanelKey = (threadKey: string) =>
+  threadKey.endsWith(":pull-requests-panel") || threadKey.endsWith(":issues-panel");
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -169,7 +198,14 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "terminal" | "linear" | "github-pr" | "pull-request" | "thread" | "side-chat"
+      | "file"
+      | "terminal"
+      | "linear"
+      | "github-pr"
+      | "pull-request"
+      | "issue"
+      | "thread"
+      | "side-chat"
     >,
   ) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null, url?: string | null) => void;
@@ -202,6 +238,7 @@ interface RightPanelStoreState {
       detailTab?: PullRequestDetailTab;
     },
   ) => void;
+  openIssue: (ref: ScopedThreadRef, target: IssueSurfaceTarget) => void;
   setPullRequestDetailTab: (
     ref: ScopedThreadRef,
     surfaceId: string,
@@ -250,7 +287,14 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "terminal" | "linear" | "github-pr" | "pull-request" | "thread" | "side-chat"
+      | "file"
+      | "terminal"
+      | "linear"
+      | "github-pr"
+      | "pull-request"
+      | "issue"
+      | "thread"
+      | "side-chat"
     >,
   ) => void;
   setThreadPanelOpen: (
@@ -284,6 +328,7 @@ const singletonSurface = (
     | "linear"
     | "github-pr"
     | "pull-request"
+    | "issue"
     | "thread"
     | "side-chat"
   >,
@@ -379,6 +424,39 @@ export function pullRequestSurfaceId(target: {
   return `pull-request:${scope}${encodeURIComponent(target.projectId)}:${host}${encodeURIComponent(target.repository)}:${target.number}`;
 }
 
+export type IssueSurface = Extract<RightPanelSurface, { kind: "issue" }>;
+
+export interface IssueSurfaceTarget {
+  environmentId?: string;
+  projectId: string;
+  tracker: string;
+  host?: string;
+  scope: string;
+  key: string;
+  url?: string;
+}
+
+function issueSurfaceId(target: Omit<IssueSurfaceTarget, "url">): IssueSurface["id"] {
+  const environment =
+    target.environmentId === undefined ? "" : `${encodeURIComponent(target.environmentId)}:`;
+  const host = target.host === undefined ? "" : `${encodeURIComponent(target.host.toLowerCase())}:`;
+  return `issue:${environment}${encodeURIComponent(target.projectId)}:${target.tracker}:${host}${encodeURIComponent(target.scope.toLowerCase())}:${encodeURIComponent(target.key)}`;
+}
+
+function issueSurface(target: IssueSurfaceTarget): IssueSurface {
+  return {
+    id: issueSurfaceId(target),
+    kind: "issue",
+    ...(target.environmentId === undefined ? {} : { environmentId: target.environmentId }),
+    projectId: target.projectId,
+    tracker: target.tracker,
+    ...(typeof target.host === "string" ? { host: target.host.toLowerCase() } : {}),
+    scope: target.scope,
+    key: target.key,
+    ...(typeof target.url === "string" ? { url: target.url } : {}),
+  };
+}
+
 export function pullRequestSurface(target: {
   environmentId?: string;
   projectId: string;
@@ -443,7 +521,8 @@ const upsertSurface = (
     !current.isOpen &&
     !workspaceLayoutProbe.isWide() &&
     surface.kind !== "pull-request" &&
-    surface.kind !== "pull-requests"
+    surface.kind !== "pull-requests" &&
+    surface.kind !== "issue"
   ) {
     return {
       ...current,
@@ -603,6 +682,23 @@ function normalizePersistedSurfaces(persistedSurfaces: unknown): RightPanelSurfa
       const { environmentId, ...rest } = surface;
       return [
         pullRequestSurface({
+          ...rest,
+          ...(typeof environmentId === "string" ? { environmentId } : {}),
+        }),
+      ];
+    }
+    if (surface.kind === "issue") {
+      if (
+        typeof surface.projectId !== "string" ||
+        typeof surface.tracker !== "string" ||
+        typeof surface.scope !== "string" ||
+        typeof surface.key !== "string"
+      ) {
+        return [];
+      }
+      const { environmentId, ...rest } = surface;
+      return [
+        issueSurface({
           ...rest,
           ...(typeof environmentId === "string" ? { environmentId } : {}),
         }),
@@ -954,7 +1050,13 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           ...userAction(state, scopedThreadKey(ref), (current) => {
             const rename = (surface: RightPanelSurface): RightPanelSurface =>
               surface.id === surfaceId && surface.kind === "device"
-                ? { ...surface, title: title.trim() || surface.target?.name || "Device" }
+                ? {
+                    ...surface,
+                    title:
+                      title.trim() ||
+                      surface.target?.name ||
+                      m(msg("Device", { $context: "a simulator or emulator" })),
+                  }
                 : surface;
             return {
               ...current,
@@ -1068,6 +1170,21 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             };
           }),
         })),
+      openIssue: (ref, target) =>
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) => {
+            const surface = issueSurface(target);
+            const next = upsertSurface(current, surface);
+            if (!target.url) return next;
+            const replace = (entry: RightPanelSurface) =>
+              entry.id === surface.id ? surface : entry;
+            return {
+              ...next,
+              surfaces: next.surfaces.map(replace),
+              mainSurfaces: next.mainSurfaces.map(replace),
+            };
+          }),
+        ),
       setPullRequestDetailTab: (ref, surfaceId, detailTab) =>
         set((state) => {
           const threadKey = scopedThreadKey(ref);

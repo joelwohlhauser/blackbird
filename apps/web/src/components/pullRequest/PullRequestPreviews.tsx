@@ -13,7 +13,7 @@ import type { MouseEvent } from "react";
 import { canOpenLinksInApp } from "~/browser/browserLinkTarget";
 import { openUrlInPreview } from "~/browser/openFileInPreview";
 import { useOpenLink } from "~/browser/useOpenLink";
-import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
+import { namedClipboardTarget, writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { useClientSettings } from "~/hooks/useSettings";
 import { previewEnvironment } from "~/state/preview";
 import { readEnvironmentScope } from "~/state/session";
@@ -74,7 +74,7 @@ export function PullRequestPreviewPills({
 
   const copy = async (url: string) => {
     try {
-      if (await writeTextToClipboard(url, "preview URL")) {
+      if (await writeTextToClipboard(url, namedClipboardTarget("preview URL"))) {
         toastManager.add({ type: "success", title: "Preview URL copied" });
       }
     } catch (cause) {

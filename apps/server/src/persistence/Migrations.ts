@@ -115,6 +115,8 @@ import Migration0105 from "./Migrations/105_TurnItemMessageOrdinalIndex.ts";
 import Migration0106 from "./Migrations/106_TurnItemInlineWorkOutput.ts";
 import Migration0107 from "./Migrations/107_RepairStaleTitleRegeneration.ts";
 import Migration0108 from "./Migrations/108_LinearIssueTagsFromBranch.ts";
+import Migration0109 from "./Migrations/109_IssueTrackerBindings.ts";
+import Migration0110 from "./Migrations/110_ActiveShellIndexIndexes.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -226,6 +228,8 @@ const migrationEntries = [
   [106, "TurnItemInlineWorkOutput", Migration0106],
   [107, "RepairStaleTitleRegeneration", Migration0107],
   [108, "LinearIssueTagsFromBranch", Migration0108],
+  [109, "IssueTrackerBindings", Migration0109],
+  [110, "ActiveShellIndexIndexes", Migration0110],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

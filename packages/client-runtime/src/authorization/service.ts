@@ -1,3 +1,5 @@
+import { msg } from "gt-i18n";
+import { translatableDetail } from "../errors/translatable.ts";
 import {
   connectDeviceVerificationCode,
   type ClientConnectionMethod,
@@ -126,7 +128,12 @@ function approvalPendingError(hostLabel: string, thumbprint: string, traceId: st
   const verificationCode = connectDeviceVerificationCode(thumbprint);
   return new ConnectionTransientError({
     reason: "approval-pending",
-    detail: `Approve this device on ${hostLabel}. It shows code ${verificationCode}.`,
+    ...translatableDetail(
+      msg("Approve this device on {host}. It shows code {verificationCode}.", {
+        host: hostLabel,
+        verificationCode,
+      }),
+    ),
     verificationCode,
     traceId,
     hop: "server",
@@ -264,7 +271,7 @@ export const make = Effect.gen(function* () {
               () =>
                 new ConnectionBlockedError({
                   reason: "configuration",
-                  detail: "Could not create the websocket authorization proof.",
+                  ...translatableDetail(msg("Could not create the websocket authorization proof.")),
                 }),
             ),
           ),
@@ -278,7 +285,9 @@ export const make = Effect.gen(function* () {
   const sessionChanged = () =>
     new ConnectionBlockedError({
       reason: "authentication",
-      detail: "Your cloud sign-in changed. Sign in again to authorize the environment.",
+      ...translatableDetail(
+        msg("Your cloud sign-in changed. Sign in again to authorize the environment."),
+      ),
     });
 
   // A missing identity before the attempt captures one means the cloud session
@@ -287,7 +296,7 @@ export const make = Effect.gen(function* () {
   const sessionPending = () =>
     new ConnectionTransientError({
       reason: "session-pending",
-      detail: "Waiting for the T3 Connect sign-in to load.",
+      ...translatableDetail(msg("Waiting for the T3 Connect sign-in to load.")),
     });
 
   const assertSession = Effect.fnUntraced(function* (
@@ -368,7 +377,7 @@ export const make = Effect.gen(function* () {
             () =>
               new ConnectionBlockedError({
                 reason: "configuration",
-                detail: "Could not create the environment authorization proof.",
+                ...translatableDetail(msg("Could not create the environment authorization proof.")),
               }),
           ),
         );
@@ -414,7 +423,7 @@ export const make = Effect.gen(function* () {
         () =>
           new ConnectionBlockedError({
             reason: "configuration",
-            detail: "Could not load the environment authorization key.",
+            ...translatableDetail(msg("Could not load the environment authorization key.")),
           }),
       ),
       Effect.withSpan("environment.authorization.dpopKey.resolve"),
@@ -489,7 +498,7 @@ export const make = Effect.gen(function* () {
               Effect.fail(
                 new ConnectionTransientError({
                   reason: "timeout",
-                  detail: "Timed out renewing the environment credential.",
+                  ...translatableDetail(msg("Timed out renewing the environment credential.")),
                 }),
               ),
           }),

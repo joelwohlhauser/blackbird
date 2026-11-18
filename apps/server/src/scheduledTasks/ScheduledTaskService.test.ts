@@ -439,6 +439,7 @@ it.effect("a one-time task runs late after downtime and deletes itself only when
     const subscribed = yield* Deferred.make<void>();
     const settled = yield* Deferred.make<void>();
     const okThread = ThreadId.make("thread:once-ok");
+    const sent = yield* Ref.make("");
     const layer = ScheduledTaskService.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
@@ -448,8 +449,22 @@ it.effect("a one-time task runs late after downtime and deletes itself only when
             getThreadShell: () => Effect.succeed(threadShell(ProjectId.make("project:test"))),
             sendToThread: (input) =>
               input.threadId === okThread
-                ? Effect.succeed({} as never)
+                ? Ref.set(sent, input.messageId).pipe(Effect.as({} as never))
                 : Effect.die("test dispatch failure"),
+            getProjectThreadRecords: () =>
+              Effect.map(
+                Ref.get(sent),
+                (userMessageId) =>
+                  ({
+                    runs: [{ id: "run:1", status: "completed", userMessageId }],
+                  }) as never,
+              ),
+            waitForThread: (input) =>
+              Effect.succeed({
+                threadId: input.threadId,
+                run: { id: input.runId, status: "completed", rootNodeId: "node:root" },
+                timedOut: false,
+              } as never),
           }),
           Layer.mock(SecretRequests.SecretRequests)({}),
           Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
@@ -682,6 +697,149 @@ it.effect.each([
       const recorded = Option.getOrUndefined(yield* Fiber.join(failed));
       assert.equal(recorded?.lastRunError, outcome.error);
       assert.equal(recorded?.runCount, 1);
+    }).pipe(Effect.provide(layer));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);
+
+it.effect("a one-time task is removed once its turn completes", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(Date.parse("2026-11-01T07:00:00.000Z"));
+    const projectId = ProjectId.make("project:test");
+    const ended = yield* Deferred.make<void>();
+    const sent = yield* Ref.make("");
+    const run = { id: "run:1", status: "completed", rootNodeId: "node:root" };
+    const layer = ScheduledTaskService.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          ManagedPolicy.layerTest(),
+          Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+          Layer.mock(ThreadManagementService.ThreadManagementService)({
+            sendToThread: (input) => Ref.set(sent, input.messageId).pipe(Effect.as({} as never)),
+            getThreadShell: () => Effect.succeed(threadShell(projectId)),
+            getProjectThreadRecords: () =>
+              Effect.map(
+                Ref.get(sent),
+                (userMessageId) => ({ runs: [{ ...run, userMessageId }] }) as never,
+              ),
+            waitForThread: (input) =>
+              Deferred.await(ended).pipe(
+                Effect.as({ threadId: input.threadId, run, timedOut: false } as never),
+              ),
+          }),
+          Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
+            namedProjectsRoot: "/projects",
+            isScratchProject: () => Effect.succeed(false),
+          }),
+          NodeCrypto.layer,
+          Scheduler.layer,
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+          }),
+        ),
+      ),
+    );
+    yield* Effect.gen(function* () {
+      const service = yield* ScheduledTaskService.ScheduledTaskService;
+      const { task } = yield* service.upsert({
+        id: ScheduledTaskId.make("task:once"),
+        title: "Release notes",
+        prompt: "Draft the release notes",
+        enabled: true,
+        schedule: { type: "once", runAt: "2026-11-01T07:01:00.000Z" },
+        projectId,
+        threadId: ThreadId.make("thread:once"),
+        workspaceStrategy: { type: "root" },
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+      });
+      const dispatched = service.subscribeList().pipe(
+        Stream.map(({ tasks }) => tasks.find((candidate) => candidate.id === task.id)),
+        Stream.filter((current) => current?.lastRunStatus === "succeeded"),
+        Stream.runHead,
+      );
+      const removed = service.subscribeList().pipe(
+        Stream.filter(({ tasks }) => tasks.every((candidate) => candidate.id !== task.id)),
+        Stream.runHead,
+      );
+      const recorded = yield* Effect.forkChild(dispatched);
+      const gone = yield* Effect.forkChild(removed);
+      yield* TestClock.adjust("2 minutes");
+      // The dispatch alone keeps it: the turn can still fail.
+      assert.isNull(Option.getOrThrow(yield* Fiber.join(recorded))?.nextRunAt);
+      yield* Deferred.succeed(ended, undefined);
+      yield* Fiber.join(gone);
+      assert.lengthOf((yield* service.list()).tasks, 0);
+    }).pipe(Effect.provide(layer));
+  }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
+);
+
+it.effect("a paused one-time task run by hand before its time is kept", () =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(Date.parse("2026-11-01T07:00:00.000Z"));
+    const projectId = ProjectId.make("project:test");
+    const ended = yield* Deferred.make<void>();
+    const outcomeRead = yield* Deferred.make<void>();
+    const sent = yield* Ref.make("");
+    const run = { id: "run:1", status: "completed", rootNodeId: "node:root" };
+    const layer = ScheduledTaskService.layer.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          ManagedPolicy.layerTest(),
+          Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
+          Layer.mock(ThreadManagementService.ThreadManagementService)({
+            sendToThread: (input) => Ref.set(sent, input.messageId).pipe(Effect.as({} as never)),
+            getThreadShell: () => Effect.succeed(threadShell(projectId)),
+            getProjectThreadRecords: () =>
+              Effect.map(
+                Ref.get(sent),
+                (userMessageId) => ({ runs: [{ ...run, userMessageId }] }) as never,
+              ),
+            waitForThread: (input) =>
+              Deferred.await(ended).pipe(
+                Effect.tap(() => Deferred.succeed(outcomeRead, undefined)),
+                Effect.as({ threadId: input.threadId, run, timedOut: false } as never),
+              ),
+          }),
+          Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
+            namedProjectsRoot: "/projects",
+            isScratchProject: () => Effect.succeed(false),
+          }),
+          NodeCrypto.layer,
+          Scheduler.layer,
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+          }),
+        ),
+      ),
+    );
+    yield* Effect.gen(function* () {
+      const service = yield* ScheduledTaskService.ScheduledTaskService;
+      const { task } = yield* service.upsert({
+        id: ScheduledTaskId.make("task:paused-once"),
+        title: "Release notes",
+        prompt: "Draft the release notes",
+        enabled: true,
+        schedule: { type: "once", runAt: "2026-11-01T08:00:00.000Z" },
+        projectId,
+        threadId: ThreadId.make("thread:once"),
+        workspaceStrategy: { type: "root" },
+        modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+      });
+      yield* service.setEnabled({ id: task.id, enabled: false });
+      yield* service.runNow({ id: task.id });
+      yield* Deferred.succeed(ended, undefined);
+      yield* Deferred.await(outcomeRead);
+      yield* TestClock.adjust("1 second");
+      const [kept] = (yield* service.list()).tasks;
+      assert.equal(kept?.id, task.id);
+      assert.equal(kept?.runCount, 1);
+      const resumed = yield* service.setEnabled({ id: task.id, enabled: true });
+      assert.equal(resumed.task.nextRunAt, "2026-11-01T08:00:00.000Z");
     }).pipe(Effect.provide(layer));
   }).pipe(Effect.provide(SqlitePersistence.layerMemory)),
 );
@@ -1056,6 +1214,9 @@ it.effect("refuses saving an enabled task above the policy ceiling", () =>
           }),
           NodeCrypto.layer,
           Scheduler.layer,
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+          }),
         ),
       ),
     );
@@ -1141,6 +1302,9 @@ it.effect("checks a task's destination thread only when the destination changes"
           }),
           NodeCrypto.layer,
           Scheduler.layer,
+          Layer.mock(ServerSettings.ServerSettingsService)({
+            getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+          }),
         ),
       ),
     );

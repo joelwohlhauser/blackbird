@@ -24,7 +24,7 @@ export function TextToSpeechSettings() {
         resetAction={
           apiKey.length > 0 ? (
             <SettingResetButton
-              label="Gemini API key"
+              ariaLabel="Gemini API key"
               onClick={() => updateSettings({ geminiApiKey: "" })}
             />
           ) : null
@@ -48,7 +48,7 @@ export function TextToSpeechSettings() {
         resetAction={
           voice !== DEFAULT_TEXT_TO_SPEECH_VOICE ? (
             <SettingResetButton
-              label="voice"
+              ariaLabel="voice"
               onClick={() => updateSettings({ textToSpeechVoice: DEFAULT_TEXT_TO_SPEECH_VOICE })}
             />
           ) : null
@@ -79,7 +79,7 @@ export function TextToSpeechSettings() {
         resetAction={
           speed !== 1 ? (
             <SettingResetButton
-              label="reading speed"
+              ariaLabel="reading speed"
               onClick={() => updateSettings({ textToSpeechSpeed: 1 })}
             />
           ) : null

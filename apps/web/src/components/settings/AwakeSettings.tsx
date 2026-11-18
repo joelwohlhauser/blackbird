@@ -50,7 +50,7 @@ function KeepAwakeWhileAgentsWorkRow() {
       resetAction={
         settings.keepAwakeWhileAgentsWork !== DEFAULT_UNIFIED_SETTINGS.keepAwakeWhileAgentsWork ? (
           <SettingResetButton
-            label="keep awake while agents work"
+            ariaLabel="keep awake while agents work"
             onClick={() =>
               updateSettings({
                 keepAwakeWhileAgentsWork: DEFAULT_UNIFIED_SETTINGS.keepAwakeWhileAgentsWork,

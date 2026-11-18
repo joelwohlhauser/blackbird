@@ -7,8 +7,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-i18n";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
+import { m } from "../i18n/messages.ts";
 import { BACKEND_QUIT_STOP_TIMEOUT } from "./DesktopBackendManager.ts";
 
 // The fields of the server's `server-runtime.json` that identify the owner of a T3 home.
@@ -92,15 +94,44 @@ export const readLiveHomeOwner = Effect.fn("DesktopHomeOwner.readLiveHomeOwner")
 export const homeOwnedMessage = (owner: Option.Option<HomeOwner>): string =>
   Option.match(owner, {
     onNone: () =>
-      "Another Blackbird server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server, or run `blackbird service uninstall` and optionally reinstall with `blackbird service install`, passing `--base-dir` with the service's home to each command. Then reopen Blackbird. You can also set a separate T3CODE_HOME and pair with the running server.",
+      m(
+        msg(
+          "Another Blackbird server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server, or run `blackbird service uninstall` and optionally reinstall with `blackbird service install`, passing `--base-dir` with the service's home to each command. Then reopen Blackbird. You can also set a separate T3CODE_HOME and pair with the running server.",
+        ),
+      ),
     onSome: (owner) => {
-      const kind = owner.serviceManaged
-        ? "The Blackbird background service"
-        : "Another Blackbird server (for example `blackbird serve`, or one started over SSH)";
-      const version = owner.serverVersion ? `, version ${owner.serverVersion}` : "";
-      const stop = owner.serviceManaged
-        ? "Stop it with `blackbird service uninstall`, passing `--base-dir` with this home"
-        : "If a Blackbird app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server";
-      return `${kind} is using this home (PID ${owner.pid}, port ${owner.port}${version}). ${stop}, and reopen Blackbird. You can also set a separate T3CODE_HOME and pair with the running server.`;
+      const variables = {
+        pid: String(owner.pid),
+        port: String(owner.port),
+        version: owner.serverVersion ?? "",
+      };
+      if (owner.serviceManaged) {
+        return owner.serverVersion
+          ? m(
+              msg(
+                "The Blackbird background service is using this home (PID {pid}, port {port}, version {version}). Stop it with `blackbird service uninstall`, passing `--base-dir` with this home, and reopen Blackbird. You can also set a separate T3CODE_HOME and pair with the running server.",
+              ),
+              variables,
+            )
+          : m(
+              msg(
+                "The Blackbird background service is using this home (PID {pid}, port {port}). Stop it with `blackbird service uninstall`, passing `--base-dir` with this home, and reopen Blackbird. You can also set a separate T3CODE_HOME and pair with the running server.",
+              ),
+              variables,
+            );
+      }
+      return owner.serverVersion
+        ? m(
+            msg(
+              "Another Blackbird server (for example `blackbird serve`, or one started over SSH) is using this home (PID {pid}, port {port}, version {version}). If a Blackbird app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server, and reopen Blackbird. You can also set a separate T3CODE_HOME and pair with the running server.",
+            ),
+            variables,
+          )
+        : m(
+            msg(
+              "Another Blackbird server (for example `blackbird serve`, or one started over SSH) is using this home (PID {pid}, port {port}). If a Blackbird app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server, and reopen Blackbird. You can also set a separate T3CODE_HOME and pair with the running server.",
+            ),
+            variables,
+          );
     },
   });
