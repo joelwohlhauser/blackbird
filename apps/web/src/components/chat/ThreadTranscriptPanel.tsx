@@ -9,6 +9,7 @@ import {
 import { formatSubagentDisplayTitle } from "@t3tools/client-runtime/state/subagent-display";
 import { type LegendListRef } from "@legendapp/list/react";
 import { useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { ExternalLinkIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
@@ -51,6 +52,7 @@ export function ThreadTranscriptPanel(props: {
   timestampFormat: TimestampFormat;
   onImageExpand: (preview: ExpandedImagePreview) => void;
 }) {
+  const gt = useGT();
   const navigate = useNavigate();
   const listRef = useRef<LegendListRef | null>(null);
   const [isAtEnd, setIsAtEnd] = useState(true);
@@ -104,12 +106,12 @@ export function ThreadTranscriptPanel(props: {
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
         <span className="min-w-0 truncate text-xs text-muted-foreground">
-          {shell?.title ?? "Subagent"}
+          {shell?.title ?? gt("Subagent")}
         </span>
         {props.onOpenInMainTabBar ? (
           <Button size="xs" variant="ghost" onClick={props.onOpenInMainTabBar}>
             <ExternalLinkIcon />
-            Open chat
+            <T>Open chat</T>
           </Button>
         ) : null}
       </div>

@@ -1,7 +1,9 @@
 import type { DesktopAwakeState } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { msg, useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
+import type { MessageResolver } from "../../i18n/messages";
 import { updateClientSettings, useClientSettings } from "../../hooks/useSettings";
 import { getDesktopAwakeBridge, useDesktopAwakeState } from "../../lib/desktopAwake";
 import { Button } from "../ui/button";
@@ -19,26 +21,38 @@ import {
 import { searchableSetting } from "./settingsSearch";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
-function awakeStatus(state: DesktopAwakeState | null, enabled: boolean, always: boolean) {
+function awakeStatus(
+  state: DesktopAwakeState | null,
+  enabled: boolean,
+  always: boolean,
+  resolve: MessageResolver,
+) {
   if (state?.message) return state.message;
   if (state?.level === "full") {
     return state.lowPower
-      ? "Keeping the Mac awake in Low Power Mode, lid closed included."
-      : "Keeping the Mac awake, lid closed included.";
+      ? resolve(msg("Keeping the Mac awake in Low Power Mode, lid closed included."))
+      : resolve(msg("Keeping the Mac awake, lid closed included."));
   }
   if (state?.level === "base") {
     return state.installed && enabled
-      ? "Agents are working, so the Mac doesn't idle-sleep."
-      : "Agents are working, so the Mac doesn't idle-sleep. Closing the lid still puts it to sleep.";
+      ? resolve(msg("Agents are working, so the Mac doesn't idle-sleep."))
+      : resolve(
+          msg(
+            "Agents are working, so the Mac doesn't idle-sleep. Closing the lid still puts it to sleep.",
+          ),
+        );
   }
-  if (!state?.installed) return "Needs a one-time setup with your administrator password.";
+  if (!state?.installed) {
+    return resolve(msg("Needs a one-time setup with your administrator password."));
+  }
   if (!enabled) return undefined;
   return always
-    ? "On. The Mac stays awake all the time."
-    : "On. The Mac stays awake while agents work.";
+    ? resolve(msg("On. The Mac stays awake all the time."))
+    : resolve(msg("On. The Mac stays awake while agents work."));
 }
 
 function KeepAwakeWhileAgentsWorkRow() {
+  const gt = useGT();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   return (
@@ -46,11 +60,13 @@ function KeepAwakeWhileAgentsWorkRow() {
       serverScoped
       settingKeys={["keepAwakeWhileAgentsWork"]}
       {...searchableSetting("keep-awake-while-agents-work")}
-      description="While agents work, the computer doesn't idle-sleep. It can sleep again a minute after they finish. Closing a laptop lid still sleeps it, unless a Mac is set up to stay awake with the lid closed."
+      description={gt(
+        "While agents work, the computer doesn't idle-sleep. It can sleep again a minute after they finish. Closing a laptop lid still sleeps it, unless a Mac is set up to stay awake with the lid closed.",
+      )}
       resetAction={
         settings.keepAwakeWhileAgentsWork !== DEFAULT_UNIFIED_SETTINGS.keepAwakeWhileAgentsWork ? (
           <SettingResetButton
-            ariaLabel="keep awake while agents work"
+            ariaLabel={gt("keep awake while agents work")}
             onClick={() =>
               updateSettings({
                 keepAwakeWhileAgentsWork: DEFAULT_UNIFIED_SETTINGS.keepAwakeWhileAgentsWork,
@@ -66,7 +82,7 @@ function KeepAwakeWhileAgentsWorkRow() {
           onCheckedChange={(checked) =>
             updateSettings({ keepAwakeWhileAgentsWork: Boolean(checked) })
           }
-          aria-label="Keep awake while agents work"
+          aria-label={gt("Keep awake while agents work")}
         />
       }
     />
@@ -101,6 +117,8 @@ function PercentSetting({
 }
 
 export function AwakeSettings() {
+  const gt = useGT();
+  const messages = useMessages();
   const settings = useClientSettings();
   const bridge = getDesktopAwakeBridge();
   const [state, setState] = useDesktopAwakeState();
@@ -121,8 +139,10 @@ export function AwakeSettings() {
           stackedThreadToast({
             type: "error",
             title:
-              action === "setup" ? "Could not set up Keep awake" : "Could not remove Keep awake",
-            description: error instanceof Error ? error.message : "Something went wrong.",
+              action === "setup"
+                ? gt("Could not set up Keep awake")
+                : gt("Could not remove Keep awake"),
+            description: error instanceof Error ? error.message : gt("Something went wrong."),
           }),
         );
       })
@@ -131,20 +151,22 @@ export function AwakeSettings() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="awake" title="Keep awake">
+      <SettingsSection id="awake" title={gt("Keep awake")}>
         <KeepAwakeWhileAgentsWorkRow />
       </SettingsSection>
 
-      <SettingsSection id="awake-lid-closed" title="Lid closed">
+      <SettingsSection id="awake-lid-closed" title={gt("Lid closed")}>
         <SettingsUnavailableGroup
-          message={available ? undefined : "Available only in the macOS desktop app."}
+          message={available ? undefined : gt("Available only in the macOS desktop app.")}
         >
           <SettingsRow
             {...searchableSetting("awake-enabled")}
-            description="Also keep the Mac awake with the lid closed while agents work. Blackbird turns macOS sleep off and turns it back on a minute after they finish."
+            description={gt(
+              "Also keep the Mac awake with the lid closed while agents work. Blackbird turns macOS sleep off and turns it back on a minute after they finish.",
+            )}
             status={
               available
-                ? awakeStatus(state, settings.awakeEnabled, settings.awakeAlways)
+                ? awakeStatus(state, settings.awakeEnabled, settings.awakeAlways, messages)
                 : undefined
             }
             control={
@@ -155,12 +177,12 @@ export function AwakeSettings() {
                   disabled={!available || pending}
                   onClick={() => change(installed ? "remove" : "setup")}
                 >
-                  {installed ? "Remove" : "Set up…"}
+                  {installed ? gt("Remove") : gt("Set up…")}
                 </Button>
                 <Switch
                   checked={installed && settings.awakeEnabled}
                   disabled={!available || !installed}
-                  aria-label="Keep the Mac awake with the lid closed"
+                  aria-label={gt("Keep the Mac awake with the lid closed")}
                   onCheckedChange={(checked) =>
                     void updateClientSettings({ awakeEnabled: checked })
                   }
@@ -170,12 +192,14 @@ export function AwakeSettings() {
           />
           <SettingsRow
             {...searchableSetting("awake-always")}
-            description="Keep the Mac awake with the lid closed all the time, even when no agents are working. Battery and heat rules still apply."
+            description={gt(
+              "Keep the Mac awake with the lid closed all the time, even when no agents are working. Battery and heat rules still apply.",
+            )}
             control={
               <Switch
                 checked={settings.awakeAlways}
                 disabled={!available || !installed || !settings.awakeEnabled}
-                aria-label="Keep the Mac awake all the time"
+                aria-label={gt("Keep the Mac awake all the time")}
                 onCheckedChange={(checked) => void updateClientSettings({ awakeAlways: checked })}
               />
             }
@@ -185,14 +209,16 @@ export function AwakeSettings() {
 
       {available ? (
         <>
-          <SettingsSection id="awake-power" title="Battery and heat">
+          <SettingsSection id="awake-power" title={gt("Battery and heat")}>
             <SettingsRow
               {...searchableSetting("awake-low-power")}
-              description="With the lid-closed setup, turn on Low Power Mode when the battery drops below this level."
+              description={gt(
+                "With the lid-closed setup, turn on Low Power Mode when the battery drops below this level.",
+              )}
               control={
                 <PercentSetting
                   value={settings.awakeLowPowerBelowPercent}
-                  label="Low Power Mode below percent"
+                  label={gt("Low Power Mode below percent")}
                   onCommit={(value) =>
                     void updateClientSettings({ awakeLowPowerBelowPercent: value })
                   }
@@ -201,22 +227,26 @@ export function AwakeSettings() {
             />
             <SettingsRow
               {...searchableSetting("awake-sleep-below")}
-              description="Let the Mac sleep when the battery drops below this level, even while agents work. 0 turns this off."
+              description={gt(
+                "Let the Mac sleep when the battery drops below this level, even while agents work. 0 turns this off.",
+              )}
               control={
                 <PercentSetting
                   value={settings.awakeSleepBelowPercent}
-                  label="Sleep below percent"
+                  label={gt("Sleep below percent")}
                   onCommit={(value) => void updateClientSettings({ awakeSleepBelowPercent: value })}
                 />
               }
             />
             <SettingsRow
               {...searchableSetting("awake-heat")}
-              description="Let the Mac sleep at critical heat, even while agents work. With the lid-closed setup, also turn on Low Power Mode when it gets seriously hot."
+              description={gt(
+                "Let the Mac sleep at critical heat, even while agents work. With the lid-closed setup, also turn on Low Power Mode when it gets seriously hot.",
+              )}
               control={
                 <Switch
                   checked={settings.awakeHeatRules}
-                  aria-label="Heat rules"
+                  aria-label={gt("Heat rules")}
                   onCheckedChange={(checked) =>
                     void updateClientSettings({ awakeHeatRules: checked })
                   }
@@ -225,14 +255,16 @@ export function AwakeSettings() {
             />
           </SettingsSection>
 
-          <SettingsSection id="awake-hotspot" title="Hotspot failover">
+          <SettingsSection id="awake-hotspot" title={gt("Hotspot failover")}>
             <SettingsRow
               {...searchableSetting("awake-hotspot")}
-              description="When the internet drops while the lid-closed setup keeps the Mac awake, join the hotspot of a nearby iPhone on your Apple Account until known Wi-Fi is back. Asks once for Location Services."
+              description={gt(
+                "When the internet drops while the lid-closed setup keeps the Mac awake, join the hotspot of a nearby iPhone on your Apple Account until known Wi-Fi is back. Asks once for Location Services.",
+              )}
               control={
                 <Switch
                   checked={settings.awakeHotspotFailover}
-                  aria-label="Hotspot failover"
+                  aria-label={gt("Hotspot failover")}
                   onCheckedChange={(checked) =>
                     void updateClientSettings({ awakeHotspotFailover: checked })
                   }

@@ -7,6 +7,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { useGT } from "gt-react";
 import { ExternalLinkIcon } from "lucide-react";
 import type { MouseEvent } from "react";
 
@@ -33,11 +34,12 @@ export function usePullRequestPreviews(
 export function useOpenPullRequestPreview(threadRef: ScopedThreadRef | null) {
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const openLink = useOpenLink(null);
+  const gt = useGT();
 
   const reportOpenFailure = (cause: unknown) => {
     toastManager.add({
       type: "error",
-      title: "Unable to open preview",
+      title: gt("Unable to open preview"),
       description: cause instanceof Error ? cause.message : String(cause),
     });
   };
@@ -71,16 +73,17 @@ export function PullRequestPreviewPills({
   previews: ReadonlyArray<PullRequestPreview>;
 }) {
   const open = useOpenPullRequestPreview(threadRef);
+  const gt = useGT();
 
   const copy = async (url: string) => {
     try {
       if (await writeTextToClipboard(url, namedClipboardTarget("preview URL"))) {
-        toastManager.add({ type: "success", title: "Preview URL copied" });
+        toastManager.add({ type: "success", title: gt("Preview URL copied") });
       }
     } catch (cause) {
       toastManager.add({
         type: "error",
-        title: "Could not copy preview URL",
+        title: gt("Could not copy preview URL"),
         description: cause instanceof Error ? cause.message : String(cause),
       });
     }
@@ -94,7 +97,7 @@ export function PullRequestPreviewPills({
             variant="info"
             className="min-w-0 max-w-full"
             render={<button type="button" />}
-            aria-label={`Open preview ${preview.url}`}
+            aria-label={gt("Open preview {url}", { url: preview.url })}
             onClick={(event) => void open(preview.url, event)}
             onAuxClick={(event) => {
               if (event.button === 1) void open(preview.url, event);

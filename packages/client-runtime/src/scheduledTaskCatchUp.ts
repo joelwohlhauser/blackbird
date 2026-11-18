@@ -1,5 +1,7 @@
 import type { ScheduledTask } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 const local = (value: string | number) =>
   DateTime.setZone(DateTime.makeUnsafe(value), DateTime.zoneMakeLocal());
@@ -26,6 +28,7 @@ const isSameDay = (a: DateTime.Zoned, b: DateTime.Zoned) => {
 export function formatScheduledTaskCatchUp(
   task: Pick<ScheduledTask, "lastRunAt" | "lastRunStatus" | "lastRunCatchUp">,
   now: number,
+  resolve: MFunctionType = mFallback,
 ): string | null {
   const record = task.lastRunCatchUp;
   if (record === undefined || task.lastRunStatus === "never") return null;
@@ -33,14 +36,31 @@ export function formatScheduledTaskCatchUp(
   const missedSince = local(record.missedSince);
   const missed =
     record.missedCount > 1
-      ? `${record.missedCount.toLocaleString()} missed runs since ${dayLabel(missedSince, current)}`
+      ? resolve(
+          msg(
+            "{count, plural, one {{countLabel} missed run since {day}} other {{countLabel} missed runs since {day}}}",
+            {
+              count: record.missedCount,
+              countLabel: record.missedCount.toLocaleString(),
+              day: dayLabel(missedSince, current),
+            },
+          ),
+        )
       : isSameDay(missedSince, current)
-        ? `missed today's ${timeLabel(missedSince)} run`
-        : `missed the ${dayLabel(missedSince, current)} run`;
-  if (task.lastRunStatus === "running" || task.lastRunAt === null) return `Catching up · ${missed}`;
+        ? resolve(msg("missed today's {time} run", { time: timeLabel(missedSince) }))
+        : resolve(msg("missed the {day} run", { day: dayLabel(missedSince, current) }));
+  if (task.lastRunStatus === "running" || task.lastRunAt === null) {
+    return resolve(msg("Catching up · {missed}", { missed }));
+  }
   const ranAt = local(task.lastRunAt);
-  const when = isSameDay(ranAt, current)
-    ? `at ${timeLabel(ranAt)}`
-    : `${dayLabel(ranAt, current)} at ${timeLabel(ranAt)}`;
-  return `${task.lastRunStatus === "failed" ? "Catch-up failed" : "Caught up"} ${when} · ${missed}`;
+  const time = timeLabel(ranAt);
+  if (isSameDay(ranAt, current)) {
+    return task.lastRunStatus === "failed"
+      ? resolve(msg("Catch-up failed at {time} · {missed}", { time, missed }))
+      : resolve(msg("Caught up at {time} · {missed}", { time, missed }));
+  }
+  const day = dayLabel(ranAt, current);
+  return task.lastRunStatus === "failed"
+    ? resolve(msg("Catch-up failed {day} at {time} · {missed}", { day, time, missed }))
+    : resolve(msg("Caught up {day} at {time} · {missed}", { day, time, missed }));
 }

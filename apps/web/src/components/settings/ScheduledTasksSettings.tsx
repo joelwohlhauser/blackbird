@@ -833,7 +833,7 @@ function ScheduledTaskRow({
   const [deliveriesOpen, setDeliveriesOpen] = useState(false);
   const isWebhook = task.schedule.type === "webhook";
   const nowMinute = useNowMinute();
-  const catchUp = formatScheduledTaskCatchUp(task, Date.parse(`${nowMinute}:00.000Z`));
+  const catchUp = formatScheduledTaskCatchUp(task, Date.parse(`${nowMinute}:00.000Z`), messages);
   const toggle = useAtomCommand(serverEnvironment.setScheduledTaskEnabled, {
     label: "scheduled task enabled",
   });
@@ -2261,7 +2261,9 @@ function ScheduledTaskEditorForm({
                     setDraft((current) => ({ ...current, runAt: event.target.value }))
                   }
                 />
-                <span className="text-xs text-muted-foreground">then deletes itself</span>
+                <span className="text-xs text-muted-foreground">
+                  <T>then deletes itself</T>
+                </span>
               </div>
             ) : draft.scheduleMode === "fixed" ? (
               <div className="flex flex-wrap items-center gap-3">

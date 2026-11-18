@@ -163,7 +163,7 @@ function ProjectIconPickerBody({
 
         {mode === "none" ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            This project will not show an icon.
+            <T>This project will not show an icon.</T>
           </p>
         ) : null}
 

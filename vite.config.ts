@@ -595,7 +595,7 @@ export default defineConfig({
           "apps/mobile/src/features/development/**",
           "packages/client-runtime/src/rpc/**",
         ],
-        rules: { "t3code/no-untranslated-copy": "warn" },
+        rules: { "t3code/no-untranslated-copy": "error" },
       },
       {
         // These Blackbird surfaces share flat borders and native window insets with the tab workspace.

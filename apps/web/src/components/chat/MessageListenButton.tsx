@@ -1,3 +1,4 @@
+import { T, useGT } from "gt-react";
 import { memo } from "react";
 import { SquareIcon, Volume2Icon } from "lucide-react";
 import { TEXT_TO_SPEECH_SPEEDS } from "@t3tools/contracts/settings";
@@ -20,6 +21,7 @@ export const MessageListenButton = memo(function MessageListenButton({
   messageId: string;
   text: string;
 }) {
+  const gt = useGT();
   const apiKey = useClientSettings((settings) => settings.geminiApiKey);
   const voice = useClientSettings((settings) => settings.textToSpeechVoice);
   const defaultSpeed = useClientSettings((settings) => settings.textToSpeechSpeed);
@@ -29,7 +31,7 @@ export const MessageListenButton = memo(function MessageListenButton({
 
   if (apiKey.trim().length === 0) return null;
 
-  const label = playback ? "Stop reading" : "Read aloud";
+  const label = playback ? gt("Stop reading") : gt("Read aloud");
   const nextSpeed = playback
     ? (TEXT_TO_SPEECH_SPEEDS[
         (TEXT_TO_SPEECH_SPEEDS.indexOf(playback.speed) + 1) % TEXT_TO_SPEECH_SPEEDS.length
@@ -77,7 +79,7 @@ export const MessageListenButton = memo(function MessageListenButton({
           <TooltipTrigger
             render={
               <Button
-                aria-label="Change reading speed"
+                aria-label={gt("Change reading speed")}
                 onClick={() => setTextToSpeechSpeed(nextSpeed)}
                 type="button"
                 size="xs"
@@ -88,7 +90,9 @@ export const MessageListenButton = memo(function MessageListenButton({
             <span className="tabular-nums">{playback.speed}×</span>
           </TooltipTrigger>
           <TooltipPopup>
-            <p>Reading speed</p>
+            <p>
+              <T>Reading speed</T>
+            </p>
           </TooltipPopup>
         </Tooltip>
       ) : null}

@@ -1651,7 +1651,7 @@ function EnvironmentTasks({
         </Text>
       ) : (
         visibleTasks?.map((task, index) => {
-          const catchUp = formatScheduledTaskCatchUp(task, now);
+          const catchUp = formatScheduledTaskCatchUp(task, now, m);
           return (
             <View
               key={task.id}

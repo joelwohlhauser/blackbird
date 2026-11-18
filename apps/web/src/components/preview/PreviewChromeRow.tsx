@@ -266,7 +266,11 @@ export function PreviewChromeRow({
           ) : null}
         </InputGroup>
 
-        <div className="flex items-center gap-0.5" role="group" aria-label="Zoom">
+        <div
+          className="flex items-center gap-0.5"
+          role="group"
+          aria-label={gt("Zoom", { $context: "browser zoom controls" })}
+        >
           <Tooltip>
             <TooltipTrigger
               render={
@@ -275,14 +279,16 @@ export function PreviewChromeRow({
                   size="icon-xs"
                   onClick={zoomDisabled ? NOOP : onZoomOut}
                   disabled={zoomDisabled}
-                  aria-label="Zoom out"
+                  aria-label={gt("Zoom out")}
                   type="button"
                 />
               }
             >
               <ZoomOut />
             </TooltipTrigger>
-            <TooltipPopup>Zoom out</TooltipPopup>
+            <TooltipPopup>
+              <T>Zoom out</T>
+            </TooltipPopup>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger
@@ -292,14 +298,16 @@ export function PreviewChromeRow({
                   size="icon-xs"
                   onClick={zoomDisabled ? NOOP : onZoomIn}
                   disabled={zoomDisabled}
-                  aria-label="Zoom in"
+                  aria-label={gt("Zoom in")}
                   type="button"
                 />
               }
             >
               <ZoomIn />
             </TooltipTrigger>
-            <TooltipPopup>Zoom in</TooltipPopup>
+            <TooltipPopup>
+              <T>Zoom in</T>
+            </TooltipPopup>
           </Tooltip>
         </div>
 

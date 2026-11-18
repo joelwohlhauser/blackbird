@@ -111,7 +111,7 @@ export function PreviewMoreMenu({
         ) : null}
         {actions.copyUrl ? (
           <MenuItem onClick={actions.copyUrl} disabled={disabled}>
-            Copy URL
+            <T>Copy URL</T>
           </MenuItem>
         ) : null}
         {actions.find || actions.copyUrl ? <MenuSeparator /> : null}

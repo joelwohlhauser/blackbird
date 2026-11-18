@@ -272,7 +272,7 @@ export function AssistantSelectionToolbar({
           }}
           finalFocus={false}
           ref={commentPopupRef}
-          aria-label="Comment on citation"
+          aria-label={gt("Comment on citation")}
           width="md"
           padding="compact"
         >

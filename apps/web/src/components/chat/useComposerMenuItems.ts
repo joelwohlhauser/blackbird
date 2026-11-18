@@ -266,7 +266,7 @@ export function useComposerMenuItems({
                 type: "slash-command" as const,
                 command: "goal" as const,
                 label: "/goal",
-                description: "Set a persistent goal for a long-running task",
+                description: gt("Set a persistent goal for a long-running task"),
               },
             ]
           : []),

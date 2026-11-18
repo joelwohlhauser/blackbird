@@ -853,6 +853,7 @@ export function PullRequestPreviewHostsSetting() {
           onCommit={(next) =>
             updateSettings({ pullRequestPreviewHosts: parsePullRequestPreviewHosts(next) })
           }
+          // oxlint-disable-next-line t3code/no-untranslated-copy -- host pattern example
           placeholder="*.staging.example.com"
           spellCheck={false}
           aria-label={gt("Preview deployment hosts")}

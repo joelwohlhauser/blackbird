@@ -10,8 +10,10 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
+import type { MessageResolver } from "../../i18n/messages";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
@@ -28,30 +30,31 @@ import { searchableSetting } from "./settingsSearch";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
 const SYNC_LABELS: Record<SkillSourceSyncMode, string> = {
-  none: "No git sync",
-  pull: "Pull only",
-  "two-way": "Two-way sync",
+  none: msg("No git sync"),
+  pull: msg("Pull only"),
+  "two-way": msg("Two-way sync"),
 };
 
 const INSTRUCTIONS_LABELS: Record<SkillSourceInstructionsMode, string> = {
-  none: "No instructions",
-  inject: "Add AGENTS.md to every session",
-  link: "Use AGENTS.md as global instructions",
+  none: msg("No instructions"),
+  inject: msg("Add AGENTS.md to every session"),
+  link: msg("Use AGENTS.md as global instructions"),
 };
 
 export function SkillsSettingsPanel() {
+  const gt = useGT();
   const { environment, scope } = useSettingsScope();
   if (scope.kind !== "environment" || !environment) {
     return (
       <SettingsScopeNotice target="environment">
-        Choose one environment to manage its skills.
+        {gt("Choose one environment to manage its skills.")}
       </SettingsScopeNotice>
     );
   }
   if (environment.serverConfig?.environment.capabilities.skillSync !== true) {
     return (
       <SettingsScopeNotice target="environment">
-        Update this environment to manage its skills.
+        {gt("Update this environment to manage its skills.")}
       </SettingsScopeNotice>
     );
   }
@@ -62,6 +65,8 @@ export function SkillsSettingsPanel() {
 
 function SkillsSettingsForm({ environmentId }: { readonly environmentId: EnvironmentId }) {
   useNowMinute();
+  const gt = useGT();
+  const messages = useMessages();
   const sources = useScopedSettings((settings) => settings.skillSources);
   const disabledSkills = useScopedSettings((settings) => settings.disabledSkills);
   const autopilotEnabled = useScopedSettings((settings) => settings.autopilotEnabled);
@@ -94,7 +99,7 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
       toastManager.add({
         type: "error",
-        title: "Could not sync skills",
+        title: gt("Could not sync skills"),
         description: String(squashAtomCommandFailure(result)),
       });
     }
@@ -108,19 +113,21 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
   return (
     <SettingsPageContainer>
       {status !== null && status.conflicts.length > 0 && (
-        <SettingsSection id="skills-conflicts" title="Conflicts">
+        <SettingsSection id="skills-conflicts" title={gt("Conflicts")}>
           {status.conflicts.map((conflict) => (
             <SettingsRow key={conflict} title={conflict} />
           ))}
         </SettingsSection>
       )}
-      <SettingsSection {...searchableSetting("skills-autopilot")} title="Autopilot">
+      <SettingsSection {...searchableSetting("skills-autopilot")} title={gt("Autopilot")}>
         <SettingsRow
-          title="Autopilot"
-          description="Gives agents Blackbird's shape, build, and ship skills and the instructions on when to use them."
+          title={gt("Autopilot")}
+          description={gt(
+            "Gives agents Blackbird's shape, build, and ship skills and the instructions on when to use them.",
+          )}
           control={
             <Switch
-              aria-label="Use autopilot"
+              aria-label={gt("Use autopilot")}
               checked={autopilotEnabled}
               onCheckedChange={(enabled) => updateSettings({ autopilotEnabled: enabled })}
             />
@@ -129,7 +136,7 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
       </SettingsSection>
       <SettingsSection
         {...searchableSetting("skills-sources")}
-        title="Sources"
+        title={gt("Sources")}
         headerAction={
           <Button
             variant="outline"
@@ -137,12 +144,16 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
             disabled={syncing || !canSync}
             onClick={() => void runSync()}
           >
-            {syncing ? "Syncing…" : "Sync now"}
+            {syncing ? <T>Syncing…</T> : <T>Sync now</T>}
           </Button>
         }
       >
         {builtIns.map((source) => (
-          <SettingsRow key={source.id} title={source.label} description={describe(source)} />
+          <SettingsRow
+            key={source.id}
+            title={source.label}
+            description={describe(messages, source)}
+          />
         ))}
         {sources.map((source) =>
           editing === source.id ? (
@@ -159,18 +170,18 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
             <SettingsRow
               key={source.id}
               title={source.label || source.id}
-              description={describe(statusById.get(source.id), source)}
+              description={describe(messages, statusById.get(source.id), source)}
               control={
                 <div className="flex gap-1.5">
                   <Button variant="outline" size="sm" onClick={() => setEditing(source.id)}>
-                    Edit
+                    <T>Edit</T>
                   </Button>
                   <Button
                     variant="destructive-outline"
                     size="sm"
                     onClick={() => saveSources(sources.filter((entry) => entry.id !== source.id))}
                   >
-                    Remove
+                    <T>Remove</T>
                   </Button>
                 </div>
               }
@@ -186,19 +197,22 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
           />
         ) : (
           <SettingsRow
-            title="Add a source"
-            description="A folder or git checkout with skills/<name>/SKILL.md and an optional AGENTS.md."
+            title={gt("Add a source")}
+            description={gt(
+              "A folder or git checkout with {skillPath} and an optional AGENTS.md.",
+              { skillPath: "skills/<name>/SKILL.md" },
+            )}
             control={
               <Button variant="outline" size="sm" onClick={() => setEditing("")}>
-                Add source
+                <T>Add source</T>
               </Button>
             }
           />
         )}
       </SettingsSection>
-      <SettingsSection {...searchableSetting("skills-list")} title="Skills">
+      <SettingsSection {...searchableSetting("skills-list")} title={gt("Skills")}>
         {skillRows.length === 0 ? (
-          <SettingsRow title="No skills found yet" />
+          <SettingsRow title={gt("No skills found yet")} />
         ) : (
           skillRows.map(({ source, name }) => (
             <SettingsRow
@@ -207,7 +221,7 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
               description={source.label}
               control={
                 <Switch
-                  aria-label={`Use ${name}`}
+                  aria-label={gt("Use {name}", { name })}
                   checked={!disabledSkills.includes(name)}
                   onCheckedChange={(enabled) => setSkillEnabled(name, enabled)}
                 />
@@ -220,17 +234,27 @@ function SkillsSettingsForm({ environmentId }: { readonly environmentId: Environ
   );
 }
 
-function describe(status: SkillSourceStatus | undefined, config?: SkillSourceConfig) {
+function describe(
+  resolve: MessageResolver,
+  status: SkillSourceStatus | undefined,
+  config?: SkillSourceConfig,
+) {
   const details = [
     status?.path ?? (config?.path || null),
-    config ? SYNC_LABELS[config.sync] : null,
-    config && config.instructions !== "none" ? INSTRUCTIONS_LABELS[config.instructions] : null,
+    config ? resolve(SYNC_LABELS[config.sync]) : null,
+    config && config.instructions !== "none"
+      ? resolve(INSTRUCTIONS_LABELS[config.instructions])
+      : null,
     status === undefined
-      ? "Not synced yet"
+      ? resolve(msg("Not synced yet"))
       : !status.available
-        ? "Not found on this environment"
+        ? resolve(msg("Not found on this environment"))
         : status.lastSyncedAt
-          ? `Synced ${formatRelativeTimeLabel(status.lastSyncedAt)}`
+          ? resolve(
+              msg("Synced {time}", {
+                time: formatRelativeTimeLabel(status.lastSyncedAt, undefined, resolve),
+              }),
+            )
           : null,
   ].filter((detail): detail is string => detail !== null && detail.length > 0);
   return (
@@ -264,6 +288,8 @@ function SourceEditor({
   readonly onSave: (source: SkillSourceConfig) => void;
   readonly onCancel: () => void;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const [label, setLabel] = useState(initial?.label ?? "");
   const [path, setPath] = useState(initial?.path ?? "");
   const [remote, setRemote] = useState(initial?.remote ?? "");
@@ -276,9 +302,11 @@ function SourceEditor({
   );
   const error =
     path.trim() === "" && remote.trim() === ""
-      ? "Enter a folder, a git remote, or both."
+      ? gt("Enter a folder, a git remote, or both.")
       : instructions === "link" && otherLinkSource
-        ? `${otherLinkSource.label || otherLinkSource.id} already provides the global instructions.`
+        ? gt("{source} already provides the global instructions.", {
+            source: otherLinkSource.label || otherLinkSource.id,
+          })
         : null;
   const save = () => {
     if (error !== null) return;
@@ -295,27 +323,29 @@ function SourceEditor({
 
   return (
     <SettingsRow
-      title={initial ? `Edit ${initial.label || initial.id}` : "New source"}
+      title={
+        initial ? gt("Edit {source}", { source: initial.label || initial.id }) : gt("New source")
+      }
       description={
-        error ?? "Leave the folder empty to clone the remote into Blackbird's data folder."
+        error ?? gt("Leave the folder empty to clone the remote into Blackbird's data folder.")
       }
     >
       <div className="grid max-w-2xl gap-2 pb-3.5 sm:grid-cols-2">
         <Input
-          aria-label="Label"
-          placeholder="Label, for example Team"
+          aria-label={gt("Label")}
+          placeholder={gt("Label, for example Team")}
           value={label}
           onChange={(event) => setLabel(event.target.value)}
         />
         <Input
-          aria-label="Folder"
-          placeholder="Folder, for example ~/repositories/agent-config"
+          aria-label={gt("Folder")}
+          placeholder={gt("Folder, for example {path}", { path: "~/repositories/agent-config" })}
           value={path}
           onChange={(event) => setPath(event.target.value)}
         />
         <Input
-          aria-label="Git remote"
-          placeholder="Git remote (optional)"
+          aria-label={gt("Git remote")}
+          placeholder={gt("Git remote (optional)")}
           value={remote}
           onChange={(event) => setRemote(event.target.value)}
         />
@@ -325,13 +355,13 @@ function SourceEditor({
             if (next) setSync(next);
           }}
         >
-          <SelectTrigger size="sm" aria-label="Git sync">
-            <SelectValue>{SYNC_LABELS[sync]}</SelectValue>
+          <SelectTrigger size="sm" aria-label={gt("Git sync")}>
+            <SelectValue>{messages(SYNC_LABELS[sync])}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="start" alignItemWithTrigger={false}>
             {(Object.keys(SYNC_LABELS) as SkillSourceSyncMode[]).map((mode) => (
               <SelectItem key={mode} value={mode}>
-                {SYNC_LABELS[mode]}
+                {messages(SYNC_LABELS[mode])}
               </SelectItem>
             ))}
           </SelectPopup>
@@ -342,8 +372,8 @@ function SourceEditor({
             if (next) setInstructions(next);
           }}
         >
-          <SelectTrigger size="sm" aria-label="Instructions">
-            <SelectValue>{INSTRUCTIONS_LABELS[instructions]}</SelectValue>
+          <SelectTrigger size="sm" aria-label={gt("Instructions")}>
+            <SelectValue>{messages(INSTRUCTIONS_LABELS[instructions])}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="start" alignItemWithTrigger={false}>
             {(Object.keys(INSTRUCTIONS_LABELS) as SkillSourceInstructionsMode[]).map((mode) => (
@@ -352,17 +382,17 @@ function SourceEditor({
                 value={mode}
                 disabled={mode === "link" && otherLinkSource !== undefined}
               >
-                {INSTRUCTIONS_LABELS[mode]}
+                {messages(INSTRUCTIONS_LABELS[mode])}
               </SelectItem>
             ))}
           </SelectPopup>
         </Select>
         <div className="flex gap-1.5">
           <Button size="sm" disabled={error !== null} onClick={save}>
-            Save
+            <T>Save</T>
           </Button>
           <Button variant="outline" size="sm" onClick={onCancel}>
-            Cancel
+            <T>Cancel</T>
           </Button>
         </div>
       </div>

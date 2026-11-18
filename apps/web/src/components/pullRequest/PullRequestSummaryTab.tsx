@@ -984,7 +984,7 @@ export function PullRequestSummaryTab({
             </PullRequestMetaRow>
           ) : null}
           {previews.length > 0 ? (
-            <PullRequestMetaRow icon={<GlobeIcon className="size-3.5" />} label="Previews">
+            <PullRequestMetaRow icon={<GlobeIcon className="size-3.5" />} label={gt("Previews")}>
               <PullRequestPreviewPills threadRef={threadRef} previews={previews} />
             </PullRequestMetaRow>
           ) : null}

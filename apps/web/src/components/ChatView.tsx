@@ -1380,7 +1380,7 @@ export default function ChatView(props: ChatViewProps) {
     if (trimmedTitle.length === 0) {
       toastManager.add({
         type: "warning",
-        title: "Thread title cannot be empty",
+        title: gt("Thread title cannot be empty"),
       });
       return;
     }
@@ -1396,7 +1396,7 @@ export default function ChatView(props: ChatViewProps) {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Failed to rename thread",
+          title: gt("Failed to rename thread"),
           description: chatActionErrorMessage(squashAtomCommandFailure(result)),
         }),
       );
@@ -2464,7 +2464,7 @@ export default function ChatView(props: ChatViewProps) {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Failed to settle thread",
+              title: gt("Failed to settle thread"),
               description: chatActionErrorMessage(squashAtomCommandFailure(result)),
             }),
           );
@@ -2473,7 +2473,7 @@ export default function ChatView(props: ChatViewProps) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: didSettle ? "Failed to open new thread" : "Failed to settle thread",
+            title: didSettle ? gt("Failed to open new thread") : gt("Failed to settle thread"),
             description: chatActionErrorMessage(error),
           }),
         );
@@ -2983,7 +2983,10 @@ export default function ChatView(props: ChatViewProps) {
     }
     if (!activeThread) return false;
     const items = buildWorkspaceTabSwitcherItems({
-      chatTitle: activeThread.title.trim().length > 0 ? activeThread.title : "Chat",
+      chatTitle:
+        activeThread.title.trim().length > 0
+          ? activeThread.title
+          : gt("Chat", { $context: "fallback title of an untitled chat tab" }),
       mainSurfaces: rightPanelState.mainSurfaces,
       panelSurfaces: rightPanelState.surfaces,
       previewSessions: activePreviewState.sessions,
@@ -4401,7 +4404,7 @@ export default function ChatView(props: ChatViewProps) {
             : {}),
         }}
       />
-      <NewTabButton ariaLabel="New tab" onClick={() => openNewTabPage("main")} />
+      <NewTabButton ariaLabel={gt("New tab")} onClick={() => openNewTabPage("main")} />
     </div>
   );
 

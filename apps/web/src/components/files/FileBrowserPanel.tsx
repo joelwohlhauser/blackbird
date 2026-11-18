@@ -15,7 +15,7 @@ import {
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Cause from "effect/Cause";
-import { T, useGT, useMessages } from "gt-react";
+import { T, useGT, useMessages, Var } from "gt-react";
 import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
@@ -244,7 +244,7 @@ export default function FileBrowserPanel({
       return;
     }
     if (entryKinds.has(normalized.path)) {
-      setCreateEntryError(`An entry already exists at ${normalized.path}.`);
+      setCreateEntryError(gt("An entry already exists at {path}.", { path: normalized.path }));
       return;
     }
 
@@ -272,7 +272,7 @@ export default function FileBrowserPanel({
       setNewEntryPath("");
       toastManager.add({
         type: "success",
-        title: createEntryKind === "file" ? "File created" : "Folder created",
+        title: createEntryKind === "file" ? gt("File created") : gt("Folder created"),
         description: createdPath,
       });
       if (createEntryKind === "file") {
@@ -283,7 +283,7 @@ export default function FileBrowserPanel({
     if (isAtomCommandInterrupted(result)) return;
 
     const error = squashAtomCommandFailure(result);
-    setCreateEntryError(error instanceof Error ? error.message : "Unable to create the entry.");
+    setCreateEntryError(error instanceof Error ? error.message : gt("Unable to create the entry."));
   };
 
   // Shadow-DOM row rects are unreliable; capture the composed contextmenu event's viewport position.
@@ -654,8 +654,8 @@ export default function FileBrowserPanel({
           type="button"
           size="icon-xs"
           variant="ghost-muted"
-          aria-label="New file"
-          title="New file"
+          aria-label={gt("New file")}
+          title={gt("New file")}
           onClick={() => openCreateEntryDialog("file")}
         >
           <FilePlus2Icon />
@@ -664,8 +664,8 @@ export default function FileBrowserPanel({
           type="button"
           size="icon-xs"
           variant="ghost-muted"
-          aria-label="New folder"
-          title="New folder"
+          aria-label={gt("New folder")}
+          title={gt("New folder")}
           onClick={() => openCreateEntryDialog("directory")}
         >
           <FolderPlusIcon />
@@ -749,15 +749,20 @@ export default function FileBrowserPanel({
       >
         <DialogPopup>
           <DialogHeader>
-            <DialogTitle>{createEntryKind === "file" ? "New file" : "New folder"}</DialogTitle>
+            <DialogTitle>
+              {createEntryKind === "file" ? <T>New file</T> : <T>New folder</T>}
+            </DialogTitle>
             <DialogDescription>
-              Enter a path relative to {projectName}. Parent folders are created automatically.
+              <T>
+                Enter a path relative to <Var>{projectName}</Var>. Parent folders are created
+                automatically.
+              </T>
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
             <form id={createEntryFormId} className="space-y-2" onSubmit={handleCreateEntry}>
               <label className="grid gap-1.5 text-sm font-medium text-foreground">
-                Path
+                <T context="file path field label">Path</T>
                 <Input
                   autoFocus
                   nativeInput
@@ -782,14 +787,16 @@ export default function FileBrowserPanel({
               disabled={isCreatingEntry}
               onClick={closeCreateEntryDialog}
             >
-              Cancel
+              <T>Cancel</T>
             </Button>
             <Button form={createEntryFormId} type="submit" disabled={isCreatingEntry}>
-              {isCreatingEntry
-                ? "Creating…"
-                : createEntryKind === "file"
-                  ? "Create file"
-                  : "Create folder"}
+              {isCreatingEntry ? (
+                <T>Creating…</T>
+              ) : createEntryKind === "file" ? (
+                <T>Create file</T>
+              ) : (
+                <T>Create folder</T>
+              )}
             </Button>
           </DialogFooter>
         </DialogPopup>

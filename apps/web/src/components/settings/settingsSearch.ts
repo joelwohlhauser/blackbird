@@ -468,9 +468,9 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "thread-details",
-    title: "Thread details",
+    title: msg("Thread details"),
     to: "/settings/general",
-    searchTerms: ["sidebar compact branch worktree pull request agent third row hide"],
+    searchTerms: [msg("sidebar compact branch worktree pull request agent third row hide")],
   },
   {
     id: "project-order",
@@ -767,9 +767,9 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "open-web-links",
-    title: "Open web links",
+    title: msg("Open web links"),
     to: "/settings/browser",
-    searchTerms: ["links default browser in-app browser right panel external open"],
+    searchTerms: [msg("links default browser in-app browser right panel external open")],
   },
   {
     id: "response-streaming",
@@ -882,7 +882,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "worktree-environment-files",
-    title: "Worktree environment files",
+    title: msg("Worktree environment files"),
     to: "/settings/worktrees",
   },
   {
@@ -932,9 +932,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "agent-notifications",
-    title: "Agent notifications",
+    title: msg("Agent notifications"),
     to: "/settings/general",
-    searchTerms: ["macos notification agent done finished stops approval input failed unfocused"],
+    searchTerms: [
+      msg("macos notification agent done finished stops approval input failed unfocused"),
+    ],
     desktopOnly: true,
   },
   {
@@ -979,25 +981,25 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "gemini-api-key",
-    title: "Gemini API key",
+    title: msg("Gemini API key"),
     to: "/settings/general",
-    searchTerms: ["google text to speech tts read aloud listen audio"],
+    searchTerms: [msg("google text to speech tts read aloud listen audio")],
   },
   {
     id: "text-to-speech-voice",
-    title: "Voice",
+    title: msg("Voice"),
     to: "/settings/general",
-    searchTerms: ["text to speech tts gemini read aloud listen"],
+    searchTerms: [msg("text to speech tts gemini read aloud listen")],
   },
   {
     id: "text-to-speech-speed",
-    title: "Reading speed",
+    title: msg("Reading speed"),
     to: "/settings/general",
-    searchTerms: ["text to speech tts gemini playback rate listen"],
+    searchTerms: [msg("text to speech tts gemini playback rate listen")],
   },
   {
     id: "workspaces",
-    title: "Workspaces",
+    title: msg("Workspaces"),
     to: "/settings/workspaces",
   },
   {
@@ -1067,56 +1069,56 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "keep-awake-while-agents-work",
-    title: "Keep awake while agents work",
+    title: msg("Keep awake while agents work"),
     to: "/settings/awake",
     scope: "environment-defaults",
-    searchTerms: ["caffeinate sleep prevent stay awake power laptop idle inhibit"],
+    searchTerms: [msg("caffeinate sleep prevent stay awake power laptop idle inhibit")],
   },
   {
     id: "awake-enabled",
-    title: "Keep awake with the lid closed",
+    title: msg("Keep awake with the lid closed"),
     to: "/settings/awake",
-    searchTerms: ["sleep lid closed clamshell caffeinate insomnia agents running"],
+    searchTerms: [msg("sleep lid closed clamshell caffeinate insomnia agents running")],
     desktopOnly: true,
     macOnly: true,
   },
   {
     id: "awake-always",
-    title: "Always keep awake",
+    title: msg("Always keep awake"),
     to: "/settings/awake",
-    searchTerms: ["always online reachable remote no agents"],
+    searchTerms: [msg("always online reachable remote no agents")],
     desktopOnly: true,
     macOnly: true,
   },
   {
     id: "awake-low-power",
-    title: "Low Power Mode below",
+    title: msg("Low Power Mode below"),
     to: "/settings/awake",
-    searchTerms: ["battery low power mode"],
+    searchTerms: [msg("battery low power mode")],
     desktopOnly: true,
     macOnly: true,
   },
   {
     id: "awake-sleep-below",
-    title: "Sleep below",
+    title: msg("Sleep below"),
     to: "/settings/awake",
-    searchTerms: ["battery floor drain"],
+    searchTerms: [msg("battery floor drain")],
     desktopOnly: true,
     macOnly: true,
   },
   {
     id: "awake-heat",
-    title: "Heat rules",
+    title: msg("Heat rules"),
     to: "/settings/awake",
-    searchTerms: ["thermal hot temperature overheating"],
+    searchTerms: [msg("thermal hot temperature overheating")],
     desktopOnly: true,
     macOnly: true,
   },
   {
     id: "awake-hotspot",
-    title: "Hotspot failover",
+    title: msg("Hotspot failover"),
     to: "/settings/awake",
-    searchTerms: ["wifi wi-fi instant personal hotspot iphone network internet"],
+    searchTerms: [msg("wifi wi-fi instant personal hotspot iphone network internet")],
     desktopOnly: true,
     macOnly: true,
   },
@@ -1268,9 +1270,9 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "pull-request-preview-hosts",
-    title: "Preview deployment hosts",
+    title: msg("Preview deployment hosts"),
     to: "/settings/diffs",
-    searchTerms: ["pr pull request preview deployment staging url pills domains comments"],
+    searchTerms: [msg("pr pull request preview deployment staging url pills domains comments")],
   },
   {
     id: "browser-auto-show-floating-preview",
@@ -1456,7 +1458,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "automation-catch-up",
-    title: "Catch up missed automations",
+    title: msg("Catch up missed automations"),
     to: "/settings/scheduled-tasks",
     scope: "project-defaults",
     searchTerms: [
@@ -1552,25 +1554,27 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "skills-autopilot",
-    title: "Autopilot",
+    title: msg("Autopilot"),
     to: "/settings/skills",
     searchTerms: [
-      "autopilot shape build ship skills agent instructions system prompt enable disable",
+      msg("autopilot shape build ship skills agent instructions system prompt enable disable"),
     ],
   },
   {
     id: "skills-sources",
-    title: "Skill sources",
+    title: msg("Skill sources"),
     to: "/settings/skills",
     searchTerms: [
-      "agent skills git repository checkout sync pull push agents.md claude.md instructions team personal",
+      msg(
+        "agent skills git repository checkout sync pull push agents.md claude.md instructions team personal",
+      ),
     ],
   },
   {
     id: "skills-list",
-    title: "Skills",
+    title: msg("Skills"),
     to: "/settings/skills",
-    searchTerms: ["agent skills enable disable switch off autopilot playwright conflicts"],
+    searchTerms: [msg("agent skills enable disable switch off autopilot playwright conflicts")],
   },
   {
     id: "archive",

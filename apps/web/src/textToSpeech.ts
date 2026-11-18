@@ -1,7 +1,9 @@
 import type { TextToSpeechSpeed } from "@t3tools/contracts/settings";
+import { msg } from "gt-react";
 import { create } from "zustand";
 
 import { toastManager } from "~/components/ui/toast";
+import { m } from "~/i18n/messages";
 
 const GEMINI_TTS_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:streamGenerateContent?alt=sse";
@@ -77,7 +79,7 @@ export async function playTextToSpeech(input: {
     stopTextToSpeech();
     toastManager.add({
       type: "error",
-      title: "Could not read message aloud",
+      title: m(msg("Could not read message aloud")),
       description: error instanceof Error ? error.message : String(error),
     });
   }

@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import { observeIntersection } from "../../lib/observeIntersection";
@@ -41,7 +42,7 @@ export function SettledShelfMoreRow(props: {
         onClick={props.onRetry}
         className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-sidebar-muted-foreground"
       >
-        {props.failed ? "Could not load older threads. Retry" : "Loading"}
+        {props.failed ? <T>Could not load older threads. Retry</T> : <T>Loading</T>}
       </button>
     </li>
   );

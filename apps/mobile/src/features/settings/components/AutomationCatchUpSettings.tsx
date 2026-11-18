@@ -1,4 +1,5 @@
 import { AuthSettingsWriteScope, type ServerSettingsPatch } from "@t3tools/contracts";
+import { T, useGT } from "gt-react-native";
 import { useRef, useState } from "react";
 import { readEnvironmentScope, useEnvironmentsWithScope } from "../../../state/session";
 import { serverEnvironment } from "../../../state/server";
@@ -16,6 +17,7 @@ import { SettingsSwitchRow } from "./SettingsSwitchRow";
 import { AppText } from "../../../components/ui/AppText";
 
 export function AutomationCatchUpSettings() {
+  const gt = useGT();
   const { selectedTargets, selectedProjectKey, projectGroups } = useSettingsEnvironmentFilter();
   const project = projectGroups.find((group) => group.key === selectedProjectKey);
   const projectSelected = selectedProjectKey !== null;
@@ -68,7 +70,7 @@ export function AutomationCatchUpSettings() {
     <>
       {projectSelected ? (
         <SettingsProjectOverridesSection
-          projectLabel={project?.label ?? "Unavailable project"}
+          projectLabel={project?.label ?? gt("Unavailable project")}
           hasOverrides={targets.some(
             (target) => target.sources.automationCatchUpEnabled === "project",
           )}
@@ -77,18 +79,20 @@ export function AutomationCatchUpSettings() {
           onClear={() => save(null)}
         />
       ) : null}
-      <SettingsSection title="Scheduling">
+      <SettingsSection title={gt("Scheduling")}>
         <SettingsSwitchRow
           icon="clock"
-          label="Catch up missed automations"
-          subtitle="When this environment starts or wakes, run each missed fixed-time automation once, then resume its normal schedule. Paused automations are excluded."
+          label={gt("Catch up missed automations")}
+          subtitle={gt(
+            "When this environment starts or wakes, run each missed fixed-time automation once, then resume its normal schedule. Paused automations are excluded.",
+          )}
           value={uniformMobileSetting(targets, "automationCatchUpEnabled")}
           disabled={disabled}
           onValueChange={(value) => save({ automationCatchUpEnabled: value })}
         />
         {!supported ? (
           <AppText className="px-4 pb-3 text-sm text-foreground-muted">
-            Update the selected environments to configure catch-up.
+            <T>Update the selected environments to configure catch-up.</T>
           </AppText>
         ) : null}
       </SettingsSection>

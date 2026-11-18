@@ -191,31 +191,34 @@ export function filterExistingWorktreeOptions(
   );
 }
 
-export function resolveExistingWorktreeSelectorState(input: {
-  hasData: boolean;
-  isPending: boolean;
-  error: string | null;
-  worktreeCount: number;
-}): {
+export function resolveExistingWorktreeSelectorState(
+  input: {
+    hasData: boolean;
+    isPending: boolean;
+    error: string | null;
+    worktreeCount: number;
+  },
+  resolve: MessageResolver = m,
+): {
   isInitialLoadPending: boolean;
   placeholder: string;
 } {
   const isInitialLoadPending = input.isPending && !input.hasData;
   const placeholder =
     input.worktreeCount > 0
-      ? "Select worktree"
+      ? resolve(msg("Select worktree"))
       : isInitialLoadPending
-        ? "Loading worktrees…"
+        ? resolve(msg("Loading worktrees…"))
         : input.error
-          ? "Could not load worktrees"
-          : "No existing worktrees";
+          ? resolve(msg("Could not load worktrees"))
+          : resolve(msg("No existing worktrees"));
   return { isInitialLoadPending, placeholder };
 }
 
 export function validateNewWorktreeBranchName(value: string): string | null {
   const branchName = value.trim();
   if (branchName.length === 0) {
-    return "Enter a new branch name before creating the worktree.";
+    return m(msg("Enter a new branch name before creating the worktree."));
   }
   const hasInvalidComponent = branchName
     .split("/")
@@ -232,7 +235,7 @@ export function validateNewWorktreeBranchName(value: string): string | null {
     /[\s\u0000-\u001f\u007f~^:?*[\\]/.test(branchName) ||
     hasInvalidComponent
   ) {
-    return "Enter a valid Git branch name.";
+    return m(msg("Enter a valid Git branch name."));
   }
   return null;
 }

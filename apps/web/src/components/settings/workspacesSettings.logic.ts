@@ -3,6 +3,8 @@ import {
   type ThreadRuntimeSummary,
 } from "@t3tools/client-runtime/state/shell";
 import type { IssueState } from "@t3tools/contracts";
+import { msg } from "gt-react";
+import { m, type MessageResolver } from "../../i18n/messages";
 
 export interface WorkspaceChatLike {
   readonly id: string;
@@ -86,19 +88,30 @@ export function linearWorkspaceStatusLabel(
   issueId: string | null,
   state: IssueState | null,
   status: LinearWorkspaceStatus,
+  resolve: MessageResolver = m,
 ): { readonly label: string; readonly detail?: string; readonly tone: string } {
-  if (!issueId) return { label: "No issue", tone: "text-muted-foreground" };
+  if (!issueId) return { label: resolve(msg("No issue")), tone: "text-muted-foreground" };
   if (status === "unavailable") return { label: issueId, tone: "text-muted-foreground" };
   if (status === "pending")
-    return { label: issueId, detail: "Checking status", tone: "text-muted-foreground" };
+    return {
+      label: issueId,
+      detail: resolve(msg("Checking status")),
+      tone: "text-muted-foreground",
+    };
   if (status === "failed")
-    return { label: issueId, detail: "Status unavailable", tone: "text-warning" };
+    return { label: issueId, detail: resolve(msg("Status unavailable")), tone: "text-warning" };
   if (state === null)
-    return { label: issueId, detail: "Issue not found", tone: "text-muted-foreground" };
+    return {
+      label: issueId,
+      detail: resolve(msg("Issue not found")),
+      tone: "text-muted-foreground",
+    };
   const closed = state.category === "closed";
   return {
     label: issueId,
-    detail: `${closed ? "Closed" : "Open"} · ${state.name}`,
+    detail: closed
+      ? resolve(msg("Closed · {state}", { state: state.name }))
+      : resolve(msg("Open · {state}", { state: state.name })),
     tone: closed ? "text-muted-foreground" : "text-foreground",
   };
 }
@@ -145,8 +158,11 @@ export function summarizeWorkspaceChats(
   };
 }
 
-export function formatWorkspaceStorageSize(sizeBytes: number | null): string {
-  if (sizeBytes === null) return "Unavailable";
+export function formatWorkspaceStorageSize(
+  sizeBytes: number | null,
+  resolve: MessageResolver = m,
+): string {
+  if (sizeBytes === null) return resolve(msg("Unavailable", { $context: "storage size" }));
   if (sizeBytes < 1024) return `${sizeBytes} B`;
 
   const units = ["KB", "MB", "GB", "TB"] as const;
@@ -161,16 +177,36 @@ export function formatWorkspaceStorageSize(sizeBytes: number | null): string {
   return `${size.toFixed(digits)} ${units[unitIndex]}`;
 }
 
-export function formatWorkspaceLastUsed(value: string | null, now = Date.now()): string {
-  if (!value) return "No chats";
+export function formatWorkspaceLastUsed(
+  value: string | null,
+  now = Date.now(),
+  resolve: MessageResolver = m,
+): string {
+  if (!value) return resolve(msg("No chats"));
   const timestamp = new Date(value).getTime();
-  if (!Number.isFinite(timestamp)) return "Unknown";
+  if (!Number.isFinite(timestamp)) return resolve(msg("Unknown", { $context: "last used time" }));
   const elapsedDays = Math.max(0, Math.floor((now - timestamp) / 86_400_000));
-  if (elapsedDays === 0) return "Today";
-  if (elapsedDays === 1) return "Yesterday";
-  if (elapsedDays < 30) return `${elapsedDays} days ago`;
+  if (elapsedDays === 0) return resolve(msg("Today"));
+  if (elapsedDays === 1) return resolve(msg("Yesterday"));
+  if (elapsedDays < 30) {
+    return resolve(
+      msg("{count, plural, one {{count} day ago} other {{count} days ago}}", {
+        count: elapsedDays,
+      }),
+    );
+  }
   const elapsedMonths = Math.floor(elapsedDays / 30);
-  if (elapsedMonths < 12) return `${elapsedMonths} ${elapsedMonths === 1 ? "month" : "months"} ago`;
+  if (elapsedMonths < 12) {
+    return resolve(
+      msg("{count, plural, one {{count} month ago} other {{count} months ago}}", {
+        count: elapsedMonths,
+      }),
+    );
+  }
   const elapsedYears = Math.floor(elapsedMonths / 12);
-  return `${elapsedYears} ${elapsedYears === 1 ? "year" : "years"} ago`;
+  return resolve(
+    msg("{count, plural, one {{count} year ago} other {{count} years ago}}", {
+      count: elapsedYears,
+    }),
+  );
 }

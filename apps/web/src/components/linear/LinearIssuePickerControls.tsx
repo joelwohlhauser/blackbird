@@ -4,7 +4,7 @@ import {
   type IssueTrackerScope,
   type ProjectId,
 } from "@t3tools/contracts";
-import { useGT } from "gt-react";
+import { T, useGT, useMessages } from "gt-react";
 import { ArrowDownWideNarrowIcon, ClockIcon, ListFilterIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useState } from "react";
@@ -69,6 +69,7 @@ export function LinearTeamSelect(props: {
   value: string | null;
   onChange: (scope: string | null) => void;
 }) {
+  const gt = useGT();
   const selected = props.teams?.find((team) => team.key === props.value);
   return (
     <Select
@@ -79,17 +80,19 @@ export function LinearTeamSelect(props: {
         variant="ghost"
         size="compact"
         className="w-24 shrink-0"
-        aria-label="Filter by team"
+        aria-label={gt("Filter by team")}
       >
         <SelectValue>
-          {props.value === null ? "All teams" : (selected?.key ?? "Saved team")}
+          {props.value === null ? gt("All teams") : (selected?.key ?? gt("Saved team"))}
         </SelectValue>
       </SelectTrigger>
       <SelectPopup alignItemWithTrigger={false} {...composerFloatingLayerProps}>
-        <SelectItem value="">All teams</SelectItem>
+        <SelectItem value="">
+          <T>All teams</T>
+        </SelectItem>
         {props.value !== null && !selected ? (
           <SelectItem value={props.value} disabled>
-            {props.teams === null ? "Loading teams…" : "Unavailable team"}
+            {props.teams === null ? <T>Loading teams…</T> : <T>Unavailable team</T>}
           </SelectItem>
         ) : null}
         {props.teams?.map((team) => (
@@ -110,6 +113,7 @@ export function LinearIssueFilterMenu(props: {
   onChange: (value: LinearIssuePickerPreferences) => void;
 }) {
   const gt = useGT();
+  const messages = useMessages();
   const { value, onChange } = props;
   const [open, setOpen] = useState(false);
   const states = useEnvironmentQuery(
@@ -127,21 +131,23 @@ export function LinearIssueFilterMenu(props: {
   );
   const filtered = value.stateIds.length > 0 || value.priorities.length > 0;
   const stateItems = states.data?.states ?? [];
-  const toggle = <T,>(list: ReadonlyArray<T>, item: T, checked: boolean) =>
+  const toggle = <Item,>(list: ReadonlyArray<Item>, item: Item, checked: boolean) =>
     checked ? [...list, item] : list.filter((entry) => entry !== item);
 
   return (
     <Menu onOpenChange={setOpen}>
       <MenuTrigger
         render={<Button variant="ghost" size="icon-xs" className="relative" />}
-        aria-label={filtered ? "Filter issues (active)" : "Filter issues"}
+        aria-label={filtered ? gt("Filter issues (active)") : gt("Filter issues")}
       >
         <ListFilterIcon />
         {filtered ? <ActiveDot /> : null}
       </MenuTrigger>
       <MenuPopup side="top" align="start" {...composerFloatingLayerProps}>
         <MenuGroup>
-          <MenuGroupLabel>Status</MenuGroupLabel>
+          <MenuGroupLabel>
+            <T context="issue status">Status</T>
+          </MenuGroupLabel>
           {states.data === null && states.isPending ? (
             <MenuItem disabled>{gt("Loading statuses…")}</MenuItem>
           ) : null}
@@ -171,7 +177,9 @@ export function LinearIssueFilterMenu(props: {
         </MenuGroup>
         <MenuSeparator />
         <MenuGroup>
-          <MenuGroupLabel>Priority</MenuGroupLabel>
+          <MenuGroupLabel>
+            <T context="issue priority">Priority</T>
+          </MenuGroupLabel>
           {LINEAR_PRIORITY_ORDER.map((priority) => (
             <MenuCheckboxItem
               key={priority}
@@ -183,7 +191,7 @@ export function LinearIssueFilterMenu(props: {
             >
               <span className="flex items-center gap-2">
                 <LinearPriorityIcon priority={priority} />
-                {LINEAR_PRIORITY_LABELS[priority]}
+                {messages(LINEAR_PRIORITY_LABELS[priority])}
               </span>
             </MenuCheckboxItem>
           ))}
@@ -192,7 +200,7 @@ export function LinearIssueFilterMenu(props: {
           <>
             <MenuSeparator />
             <MenuItem onClick={() => onChange({ ...value, stateIds: [], priorities: [] })}>
-              Clear filters
+              <T>Clear filters</T>
             </MenuItem>
           </>
         ) : null}
@@ -205,12 +213,13 @@ export function LinearIssueSortMenu(props: {
   value: LinearIssuePickerPreferences;
   onChange: (value: LinearIssuePickerPreferences) => void;
 }) {
+  const gt = useGT();
   const { value, onChange } = props;
   return (
     <Menu>
       <MenuTrigger
         render={<Button variant="ghost" size="icon-xs" className="relative" />}
-        aria-label={value.sort === "priority" ? "Sort issues (by priority)" : "Sort issues"}
+        aria-label={value.sort === "priority" ? gt("Sort issues (by priority)") : gt("Sort issues")}
       >
         <ArrowDownWideNarrowIcon />
         {value.sort === "priority" ? <ActiveDot /> : null}
@@ -225,13 +234,13 @@ export function LinearIssueSortMenu(props: {
           <MenuRadioItem value="updated">
             <span className="flex items-center gap-2">
               <ClockIcon className="size-3.5" />
-              Recently updated
+              <T>Recently updated</T>
             </span>
           </MenuRadioItem>
           <MenuRadioItem value="priority">
             <span className="flex items-center gap-2">
               <LinearPriorityIcon priority={2} />
-              Priority
+              <T context="sort issues by priority">Priority</T>
             </span>
           </MenuRadioItem>
         </MenuRadioGroup>

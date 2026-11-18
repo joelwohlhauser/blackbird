@@ -1,8 +1,8 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { T, useGT } from "gt-react";
 import { BellIcon, BellOffIcon } from "lucide-react";
 import { useThreadNotificationPreferences } from "../../hooks/useThreadNotificationPreferences";
-import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -12,6 +12,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
  * actually post anything.
  */
 export function ChatNotificationToggle({ threadRef }: { threadRef: ScopedThreadRef }) {
+  const gt = useGT();
   const [preferences, setPreferences] = useThreadNotificationPreferences();
   const threadKey = scopedThreadKey(threadRef);
   const enabled = preferences[threadKey] ?? false;
@@ -23,11 +24,10 @@ export function ChatNotificationToggle({ threadRef }: { threadRef: ScopedThreadR
           <Button
             type="button"
             size="icon-sm"
-            variant="ghost-muted"
+            variant={enabled ? "ghost" : "ghost-muted"}
             data-toolbar-control=""
-            aria-label="Desktop notifications for this chat"
+            aria-label={gt("Desktop notifications for this chat")}
             aria-pressed={enabled}
-            className={cn(enabled && "text-foreground")}
             onClick={() =>
               setPreferences((current) => ({
                 ...current,
@@ -40,9 +40,11 @@ export function ChatNotificationToggle({ threadRef }: { threadRef: ScopedThreadR
         {enabled ? <BellIcon className="size-4" /> : <BellOffIcon className="size-4" />}
       </TooltipTrigger>
       <TooltipPopup side="bottom">
-        {enabled
-          ? "Disable desktop notifications for this chat"
-          : "Enable desktop notifications for this chat"}
+        {enabled ? (
+          <T>Disable desktop notifications for this chat</T>
+        ) : (
+          <T>Enable desktop notifications for this chat</T>
+        )}
       </TooltipPopup>
     </Tooltip>
   );

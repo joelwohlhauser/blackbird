@@ -472,13 +472,13 @@ export function PreviewView({
       : previewBridge?.copyUrl(runtimeTabId);
     void copy?.then(
       (copied) => {
-        if (copied) toastManager.add({ type: "success", title: "URL copied" });
+        if (copied) toastManager.add({ type: "success", title: gt("URL copied") });
       },
       (error: unknown) =>
         toastManager.add({
           type: "error",
-          title: "Unable to copy URL",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: gt("Unable to copy URL"),
+          description: error instanceof Error ? error.message : gt("An error occurred."),
         }),
     );
   };

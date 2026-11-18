@@ -1,4 +1,5 @@
 import type { IssueState, IssueSummary } from "@t3tools/contracts";
+import { msg, useGT, useMessages } from "gt-react";
 
 import { cn } from "../../lib/utils";
 
@@ -27,11 +28,11 @@ const linearPriority = (priority: number | undefined): LinearPriority =>
   LINEAR_PRIORITY_ORDER.find((candidate) => candidate === priority) ?? 0;
 
 export const LINEAR_PRIORITY_LABELS: Record<LinearPriority, string> = {
-  0: "No priority",
-  1: "Urgent",
-  2: "High",
-  3: "Medium",
-  4: "Low",
+  0: msg("No priority"),
+  1: msg("Urgent", { $context: "issue priority" }),
+  2: msg("High", { $context: "issue priority" }),
+  3: msg("Medium", { $context: "issue priority" }),
+  4: msg("Low", { $context: "issue priority" }),
 };
 
 const FILLED_CIRCLE = "M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1Z";
@@ -79,6 +80,7 @@ export function LinearStatusIcon({
   state: IssueState;
   className?: string;
 }) {
+  const gt = useGT();
   const state = linearStateLook(issueState);
   return (
     <svg
@@ -87,7 +89,7 @@ export function LinearStatusIcon({
       fill="currentColor"
       style={{ color: state.color }}
       role="img"
-      aria-label={`Status: ${state.name}`}
+      aria-label={gt("Status: {status}", { status: state.name })}
     >
       <title>{state.name}</title>
       <StatusShape state={state} />
@@ -102,6 +104,9 @@ export function LinearPriorityIcon({
   priority: LinearPriority;
   closed?: boolean;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
+  const label = messages(LINEAR_PRIORITY_LABELS[priority]);
   return (
     <svg
       viewBox="0 0 16 16"
@@ -109,9 +114,9 @@ export function LinearPriorityIcon({
       fill="currentColor"
       style={{ color: priority === 1 && !closed ? "#ff6b26" : "#999a9c" }}
       role="img"
-      aria-label={`Priority: ${LINEAR_PRIORITY_LABELS[priority]}`}
+      aria-label={gt("Priority: {priority}", { priority: label })}
     >
-      <title>{LINEAR_PRIORITY_LABELS[priority]}</title>
+      <title>{label}</title>
       {priority === 0 ? (
         <path d="M1 7h3v2H1Zm5.5 0h3v2h-3ZM12 7h3v2h-3Z" />
       ) : priority === 1 ? (

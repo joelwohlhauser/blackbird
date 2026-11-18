@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import type { DesktopAwakeState } from "@t3tools/contracts";
 import type { ReactNode } from "react";
-import { T, useGT } from "gt-react";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { memo } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
@@ -49,6 +49,7 @@ import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { observeResize } from "~/lib/observeResize";
+import type { MessageResolver } from "~/i18n/messages";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -193,14 +194,25 @@ function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   );
 }
 
-function awakeLabel(state: DesktopAwakeState, enabled: boolean, always: boolean) {
+function awakeLabel(
+  state: DesktopAwakeState,
+  enabled: boolean,
+  always: boolean,
+  resolve: MessageResolver,
+) {
   if (state.level === "full") {
-    return state.lowPower ? "Keeping the Mac awake in Low Power Mode" : "Keeping the Mac awake";
+    return state.lowPower
+      ? resolve(msg("Keeping the Mac awake in Low Power Mode"))
+      : resolve(msg("Keeping the Mac awake"));
   }
-  if (state.level === "base") return "Keeping the Mac from idle-sleeping while agents work";
+  if (state.level === "base") {
+    return resolve(msg("Keeping the Mac from idle-sleeping while agents work"));
+  }
   if (state.message) return state.message;
-  if (!state.installed || !enabled) return "Not keeping the Mac awake";
-  return always ? "Keep awake is on" : "Keep awake starts when agents work";
+  if (!state.installed || !enabled) return resolve(msg("Not keeping the Mac awake"));
+  return always
+    ? resolve(msg("Keep awake is on"))
+    : resolve(msg("Keep awake starts when agents work"));
 }
 
 function SidebarUtilityItem({
@@ -232,6 +244,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
   const gt = useGT();
+  const resolve = useMessages();
   const { isMobile, setOpenMobile } = useSidebar();
   const isOnUtilityPage = useLocation({
     select: (location) => isSidebarUtilityPage(location.pathname),
@@ -326,7 +339,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                   )}
                 />
               }
-              label={awakeLabel(awakeState, awakeEnabled, awakeAlways)}
+              label={awakeLabel(awakeState, awakeEnabled, awakeAlways, resolve)}
               onClick={handleAwakeClick}
             />
           ) : null}

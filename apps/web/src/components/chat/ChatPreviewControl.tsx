@@ -8,6 +8,7 @@ import type {
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { T, useGT } from "gt-react";
 import { ChevronDownIcon, GlobeIcon } from "lucide-react";
 
 import { useClientSettings } from "~/hooks/useSettings";
@@ -48,6 +49,7 @@ export function ChatPreviewControl({
   projectId: ProjectId;
   pullRequests: ReadonlyArray<ThreadPullRequestLink>;
 }) {
+  const gt = useGT();
   const hostPatterns = useClientSettings((settings) => settings.pullRequestPreviewHosts);
   const refs =
     hostPatterns.length === 0
@@ -73,7 +75,7 @@ export function ChatPreviewControl({
             <Button
               size="xs"
               variant="outline"
-              aria-label={`Open preview ${only.label}`}
+              aria-label={gt("Open preview {label}", { label: only.label })}
               data-toolbar-control=""
               onClick={(event) => void open(only.url, event)}
               onAuxClick={(event) => {
@@ -83,18 +85,24 @@ export function ChatPreviewControl({
           }
         >
           <GlobeIcon className="size-3.5" />
-          <span className={LABEL_CLASS}>Preview</span>
+          <span className={LABEL_CLASS}>
+            <T context="deployment preview button">Preview</T>
+          </span>
         </TooltipTrigger>
-        <TooltipPopup side="top">{`Open ${only.label}`}</TooltipPopup>
+        <TooltipPopup side="top">{gt("Open {label}", { label: only.label })}</TooltipPopup>
       </Tooltip>
     );
   }
 
   return (
     <Menu>
-      <MenuTrigger render={<Button size="xs" variant="outline" aria-label="Open a preview" />}>
+      <MenuTrigger
+        render={<Button size="xs" variant="outline" aria-label={gt("Open a preview")} />}
+      >
         <GlobeIcon className="size-3.5" />
-        <span className={LABEL_CLASS}>Preview</span>
+        <span className={LABEL_CLASS}>
+          <T context="deployment preview button">Preview</T>
+        </span>
         <ChevronDownIcon className="size-3.5" />
       </MenuTrigger>
       <MenuPopup align="end">

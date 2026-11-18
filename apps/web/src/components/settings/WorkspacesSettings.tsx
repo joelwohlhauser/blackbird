@@ -16,9 +16,11 @@ import {
   XIcon,
 } from "lucide-react";
 import * as DateTime from "effect/DateTime";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
 import { isDesktopLocalConnectionTarget } from "../../connection/desktopLocal";
+import type { MessageResolver } from "../../i18n/messages";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { linearIssueIdForWorkspace } from "../../linearIntegration";
 import { cn } from "../../lib/utils";
@@ -107,18 +109,27 @@ function GitStatusIcon({
   readonly hasChanges: boolean | null;
   readonly pending: boolean;
 }) {
+  const gt = useGT();
   const status =
     hasChanges === false
       ? {
-          label: "Clean worktree. No uncommitted changes.",
+          label: gt("Clean worktree. No uncommitted changes."),
           Icon: CheckIcon,
           tone: "text-success",
         }
       : hasChanges === true
-        ? { label: "Worktree has uncommitted changes.", Icon: XIcon, tone: "text-destructive" }
+        ? {
+            label: gt("Worktree has uncommitted changes."),
+            Icon: XIcon,
+            tone: "text-destructive",
+          }
         : pending
-          ? { label: "Checking Git status.", Icon: MinusIcon, tone: "text-muted-foreground" }
-          : { label: "Git status is unavailable.", Icon: XIcon, tone: "text-muted-foreground" };
+          ? { label: gt("Checking Git status."), Icon: MinusIcon, tone: "text-muted-foreground" }
+          : {
+              label: gt("Git status is unavailable."),
+              Icon: XIcon,
+              tone: "text-muted-foreground",
+            };
   const icon = (
     <button
       type="button"
@@ -144,15 +155,18 @@ function environmentIcon(environment: EnvironmentPresentation) {
   return CloudIcon;
 }
 
-function environmentDetail(environment: EnvironmentPresentation): string {
-  if (environment.entry.target._tag === "PrimaryConnectionTarget") return "Primary device";
+function environmentDetail(environment: EnvironmentPresentation, resolve: MessageResolver): string {
+  if (environment.entry.target._tag === "PrimaryConnectionTarget")
+    return resolve(msg("Primary device"));
   if (environment.relayManaged) return "T3 Connect";
   if (environment.entry.target._tag === "SshConnectionTarget") return "SSH";
-  if (isDesktopLocalConnectionTarget(environment.entry.target)) return "Local device";
-  return environment.displayUrl ?? "Remote device";
+  if (isDesktopLocalConnectionTarget(environment.entry.target)) return resolve(msg("Local device"));
+  return environment.displayUrl ?? resolve(msg("Remote device"));
 }
 
 export function WorkspacesSettingsPanel() {
+  const gt = useGT();
+  const messages = useMessages();
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const options = buildProviderEnvironmentOptions(environments, primaryEnvironmentId);
@@ -289,6 +303,7 @@ export function WorkspacesSettingsPanel() {
       row.issueId,
       row.issueId === null ? null : (issueStates.get(row.issueId) ?? null),
       linearStatus,
+      messages,
     );
     return {
       ...row,
@@ -329,8 +344,9 @@ export function WorkspacesSettingsPanel() {
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Could not delete worktree",
-        description: error instanceof Error ? error.message : "The worktree could not be removed.",
+        title: gt("Could not delete worktree"),
+        description:
+          error instanceof Error ? error.message : gt("The worktree could not be removed."),
       });
       return;
     }
@@ -338,22 +354,22 @@ export function WorkspacesSettingsPanel() {
     workspaceDetailsQuery.refresh();
     toastManager.add({
       type: "success",
-      title: "Worktree deleted",
-      description: "Associated chats were left unchanged.",
+      title: gt("Worktree deleted"),
+      description: gt("Associated chats were left unchanged."),
     });
   };
 
   return (
     <SettingsPageContainer width="wide">
       {!onlyPrimaryDevice ? (
-        <SettingsSection title="Devices">
+        <SettingsSection title={gt("Devices")}>
           {options.length === 0 ? (
             <SettingsRow
-              title={isReady ? "No connected devices" : "Loading devices"}
+              title={isReady ? gt("No connected devices") : gt("Loading devices")}
               description={
                 isReady
-                  ? "Connect an execution environment to inspect its worktrees."
-                  : "Reading connected execution environments."
+                  ? gt("Connect an execution environment to inspect its worktrees.")
+                  : gt("Reading connected execution environments.")
               }
             />
           ) : (
@@ -390,7 +406,7 @@ export function WorkspacesSettingsPanel() {
                         </span>
                       </span>
                       <span className="block truncate pl-4.5 text-xs text-muted-foreground">
-                        {environmentDetail(environment)} · {statusText}
+                        {environmentDetail(environment, messages)} · {statusText}
                       </span>
                     </span>
                   </button>
@@ -403,12 +419,12 @@ export function WorkspacesSettingsPanel() {
 
       {selectedEnvironment ? (
         <SettingsSection
-          title="Workspaces"
+          title={gt("Workspaces")}
           headerAction={
             <Button
               size="icon-xs"
               variant="ghost-muted"
-              aria-label="Refresh workspaces"
+              aria-label={gt("Refresh workspaces")}
               disabled={workspaceQuery.isPending && workspaceQuery.data === null}
               onClick={() => {
                 workspaceQuery.refresh();
@@ -422,17 +438,25 @@ export function WorkspacesSettingsPanel() {
         >
           {selectedEnvironment.connection.phase !== "connected" ? (
             <SettingsRow
-              title="Device unavailable"
+              title={gt("Device unavailable")}
               description={connectionStatusText(selectedEnvironment.connection)}
             />
           ) : workspaceQuery.error ? (
-            <SettingsRow title="Could not load workspaces" description={workspaceQuery.error} />
+            <SettingsRow
+              title={gt("Could not load workspaces")}
+              description={workspaceQuery.error}
+            />
           ) : workspaceQuery.isPending && workspaceQuery.data === null ? (
-            <SettingsRow title="Loading workspaces" description="Finding registered worktrees." />
+            <SettingsRow
+              title={gt("Loading workspaces")}
+              description={gt("Finding registered worktrees.")}
+            />
           ) : rows.length === 0 ? (
             <SettingsRow
-              title="No worktrees"
-              description="Main checkouts are not shown. Only existing registered worktrees appear here."
+              title={gt("No worktrees")}
+              description={gt(
+                "Main checkouts are not shown. Only existing registered worktrees appear here.",
+              )}
             />
           ) : (
             <div className="overflow-hidden rounded-xl border border-border/60 bg-background/40">
@@ -440,19 +464,19 @@ export function WorkspacesSettingsPanel() {
                 <TableHeader>
                   <TableRow>
                     <SortableWorkspaceHeader
-                      label="Workspace"
+                      label={gt("Workspace", { $context: "table column header" })}
                       sortKey="workspace"
                       sort={sort}
                       onSort={toggleSort}
                     />
                     <SortableWorkspaceHeader
-                      label="Storage"
+                      label={gt("Storage", { $context: "table column header, disk usage" })}
                       sortKey="storage"
                       sort={sort}
                       onSort={toggleSort}
                     />
                     <SortableWorkspaceHeader
-                      label="Chats"
+                      label={gt("Chats", { $context: "table column header" })}
                       sortKey="chats"
                       sort={sort}
                       onSort={toggleSort}
@@ -464,19 +488,21 @@ export function WorkspacesSettingsPanel() {
                       onSort={toggleSort}
                     />
                     <SortableWorkspaceHeader
-                      label="Git"
+                      label={gt("Git", { $context: "table column header, working tree status" })}
                       sortKey="git"
                       sort={sort}
                       onSort={toggleSort}
                     />
                     <SortableWorkspaceHeader
-                      label="Last used"
+                      label={gt("Last used", { $context: "table column header" })}
                       sortKey="lastUsed"
                       sort={sort}
                       onSort={toggleSort}
                     />
                     <TableHead className="w-0">
-                      <span className="sr-only">Actions</span>
+                      <span className="sr-only">
+                        <T>Actions</T>
+                      </span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -496,8 +522,8 @@ export function WorkspacesSettingsPanel() {
                         <TableCell>
                           <span className="font-mono tabular-nums">
                             {row.sizeBytes === null && workspaceDetailsQuery.isPending
-                              ? "Measuring…"
-                              : formatWorkspaceStorageSize(row.sizeBytes)}
+                              ? gt("Measuring…")
+                              : formatWorkspaceStorageSize(row.sizeBytes, messages)}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -520,17 +546,25 @@ export function WorkspacesSettingsPanel() {
                           />
                         </TableCell>
                         <TableCell>
-                          {formatWorkspaceLastUsed(row.chatSummary.latestUpdatedAt)}
+                          {formatWorkspaceLastUsed(
+                            row.chatSummary.latestUpdatedAt,
+                            undefined,
+                            messages,
+                          )}
                         </TableCell>
                         <TableCell>
                           <Button
                             size="icon-xs"
                             variant="ghost-muted"
-                            aria-label={`Delete ${workspacePathBasename(row.path)} worktree`}
+                            aria-label={gt("Delete {name} worktree", {
+                              name: workspacePathBasename(row.path),
+                            })}
                             title={
                               row.chatSummary.hasLiveSession || row.hasLiveTerminal
-                                ? "Stop associated chat sessions and terminals before deleting this worktree"
-                                : "Delete worktree"
+                                ? gt(
+                                    "Stop associated chat sessions and terminals before deleting this worktree",
+                                  )
+                                : gt("Delete worktree")
                             }
                             disabled={
                               deletingPath !== null ||

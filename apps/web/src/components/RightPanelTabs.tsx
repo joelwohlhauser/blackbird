@@ -472,6 +472,7 @@ export function NewTabPage(props: {
 
 export function RightPanelTabs(props: RightPanelTabsProps) {
   const gt = useGT();
+  const messages = useMessages();
   const focusedSurface = props.surfaces.find((surface) => surface.id === props.activeSurfaceId);
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
 
@@ -482,7 +483,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       workspaceLabel={
         focusedSurface
           ? gt("Workspace panel: {title}", {
-              title: surfaceTitle(focusedSurface, props.previewSessions, props.terminalLabelsById),
+              title: surfaceTitle(
+                focusedSurface,
+                props.previewSessions,
+                props.terminalLabelsById,
+                messages,
+              ),
             })
           : gt("Workspace panel")
       }

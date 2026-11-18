@@ -1,12 +1,14 @@
 import type { ExternalLinkOpenMode, LocalApi, ScopedThreadRef } from "@t3tools/contracts";
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
 
 import { resolveBrowserDefaults } from "~/browser/browserDefaults";
 import { isWebUrl } from "~/browser/browserLinkTarget";
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
 import { isPreviewAvailableFor, previewRuntimeFor } from "~/browser/previewRuntime";
 import { recordVisitForThread } from "~/browserHistoryStore";
+import { m } from "~/i18n/messages";
 import { applyPreviewServerSnapshot } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
 
@@ -75,8 +77,8 @@ export async function openTerminalLinkInPreview<E>(
     try {
       choice = await input.localApi.contextMenu.show(
         [
-          { id: "open-in-preview", label: "Open in Blackbird" },
-          { id: "open-in-browser", label: "Open in default browser" },
+          { id: "open-in-preview", label: m(msg("Open in Blackbird")) },
+          { id: "open-in-browser", label: m(msg("Open in default browser")) },
         ],
         input.position,
       );

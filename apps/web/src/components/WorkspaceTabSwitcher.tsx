@@ -1,7 +1,7 @@
 /** Ctrl+Tab cycles workspace tabs; holding Ctrl reveals the overlay, and releasing it commits. */
 import type { PreviewSessionSnapshot } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 import { MessageSquare } from "lucide-react";
-import { useEffect, useRef } from "react";
 
 import type { RightPanelSurface, WorkspaceTabContainer } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
@@ -55,27 +55,25 @@ export function buildWorkspaceTabSwitcherItems(input: {
   ];
 }
 
+const scrollIntoNearestView = (node: HTMLElement | null) =>
+  node?.scrollIntoView({ block: "nearest" });
+
 export function WorkspaceTabSwitcherOverlay(props: {
   state: WorkspaceTabSwitcherState;
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   onSelect: (item: WorkspaceTabSwitcherItem) => void;
 }) {
   const { resolvedTheme } = useTheme();
-  const listRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    listRef.current?.querySelector("[aria-selected='true']")?.scrollIntoView({ block: "nearest" });
-  }, [props.state.selectedIndex]);
-
+  const gt = useGT();
   return (
     <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/10 px-6">
       <div
-        aria-label="Switch tab"
+        aria-label={gt("Switch tab")}
         aria-modal="true"
         className="pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border border-border/80 bg-popover/98 p-2 text-popover-foreground shadow-2xl backdrop-blur-xl"
         role="dialog"
       >
-        <div className="max-h-[min(24rem,70vh)] overflow-y-auto" ref={listRef}>
+        <div className="max-h-[min(24rem,70vh)] overflow-y-auto">
           {props.state.items.map((item, index) => {
             const selected = index === props.state.selectedIndex;
             return (
@@ -86,6 +84,7 @@ export function WorkspaceTabSwitcherOverlay(props: {
                   selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/55",
                 )}
                 key={item.id}
+                ref={selected ? scrollIntoNearestView : undefined}
                 onClick={() => props.onSelect(item)}
                 type="button"
               >
@@ -102,7 +101,11 @@ export function WorkspaceTabSwitcherOverlay(props: {
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm">{item.title}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {item.container === "panel" ? "Panel" : "Chat area"}
+                  {item.container === "panel" ? (
+                    <T context="workspace tab location">Panel</T>
+                  ) : (
+                    <T>Chat area</T>
+                  )}
                 </span>
               </button>
             );

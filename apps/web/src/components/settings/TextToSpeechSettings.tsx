@@ -3,6 +3,7 @@ import {
   TEXT_TO_SPEECH_SPEEDS,
   TEXT_TO_SPEECH_VOICES,
 } from "@t3tools/contracts/settings";
+import { useGT } from "gt-react";
 
 import { DraftInput } from "../ui/draft-input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -15,16 +16,19 @@ export function TextToSpeechSettings() {
   const voice = useScopedSettings((settings) => settings.textToSpeechVoice);
   const speed = useScopedSettings((settings) => settings.textToSpeechSpeed);
   const updateSettings = useUpdateScopedSettings();
+  const gt = useGT();
 
   return (
-    <SettingsSection title="Text to speech">
+    <SettingsSection title={gt("Text to speech")}>
       <SettingsRow
         {...searchableSetting("gemini-api-key")}
-        description="Adds a read-aloud button next to the copy button on assistant messages. Stored on this device only."
+        description={gt(
+          "Adds a read-aloud button next to the copy button on assistant messages. Stored on this device only.",
+        )}
         resetAction={
           apiKey.length > 0 ? (
             <SettingResetButton
-              ariaLabel="Gemini API key"
+              ariaLabel={gt("Gemini API key")}
               onClick={() => updateSettings({ geminiApiKey: "" })}
             />
           ) : null
@@ -36,19 +40,19 @@ export function TextToSpeechSettings() {
             onCommit={(value) => updateSettings({ geminiApiKey: value.trim() })}
             type="password"
             autoComplete="off"
-            placeholder="Gemini API key"
+            placeholder={gt("Gemini API key")}
             spellCheck={false}
-            aria-label="Gemini API key"
+            aria-label={gt("Gemini API key")}
           />
         }
       />
       <SettingsRow
         {...searchableSetting("text-to-speech-voice")}
-        description="Gemini voice used to read messages."
+        description={gt("Gemini voice used to read messages.")}
         resetAction={
           voice !== DEFAULT_TEXT_TO_SPEECH_VOICE ? (
             <SettingResetButton
-              ariaLabel="voice"
+              ariaLabel={gt("voice", { $context: "text-to-speech voice setting" })}
               onClick={() => updateSettings({ textToSpeechVoice: DEFAULT_TEXT_TO_SPEECH_VOICE })}
             />
           ) : null
@@ -60,7 +64,11 @@ export function TextToSpeechSettings() {
               if (typeof value === "string") updateSettings({ textToSpeechVoice: value });
             }}
           >
-            <SelectTrigger size="sm" className="w-full sm:w-48" aria-label="Voice">
+            <SelectTrigger
+              size="sm"
+              className="w-full sm:w-48"
+              aria-label={gt("Voice", { $context: "text-to-speech voice setting" })}
+            >
               <SelectValue>{voice}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -75,11 +83,13 @@ export function TextToSpeechSettings() {
       />
       <SettingsRow
         {...searchableSetting("text-to-speech-speed")}
-        description="Playback speed messages start at. Change it while listening with the speed button."
+        description={gt(
+          "Playback speed messages start at. Change it while listening with the speed button.",
+        )}
         resetAction={
           speed !== 1 ? (
             <SettingResetButton
-              ariaLabel="reading speed"
+              ariaLabel={gt("reading speed")}
               onClick={() => updateSettings({ textToSpeechSpeed: 1 })}
             />
           ) : null
@@ -92,7 +102,7 @@ export function TextToSpeechSettings() {
               if (next !== undefined) updateSettings({ textToSpeechSpeed: next });
             }}
           >
-            <SelectTrigger size="sm" className="w-full sm:w-28" aria-label="Reading speed">
+            <SelectTrigger size="sm" className="w-full sm:w-28" aria-label={gt("Reading speed")}>
               <SelectValue>{`${speed}×`}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>

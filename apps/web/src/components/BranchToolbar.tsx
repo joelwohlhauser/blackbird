@@ -692,6 +692,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   onEnvironmentChange,
   trailing,
 }: BranchToolbarProps) {
+  const gt = useGT();
   const m = useMessages();
   const branchSelectorRef = useRef<BranchToolbarBranchSelectorHandle>(null);
   const threadRef = scopeThreadRef(environmentId, threadId);
@@ -782,7 +783,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   };
   const newBranchNameInput = showNewBranchNameInput ? (
     <Input
-      aria-label="New branch name"
+      aria-label={gt("New branch name")}
       autoCapitalize="none"
       autoComplete="off"
       autoCorrect="off"
@@ -790,7 +791,7 @@ export const BranchToolbar = memo(function BranchToolbar({
       size="sm"
       disabled={envModeLocked}
       value={newBranchName}
-      placeholder="New branch name"
+      placeholder={gt("New branch name")}
       className="h-7 w-0 min-w-0 flex-1 rounded-md border-transparent bg-transparent px-1 text-xs text-foreground/75 shadow-none before:hidden hover:bg-foreground/3 has-focus-visible:border-border/40 has-focus-visible:bg-foreground/3 has-focus-visible:ring-0"
       onChange={(event) => onNewBranchNameChange(event.target.value)}
       onBlur={() => onNewBranchNameChange(newBranchName.trim())}
@@ -834,7 +835,9 @@ export const BranchToolbar = memo(function BranchToolbar({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: `Couldn't check branches for ${issue.displayKey}`,
+          title: resolveMessage(
+            msg("Couldn't check branches for {issue}", { issue: issue.displayKey }),
+          ),
         }),
       );
       return;
@@ -890,7 +893,7 @@ export const BranchToolbar = memo(function BranchToolbar({
     !forceNewWorktree &&
     linearConnection.connected ? (
       <LinearIssuePicker
-        label={selectedLinearIssueId ?? "Issue"}
+        label={selectedLinearIssueId ?? gt("Issue", { $context: "Linear issue" })}
         disabled={resolvingLinearIssue}
         environmentId={environmentId}
         projectId={projectId}

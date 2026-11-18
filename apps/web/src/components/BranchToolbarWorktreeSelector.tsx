@@ -1,4 +1,5 @@
 import type { EnvironmentId } from "@t3tools/contracts";
+import { T, useGT, useMessages } from "gt-react";
 import { ChevronDownIcon, FolderGitIcon, SearchIcon } from "lucide-react";
 import { memo, useState } from "react";
 
@@ -36,6 +37,8 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
   disabled,
   onWorktreeChange,
 }: BranchToolbarWorktreeSelectorProps) {
+  const gt = useGT();
+  const resolve = useMessages();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const worktreesQuery = useEnvironmentQuery(
@@ -57,12 +60,15 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
   const worktreePaths = worktrees.map((worktree) => worktree.path);
   const filteredWorktrees = filterExistingWorktreeOptions(worktrees, query);
   const filteredWorktreePaths = filteredWorktrees.map((worktree) => worktree.path);
-  const selectorState = resolveExistingWorktreeSelectorState({
-    hasData: worktreesQuery.data !== null,
-    isPending: worktreesQuery.isPending,
-    error: worktreesQuery.error,
-    worktreeCount: worktrees.length,
-  });
+  const selectorState = resolveExistingWorktreeSelectorState(
+    {
+      hasData: worktreesQuery.data !== null,
+      isPending: worktreesQuery.isPending,
+      error: worktreesQuery.error,
+      worktreeCount: worktrees.length,
+    },
+    resolve,
+  );
 
   return (
     <Combobox
@@ -83,8 +89,8 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
     >
       <ComboboxTrigger
         render={<Button variant="ghost" size="xs" />}
-        className="min-w-0 flex-1 justify-start font-medium"
-        aria-label="Existing worktree"
+        className="min-w-0 flex-1 justify-start"
+        aria-label={gt("Existing worktree")}
       >
         <FolderGitIcon className="size-3 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">
@@ -94,16 +100,17 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
       </ComboboxTrigger>
       <ComboboxPopup side="top" className="flex w-96 flex-col">
         <div className="shrink-0 px-3 pt-2.5">
-          <div className="mb-1.5 text-xs font-medium text-foreground/90">Existing worktree</div>
-          <div className="relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">
+          <div className="mb-1.5 text-xs font-medium text-foreground/90">
+            <T>Existing worktree</T>
+          </div>
+          <div className="relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring [&_input]:h-6.5 [&_input]:ps-5 [&_input]:font-sans [&_input]:leading-6.5">
             <SearchIcon
               aria-hidden="true"
               className="pointer-events-none absolute top-1.5 left-0 size-4 shrink-0 text-muted-foreground/55"
             />
             <ComboboxInput
               autoFocus
-              className="[&_input]:h-6.5 [&_input]:ps-5 [&_input]:font-sans [&_input]:leading-6.5"
-              placeholder="Search worktrees..."
+              placeholder={gt("Search worktrees...")}
               showTrigger={false}
               size="sm"
               unstyled
@@ -112,8 +119,10 @@ export const BranchToolbarWorktreeSelector = memo(function BranchToolbarWorktree
             />
           </div>
         </div>
-        <ComboboxEmpty>No worktrees found.</ComboboxEmpty>
-        <ComboboxList className="max-h-80 min-w-0 py-1">
+        <ComboboxEmpty>
+          <T>No worktrees found.</T>
+        </ComboboxEmpty>
+        <ComboboxList className="my-1 max-h-80 min-w-0">
           {filteredWorktrees.map((worktree) => (
             <ComboboxItem hideIndicator key={worktree.path} value={worktree.path}>
               <span className="flex min-w-0 flex-col py-0.5">

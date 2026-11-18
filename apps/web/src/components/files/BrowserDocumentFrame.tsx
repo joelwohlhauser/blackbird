@@ -36,7 +36,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { msg } from "gt-react";
 import { isElectron } from "~/env";
+import { m } from "~/i18n/messages";
 import { FileSurfaceLoading } from "./fileSurfaceChrome";
 import type { PdfViewState } from "./PdfViewer";
 
@@ -382,14 +384,18 @@ export function HtmlRenderDocument(props: {
       ...(unsent
         ? {
             placed: {
-              title: "Couldn't send the page's message",
-              description: "It's in your message box. Send it from there.",
+              title: m(msg("Couldn't send the page's message")),
+              description: m(msg("It's in your message box. Send it from there.")),
             },
           }
         : {}),
       replace: {
-        title: unsent ? "Couldn't send the page's message" : "Text from the page is ready",
-        description: "This thread already has a draft. Replace it with the text from the page?",
+        title: unsent
+          ? m(msg("Couldn't send the page's message"))
+          : m(msg("Text from the page is ready")),
+        description: m(
+          msg("This thread already has a draft. Replace it with the text from the page?"),
+        ),
       },
     });
   });

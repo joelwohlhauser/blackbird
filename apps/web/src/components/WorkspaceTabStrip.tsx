@@ -19,6 +19,7 @@ import {
   VolumeOffIcon,
   X,
 } from "lucide-react";
+import { msg, useGT, useMessages } from "gt-react";
 import {
   type MouseEvent as ReactMouseEvent,
   type WheelEvent as ReactWheelEvent,
@@ -27,6 +28,7 @@ import {
   useState,
 } from "react";
 
+import { m, type MessageResolver } from "~/i18n/messages";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface, WorkspaceTabContainer } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
@@ -72,20 +74,22 @@ export function surfaceTitle(
   surface: RightPanelSurface,
   sessions: Readonly<Record<string, PreviewSessionSnapshot>>,
   terminalLabelsById: ReadonlyMap<string, string>,
+  resolve: MessageResolver = m,
 ): string {
+  const browserTitle = () => resolve(msg("Browser", { $context: "workspace tab title" }));
   switch (surface.kind) {
     case "new-tab":
-      return "New Tab";
+      return resolve(msg("New Tab"));
     case "diff":
-      return "Diff";
+      return resolve(msg("Diff", { $context: "workspace tab title" }));
     case "files":
-      return "Files";
+      return resolve(msg("Files", { $context: "workspace tab title" }));
     case "file":
       return surface.relativePath.slice(surface.relativePath.lastIndexOf("/") + 1);
     case "linear":
-      return "Linear Issue";
+      return resolve(msg("Linear Issue"));
     case "github-pr":
-      return "GitHub PR";
+      return resolve(msg("GitHub PR"));
     case "terminal":
       return (
         terminalLabelsById.get(surface.activeTerminalId) ??
@@ -94,23 +98,27 @@ export function surfaceTitle(
     case "pull-request":
       return `#${surface.number}`;
     case "pull-requests":
-      return "Pull Requests";
+      return resolve(msg("Pull Requests"));
     case "issue":
       return /^\d+$/.test(surface.key) ? `#${surface.key}` : surface.key;
     case "device":
-      return surface.title ?? surface.target?.name ?? "Device";
+      return (
+        surface.title ??
+        surface.target?.name ??
+        resolve(msg("Device", { $context: "workspace tab title" }))
+      );
     case "thread":
-      return surface.title ?? "Subagent";
+      return surface.title ?? resolve(msg("Subagent", { $context: "workspace tab title" }));
     case "side-chat":
-      return "Side chat";
+      return resolve(msg("Side chat"));
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
-      if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
+      if (!snapshot || snapshot.navStatus._tag === "Idle") return browserTitle();
       if (snapshot.navStatus.title.trim().length > 0) return snapshot.navStatus.title;
       try {
-        return new URL(snapshot.navStatus.url).host || "Browser";
+        return new URL(snapshot.navStatus.url).host || browserTitle();
       } catch {
-        return "Browser";
+        return browserTitle();
       }
     }
   }
@@ -232,7 +240,7 @@ function tabMuteMenuItem(input: {
   canResolveRuntimeTabId: boolean;
 }): { label: string; disabled: boolean } {
   return {
-    label: input.overlay?.audioMuted ? "Unmute tab" : "Mute tab",
+    label: input.overlay?.audioMuted ? m(msg("Unmute tab")) : m(msg("Mute tab")),
     disabled: input.overlay === null || !input.canResolveRuntimeTabId,
   };
 }
@@ -260,7 +268,13 @@ export function WorkspaceTabDragPreview(props: {
   terminalLabelsById: ReadonlyMap<string, string>;
 }) {
   const { resolvedTheme } = useTheme();
-  const title = surfaceTitle(props.surface, props.previewSessions, props.terminalLabelsById);
+  const messages = useMessages();
+  const title = surfaceTitle(
+    props.surface,
+    props.previewSessions,
+    props.terminalLabelsById,
+    messages,
+  );
   return (
     <div
       className={cn(
@@ -295,6 +309,7 @@ export interface MainChatTabProps {
 
 /** Pinned, non-closable chat tab at the head of the main container. */
 function MainChatTab(props: MainChatTabProps) {
+  const gt = useGT();
   // Registers as a (drag-disabled) sortable so dropping on it targets the
   // first slot of the main container.
   const { setNodeRef } = useSortable({
@@ -344,7 +359,7 @@ function MainChatTab(props: MainChatTabProps) {
         ref={renameInputRef}
         type="text"
         dir="auto"
-        aria-label="Rename chat"
+        aria-label={gt("Rename chat")}
         value={renameTitle}
         disabled={renamePending}
         className="h-6 w-56 shrink-0 rounded-md border border-border bg-background px-1.5 text-xs text-foreground outline-hidden [-webkit-app-region:no-drag] focus:border-ring focus:ring-1 focus:ring-inset focus:ring-ring disabled:opacity-60"
@@ -375,8 +390,8 @@ function MainChatTab(props: MainChatTabProps) {
         if (!api || (!onRename && !props.onFind)) return;
         event.preventDefault();
         const items: ContextMenuItem[] = [];
-        if (onRename) items.push({ id: "rename", label: "Rename chat" });
-        if (props.onFind) items.push({ id: "find", label: "Find in thread" });
+        if (onRename) items.push({ id: "rename", label: gt("Rename chat") });
+        if (props.onFind) items.push({ id: "find", label: gt("Find in thread") });
         void api.contextMenu.show(items, { x: event.clientX, y: event.clientY }).then((action) => {
           if (action === "rename") beginRename();
           if (action === "find") props.onFind?.();
@@ -401,7 +416,7 @@ function MainChatTab(props: MainChatTabProps) {
           }
         />
         <TooltipPopup>
-          {onRename ? `${props.label} · Double-click to rename` : props.label}
+          {onRename ? gt("{label} · Double-click to rename", { label: props.label }) : props.label}
         </TooltipPopup>
       </Tooltip>
     </div>
@@ -429,6 +444,7 @@ function WorkspaceSurfaceTab(props: {
   onContextMenu: (event: ReactMouseEvent, surface: RightPanelSurface) => void;
   previewRuntimeTabId?: ((tabId: string) => string) | undefined;
 }) {
+  const gt = useGT();
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
     id: props.surface.id,
     data: { type: "workspace-tab", container: props.container },
@@ -458,7 +474,7 @@ function WorkspaceSurfaceTab(props: {
       <button
         type="button"
         className="group/close relative flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
-        aria-label={`Close ${props.title}`}
+        aria-label={gt("Close {title}", { title: props.title })}
         onClick={() => props.onCloseSurface(props.surface)}
       >
         <span className="relative flex size-3 items-center justify-center group-hover/tab:hidden group-focus-visible/close:hidden">
@@ -487,7 +503,11 @@ function WorkspaceSurfaceTab(props: {
               <button
                 type="button"
                 className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-muted"
-                aria-label={audio === "muted" ? `Unmute ${props.title}` : `Mute ${props.title}`}
+                aria-label={
+                  audio === "muted"
+                    ? gt("Unmute {title}", { title: props.title })
+                    : gt("Mute {title}", { title: props.title })
+                }
                 onClick={(event) => {
                   event.stopPropagation();
                   void previewBridge
@@ -503,7 +523,7 @@ function WorkspaceSurfaceTab(props: {
               <Volume2Icon className="size-3" />
             )}
           </TooltipTrigger>
-          <TooltipPopup>{audio === "muted" ? "Unmute tab" : "Mute tab"}</TooltipPopup>
+          <TooltipPopup>{audio === "muted" ? gt("Unmute tab") : gt("Mute tab")}</TooltipPopup>
         </Tooltip>
       )}
       <Tooltip>
@@ -548,6 +568,8 @@ export interface WorkspaceTabStripProps {
 
 export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
   const { resolvedTheme } = useTheme();
+  const gt = useGT();
+  const messages = useMessages();
   const tabListRef = useRef<HTMLDivElement>(null);
   const { setNodeRef: setBlankSpaceDropRef } = useDroppable({
     id: workspaceTabContainerDropId(props.container),
@@ -566,7 +588,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
 
     const items: ContextMenuItem<TabContextMenuAction>[] = [];
     if (surface.kind === "file") {
-      items.push({ id: "copy-path", label: "Copy path" });
+      items.push({ id: "copy-path", label: gt("Copy path") });
     }
     const menuPreviewTabId = previewTabIdOf(surface, props.previewSessions);
     const menuOverlay = menuPreviewTabId ? (props.desktopByTabId[menuPreviewTabId] ?? null) : null;
@@ -581,20 +603,20 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       });
     }
     items.push(
-      { id: "close", label: "Close" },
+      { id: "close", label: gt("Close", { $context: "verb, closes a tab" }) },
       {
         id: "close-others",
-        label: "Close others",
+        label: gt("Close others"),
         disabled: props.surfaces.length <= 1,
       },
       {
         id: "close-to-right",
-        label: "Close to the right",
+        label: gt("Close to the right"),
         disabled: surfaceIndex >= props.surfaces.length - 1,
       },
       {
         id: "close-all",
-        label: "Close all",
+        label: gt("Close all"),
         disabled: props.surfaces.length === 0,
       },
     );
@@ -690,7 +712,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       surface={surface}
       active={surface.id === props.activeSurfaceId}
       pending={props.pendingSurfaceIds.has(surface.id)}
-      title={surfaceTitle(surface, props.previewSessions, props.terminalLabelsById)}
+      title={surfaceTitle(surface, props.previewSessions, props.terminalLabelsById, messages)}
       previewSessions={props.previewSessions}
       desktopByTabId={props.desktopByTabId}
       {...(props.previewRuntimeTabId !== undefined
