@@ -21,7 +21,6 @@ import * as LinearThreadIssues from "./LinearThreadIssues.ts";
 interface FakeThread {
   readonly id: ThreadId;
   readonly projectId: ProjectId;
-  readonly branch: string | null;
   tags: ReadonlyArray<string>;
   issues: ReadonlyArray<ThreadIssueLink>;
   readonly deletedAt: string | null;
@@ -30,11 +29,10 @@ interface FakeThread {
 const thread = (
   id: string,
   tags: ReadonlyArray<string>,
-  options: { readonly deleted?: boolean; readonly branch?: string } = {},
+  options: { readonly deleted?: boolean } = {},
 ): FakeThread => ({
   id: ThreadId.make(id),
   projectId: ProjectId.make(`project-${id}`),
-  branch: options.branch ?? null,
   tags,
   issues: [],
   deletedAt: options.deleted === true ? "2026-11-01T00:00:00.000Z" : null,
@@ -61,6 +59,12 @@ function harness(
     Effect.provide(
       Layer.mergeAll(
         Layer.mock(Orchestrator.OrchestratorV2)({
+          getThreadShell: (threadId) =>
+            Effect.succeed(
+              (byId.has(threadId)
+                ? { ...byId.get(threadId)! }
+                : null) as unknown as OrchestrationV2ThreadShell | null,
+            ),
           getShellSnapshot: () =>
             Effect.succeed({
               schemaVersion: 2,
@@ -135,7 +139,7 @@ describe("LinearThreadIssues", () => {
       );
       const linear = yield* service;
 
-      yield* linear.convertTags;
+      yield* linear.convertTags();
       expect(reads).toEqual(["AI-1", "AI-404"]);
       expect(links).toEqual(["first project-first AI AI-1", "second project-second AI AI-1"]);
       expect(untagged).toEqual(["first linear:AI-1", "second linear:AI-1"]);
@@ -143,7 +147,7 @@ describe("LinearThreadIssues", () => {
       expect(deleted.tags).toEqual(["linear:AI-1"]);
 
       reads.length = 0;
-      yield* linear.convertTags;
+      yield* linear.convertTags();
       expect(reads).toEqual(["AI-404"]);
       expect(links).toHaveLength(2);
       expect(untagged).toHaveLength(2);
@@ -156,22 +160,23 @@ describe("LinearThreadIssues", () => {
       const { service, reads, links, untagged } = harness([tagged], () =>
         Effect.fail(new IssueUnavailableError({ reason: "unauthenticated" })),
       );
-      yield* (yield* service).convertTags;
+      yield* (yield* service).convertTags();
       expect(reads).toEqual(["AI-1"]);
       expect([links, untagged, tagged.tags]).toEqual([[], [], ["linear:AI-1", "linear:AI-2"]]);
     }),
   );
 
-  it.effect("links the issue a branch is named after, once", () =>
+  it.effect("converts only the named thread's tags", () =>
     Effect.gen(function* () {
-      const onBranch = thread("on-branch", [], { branch: "joel/ai-7-fix-login" });
-      const { service, reads, links } = harness([onBranch], (key) => Effect.succeed(detail(key)));
-      const linear = yield* service;
-      yield* linear.linkBranchIssue(onBranch);
-      yield* linear.linkBranchIssue(onBranch);
-      yield* linear.linkBranchIssue({ ...onBranch, branch: "main" });
+      const named = thread("named", ["linear:AI-7"]);
+      const other = thread("other", ["linear:AI-8"]);
+      const { service, reads, links } = harness([named, other], (key) =>
+        Effect.succeed(detail(key)),
+      );
+      yield* (yield* service).convertTags(named.id);
       expect(reads).toEqual(["AI-7"]);
-      expect(links).toEqual(["on-branch project-on-branch AI AI-7"]);
+      expect(links).toEqual(["named project-named AI AI-7"]);
+      expect(other.tags).toEqual(["linear:AI-8"]);
     }),
   );
 });

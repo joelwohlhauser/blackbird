@@ -1,7 +1,6 @@
 import {
   CommandId,
   IssueTrackerKind,
-  linearIssueIdFromBranch,
   linearIssueIdsFromTags,
   linearIssueTag,
   type IssueDetail,
@@ -40,16 +39,10 @@ type Resolution =
 
 const teamKeyOf = (identifier: string) => identifier.slice(0, identifier.lastIndexOf("-"));
 
-const isLinked = (thread: LinkTarget, identifier: string) =>
-  (thread.issues ?? []).some((link) => link.tracker === LINEAR && link.key === identifier);
-
 export class LinearThreadIssues extends Context.Service<
   LinearThreadIssues,
   {
-    readonly convertTags: Effect.Effect<void>;
-    readonly linkBranchIssue: (
-      thread: LinkTarget & { readonly branch: string | null },
-    ) => Effect.Effect<void>;
+    readonly convertTags: (threadId?: ThreadId) => Effect.Effect<void>;
   }
 >()("t3/issue/LinearThreadIssues") {}
 
@@ -111,10 +104,18 @@ export const make = Effect.gen(function* () {
       ),
     );
 
-  const convertTags = Effect.fn("LinearThreadIssues.convertTags")(function* () {
-    const snapshot = yield* orchestrator.getShellSnapshot();
+  const taggedThreads = (threadId: ThreadId | undefined) =>
+    threadId === undefined
+      ? orchestrator
+          .getShellSnapshot()
+          .pipe(Effect.map((snapshot) => [...snapshot.threads, ...snapshot.archivedThreads]))
+      : orchestrator
+          .getThreadShell(threadId)
+          .pipe(Effect.map((thread) => (thread === null ? [] : [thread])));
+
+  const convert = Effect.fn("LinearThreadIssues.convertTags")(function* (threadId?: ThreadId) {
     const tagged = new Map<string, Array<LinkTarget>>();
-    for (const thread of [...snapshot.threads, ...snapshot.archivedThreads]) {
+    for (const thread of yield* taggedThreads(threadId)) {
       if (thread.deletedAt !== null) continue;
       for (const identifier of linearIssueIdsFromTags(thread.tags)) {
         const threads = tagged.get(identifier.toUpperCase()) ?? [];
@@ -152,64 +153,35 @@ export const make = Effect.gen(function* () {
     }
   });
 
-  const linkBranchIssue: LinearThreadIssues["Service"]["linkBranchIssue"] = Effect.fn(
-    "LinearThreadIssues.linkBranchIssue",
-  )(function* (thread) {
-    const identifier = linearIssueIdFromBranch(thread.branch);
-    if (identifier === null || isLinked(thread, identifier)) return;
-    const resolution = yield* resolve(thread.projectId, identifier);
-    if (resolution._tag !== "resolved") return;
-    yield* link(thread, resolution.issue).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("Linear issue from the branch could not be linked", {
-          threadId: thread.id,
-          identifier,
-          cause,
-        }),
-      ),
-    );
-  });
-
   return LinearThreadIssues.of({
-    convertTags: conversions.withPermits(1)(
-      convertTags().pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("Linear issue tags could not be converted", { cause }),
+    convertTags: Effect.fn("LinearThreadIssues.convertTagsInTurn")(function* (threadId?: ThreadId) {
+      yield* conversions.withPermits(1)(
+        convert(threadId).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Linear issue tags could not be converted", { cause }),
+          ),
         ),
-      ),
-    ),
-    linkBranchIssue,
+      );
+    }),
   });
 });
 
-const followBranches = Effect.fn("LinearThreadIssues.followBranches")(
+const hasLinearTag = (event: OrchestrationV2DomainEvent) =>
+  (event.type === "thread.created" ||
+    event.type === "thread.metadata-updated" ||
+    event.type === "thread.tags-updated") &&
+  linearIssueIdsFromTags(event.payload.tags).length > 0;
+
+const followTags = Effect.fn("LinearThreadIssues.followTags")(
   function* (service: LinearThreadIssues["Service"]) {
     const orchestrator = yield* Orchestrator.OrchestratorV2;
-    const snapshot = yield* orchestrator.getShellSnapshot();
-    const branches = new Map<ThreadId, string | null>(
-      [...snapshot.threads, ...snapshot.archivedThreads].map((thread) => [
-        thread.id,
-        thread.branch,
-      ]),
-    );
-    yield* Effect.forkChild(service.convertTags);
-    yield* Stream.runForEach(
-      orchestrator.streamDomainEvents,
-      (event: OrchestrationV2DomainEvent) => {
-        if (event.type !== "thread.created" && event.type !== "thread.metadata-updated") {
-          return Effect.void;
-        }
-        const thread = event.payload;
-        const known = branches.has(thread.id);
-        const previous = branches.get(thread.id);
-        branches.set(thread.id, thread.branch);
-        const moved = event.type === "thread.created" || (known && previous !== thread.branch);
-        return moved ? service.linkBranchIssue(thread) : Effect.void;
-      },
+    yield* Effect.forkChild(service.convertTags());
+    yield* Stream.runForEach(orchestrator.streamDomainEvents, (event) =>
+      hasLinearTag(event) ? service.convertTags(event.threadId) : Effect.void,
     );
   },
   Effect.catchCause((cause) =>
-    Effect.logWarning("Linear issue branch links stopped following threads", { cause }),
+    Effect.logWarning("Linear issue tags stopped being followed", { cause }),
   ),
 );
 
@@ -217,7 +189,7 @@ export const layer = Layer.effect(
   LinearThreadIssues,
   Effect.gen(function* () {
     const service = yield* make;
-    yield* forkParked(followBranches(service));
+    yield* forkParked(followTags(service));
     return service;
   }),
 );
@@ -233,7 +205,7 @@ export const layerConnections = Layer.effect(
     ) {
       const connection = yield* connections.connect(input);
       if (input.tracker === LINEAR && input.token !== null) {
-        yield* Effect.forkIn(linear.convertTags, scope);
+        yield* Effect.forkIn(linear.convertTags(), scope);
       }
       return connection;
     });
