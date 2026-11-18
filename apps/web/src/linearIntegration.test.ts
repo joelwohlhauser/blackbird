@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { linearIssueIdForWorkspace, linearUrl } from "./linearIntegration";
+import { isLinearAppUrl, linearIssueIdForWorkspace } from "./linearIntegration";
 
 describe("Linear integration", () => {
   it("uses the branch before falling back to the worktree folder", () => {
@@ -15,15 +15,9 @@ describe("Linear integration", () => {
     ).toBe("OPS-42");
   });
 
-  it("opens the issue in the configured workspace", () => {
-    expect(linearUrl({ organizationSlug: " Acme ", issueId: "APP-123" })).toBe(
-      "https://linear.app/acme/issue/APP-123/",
-    );
-    expect(linearUrl({ organizationSlug: "", issueId: "APP-123" })).toBe("https://linear.app");
-  });
-
-  it("falls back to the organization workspace", () => {
-    expect(linearUrl({ organizationSlug: "acme", issueId: null })).toBe("https://linear.app/acme");
-    expect(linearUrl({ organizationSlug: "  ", issueId: null })).toBe("https://linear.app");
+  it("recognizes links into the Linear web app", () => {
+    expect(isLinearAppUrl("https://linear.app/acme/issue/APP-123/title")).toBe(true);
+    expect(isLinearAppUrl("https://linear.app.example.com/acme")).toBe(false);
+    expect(isLinearAppUrl("not a url")).toBe(false);
   });
 });

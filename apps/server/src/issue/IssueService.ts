@@ -34,6 +34,7 @@ import {
 } from "@t3tools/contracts";
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import {
+  EVERY_ISSUE_SCOPE,
   IssueTrackerError,
   isStandaloneIssueTracker,
   type IssueInvolvementFilter,
@@ -299,7 +300,9 @@ const make = Effect.gen(function* () {
       Effect.flatMap(({ supported }) => {
         const own = supported.find((candidate) => candidate.tracker === ref.tracker);
         if (own === undefined) {
-          return Effect.fail(new IssueUnavailableError({ reason: "tracker-unsupported" }));
+          return readThroughAccount(ref).pipe(
+            Effect.map((project) => ({ ...project, writable: false })),
+          );
         }
         const host = ref.host?.trim().toLowerCase() ?? own.host;
         if (host !== own.host) {
@@ -310,6 +313,38 @@ const make = Effect.gen(function* () {
         return Effect.succeed({ ...own, scope, writable });
       }),
     );
+
+  /**
+   * A standalone tracker reads through its connected account for any project, bound or not; only
+   * a bound project may write to it.
+   */
+  const readThroughAccount = (ref: IssueScopeRef): Effect.Effect<SupportedProject, IssueError> => {
+    const api = registry.standalone.find((candidate) => candidate.kind === ref.tracker);
+    const host = api?.standalone.host;
+    if (api === undefined || (ref.host !== undefined && ref.host.trim().toLowerCase() !== host)) {
+      return Effect.fail(new IssueUnavailableError({ reason: "tracker-unsupported" }));
+    }
+    return projects.getShell(ref.projectId).pipe(
+      Effect.mapError(
+        (cause) =>
+          new IssueOperationError({
+            operation: "listProjects",
+            detail: "The project list could not be read.",
+            cause,
+          }),
+      ),
+      Effect.flatMap(
+        Effect.fromOption(() => new IssueUnavailableError({ reason: "tracker-unsupported" })),
+      ),
+      Effect.map((project) => ({
+        project,
+        api,
+        tracker: api.kind,
+        host: api.standalone.host,
+        scope: ref.scope.trim(),
+      })),
+    );
+  };
 
   const requireWritable = (ref: IssueScopeRef, operation: string) =>
     requireProject(ref).pipe(
@@ -322,7 +357,19 @@ const make = Effect.gen(function* () {
   const list: IssueService["Service"]["list"] = Effect.fn("IssueService.list")(function* (input) {
     // Trackers name every host so a client narrowed to one can switch to another; only the
     // narrowed host's scopes are read.
-    const { supported, unimplemented } = yield* listProjects({ projectId: input.projectId });
+    const { supported, unimplemented } =
+      input.standalone === undefined
+        ? yield* listProjects({ projectId: input.projectId })
+        : {
+            supported: [
+              yield* readThroughAccount({
+                projectId: input.standalone.projectId,
+                tracker: input.standalone.tracker,
+                scope: input.standalone.scope ?? EVERY_ISSUE_SCOPE,
+              }),
+            ],
+            unimplemented: new Map<string, { tracker: IssueTrackerKind; projectCount: number }>(),
+          };
     const host = input.host?.trim().toLowerCase();
     const limit = input.limit ?? DEFAULT_LIST_LIMIT;
     // Worktrees of one repository are separate projects, and every repository of an Azure
@@ -408,6 +455,7 @@ const make = Effect.gen(function* () {
                 assignee: input.assignee,
                 sort: input.sort ?? "updated",
                 cursor,
+                refinement: input.standalone,
               }),
             ),
             Effect.result,
@@ -427,7 +475,7 @@ const make = Effect.gen(function* () {
               ...item,
               tracker: project.tracker,
               host: project.host,
-              scope: project.scope,
+              scope: item.scope ?? project.scope,
               projectId: project.project.id,
               projectTitle: project.project.title,
             });
@@ -447,7 +495,10 @@ const make = Effect.gen(function* () {
         detail: "Issues cannot be browsed for this host yet.",
       });
     }
-    entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    // One standalone scope keeps the tracker's own order, which may be by priority.
+    if (input.standalone === undefined) {
+      entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    }
     return {
       viewers: Object.fromEntries(viewers),
       trackers: [...trackers.values()],
@@ -707,7 +758,17 @@ const make = Effect.gen(function* () {
       const own = preferFirst(
         onTracker.filter((project) => project.scope.toLowerCase() === link.scope.toLowerCase()),
       );
-      const lender = own ?? preferFirst(onTracker);
+      const lender =
+        own ??
+        preferFirst(onTracker) ??
+        (standalone !== null && preferredProjectId !== undefined
+          ? yield* readThroughAccount({
+              projectId: preferredProjectId,
+              tracker,
+              host: link.host,
+              scope: link.scope,
+            })
+          : undefined);
       if (lender === undefined) {
         return yield* new IssueUnavailableError({ reason: "tracker-unsupported" });
       }

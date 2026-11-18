@@ -570,17 +570,67 @@ describe("IssueService with a standalone tracker", () => {
         },
       });
 
-      // Unbound, the standalone scope is gone and its references are unsupported.
+      // Unbound, the standalone scope leaves the listing; its issues stay readable, not writable.
       listed.length = 0;
       const unbound = yield* makeService({ projects, trackers });
       const after = yield* unbound.list({ state: "open" });
       expect(listed).toEqual(["github github.com acme/web"]);
       expect(after.trackers.map((tracker) => tracker.tracker)).toEqual(["github"]);
-      const refused = yield* Effect.flip(unbound.detail(linearRef));
-      expect(refused).toMatchObject({
-        _tag: "IssueUnavailableError",
-        reason: "tracker-unsupported",
+      expect(yield* unbound.detail(linearRef)).toMatchObject({ writable: false });
+      expect(yield* Effect.flip(unbound.comment({ ...linearRef, body: "hi" }))).toMatchObject({
+        _tag: "IssueOperationError",
+        reason: "read-only",
       });
+      expect(
+        yield* unbound.resolveUrl(
+          "https://linear.app/acme/issue/ENG-1/issue-title",
+          "notes" as ProjectId,
+        ),
+      ).toMatchObject({ projectId: "notes", scope: "ENG", key: "ENG-1", writable: false });
+
+      // The connected account lists every team for any project, or the one team asked for.
+      listed.length = 0;
+      const everyTeam = yield* unbound.list({
+        state: "open",
+        standalone: { projectId: "notes" as ProjectId, tracker: LINEAR },
+      });
+      yield* unbound.list({
+        state: "open",
+        standalone: { projectId: "notes" as ProjectId, tracker: LINEAR, scope: "OPS" },
+      });
+      expect(listed).toEqual(["linear linear.app *", "linear linear.app OPS"]);
+      expect(everyTeam.entries.map((entry) => [entry.projectId, entry.key])).toEqual([
+        ["notes", "ENG-1"],
+      ]);
+
+      // Linear's own filters reach the tracker, and its order survives, here by priority.
+      const refinements: unknown[] = [];
+      const byPriority = yield* makeService({
+        projects,
+        trackers: [
+          fakeStandaloneTracker({
+            listIssues: (input) =>
+              Effect.sync(() => {
+                refinements.push(input.refinement);
+                return {
+                  items: [issue("ENG-1", "2026-07-01T00:00:00Z"), issue("ENG-2")],
+                  nextCursor: null,
+                };
+              }),
+          }),
+        ],
+      });
+      const ordered = yield* byPriority.list({
+        state: "all",
+        standalone: {
+          projectId: "notes" as ProjectId,
+          tracker: LINEAR,
+          priorities: [1],
+          sortByPriority: true,
+        },
+      });
+      expect(refinements).toMatchObject([{ priorities: [1], sortByPriority: true }]);
+      expect(ordered.entries.map((entry) => entry.key)).toEqual(["ENG-1", "ENG-2"]);
 
       // A project with no remote at all can still be bound, and then has only the standalone one.
       const standaloneOnly = yield* makeService({

@@ -17,6 +17,7 @@ fragment LinearWorkflowState on WorkflowState {
   name
   type
   position
+  color
 }
 
 fragment LinearLabel on IssueLabel {
@@ -60,6 +61,8 @@ fragment LinearIssue on Issue {
   number
   title
   url
+  branchName
+  priority
   description
   createdAt
   updatedAt
@@ -67,6 +70,13 @@ fragment LinearIssue on Issue {
   canceledAt
   state {
     ...LinearWorkflowState
+    team {
+      states(filter: { type: { eq: "started" } }) {
+        nodes {
+          position
+        }
+      }
+    }
   }
   team {
     key
@@ -105,8 +115,20 @@ query T3Viewer {
   }
 }
 
-query T3Issues($first: Int!, $after: String, $filter: IssueFilter!, $orderBy: PaginationOrderBy!) {
-  issues(first: $first, after: $after, filter: $filter, orderBy: $orderBy) {
+query T3Issues(
+  $first: Int!
+  $after: String
+  $filter: IssueFilter!
+  $orderBy: PaginationOrderBy!
+  $includeArchived: Boolean
+) {
+  issues(
+    first: $first
+    after: $after
+    filter: $filter
+    orderBy: $orderBy
+    includeArchived: $includeArchived
+  ) {
     nodes {
       ...LinearIssue
     }
@@ -295,6 +317,20 @@ query T3CommentReactions($id: String!) {
     }
     reactions {
       ...LinearReaction
+    }
+  }
+}
+
+query T3WorkflowStates($after: String) {
+  workflowStates(first: 250, after: $after) {
+    nodes {
+      ...LinearWorkflowState
+      team {
+        key
+      }
+    }
+    pageInfo {
+      ...LinearPageInfo
     }
   }
 }

@@ -4,7 +4,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { IssueTrackerKind } from "@t3tools/contracts";
-import type { StandaloneIssueTrackerApi } from "@t3tools/source-control-core/server/IssueTracker";
+import {
+  EVERY_ISSUE_SCOPE,
+  type StandaloneIssueTrackerApi,
+} from "@t3tools/source-control-core/server/IssueTracker";
 import * as IssueTrackerHost from "@t3tools/source-control-core/server/IssueTrackerHost";
 
 import * as LinearApi from "./LinearApi.ts";
@@ -25,6 +28,8 @@ const state = (name: string, type: string, position = 0) => ({
   name,
   type,
   position,
+  color: "#f2c94c",
+  team: { states: { nodes: [{ position: 1 }, { position: 2 }] } },
 });
 
 const issue = (
@@ -36,6 +41,8 @@ const issue = (
   number: Number(identifier.split("-")[1]),
   title: `Issue ${identifier}`,
   url: `https://linear.app/acme/issue/${identifier}`,
+  branchName: `julius/${identifier.toLowerCase()}-issue`,
+  priority: 2,
   description: "body",
   createdAt: "2026-07-01T00:00:00.000Z",
   updatedAt: "2026-07-02T00:00:00.000Z",
@@ -207,12 +214,35 @@ describe("LinearIssueTracker", () => {
       });
       expect(page.nextCursor).toBe("cur_2");
       expect(page.items.map((item) => [item.key, item.displayKey, item.state])).toEqual([
-        ["ENG-2", "ENG-2", { category: "closed", name: "Done", closeReason: "completed" }],
-        ["ENG-1", "ENG-1", { category: "open", name: "In Progress" }],
+        [
+          "ENG-2",
+          "ENG-2",
+          {
+            category: "closed",
+            name: "Done",
+            closeReason: "completed",
+            stateType: "completed",
+            color: "#f2c94c",
+          },
+        ],
+        [
+          "ENG-1",
+          "ENG-1",
+          {
+            category: "open",
+            name: "In Progress",
+            stateType: "started",
+            color: "#f2c94c",
+            progress: 1 / 3,
+          },
+        ],
       ]);
       // A listing carries no comment totals, whatever the row's position.
       expect(page.items.map((item) => item.commentCount)).toEqual([0, 0]);
       expect(page.items[0]).toMatchObject({
+        scope: "ENG",
+        branchName: "julius/eng-2-issue",
+        priority: 2,
         closedAt: "2026-07-03T00:00:00.000Z",
         author: { login: "julius", name: "julius" },
         assignees: [{ login: "theo", name: "theo" }],
@@ -243,6 +273,127 @@ describe("LinearIssueTracker", () => {
         }),
       );
       expect([refused.reason, refused.retryAt]).toEqual(["rate-limited", resetAt]);
+    }),
+  );
+
+  it.effect("narrows by Linear's own filters and walks priorities one at a time", () =>
+    Effect.gen(function* () {
+      const asked: Array<unknown> = [];
+      const { tracker } = fakeLinear({
+        T3Issues: (variables) => {
+          asked.push(variables.filter);
+          const filter = variables.filter as { and: ReadonlyArray<{ priority?: { eq: number } }> };
+          const priority = filter.and.find((clause) => clause.priority?.eq !== undefined)?.priority
+            ?.eq;
+          return {
+            issues: {
+              nodes: priority === 2 ? [] : [issue(priority === 1 ? "ENG-1" : "ENG-4")],
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          };
+        },
+      });
+      const api = yield* tracker;
+      const listing = {
+        ...target,
+        scope: EVERY_ISSUE_SCOPE,
+        state: "all",
+        involvement: "all",
+        sort: "updated",
+        limit: 50,
+      } as const;
+      const first = yield* api.listIssues({
+        ...listing,
+        refinement: {
+          stateIds: ["st_todo"],
+          stateTypes: ["triage"],
+          priorities: [1, 2, 4],
+          keys: ["eng-1", "not a key"],
+          sortByPriority: true,
+        },
+      });
+      expect(asked[0]).toMatchObject({
+        and: [
+          { state: { id: { in: ["st_todo"] } } },
+          { state: { type: { in: ["triage"] } } },
+          { priority: { in: [1, 2, 4] } },
+          { or: [{ team: { key: { eq: "ENG" } }, number: { eq: 1 } }] },
+          { priority: { eq: 1 } },
+        ],
+      });
+      expect(first.items.map((item) => item.key)).toEqual(["ENG-1"]);
+      const second = yield* api.listIssues({
+        ...listing,
+        refinement: { priorities: [1, 2, 4], sortByPriority: true },
+        cursor: first.nextCursor ?? undefined,
+      });
+      // An empty priority is skipped on the way to the next one with issues.
+      expect(second).toMatchObject({ items: [{ key: "ENG-4" }], nextCursor: null });
+      expect(yield* api.listIssues({ ...listing, refinement: { keys: ["not a key"] } })).toEqual({
+        items: [],
+        nextCursor: null,
+      });
+    }),
+  );
+
+  it.effect("offers every team's workflow states for a listing across teams", () =>
+    Effect.gen(function* () {
+      const teamState = (team: string, name: string, type: string, position: number) => ({
+        ...state(name, type, position),
+        id: `${team}_${name}`,
+        team: { key: team },
+      });
+      const { tracker } = fakeLinear({
+        T3WorkflowStates: () => ({
+          workflowStates: {
+            nodes: [
+              teamState("ENG", "Review", "started", 2),
+              teamState("ENG", "Doing", "started", 1),
+              teamState("OPS", "Triage", "triage", 0),
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        }),
+      });
+      const candidates = yield* (yield* tracker).listCandidates({
+        ...target,
+        scope: EVERY_ISSUE_SCOPE,
+      });
+      expect(
+        candidates.states?.map((entry) => [entry.id, entry.scope, entry.stateType, entry.progress]),
+      ).toEqual([
+        ["OPS_Triage", "OPS", "triage", undefined],
+        ["ENG_Doing", "ENG", "started", 1 / 3],
+        ["ENG_Review", "ENG", "started", 2 / 3],
+      ]);
+    }),
+  );
+
+  it.effect("lists every team's issues when asked for every scope", () =>
+    Effect.gen(function* () {
+      const { tracker } = fakeLinear({
+        T3Issues: (variables) => {
+          expect(variables.filter).not.toHaveProperty("team");
+          return {
+            issues: {
+              nodes: [issue("OPS-7", { branchName: "" }), issue("ENG-1")],
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          };
+        },
+      });
+      const page = yield* (yield* tracker).listIssues({
+        ...target,
+        scope: EVERY_ISSUE_SCOPE,
+        state: "all",
+        involvement: "all",
+        sort: "updated",
+        limit: 50,
+      });
+      expect(page.items.map((item) => [item.scope, item.key, item.branchName])).toEqual([
+        ["OPS", "OPS-7", undefined],
+        ["ENG", "ENG-1", "julius/eng-1-issue"],
+      ]);
     }),
   );
 

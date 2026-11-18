@@ -102,7 +102,7 @@ renames the chat, replacing the old header title text — the project name is
 gone from the header), never scrolls out of view, and cannot be closed or
 moved to the panel.
 
-Linear opens in the right panel: click a linked issue below the composer or in the thread details card, click a Linear link in a chat message (Command-click opens it in your browser), or pick Linear on the New Tab page, which opens the chat's first linked issue. A chat has one Linear tab, so opening another issue replaces its page, and Home goes to the chat's first linked issue. Pull request views, including the chat's own PR, always open in the right panel, as in T3 Code. GitHub browser tabs remain available from New Tab.
+Linear opens in the right panel: click a linked issue below the composer or in the thread details card, click a Linear link in a chat message (Command-click opens it in your browser), or pick Linear on the New Tab page, which opens the chat's latest linked issue. A chat has one Linear tab, so opening another issue replaces its page, and Home goes to the chat's latest linked issue, or to Linear's home page when none is linked. Pull request views, including the chat's own PR, always open in the right panel, as in T3 Code. GitHub browser tabs remain available from New Tab.
 
 Tabs are draggable: reorder them within a container or drag them between the
 chat area and the right panel. Dragging toward the chat column's right edge
@@ -179,10 +179,8 @@ selected environment at a time. Main checkouts are omitted. Each row shows the
 worktree's storage use, associated active and archived chat count, Git state,
 last chat activity, and the status of a Linear issue inferred from the branch
 or worktree folder name. Deleting a row removes only the worktree and makes the
-row disappear; it never archives or detaches chats. Issue status comes from the
-desktop app's **Sign in with Linear** under **Settings → General → Linear**, so
-remote environments show it too. The organization slug there continues to
-control Linear URLs opened in workspace tabs.
+row disappear; it never archives or detaches chats. Issue status is read through
+the environment's own Linear connection.
 
 ### Composer and agent controls
 
@@ -250,9 +248,9 @@ Scheduled tasks don't start while the machine is offline, because their runs wou
 
 The normal right panel has browser-backed integration tabs:
 
-- **Issue** opens a chat's linked Linear issue in the configured organization. The organization slug is
-  configurable and empty by default. Set it under Settings → General → Linear to open and pin issue tabs; until then, the Linear action opens its home page.
-- A chat can link several Linear issues. A branch named after an issue, such as `eng-123-add-login`, links it when the chat starts on that branch or moves to it. Link more with **Link issue** in the thread details card, and agents can link one with the `link_linear_issue` tool. Linked issues show with their status below the composer and in the thread details card; unlink one there and it stays unlinked. The status needs the desktop app's Sign in with Linear.
+- **Linear** uses T3 Code's issue tracker integration: each environment connects Linear with a personal API key under Settings → Source control & issues. Blackbird has no Linear client of its own.
+- A chat can link several Linear issues, stored as T3 Code issue links. A branch named after an issue, such as `eng-123-add-login`, links it when the chat starts on that branch or moves to it. Link more with **Link issue** in the thread details card, and agents link one with the `link_issue` tool and the issue's URL. Linked issues show with their live status below the composer and in the thread details card, and open in the Linear tab; unlink one there and it stays unlinked. Linear issues work in every project of a connected environment; binding a project to a team in Settings only adds that team to the Issues page and allows writes there.
+- Older chats linked issues through `linear:<ID>` thread tags. Once an environment has a Linear key, its server converts those tags into issue links at startup and after the key is saved. A tag whose issue Linear cannot find stays as it is.
 - **PR** uses the authenticated GitHub CLI (`gh`) to detect the pull request for
   the current branch and open the GitHub page inside Blackbird.
 - **Previews** pills in a pull request's Summary tab list the preview
@@ -269,7 +267,7 @@ that same tab, including links to a different domain. Other chat/terminal links
 can ask each time, always open in the normal right panel, or always open in the
 default browser; this is configurable in Settings → Browser.
 
-On desktop, new drafts in a Git project show a Linear issue picker in the composer. Its **Assigned to me**, **Triage**, and **All issues** views search as you type and load more issues as you scroll, with priority and status icons. A team filter, status and priority filters, and a priority sort are saved per project. Picking an issue uses its Linear branch name: a branch already checked out in a worktree selects **Existing worktree**, one checked out in the main checkout selects **Current checkout**, a local or remote branch without a worktree selects **New worktree** for it, and otherwise **New worktree & branch** is prefilled with the branch name and starts from the default branch. Nothing is created until you send. **Unlink** returns the draft to the current checkout. **Create issue** opens Linear's own new-issue page in a Linear tab and picks up the issue you create there.
+New drafts in a Git project show a Linear issue picker in the composer when the project's environment has a Linear key. Its **Assigned to me**, **Triage**, and **All issues** views search titles and descriptions as you type across every team of the workspace and load more issues as you scroll, with priority and status icons. A team filter (defaulting to the team the project is bound to), status and priority filters, and a priority sort are saved per project. Picking an issue uses its Linear branch name: a branch already checked out in a worktree selects **Existing worktree**, one checked out in the main checkout selects **Current checkout**, a local or remote branch without a worktree selects **New worktree** for it, and otherwise **New worktree & branch** is prefilled with the branch name and starts from the default branch. Nothing is created until you send. **Unlink** returns the draft to the current checkout. **Create issue** opens Linear's own new-issue page in a Linear tab and picks up the issue you create there.
 
 ## Local and remote environments
 

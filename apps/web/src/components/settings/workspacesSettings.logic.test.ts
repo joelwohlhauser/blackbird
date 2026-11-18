@@ -76,39 +76,19 @@ describe("workspace settings", () => {
 
   it("makes Linear open and closed state explicit", () => {
     expect(
-      linearWorkspaceStatusLabel(
-        "AI-42",
-        {
-          issueId: "AI-42",
-          title: "Add a member",
-          stateName: "In Progress",
-          stateType: "started",
-          stateColor: "#f2c94c",
-        },
-        "ready",
-      ).detail,
+      linearWorkspaceStatusLabel("AI-42", { category: "open", name: "In Progress" }, "ready")
+        .detail,
     ).toBe("Open · In Progress");
     expect(
       linearWorkspaceStatusLabel(
         "AI-42",
-        {
-          issueId: "AI-42",
-          title: "Add a member",
-          stateName: "Done",
-          stateType: "completed",
-          stateColor: "#5e6ad2",
-        },
+        { category: "closed", name: "Done", closeReason: "completed" },
         "ready",
       ).detail,
     ).toBe("Closed · Done");
-    expect(linearWorkspaceStatusLabel("AI-42", undefined, "failed").detail).toBe(
-      "Status unavailable",
-    );
-    expect(linearWorkspaceStatusLabel("AI-42", undefined, "signed-out").detail).toBe(
-      "Sign in to Linear",
-    );
-    expect(linearWorkspaceStatusLabel("AI-42", undefined, "unavailable").detail).toBeUndefined();
-    expect(linearWorkspaceStatusLabel("AI-42", undefined, "ready").detail).toBe("Issue not found");
+    expect(linearWorkspaceStatusLabel("AI-42", null, "failed").detail).toBe("Status unavailable");
+    expect(linearWorkspaceStatusLabel("AI-42", null, "unavailable").detail).toBeUndefined();
+    expect(linearWorkspaceStatusLabel("AI-42", null, "ready").detail).toBe("Issue not found");
   });
 
   it("sorts unused and oldest worktrees first by default", () => {

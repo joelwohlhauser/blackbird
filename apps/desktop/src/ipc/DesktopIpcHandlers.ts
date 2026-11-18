@@ -89,7 +89,6 @@ import {
   addCliCommandToPath,
 } from "./methods/cliCommand.ts";
 import { getAwakeState, removeAwake, setupAwake } from "./methods/awake.ts";
-import * as LinearIpc from "./methods/linear.ts";
 import { forgetThread } from "./methods/rendererHistory.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
@@ -182,15 +181,6 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(getAwakeState);
   yield* ipc.handle(setupAwake);
   yield* ipc.handle(removeAwake);
-  yield* ipc.handle(LinearIpc.getLinearState);
-  yield* ipc.handle(LinearIpc.signInToLinear);
-  yield* ipc.handle(LinearIpc.cancelLinearSignIn);
-  yield* ipc.handle(LinearIpc.signOutOfLinear);
-  yield* ipc.handle(LinearIpc.listLinearIssues);
-  yield* ipc.handle(LinearIpc.listLinearTeams);
-  yield* ipc.handle(LinearIpc.listLinearStates);
-  yield* ipc.handle(LinearIpc.findCreatedLinearIssue);
-  yield* ipc.handle(LinearIpc.getLinearIssueStatuses);
   yield* ipc.handle(addCliCommandToPath);
   for (const previewMethod of PreviewIpc.methods) {
     // Explicit types preserve the error/service union of these heterogeneous preview methods.

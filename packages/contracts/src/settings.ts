@@ -521,7 +521,6 @@ export const ClientSettingsSchema = Schema.Struct({
   externalLinkOpenMode: ExternalLinkOpenMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_EXTERNAL_LINK_OPEN_MODE)),
   ),
-  linearOrganizationSlug: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   fontSizeInterface: InterfaceFontSize.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_INTERFACE_FONT_SIZE)),
   ),
@@ -2170,7 +2169,6 @@ export const ClientSettingsPatch = Schema.Struct({
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   externalLinkOpenMode: Schema.optionalKey(ExternalLinkOpenMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
-  linearOrganizationSlug: Schema.optionalKey(TrimmedString),
   onboardingCompletedAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   fontSizeInterface: Schema.optionalKey(InterfaceFontSize),
   fontSizePrompt: Schema.optionalKey(PromptFontSize),

@@ -39,6 +39,7 @@ import {
   type LinearUser,
   type T3Issue,
   type T3Team,
+  type T3WorkflowStates,
   type Template,
 } from "./LinearApi.graphql.ts";
 
@@ -78,6 +79,7 @@ export interface LinearTemplate extends Omit<Template, "templateData"> {
 }
 
 type LinearTeamDetail = T3Team.Result["teams"]["nodes"][number];
+export type LinearTeamWorkflowState = T3WorkflowStates.Result["workflowStates"]["nodes"][number];
 type LinearIssueDetail = NonNullable<T3Issue.Result["issue"]>;
 
 /** The team with the workspace-wide labels that any of its issues may also carry. */
@@ -110,6 +112,7 @@ export class LinearApi extends Context.Service<
       readonly first: number;
       readonly after?: string | undefined;
       readonly orderBy: "updatedAt" | "createdAt";
+      readonly includeArchived?: boolean | undefined;
     }) => Effect.Effect<
       { readonly nodes: ReadonlyArray<LinearIssue>; readonly nextCursor: string | null },
       IssueTrackerError
@@ -128,6 +131,11 @@ export class LinearApi extends Context.Service<
       IssueTrackerError
     >;
     readonly getTeam: (key: string) => Effect.Effect<LinearTeamScope | null, IssueTrackerError>;
+    /** Every team's workflow states the credential can see. */
+    readonly listWorkflowStates: () => Effect.Effect<
+      ReadonlyArray<LinearTeamWorkflowState>,
+      IssueTrackerError
+    >;
     readonly createIssue: (
       input: IssueCreateInput,
     ) => Effect.Effect<{ readonly identifier: string; readonly url: string }, IssueTrackerError>;
@@ -305,6 +313,7 @@ export const make = Effect.gen(function* () {
         after: input.after ?? null,
         filter: input.filter,
         orderBy: input.orderBy,
+        includeArchived: input.includeArchived ?? null,
       }),
     ).pipe(
       Effect.map((data) => ({
@@ -365,6 +374,21 @@ export const make = Effect.gen(function* () {
       }),
     );
 
+  const listWorkflowStates: LinearApi["Service"]["listWorkflowStates"] = Effect.fn(
+    "LinearApi.listWorkflowStates",
+  )(function* () {
+    const states: Array<LinearTeamWorkflowState> = [];
+    let after: string | null = null;
+    do {
+      const page: T3WorkflowStates.Result = yield* call("listWorkflowStates", (linear) =>
+        linear.T3WorkflowStates({ after }),
+      );
+      states.push(...page.workflowStates.nodes);
+      after = nextCursor(page.workflowStates.pageInfo);
+    } while (after !== null);
+    return states;
+  });
+
   const createIssue: LinearApi["Service"]["createIssue"] = (input) =>
     call("createIssue", (linear) => linear.T3IssueCreate({ input })).pipe(
       Effect.flatMap(({ issueCreate }) =>
@@ -424,6 +448,7 @@ export const make = Effect.gen(function* () {
     getIssue,
     getComments,
     getTeam,
+    listWorkflowStates,
     createIssue,
     updateIssue,
     createComment,

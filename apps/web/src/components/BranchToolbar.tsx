@@ -12,7 +12,7 @@ import { ComposerContextLabel } from "./ComposerContextLabel";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type {
   EnvironmentId,
-  LinearIssue,
+  IssueListEntry,
   ProjectId,
   ThreadId,
   VcsListRefsResult,
@@ -33,11 +33,10 @@ import {
 import { flushSync } from "react-dom";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
-import { getDesktopLinearBridge } from "../lib/desktopLinear";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { vcsEnvironment } from "../state/vcs";
 import { linearIssueIdFromBranch } from "@t3tools/contracts";
-import { LinearIssuePicker } from "./linear/LinearIssuePicker";
+import { LinearIssuePicker, useLinearConnection } from "./linear/LinearIssuePicker";
 import { ThreadLinearIssueBadge } from "./linear/ThreadLinearIssues";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { useProject, useThreadShellsForProjectRefs } from "../state/entities";
@@ -805,12 +804,14 @@ export const BranchToolbar = memo(function BranchToolbar({
   ) : null;
 
   const [resolvingLinearIssue, setResolvingLinearIssue] = useState(false);
-  const onLinearIssueSelect = async (issue: LinearIssue) => {
-    if (!activeProject) return;
+  const linearConnection = useLinearConnection(environmentId, projectId);
+  const onLinearIssueSelect = async (issue: IssueListEntry) => {
+    const branchName = issue.branchName;
+    if (!activeProject || branchName === undefined) return;
     const projectCwd = activeProject.workspaceRoot;
     const refsAtom = vcsEnvironment.listRefs({
       environmentId,
-      input: { cwd: projectCwd, query: issue.branchName, refKind: "all", limit: 20 },
+      input: { cwd: projectCwd, query: branchName, refKind: "all", limit: 20 },
     });
     setResolvingLinearIssue(true);
     const refs = await Effect.runPromise(
@@ -833,7 +834,7 @@ export const BranchToolbar = memo(function BranchToolbar({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: `Couldn't check branches for ${issue.identifier}`,
+          title: `Couldn't check branches for ${issue.displayKey}`,
         }),
       );
       return;
@@ -842,7 +843,7 @@ export const BranchToolbar = memo(function BranchToolbar({
     const workspace = resolveLinearIssueWorkspace({
       refs,
       projectCwd,
-      branchName: issue.branchName,
+      branchName,
     });
     switch (workspace._tag) {
       case "reuse":
@@ -887,10 +888,12 @@ export const BranchToolbar = memo(function BranchToolbar({
     !isServerThread &&
     canReuseExistingWorktree &&
     !forceNewWorktree &&
-    getDesktopLinearBridge() ? (
+    linearConnection.connected ? (
       <LinearIssuePicker
         label={selectedLinearIssueId ?? "Issue"}
         disabled={resolvingLinearIssue}
+        environmentId={environmentId}
+        projectId={projectId}
         preferencesKey={`${environmentId}:${projectId}`}
         onSelect={(issue) => void onLinearIssueSelect(issue)}
         onUnlink={selectedLinearIssueId ? onLinearIssueUnlink : undefined}

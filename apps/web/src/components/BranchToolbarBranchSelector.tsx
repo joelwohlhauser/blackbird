@@ -921,7 +921,7 @@ export function BranchToolbarBranchSelector({
         ) : null}
         {displayMode === "panel" ? (
           <ThreadDetailsIssueRows
-            links={linkedIssues}
+            links={linkedIssues.filter((link) => link.tracker !== "linear")}
             onOpenLink={(event, link) => {
               event.stopPropagation();
               useRightPanelStore.getState().openIssue(threadRef, {

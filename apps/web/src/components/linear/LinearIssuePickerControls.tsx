@@ -1,15 +1,16 @@
 import {
-  LINEAR_PRIORITY_ORDER,
-  LinearIssueSort,
-  type LinearIssueFilters,
-  type LinearTeam,
-  type LinearWorkflowState,
+  IssueTrackerKind,
+  type EnvironmentId,
+  type IssueTrackerScope,
+  type ProjectId,
 } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { ArrowDownWideNarrowIcon, ClockIcon, ListFilterIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useState } from "react";
 
-import { getDesktopLinearBridge } from "../../lib/desktopLinear";
+import { issueEnvironment } from "../../state/issues";
+import { useEnvironmentQuery } from "../../state/query";
 import { composerFloatingLayerProps } from "../chat/composerEventScope";
 import { Button } from "../ui/button";
 import {
@@ -25,12 +26,29 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import { LINEAR_PRIORITY_LABELS, LinearPriorityIcon, LinearStatusIcon } from "./LinearIssueIcons";
+import {
+  LINEAR_PRIORITY_LABELS,
+  LINEAR_PRIORITY_ORDER,
+  LinearPriorityIcon,
+  LinearStatusIcon,
+} from "./LinearIssueIcons";
 
-export const DEFAULT_LINEAR_ISSUE_FILTERS: LinearIssueFilters = {
+const LINEAR = IssueTrackerKind.make("linear");
+
+const LinearIssueSort = Schema.Literals(["updated", "priority"]);
+
+export const LinearIssuePickerPreferences = Schema.Struct({
+  view: Schema.Literals(["assigned", "triage", "all"]),
+  sort: LinearIssueSort,
+  scope: Schema.optional(Schema.NullOr(Schema.String)),
+  stateIds: Schema.Array(Schema.String).check(Schema.isMaxLength(100)),
+  priorities: Schema.Array(Schema.Literals(LINEAR_PRIORITY_ORDER)),
+});
+export type LinearIssuePickerPreferences = typeof LinearIssuePickerPreferences.Type;
+
+export const DEFAULT_LINEAR_ISSUE_PICKER_PREFERENCES: LinearIssuePickerPreferences = {
   view: "assigned",
-  teamId: null,
-  sort: "updatedAt",
+  sort: "updated",
   stateIds: [],
   priorities: [],
 };
@@ -47,11 +65,11 @@ function ActiveDot() {
 }
 
 export function LinearTeamSelect(props: {
-  teams: ReadonlyArray<LinearTeam> | null;
+  teams: ReadonlyArray<IssueTrackerScope> | null;
   value: string | null;
-  onChange: (teamId: string | null) => void;
+  onChange: (scope: string | null) => void;
 }) {
-  const selected = props.teams?.find((team) => team.id === props.value);
+  const selected = props.teams?.find((team) => team.key === props.value);
   return (
     <Select
       value={props.value ?? ""}
@@ -75,7 +93,7 @@ export function LinearTeamSelect(props: {
           </SelectItem>
         ) : null}
         {props.teams?.map((team) => (
-          <SelectItem key={team.id} value={team.id}>
+          <SelectItem key={team.key} value={team.key}>
             {team.key} · {team.name}
           </SelectItem>
         ))}
@@ -85,44 +103,35 @@ export function LinearTeamSelect(props: {
 }
 
 export function LinearIssueFilterMenu(props: {
-  value: LinearIssueFilters;
-  onChange: (value: LinearIssueFilters) => void;
+  environmentId: EnvironmentId;
+  projectId: ProjectId;
+  scope: string | null;
+  value: LinearIssuePickerPreferences;
+  onChange: (value: LinearIssuePickerPreferences) => void;
 }) {
+  const gt = useGT();
   const { value, onChange } = props;
-  const [states, setStates] = useState<{
-    readonly teamId: string | null;
-    readonly status: "loading" | "error" | "ready";
-    readonly items: ReadonlyArray<LinearWorkflowState>;
-  } | null>(null);
+  const [open, setOpen] = useState(false);
+  const states = useEnvironmentQuery(
+    open
+      ? issueEnvironment.candidates({
+          environmentId: props.environmentId,
+          input: {
+            projectId: props.projectId,
+            tracker: LINEAR,
+            host: "linear.app",
+            scope: props.scope ?? "*",
+          },
+        })
+      : null,
+  );
   const filtered = value.stateIds.length > 0 || value.priorities.length > 0;
-
-  const loadStates = () => {
-    const bridge = getDesktopLinearBridge();
-    if (!bridge) return;
-    const teamId = value.teamId;
-    setStates({ teamId, status: "loading", items: [] });
-    void bridge.listStates(teamId).then(
-      (items) =>
-        setStates((current) =>
-          current?.teamId === teamId ? { teamId, status: "ready", items: items ?? [] } : current,
-        ),
-      () =>
-        setStates((current) =>
-          current?.teamId === teamId ? { teamId, status: "error", items: [] } : current,
-        ),
-    );
-  };
-
-  const stateItems = states?.teamId === value.teamId ? states.items : [];
+  const stateItems = states.data?.states ?? [];
   const toggle = <T,>(list: ReadonlyArray<T>, item: T, checked: boolean) =>
     checked ? [...list, item] : list.filter((entry) => entry !== item);
 
   return (
-    <Menu
-      onOpenChange={(open) => {
-        if (open) loadStates();
-      }}
-    >
+    <Menu onOpenChange={setOpen}>
       <MenuTrigger
         render={<Button variant="ghost" size="icon-xs" className="relative" />}
         aria-label={filtered ? "Filter issues (active)" : "Filter issues"}
@@ -133,10 +142,12 @@ export function LinearIssueFilterMenu(props: {
       <MenuPopup side="top" align="start" {...composerFloatingLayerProps}>
         <MenuGroup>
           <MenuGroupLabel>Status</MenuGroupLabel>
-          {states?.status === "loading" ? <MenuItem disabled>Loading statuses…</MenuItem> : null}
-          {states?.status === "error" ? (
-            <MenuItem closeOnClick={false} onClick={loadStates}>
-              Couldn't load statuses. Retry
+          {states.data === null && states.isPending ? (
+            <MenuItem disabled>{gt("Loading statuses…")}</MenuItem>
+          ) : null}
+          {states.data === null && states.error !== null ? (
+            <MenuItem closeOnClick={false} onClick={states.refresh}>
+              {gt("Couldn't load statuses. Retry")}
             </MenuItem>
           ) : null}
           {stateItems.map((state) => (
@@ -151,8 +162,8 @@ export function LinearIssueFilterMenu(props: {
               <span className="flex items-center gap-2">
                 <LinearStatusIcon state={state} />
                 {state.name}
-                {value.teamId === null ? (
-                  <span className="text-xs text-muted-foreground">{state.team.key}</span>
+                {props.scope === null ? (
+                  <span className="text-xs text-muted-foreground">{state.scope}</span>
                 ) : null}
               </span>
             </MenuCheckboxItem>
@@ -191,8 +202,8 @@ export function LinearIssueFilterMenu(props: {
 }
 
 export function LinearIssueSortMenu(props: {
-  value: LinearIssueFilters;
-  onChange: (value: LinearIssueFilters) => void;
+  value: LinearIssuePickerPreferences;
+  onChange: (value: LinearIssuePickerPreferences) => void;
 }) {
   const { value, onChange } = props;
   return (
@@ -211,7 +222,7 @@ export function LinearIssueSortMenu(props: {
             if (isLinearIssueSort(sort)) onChange({ ...value, sort });
           }}
         >
-          <MenuRadioItem value="updatedAt">
+          <MenuRadioItem value="updated">
             <span className="flex items-center gap-2">
               <ClockIcon className="size-3.5" />
               Recently updated

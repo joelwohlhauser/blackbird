@@ -2,9 +2,7 @@ import {
   threadRuntimeIsActive,
   type ThreadRuntimeSummary,
 } from "@t3tools/client-runtime/state/shell";
-import type { LinearIssueStatus } from "@t3tools/contracts";
-
-import type { LinearIssueStatusesState } from "../../lib/desktopLinear";
+import type { IssueState } from "@t3tools/contracts";
 
 export interface WorkspaceChatLike {
   readonly id: string;
@@ -82,24 +80,25 @@ export function sortWorkspaceRows<T extends WorkspaceSortableRow>(
   });
 }
 
+export type LinearWorkspaceStatus = "unavailable" | "pending" | "failed" | "ready";
+
 export function linearWorkspaceStatusLabel(
   issueId: string | null,
-  issue: LinearIssueStatus | undefined,
-  status: LinearIssueStatusesState,
+  state: IssueState | null,
+  status: LinearWorkspaceStatus,
 ): { readonly label: string; readonly detail?: string; readonly tone: string } {
   if (!issueId) return { label: "No issue", tone: "text-muted-foreground" };
   if (status === "unavailable") return { label: issueId, tone: "text-muted-foreground" };
-  if (status === "signed-out")
-    return { label: issueId, detail: "Sign in to Linear", tone: "text-muted-foreground" };
   if (status === "pending")
     return { label: issueId, detail: "Checking status", tone: "text-muted-foreground" };
   if (status === "failed")
     return { label: issueId, detail: "Status unavailable", tone: "text-warning" };
-  if (!issue) return { label: issueId, detail: "Issue not found", tone: "text-muted-foreground" };
-  const closed = issue.stateType === "completed" || issue.stateType === "canceled";
+  if (state === null)
+    return { label: issueId, detail: "Issue not found", tone: "text-muted-foreground" };
+  const closed = state.category === "closed";
   return {
     label: issueId,
-    detail: `${closed ? "Closed" : "Open"} · ${issue.stateName}`,
+    detail: `${closed ? "Closed" : "Open"} · ${state.name}`,
     tone: closed ? "text-muted-foreground" : "text-foreground",
   };
 }

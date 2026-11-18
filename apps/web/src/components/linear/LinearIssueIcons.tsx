@@ -1,10 +1,30 @@
-import {
-  LINEAR_CLOSED_STATE_TYPES,
-  type LinearIssue,
-  type LinearPriority,
-} from "@t3tools/contracts";
+import type { IssueState, IssueSummary } from "@t3tools/contracts";
 
 import { cn } from "../../lib/utils";
+
+export const LINEAR_PRIORITY_ORDER = [1, 2, 3, 4, 0] as const;
+export type LinearPriority = (typeof LINEAR_PRIORITY_ORDER)[number];
+
+interface LinearStateLook {
+  readonly name: string;
+  readonly type: string;
+  readonly color: string;
+  readonly progress: number;
+}
+
+function linearStateLook(state: IssueState): LinearStateLook {
+  return {
+    name: state.name,
+    type:
+      state.stateType ??
+      (state.category === "closed" ? (state.closeReason ?? "completed") : "unstarted"),
+    color: state.color ?? "#999a9c",
+    progress: state.progress ?? 0.5,
+  };
+}
+
+const linearPriority = (priority: number | undefined): LinearPriority =>
+  LINEAR_PRIORITY_ORDER.find((candidate) => candidate === priority) ?? 0;
 
 export const LINEAR_PRIORITY_LABELS: Record<LinearPriority, string> = {
   0: "No priority",
@@ -22,7 +42,7 @@ const STATUS_CUTOUTS: Record<string, string> = {
   triage: "M3 8l3.5-3.5v2.75h3V4.5L13 8l-3.5 3.5V8.75h-3v2.75Z",
 };
 
-function StatusShape({ state }: { state: LinearIssue["state"] }) {
+function StatusShape({ state }: { state: LinearStateLook }) {
   const cutout = STATUS_CUTOUTS[state.type];
   if (cutout) return <path fillRule="evenodd" d={`${FILLED_CIRCLE}${cutout}`} />;
   if (state.type === "backlog") {
@@ -53,12 +73,13 @@ function StatusShape({ state }: { state: LinearIssue["state"] }) {
 }
 
 export function LinearStatusIcon({
-  state,
+  state: issueState,
   className,
 }: {
-  state: LinearIssue["state"];
+  state: IssueState;
   className?: string;
 }) {
+  const state = linearStateLook(issueState);
   return (
     <svg
       viewBox="0 0 16 16"
@@ -109,12 +130,12 @@ export function LinearPriorityIcon({
   );
 }
 
-export function LinearIssueIcons({ issue }: { issue: LinearIssue }) {
+export function LinearIssueIcons({ issue }: { issue: Pick<IssueSummary, "priority" | "state"> }) {
   return (
     <>
       <LinearPriorityIcon
-        priority={issue.priority}
-        closed={LINEAR_CLOSED_STATE_TYPES.includes(issue.state.type)}
+        priority={linearPriority(issue.priority)}
+        closed={issue.state.category === "closed"}
       />
       <LinearStatusIcon state={issue.state} />
     </>

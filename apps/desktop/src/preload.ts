@@ -353,29 +353,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       };
     },
   },
-  linear: {
-    getState: () => ipcRenderer.invoke(IpcChannels.LINEAR_GET_STATE_CHANNEL),
-    signIn: () => ipcRenderer.invoke(IpcChannels.LINEAR_SIGN_IN_CHANNEL),
-    cancelSignIn: () => ipcRenderer.invoke(IpcChannels.LINEAR_CANCEL_SIGN_IN_CHANNEL),
-    signOut: () => ipcRenderer.invoke(IpcChannels.LINEAR_SIGN_OUT_CHANNEL),
-    listIssues: (query) => ipcRenderer.invoke(IpcChannels.LINEAR_LIST_ISSUES_CHANNEL, query),
-    listTeams: () => ipcRenderer.invoke(IpcChannels.LINEAR_LIST_TEAMS_CHANNEL),
-    listStates: (teamId) => ipcRenderer.invoke(IpcChannels.LINEAR_LIST_STATES_CHANNEL, teamId),
-    findCreatedIssue: (since) =>
-      ipcRenderer.invoke(IpcChannels.LINEAR_FIND_CREATED_ISSUE_CHANNEL, since),
-    issueStatuses: (issueIds) =>
-      ipcRenderer.invoke(IpcChannels.LINEAR_ISSUE_STATUSES_CHANNEL, issueIds),
-    onState: (listener) => {
-      const wrappedListener = (_event: Electron.IpcRendererEvent, account: unknown) => {
-        if (typeof account !== "object") return;
-        listener(account as Parameters<typeof listener>[0]);
-      };
-      ipcRenderer.on(IpcChannels.LINEAR_STATE_CHANNEL, wrappedListener);
-      return () => {
-        ipcRenderer.removeListener(IpcChannels.LINEAR_STATE_CHANNEL, wrappedListener);
-      };
-    },
-  },
   onUpdateState: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, state: unknown) => {
       if (typeof state !== "object" || state === null) return;

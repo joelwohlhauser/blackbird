@@ -384,20 +384,9 @@ describe("ClientSettings external links", () => {
   });
 });
 
-describe("ClientSettings Linear integration", () => {
-  it("leaves the organization unconfigured and uses public preview hosts by default", () => {
-    expect(decodeClientSettings({}).linearOrganizationSlug).toBe("");
+describe("ClientSettings pull request previews", () => {
+  it("uses public preview hosts by default", () => {
     expect(decodeClientSettings({}).pullRequestPreviewHosts).toEqual(["*.vercel.app"]);
-  });
-
-  it("trims organization slug updates", () => {
-    expect(
-      decodeClientSettingsPatch({ linearOrganizationSlug: "  another-workspace  " })
-        .linearOrganizationSlug,
-    ).toBe("another-workspace");
-    expect(decodeClientSettingsPatch({ linearOrganizationSlug: "  " }).linearOrganizationSlug).toBe(
-      "",
-    );
   });
 });
 

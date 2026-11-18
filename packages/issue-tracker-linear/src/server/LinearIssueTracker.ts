@@ -1,9 +1,10 @@
 /**
- * Linear as an issue tracker. A scope is a team key (`ENG`) and an issue key its identifier
- * (`ENG-123`). A workflow state is closed when its type is `completed` or `canceled`, so closing
+ * Linear as an issue tracker. A scope is a team key (`ENG`), or every team for a listing, and an
+ * issue key its identifier (`ENG-123`). A workflow state is closed when its type is `completed` or `canceled`, so closing
  * picks the team's first state of that type, as Linear's own "Done" and "Canceled" do.
  */
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   type IssueActor,
@@ -17,9 +18,11 @@ import {
   type IssueState,
   type IssueTemplate,
   type IssueViewerPermissions,
+  type IssueWorkflowState,
   type StandaloneIssueTrackerDescriptor,
 } from "@t3tools/contracts";
 import {
+  EVERY_ISSUE_SCOPE,
   IssueTrackerError,
   type IssueInvolvementFilter,
   type StandaloneIssueTrackerApi,
@@ -80,9 +83,9 @@ const STATE_TYPE_ORDER = [
   "duplicate",
 ];
 
-function inWorkflowOrder(
-  states: ReadonlyArray<LinearApi.LinearWorkflowState>,
-): ReadonlyArray<LinearApi.LinearWorkflowState> {
+function inWorkflowOrder<State extends LinearApi.LinearWorkflowState>(
+  states: ReadonlyArray<State>,
+): ReadonlyArray<State> {
   return states.toSorted(
     (a, b) =>
       STATE_TYPE_ORDER.indexOf(a.type) - STATE_TYPE_ORDER.indexOf(b.type) ||
@@ -125,11 +128,61 @@ function parseIdentifier(key: string): string | null {
   return /^[A-Za-z][A-Za-z0-9]*-[1-9]\d*$/.test(key.trim()) ? key.trim().toUpperCase() : null;
 }
 
-function toState(state: LinearApi.LinearWorkflowState): IssueState {
-  return CLOSED_STATE_TYPES.includes(state.type)
-    ? { category: "closed", name: state.name, closeReason: state.type }
-    : { category: "open", name: state.name };
+/** Linear's own icon fills a started state by its place among the team's started states. */
+function startedProgress(position: number, startedPositions: ReadonlyArray<number>): number {
+  return (
+    (startedPositions.filter((other) => other < position).length + 1) /
+    (startedPositions.length + 1)
+  );
 }
+
+const startedPositionsOf = (states: ReadonlyArray<LinearApi.LinearWorkflowState>) =>
+  states.filter((state) => state.type === "started").map((state) => state.position);
+
+function toState(
+  state: LinearApi.LinearWorkflowState,
+  startedPositions: ReadonlyArray<number>,
+): IssueState {
+  const look = {
+    stateType: state.type,
+    ...(state.color.trim() === "" ? {} : { color: state.color }),
+    ...(state.type === "started"
+      ? { progress: startedProgress(state.position, startedPositions) }
+      : {}),
+  };
+  return CLOSED_STATE_TYPES.includes(state.type)
+    ? { category: "closed", name: state.name, closeReason: state.type, ...look }
+    : { category: "open", name: state.name, ...look };
+}
+
+function toWorkflowStates(
+  states: ReadonlyArray<
+    LinearApi.LinearWorkflowState & { readonly team: { readonly key: string } }
+  >,
+): IssueWorkflowState[] {
+  const startedByTeam = new Map<string, number[]>();
+  for (const state of states) {
+    if (state.type !== "started") continue;
+    startedByTeam.set(state.team.key, [
+      ...(startedByTeam.get(state.team.key) ?? []),
+      state.position,
+    ]);
+  }
+  return inWorkflowOrder(states).map((state) => ({
+    ...toState(state, startedByTeam.get(state.team.key) ?? []),
+    id: state.id,
+    scope: state.team.key,
+  }));
+}
+
+/** Linear lists most urgent first as Urgent, High, Medium, Low, then no priority. */
+const PRIORITY_ORDER = [1, 2, 3, 4, 0];
+
+const PriorityCursor = Schema.fromJsonString(
+  Schema.Struct({ priority: Schema.Number, after: Schema.NullOr(Schema.String) }),
+);
+const decodePriorityCursor = Schema.decodeUnknownOption(PriorityCursor);
+const encodePriorityCursor = Schema.encodeEffect(PriorityCursor);
 
 /**
  * The login is Linear's handle (its `displayName`, unique in a workspace), which is what people
@@ -165,11 +218,17 @@ function userName(user: LinearApi.LinearUser): string {
 function toSummary(issue: LinearApi.LinearIssue, commentCount = 0): TrackerIssueSummary {
   return {
     key: issue.identifier,
+    scope: issue.team.key,
     displayKey: issue.identifier,
     title: issue.title,
     url: issue.url,
+    ...(issue.branchName.trim() === "" ? {} : { branchName: issue.branchName }),
     author: actorOf(issue.creator, issue.botActor),
-    state: toState(issue.state),
+    state: toState(
+      issue.state,
+      issue.state.team.states.nodes.map((state) => state.position),
+    ),
+    priority: Math.max(0, Math.round(issue.priority)),
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
     closedAt: issue.completedAt ?? issue.canceledAt ?? null,
@@ -434,7 +493,22 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
       // The id, not the display name: it is what the involvement filters compare against.
       getViewer: () => linear.viewer().pipe(Effect.map((data) => toActor(data.viewer).login)),
 
-      listIssues: (input) => {
+      listIssues: Effect.fn("LinearIssueTracker.listIssues")(function* (input) {
+        const refinement = input.refinement ?? {};
+        const keys = (refinement.keys ?? []).flatMap((key) => {
+          const match = /^([A-Za-z][A-Za-z0-9]*)-([1-9]\d*)$/.exec(key.trim());
+          return match === null
+            ? []
+            : [
+                {
+                  team: { key: { eq: match[1]!.toUpperCase() } },
+                  number: { eq: Number(match[2]) },
+                },
+              ];
+        });
+        if (refinement.keys !== undefined && keys.length === 0) {
+          return { items: [], nextCursor: null };
+        }
         // `ENG-12`, `#12` or `12` asks for one issue of this team by number.
         const reference =
           input.query === undefined
@@ -446,9 +520,17 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
             ? []
             : [{ assignee: { displayName: { eq: input.assignee } } }]),
           ...(input.labels ?? []).map((name) => ({ labels: { some: { name: { eq: name } } } })),
+          ...(refinement.stateIds?.length ? [{ state: { id: { in: refinement.stateIds } } }] : []),
+          ...(refinement.stateTypes?.length
+            ? [{ state: { type: { in: refinement.stateTypes } } }]
+            : []),
+          ...(refinement.priorities?.length ? [{ priority: { in: refinement.priorities } }] : []),
+          ...(keys.length === 0 ? [] : [{ or: keys }]),
         ];
         const filter: LinearApi.IssueFilter = {
-          team: { key: { eq: input.scope.trim().toUpperCase() } },
+          ...(input.scope === EVERY_ISSUE_SCOPE
+            ? {}
+            : { team: { key: { eq: input.scope.trim().toUpperCase() } } }),
           ...involvementFilter(input),
           ...(input.state === "all"
             ? {}
@@ -471,20 +553,50 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
                 ],
               }),
         };
-        return linear
-          .listIssues({
-            filter,
+        const read = (pageFilter: LinearApi.IssueFilter, after: string | undefined) =>
+          linear.listIssues({
+            filter: pageFilter,
             first: input.limit,
-            after: input.cursor,
+            after,
             orderBy: input.sort === "created" ? "createdAt" : "updatedAt",
-          })
-          .pipe(
-            Effect.map((page) => ({
-              items: page.nodes.map((node) => toSummary(node)),
-              nextCursor: page.nextCursor,
-            })),
+            includeArchived: keys.length > 0,
+          });
+        if (refinement.sortByPriority !== true) {
+          const page = yield* read(filter, input.cursor);
+          return { items: page.nodes.map((node) => toSummary(node)), nextCursor: page.nextCursor };
+        }
+        // Linear pages by date only, so a priority sort walks one priority at a time.
+        const priorities = PRIORITY_ORDER.filter(
+          (priority) =>
+            refinement.priorities === undefined ||
+            refinement.priorities.length === 0 ||
+            refinement.priorities.includes(priority),
+        );
+        const cursor =
+          input.cursor === undefined ? null : Option.getOrNull(decodePriorityCursor(input.cursor));
+        const start = cursor === null ? 0 : Math.max(0, priorities.indexOf(cursor.priority));
+        for (let index = start; index < priorities.length; index++) {
+          const priority = priorities[index]!;
+          const page = yield* read(
+            { ...filter, and: [...(filter.and ?? []), { priority: { eq: priority } }] },
+            index === start ? (cursor?.after ?? undefined) : undefined,
           );
-      },
+          const nextPriority = priorities[index + 1];
+          const next =
+            page.nextCursor !== null
+              ? { priority, after: page.nextCursor }
+              : nextPriority === undefined
+                ? null
+                : { priority: nextPriority, after: null };
+          if (page.nodes.length > 0 || next === null) {
+            return {
+              items: page.nodes.map((node) => toSummary(node)),
+              nextCursor: next === null ? null : yield* Effect.orDie(encodePriorityCursor(next)),
+            };
+          }
+        }
+        return { items: [], nextCursor: null };
+      }),
 
       getIssue: Effect.fn("LinearIssueTracker.getIssue")(function* (input) {
         const identifier = yield* requireIdentifier("getIssue", input.key);
@@ -503,7 +615,9 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
           body: issue.description ?? "",
           viewer: me === null ? null : toActor(me).login,
           viewerPermissions: VIEWER_PERMISSIONS,
-          states: inWorkflowOrder(issue.team.states.nodes).map(toState),
+          states: inWorkflowOrder(issue.team.states.nodes).map((state) =>
+            toState(state, startedPositionsOf(issue.team.states.nodes)),
+          ),
           reactions: toReactions(issue.reactions, viewer),
           comments: issue.comments.nodes.map((comment) => toComment(comment, viewer)),
           commentsCursor: issue.comments.pageInfo.hasNextPage
@@ -620,17 +734,35 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
         ),
 
       listCandidates: (input) =>
-        requireTeam("listCandidates", input.scope).pipe(
-          Effect.map((scope) => ({
-            labels: [...scope.team.labels.nodes, ...scope.workspaceLabels].map((label) => ({
-              name: label.name,
-              color: label.color,
-              description: label.description ?? null,
-            })),
-            assignees: scope.team.members.nodes.map((user) => ({ ...toActor(user), id: user.id })),
-            truncated: scope.truncated,
-          })),
-        ),
+        input.scope === EVERY_ISSUE_SCOPE
+          ? linear.listWorkflowStates().pipe(
+              Effect.map((states) => ({
+                labels: [],
+                assignees: [],
+                truncated: false,
+                states: toWorkflowStates(states),
+              })),
+            )
+          : requireTeam("listCandidates", input.scope).pipe(
+              Effect.map((scope) => ({
+                labels: [...scope.team.labels.nodes, ...scope.workspaceLabels].map((label) => ({
+                  name: label.name,
+                  color: label.color,
+                  description: label.description ?? null,
+                })),
+                assignees: scope.team.members.nodes.map((user) => ({
+                  ...toActor(user),
+                  id: user.id,
+                })),
+                truncated: scope.truncated,
+                states: toWorkflowStates(
+                  scope.team.states.nodes.map((state) => ({
+                    ...state,
+                    team: { key: scope.team.key },
+                  })),
+                ),
+              })),
+            ),
     };
     return api;
   });

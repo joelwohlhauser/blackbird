@@ -49,8 +49,21 @@ export const IssueState = Schema.Struct({
   name: TrimmedNonEmptyString,
   /** How a closed state ended, where the tracker says: `completed`, or its word for not done. */
   closeReason: Schema.optional(TrimmedNonEmptyString),
+  /** The tracker's own kind of state, where it has one: Linear's `triage`, `started`. */
+  stateType: Schema.optional(TrimmedNonEmptyString),
+  color: Schema.optional(TrimmedNonEmptyString),
+  /** How far a started state is through the started part of its workflow, from 0 to 1. */
+  progress: Schema.optional(Schema.Number),
 });
 export type IssueState = typeof IssueState.Type;
+
+/** One state of a scope's workflow, as a listing filter offers it. */
+export const IssueWorkflowState = Schema.Struct({
+  ...IssueState.fields,
+  id: TrimmedNonEmptyString,
+  scope: TrimmedNonEmptyString,
+});
+export type IssueWorkflowState = typeof IssueWorkflowState.Type;
 
 /** What a listing asks for: either category, or both. */
 export const IssueListState = Schema.Literals(["all", "open", "closed"]);
@@ -110,6 +123,10 @@ export const IssueSummary = Schema.Struct({
   assignees: Schema.Array(IssueActor),
   labels: Schema.Array(IssueLabel),
   commentCount: NonNegativeInt,
+  /** The branch name the tracker suggests for working on the issue, where it suggests one. */
+  branchName: Schema.optional(TrimmedNonEmptyString),
+  /** Linear's scale, where the tracker has one: 0 none, 1 urgent, 2 high, 3 medium, 4 low. */
+  priority: Schema.optional(NonNegativeInt),
 });
 export type IssueSummary = typeof IssueSummary.Type;
 
@@ -255,6 +272,22 @@ export const IssueListCursors = Schema.Record(
 );
 export type IssueListCursors = typeof IssueListCursors.Type;
 
+/** What a standalone tracker's own listing can narrow and order by beyond the common filters. */
+export const IssueStandaloneListRefinement = Schema.Struct({
+  stateIds: Schema.optional(Schema.Array(TrimmedNonEmptyString).check(Schema.isMaxLength(100))),
+  stateTypes: Schema.optional(Schema.Array(TrimmedNonEmptyString).check(Schema.isMaxLength(20))),
+  priorities: Schema.optional(Schema.Array(NonNegativeInt).check(Schema.isMaxLength(10))),
+  /** Issue keys, for reading a known set of issues at once. */
+  keys: Schema.optional(
+    Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(64))).check(
+      Schema.isMaxLength(200),
+    ),
+  ),
+  /** Most urgent first, newest update first within a priority. */
+  sortByPriority: Schema.optional(Schema.Boolean),
+});
+export type IssueStandaloneListRefinement = typeof IssueStandaloneListRefinement.Type;
+
 export const IssueListInput = Schema.Struct({
   state: IssueListState,
   involvement: Schema.optional(IssueInvolvement),
@@ -277,6 +310,18 @@ export const IssueListInput = Schema.Struct({
   assignee: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(320))),
   /** Absent means `updated`. */
   sort: Schema.optional(IssueListSort),
+  /**
+   * Reads one standalone tracker through its connected account instead of the projects bound to
+   * it: only `scope`, or every scope the account reaches. `projectId` serves the read.
+   */
+  standalone: Schema.optional(
+    Schema.Struct({
+      ...IssueStandaloneListRefinement.fields,
+      projectId: ProjectId,
+      tracker: IssueTrackerKind,
+      scope: Schema.optional(TrimmedNonEmptyString),
+    }),
+  ),
 });
 export type IssueListInput = typeof IssueListInput.Type;
 
@@ -429,6 +474,8 @@ export const IssueCandidates = Schema.Struct({
   assignees: Schema.Array(IssueAssigneeCandidate),
   /** The tracker has more than were read, so somebody missing is not necessarily ineligible. */
   truncated: Schema.Boolean,
+  /** The scope's workflow states, from a tracker whose listing filters by them. */
+  states: Schema.optional(Schema.Array(IssueWorkflowState)),
 });
 export type IssueCandidates = typeof IssueCandidates.Type;
 

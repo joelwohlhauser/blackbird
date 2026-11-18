@@ -14,15 +14,6 @@ import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor, type ScopedThreadRef } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
-import type {
-  LinearAccount,
-  LinearIssue,
-  LinearIssuePage,
-  LinearIssueQuery,
-  LinearIssueStatus,
-  LinearTeam,
-  LinearWorkflowState,
-} from "./linear.ts";
 import { KeybindingShortcut, type PreviewForwardedShortcut } from "./keybindings.ts";
 
 import type {
@@ -1217,18 +1208,6 @@ export interface DesktopBridge {
     setup: () => Promise<DesktopAwakeState>;
     remove: () => Promise<DesktopAwakeState>;
     onState: (listener: (state: DesktopAwakeState) => void) => () => void;
-  };
-  linear?: {
-    getState: () => Promise<LinearAccount | null>;
-    signIn: () => Promise<LinearAccount>;
-    cancelSignIn: () => Promise<void>;
-    signOut: () => Promise<void>;
-    listIssues: (query: LinearIssueQuery) => Promise<LinearIssuePage | null>;
-    listTeams: () => Promise<readonly LinearTeam[] | null>;
-    listStates: (teamId: string | null) => Promise<readonly LinearWorkflowState[] | null>;
-    findCreatedIssue: (since: string) => Promise<LinearIssue | null>;
-    issueStatuses: (issueIds: readonly string[]) => Promise<readonly LinearIssueStatus[] | null>;
-    onState: (listener: (account: LinearAccount | null) => void) => () => void;
   };
   webLinks: {
     setReady: (ready: boolean) => Promise<void>;

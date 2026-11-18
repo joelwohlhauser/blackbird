@@ -87,7 +87,6 @@ import {
   ProviderInteractionMode,
   resolveIdleCompaction,
   RuntimeMode,
-  linearIssueIdFromBranch,
 } from "@t3tools/contracts";
 import {
   canResumeThread,
@@ -298,8 +297,8 @@ import {
   useEnvironmentSettings,
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
-import { linearUrl } from "../linearIntegration";
-import { useLinkedLinearIssues } from "./linear/ThreadLinearIssues";
+import { LINEAR_APP_URL } from "../linearIntegration";
+import { linearIssueLinks } from "./linear/ThreadLinearIssues";
 import { isQuickChatsProject } from "../quickChats";
 import { usePanelAnimationSettings } from "../panelAnimations";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
@@ -1911,13 +1910,7 @@ export default function ChatView(props: ChatViewProps) {
         });
   const gitStatusQuery = useEnvironmentQuery(gitStatusAtom);
   const githubPullRequest = githubPullRequestFromStatus(gitStatusQuery.data);
-  const attachedBranch =
-    activeThread?.branch ?? draftThread?.branch ?? gitStatusQuery.data?.refName ?? null;
-  const linearOrganizationSlug = useClientSettings((settings) => settings.linearOrganizationSlug);
-  const linkedLinearIssues = useLinkedLinearIssues(serverThread?.source.tags);
-  const linkedLinearIssueId = serverThread
-    ? linkedLinearIssues.firstIssueId
-    : linearIssueIdFromBranch(attachedBranch);
+  const linkedLinearIssueUrl = linearIssueLinks(serverThread?.issues).at(-1)?.url ?? LINEAR_APP_URL;
   useWorkspaceMutationRefresh({
     enabled: gitStatusCwd !== null,
     mutationId: workspaceMutationId,
@@ -2364,10 +2357,6 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadRef || !canOperatePreview || !browserAvailable) return;
     openLinearUrlInPanel(activeThreadRef, url);
   };
-  const linkedLinearIssueUrl = linearUrl({
-    organizationSlug: linearOrganizationSlug,
-    issueId: linkedLinearIssueId,
-  });
   const createLinearSurface = () => openLinearUrl(linkedLinearIssueUrl);
   const createLinearSurfaceStable = useStableCallback(createLinearSurface);
   const openLinearUrlStable = useStableCallback(openLinearUrl);

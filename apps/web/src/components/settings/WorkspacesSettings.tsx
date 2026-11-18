@@ -1,6 +1,6 @@
 import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId } from "@t3tools/contracts";
+import { IssueTrackerKind, type EnvironmentId } from "@t3tools/contracts";
 import {
   ArrowDownIcon,
   ArrowUpDownIcon,
@@ -20,7 +20,6 @@ import { useState } from "react";
 
 import { isDesktopLocalConnectionTarget } from "../../connection/desktopLocal";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
-import { useLinearIssueStatuses } from "../../lib/desktopLinear";
 import { linearIssueIdForWorkspace } from "../../linearIntegration";
 import { cn } from "../../lib/utils";
 import {
@@ -29,6 +28,7 @@ import {
   type EnvironmentPresentation,
 } from "../../state/environments";
 import { useProjects, useThreadShells } from "../../state/entities";
+import { issueEnvironment } from "../../state/issues";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useKnownTerminalSessions } from "../../state/terminalSessions";
@@ -39,6 +39,7 @@ import {
   connectionPhaseDotClassName,
   connectionPhasePingClassName,
 } from "../ConnectionStatusDot";
+import { useLinearConnection } from "../linear/LinearIssuePicker";
 import { Button } from "../ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -56,9 +57,12 @@ import {
   summarizeWorkspaceChats,
   workspacePathBasename,
   workspacePathsMatch,
+  type LinearWorkspaceStatus,
   type WorkspaceSortDirection,
   type WorkspaceSortKey,
 } from "./workspacesSettings.logic";
+
+const LINEAR = IssueTrackerKind.make("linear");
 
 interface WorkspaceSortState {
   readonly key: WorkspaceSortKey;
@@ -83,10 +87,10 @@ function SortableWorkspaceHeader({
       : ArrowDownIcon
     : ArrowUpDownIcon;
   return (
-    <TableHead aria-sort={active ? sort.direction : "none"} className="p-0">
+    <TableHead aria-sort={active ? sort.direction : "none"}>
       <button
         type="button"
-        className="flex h-10 w-full items-center gap-1 px-2 text-left hover:text-foreground"
+        className="flex w-full items-center gap-1 text-left hover:text-foreground"
         onClick={() => onSort(sortKey)}
       >
         {label}
@@ -121,7 +125,7 @@ function GitStatusIcon({
       aria-label={status.label}
       className="flex size-6 cursor-help items-center justify-center rounded-md outline-hidden"
     >
-      <status.Icon className={cn("size-4 stroke-[2.5]", status.tone)} aria-hidden />
+      <status.Icon strokeWidth={2.5} className={cn("size-4", status.tone)} aria-hidden />
     </button>
   );
   return (
@@ -247,14 +251,44 @@ export function WorkspacesSettingsPanel() {
       };
     },
   );
+  const linearConnected = useLinearConnection(effectiveEnvironmentId, null).connected;
   const issueIds = [...new Set(rows.flatMap((row) => (row.issueId ? [row.issueId] : [])))];
-  const linearStatuses = useLinearIssueStatuses(issueIds);
-  const issuesById = new Map(linearStatuses.issues.map((issue) => [issue.issueId, issue]));
+  const firstProjectId = rows[0]?.projectId;
+  const linearIssues = useEnvironmentQuery(
+    linearConnected &&
+      effectiveEnvironmentId !== null &&
+      firstProjectId !== undefined &&
+      issueIds.length > 0
+      ? issueEnvironment.list({
+          environmentId: effectiveEnvironmentId,
+          input: {
+            state: "all",
+            limit: 200,
+            standalone: {
+              projectId: firstProjectId,
+              tracker: LINEAR,
+              keys: issueIds.slice(0, 200),
+            },
+          },
+        })
+      : null,
+  );
+  const linearStatus: LinearWorkspaceStatus = !linearConnected
+    ? "unavailable"
+    : linearIssues.data !== null &&
+        !(linearIssues.data.entries.length === 0 && linearIssues.data.errors.length > 0)
+      ? "ready"
+      : linearIssues.error !== null || linearIssues.data !== null
+        ? "failed"
+        : "pending";
+  const issueStates = new Map(
+    (linearIssues.data?.entries ?? []).map((entry) => [entry.key, entry.state]),
+  );
   const sortableRows = rows.map((row) => {
     const linear = linearWorkspaceStatusLabel(
       row.issueId,
-      row.issueId ? issuesById.get(row.issueId) : undefined,
-      linearStatuses.status,
+      row.issueId === null ? null : (issueStates.get(row.issueId) ?? null),
+      linearStatus,
     );
     return {
       ...row,
@@ -355,7 +389,7 @@ export function WorkspacesSettingsPanel() {
                           {environment.label}
                         </span>
                       </span>
-                      <span className="block truncate pl-[18px] text-xs text-muted-foreground">
+                      <span className="block truncate pl-4.5 text-xs text-muted-foreground">
                         {environmentDetail(environment)} · {statusText}
                       </span>
                     </span>
@@ -379,7 +413,7 @@ export function WorkspacesSettingsPanel() {
               onClick={() => {
                 workspaceQuery.refresh();
                 workspaceDetailsQuery.refresh();
-                linearStatuses.refresh();
+                linearIssues.refresh();
               }}
             >
               <RefreshCwIcon />
@@ -455,22 +489,26 @@ export function WorkspacesSettingsPanel() {
                           <div className="truncate font-medium text-foreground">
                             {workspacePathBasename(row.path)}
                           </div>
-                          <div className="truncate text-[11px] text-muted-foreground">
+                          <div className="truncate text-2xs text-muted-foreground">
                             {row.projectTitle} · {row.branch}
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono tabular-nums">
-                          {row.sizeBytes === null && workspaceDetailsQuery.isPending
-                            ? "Measuring…"
-                            : formatWorkspaceStorageSize(row.sizeBytes)}
+                        <TableCell>
+                          <span className="font-mono tabular-nums">
+                            {row.sizeBytes === null && workspaceDetailsQuery.isPending
+                              ? "Measuring…"
+                              : formatWorkspaceStorageSize(row.sizeBytes)}
+                          </span>
                         </TableCell>
-                        <TableCell className="tabular-nums">{row.chatSummary.count}</TableCell>
+                        <TableCell>
+                          <span className="tabular-nums">{row.chatSummary.count}</span>
+                        </TableCell>
                         <TableCell>
                           <div className={cn("font-medium", row.linear.tone)}>
                             {row.linear.label}
                           </div>
                           {row.linear.detail ? (
-                            <div className="text-[11px] text-muted-foreground">
+                            <div className="text-2xs text-muted-foreground">
                               {row.linear.detail}
                             </div>
                           ) : null}

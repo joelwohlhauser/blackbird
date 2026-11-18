@@ -978,18 +978,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("onboarding setup first run getting started agents import projects")],
   },
   {
-    id: "linear-organization",
-    title: "Linear organization",
-    to: "/settings/general",
-  },
-  {
-    id: "linear-account",
-    title: "Linear account",
-    to: "/settings/general",
-    searchTerms: ["sign in oauth login"],
-    desktopOnly: true,
-  },
-  {
     id: "gemini-api-key",
     title: "Gemini API key",
     to: "/settings/general",

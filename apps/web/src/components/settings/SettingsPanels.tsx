@@ -32,7 +32,6 @@ import * as Schema from "effect/Schema";
 import { HOSTED_APP_CHANNEL } from "../../branding";
 import { AboutVersionTitle } from "./AboutVersionTitle";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
-import { LinearAccountSettingsRow } from "./LinearAccountSettingsRow";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
 import {
   canCheckForUpdate,
@@ -1107,39 +1106,6 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
-      </SettingsSection>
-
-      <SettingsSection id="linear" title={gt("Linear")}>
-        <SettingsRow
-          {...setting("linear-organization")}
-          description={gt("Organization slug used to open Linear issues from the right panel.")}
-          resetAction={
-            settings.linearOrganizationSlug !== DEFAULT_UNIFIED_SETTINGS.linearOrganizationSlug ? (
-              <SettingResetButton
-                ariaLabel={gt("Reset Linear organization to default")}
-                onClick={() =>
-                  updateSettings({
-                    linearOrganizationSlug: DEFAULT_UNIFIED_SETTINGS.linearOrganizationSlug,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <DraftInput
-              className="w-full sm:w-56"
-              value={settings.linearOrganizationSlug}
-              onCommit={(next) => {
-                const organizationSlug = next.trim().toLowerCase();
-                updateSettings({ linearOrganizationSlug: organizationSlug });
-              }}
-              placeholder="your-workspace"
-              spellCheck={false}
-              aria-label={gt("Linear organization slug")}
-            />
-          }
-        />
-        <LinearAccountSettingsRow />
       </SettingsSection>
 
       <TextToSpeechSettings />

@@ -18,6 +18,7 @@ import type {
   IssueListState,
   IssueReaction,
   IssueReactionContent,
+  IssueStandaloneListRefinement,
   IssueSummary,
   IssueTemplateList,
   IssueTrackerKind,
@@ -71,8 +72,16 @@ export interface IssueTarget extends IssueScopeTarget {
   readonly key: string;
 }
 
-/** An issue as the tracker sees it, before the service attaches project context. */
-export type TrackerIssueSummary = Omit<IssueSummary, "tracker" | "host" | "scope">;
+/** The scope a standalone tracker reads as every scope its connected account reaches. */
+export const EVERY_ISSUE_SCOPE = "*";
+
+/**
+ * An issue as the tracker sees it, before the service attaches project context. `scope` is the
+ * issue's own, which a listing across every scope needs.
+ */
+export type TrackerIssueSummary = Omit<IssueSummary, "tracker" | "host" | "scope"> & {
+  readonly scope?: string;
+};
 
 export interface TrackerIssuePage {
   readonly items: ReadonlyArray<TrackerIssueSummary>;
@@ -126,6 +135,8 @@ export interface IssueTrackerApi {
         readonly sort: IssueListSort;
         /** A cursor this tracker handed back from an earlier page. Absent asks for the first. */
         readonly cursor?: string | undefined;
+        /** Only asked of a standalone tracker, through its own account. */
+        readonly refinement?: IssueStandaloneListRefinement | undefined;
       },
   ) => Effect.Effect<TrackerIssuePage, IssueTrackerError>;
 

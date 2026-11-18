@@ -1,6 +1,6 @@
 import { linearIssueIdFromBranch } from "@t3tools/contracts";
 
-const LINEAR_APP_ORIGIN = "https://linear.app";
+export const LINEAR_APP_URL = "https://linear.app";
 
 export function linearIssueIdForWorkspace(input: {
   readonly branch: string | null | undefined;
@@ -13,16 +13,6 @@ export function linearIssueIdForWorkspace(input: {
   return linearIssueIdFromBranch(normalizedPath.split("/").at(-1));
 }
 
-export function linearUrl(input: {
-  readonly organizationSlug: string;
-  readonly issueId: string | null;
-}): string {
-  const organizationSlug = encodeURIComponent(input.organizationSlug.trim().toLowerCase());
-  if (!organizationSlug) return LINEAR_APP_ORIGIN;
-  const organizationUrl = `${LINEAR_APP_ORIGIN}/${organizationSlug}`;
-  return input.issueId ? `${organizationUrl}/issue/${input.issueId}/` : organizationUrl;
-}
-
 export function isLinearAppUrl(href: string): boolean {
-  return URL.canParse(href) && new URL(href).origin === LINEAR_APP_ORIGIN;
+  return URL.canParse(href) && new URL(href).origin === LINEAR_APP_URL;
 }

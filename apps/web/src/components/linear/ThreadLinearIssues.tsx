@@ -1,19 +1,20 @@
 import {
   AuthOrchestrationOperateScope,
-  linearIssueIdsFromTags,
-  linearIssueTag,
-  type LinearIssueStatus,
+  threadIssueKeyOf,
+  type EnvironmentId,
+  type IssueListEntry,
   type ScopedThreadRef,
+  type ThreadIssueLink,
 } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { UnlinkIcon } from "lucide-react";
 import type { MouseEvent } from "react";
 
 import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { useClientSettings } from "../../hooks/useSettings";
-import { useLinearIssueStatuses } from "../../lib/desktopLinear";
 import { cn } from "../../lib/utils";
-import { linearUrl } from "../../linearIntegration";
 import { useQuietThreadShell } from "../../state/entities";
+import { issueEnvironment } from "../../state/issues";
+import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentScope } from "../../state/session";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -29,12 +30,7 @@ import { LinearIcon } from "../Icons";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { LinearStatusIcon } from "./LinearIssueIcons";
-import { LinearIssuePicker } from "./LinearIssuePicker";
-
-interface ThreadLinearIssue {
-  readonly id: string;
-  readonly status: LinearIssueStatus | undefined;
-}
+import { LinearIssuePicker, useLinearConnection } from "./LinearIssuePicker";
 
 interface ThreadLinearIssuesProps {
   readonly threadRef: ScopedThreadRef;
@@ -42,99 +38,154 @@ interface ThreadLinearIssuesProps {
   readonly onOpenLinearUrl?: ((url: string) => void) | undefined;
 }
 
-export function useLinkedLinearIssues(tags: ReadonlyArray<string> | undefined) {
-  const issueIds = linearIssueIdsFromTags(tags);
-  const statuses = useLinearIssueStatuses(issueIds);
-  const signedIn = statuses.status !== "unavailable" && statuses.status !== "signed-out";
-  useLiveRefresh(statuses.refresh, { enabled: signedIn && issueIds.length > 0 });
-  const statusById = new Map(statuses.issues.map((issue) => [issue.issueId, issue]));
-  const resolved = new Set(statuses.resolvedIssueIds);
-  const issues = issueIds.flatMap((id): ReadonlyArray<ThreadLinearIssue> => {
-    const status = statusById.get(id);
-    return status === undefined && resolved.has(id) ? [] : [{ id, status }];
-  });
-  return {
-    signedIn,
-    issues,
-    firstIssueId:
-      (signedIn ? issues.find((issue) => issue.status !== undefined) : issues[0])?.id ?? null,
-  };
+export function linearIssueLinks(
+  issues: ReadonlyArray<ThreadIssueLink> | undefined,
+): ReadonlyArray<ThreadIssueLink> {
+  return (issues ?? []).filter((link) => link.tracker === "linear");
+}
+
+function useLinearIssue(environmentId: EnvironmentId, link: ThreadIssueLink) {
+  const query = useEnvironmentQuery(
+    issueEnvironment.detail({
+      environmentId,
+      input: {
+        projectId: link.projectId,
+        tracker: link.tracker,
+        host: link.host,
+        scope: link.scope,
+        key: link.key,
+      },
+    }),
+  );
+  useLiveRefresh(query.refresh, { key: `linear-issue:${environmentId}:${link.key}` });
+  return query.data;
+}
+
+function LinearIssueStatusIcon({
+  environmentId,
+  link,
+  className,
+}: {
+  environmentId: EnvironmentId;
+  link: ThreadIssueLink;
+  className?: string;
+}) {
+  const issue = useLinearIssue(environmentId, link);
+  return issue === null ? (
+    <LinearIcon aria-hidden className={cn("size-2.5 shrink-0", className)} />
+  ) : (
+    <LinearStatusIcon state={issue.state} {...(className ? { className } : {})} />
+  );
+}
+
+function LinearIssueSummary({
+  environmentId,
+  link,
+}: {
+  environmentId: EnvironmentId;
+  link: ThreadIssueLink;
+}) {
+  const issue = useLinearIssue(environmentId, link);
+  return `${link.displayKey}: ${issue?.title ?? link.title}`;
+}
+
+function LinearIssueTooltip({
+  environmentId,
+  link,
+}: {
+  environmentId: EnvironmentId;
+  link: ThreadIssueLink;
+}) {
+  const issue = useLinearIssue(environmentId, link);
+  return issue === null ? link.displayKey : `${issue.title} · ${issue.state.name}`;
 }
 
 function useThreadLinearIssues({ threadRef, onOpenLinearUrl }: ThreadLinearIssuesProps) {
   const thread = useQuietThreadShell(threadRef);
-  const linked = useLinkedLinearIssues(thread?.source.tags);
-  const organizationSlug = useClientSettings((settings) => settings.linearOrganizationSlug);
-  const setTag = useAtomCommand(threadEnvironment.setTag, { reportFailure: true });
+  const unlink = useAtomCommand(threadEnvironment.unlinkIssue, { reportFailure: true });
+  const link = useAtomCommand(threadEnvironment.linkIssue, { reportFailure: true });
   const canOperate = useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope);
   return {
-    ...linked,
+    links: linearIssueLinks(thread?.issues),
     canOperate,
-    setLinked: (issueId: string, linked: boolean) =>
-      void setTag({
+    projectId: thread?.projectId ?? null,
+    unlink: (issue: ThreadIssueLink) =>
+      void unlink({
         environmentId: threadRef.environmentId,
-        input: { threadId: threadRef.threadId, tag: linearIssueTag(issueId), tagged: linked },
-      }),
-    linkProps: (issueId: string) => {
-      const url = linearUrl({ organizationSlug, issueId });
-      return {
-        href: url,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        onClick: (event: MouseEvent<HTMLElement>) => {
-          if (!onOpenLinearUrl) return;
-          event.preventDefault();
-          onOpenLinearUrl(url);
+        input: {
+          threadId: threadRef.threadId,
+          tracker: issue.tracker,
+          host: issue.host,
+          scope: issue.scope,
+          key: issue.key,
         },
-      };
+      }),
+    link: (entry: IssueListEntry) => {
+      if (thread === null) return;
+      void link({
+        environmentId: threadRef.environmentId,
+        input: {
+          threadId: threadRef.threadId,
+          projectId: thread.projectId,
+          tracker: entry.tracker,
+          host: entry.host,
+          scope: entry.scope,
+          key: entry.key,
+          url: entry.url,
+          displayKey: entry.displayKey,
+          title: entry.title,
+          source: "manual",
+        },
+      });
     },
+    linkProps: (issue: ThreadIssueLink) => ({
+      href: issue.url,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      onClick: (event: MouseEvent<HTMLElement>) => {
+        if (!onOpenLinearUrl) return;
+        event.preventDefault();
+        onOpenLinearUrl(issue.url);
+      },
+    }),
   };
 }
 
-function IssueIcon({ issue, className }: { issue: ThreadLinearIssue; className?: string }) {
-  return issue.status ? (
-    <LinearStatusIcon
-      state={{
-        name: issue.status.stateName,
-        type: issue.status.stateType,
-        color: issue.status.stateColor,
-        progress: 0.5,
-      }}
-      {...(className ? { className } : {})}
-    />
-  ) : (
-    <LinearIcon aria-hidden className={cn("size-2.5 shrink-0", className)} />
-  );
-}
-
-const issueSummary = (issue: ThreadLinearIssue) =>
-  issue.status ? `${issue.id}: ${issue.status.title}` : issue.id;
-
-function IssueBadgeContent({ issue, text }: { issue: ThreadLinearIssue; text: string }) {
+function IssueBadgeContent({
+  environmentId,
+  link,
+  text,
+}: {
+  environmentId: EnvironmentId;
+  link: ThreadIssueLink;
+  text: string;
+}) {
   return (
     <span className="contents font-normal text-xs tabular-nums">
-      <IssueIcon issue={issue} className="size-3" />
+      <LinearIssueStatusIcon environmentId={environmentId} link={link} className="size-3" />
       <span className="ms-0.5 text-secondary-label">{text}</span>
     </span>
   );
 }
 
 export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
-  const { issues, linkProps } = useThreadLinearIssues(props);
-  const latest = issues.at(-1);
+  const gt = useGT();
+  const { links, linkProps } = useThreadLinearIssues(props);
+  const { environmentId } = props.threadRef;
+  const latest = links.at(-1);
   if (latest === undefined) return null;
-  if (issues.length === 1) {
+  if (links.length === 1) {
     return (
       <Tooltip>
         <TooltipTrigger
-          render={<ComposerControl size="xs" render={<a {...linkProps(latest.id)} />} />}
-          aria-label={`Open ${latest.id} in Linear`}
+          render={<ComposerControl size="xs" render={<a {...linkProps(latest)} />} />}
+          aria-label={gt("Open {key} in Linear", { key: latest.displayKey })}
           data-composer-context-control
         >
-          <IssueBadgeContent issue={latest} text={latest.id} />
+          <IssueBadgeContent environmentId={environmentId} link={latest} text={latest.displayKey} />
         </TooltipTrigger>
         <TooltipPopup side="top">
-          {latest.status ? `${latest.status.title} · ${latest.status.stateName}` : latest.id}
+          <LinearIssueTooltip environmentId={environmentId} link={latest} />
         </TooltipPopup>
       </Tooltip>
     );
@@ -143,16 +194,22 @@ export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
     <Menu>
       <MenuTrigger
         render={<ComposerControl size="xs" />}
-        aria-label="Linked Linear issues"
+        aria-label={gt("Linked Linear issues")}
         data-composer-context-control
       >
-        <IssueBadgeContent issue={latest} text={`${latest.id} +${issues.length - 1}`} />
+        <IssueBadgeContent
+          environmentId={environmentId}
+          link={latest}
+          text={`${latest.displayKey} +${links.length - 1}`}
+        />
       </MenuTrigger>
       <MenuPopup side="top" align="end" className="max-w-96" {...composerFloatingLayerProps}>
-        {issues.map((issue) => (
-          <MenuItem key={issue.id} render={<a {...linkProps(issue.id)} />}>
-            <IssueIcon issue={issue} />
-            <span className="min-w-0 truncate">{issueSummary(issue)}</span>
+        {links.map((link) => (
+          <MenuItem key={threadIssueKeyOf(link)} render={<a {...linkProps(link)} />}>
+            <LinearIssueStatusIcon environmentId={environmentId} link={link} />
+            <span className="min-w-0 truncate">
+              <LinearIssueSummary environmentId={environmentId} link={link} />
+            </span>
           </MenuItem>
         ))}
       </MenuPopup>
@@ -161,25 +218,32 @@ export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
 }
 
 export function ThreadDetailsLinearRows(props: ThreadLinearIssuesProps) {
-  const { canOperate, signedIn, issues, setLinked, linkProps } = useThreadLinearIssues(props);
+  const gt = useGT();
+  const { canOperate, links, projectId, link, unlink, linkProps } = useThreadLinearIssues(props);
+  const { environmentId } = props.threadRef;
+  const connection = useLinearConnection(environmentId, projectId);
   return (
     <>
-      {issues.map((issue) => (
-        <div key={issue.id} className={THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS}>
+      {links.map((issue) => (
+        <div key={threadIssueKeyOf(issue)} className={THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS}>
           <ThreadDetailsControl
             variant="ghost"
             size="sm"
             part="primary"
-            render={<a {...linkProps(issue.id)} />}
-            aria-label={`Open ${issue.id} in Linear`}
+            render={<a {...linkProps(issue)} />}
+            aria-label={gt("Open {key} in Linear", { key: issue.displayKey })}
           >
             <span className="flex size-4 shrink-0 items-center justify-center">
-              <IssueIcon issue={issue} className="size-3.5 text-muted-foreground" />
+              <LinearIssueStatusIcon
+                environmentId={environmentId}
+                link={issue}
+                className="size-3.5 text-muted-foreground"
+              />
             </span>
             <span
               className={cn("min-w-0 flex-1 truncate text-left", THREAD_DETAILS_PANEL_LABEL_CLASS)}
             >
-              {issueSummary(issue)}
+              <LinearIssueSummary environmentId={environmentId} link={issue} />
             </span>
           </ThreadDetailsControl>
           {canOperate ? (
@@ -193,26 +257,28 @@ export function ThreadDetailsLinearRows(props: ThreadLinearIssuesProps) {
                       variant="ghost"
                       size="sm"
                       part="secondary"
-                      aria-label={`Unlink ${issue.id}`}
-                      onClick={() => setLinked(issue.id, false)}
+                      aria-label={gt("Unlink {key}", { key: issue.displayKey })}
+                      onClick={() => unlink(issue)}
                     />
                   }
                 >
                   <UnlinkIcon aria-hidden className="size-4" />
                 </TooltipTrigger>
-                <TooltipPopup side="top">Unlink from this thread</TooltipPopup>
+                <TooltipPopup side="top">{gt("Unlink from this thread")}</TooltipPopup>
               </Tooltip>
             </span>
           ) : null}
         </div>
       ))}
-      {signedIn && canOperate ? (
+      {connection.connected && canOperate && projectId !== null ? (
         <LinearIssuePicker
-          label="Link issue"
+          label={gt("Link issue")}
           displayMode="panel"
           disabled={false}
+          environmentId={environmentId}
+          projectId={projectId}
           preferencesKey={props.preferencesKey}
-          onSelect={(issue) => setLinked(issue.identifier, true)}
+          onSelect={link}
           onOpenLinear={props.onOpenLinearUrl}
         />
       ) : null}

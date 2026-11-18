@@ -139,7 +139,6 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "unlink-pr",
     "pull-request",
   ),
-  link_linear_issue: tool(["Link", "Linking", "Linked", "a Linear issue"], "thread-update"),
   list_thread_pull_requests: tool(
     ["Check", "Checking", "Checked", "linked pull requests"],
     "list-prs",
