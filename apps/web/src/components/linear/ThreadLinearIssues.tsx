@@ -121,20 +121,20 @@ function IssueBadgeContent({ issue, text }: { issue: ThreadLinearIssue; text: st
 
 export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
   const { issues, linkProps } = useThreadLinearIssues(props);
-  const [first, ...others] = issues;
-  if (first === undefined) return null;
-  if (others.length === 0) {
+  const latest = issues.at(-1);
+  if (latest === undefined) return null;
+  if (issues.length === 1) {
     return (
       <Tooltip>
         <TooltipTrigger
-          render={<ComposerControl size="xs" render={<a {...linkProps(first.id)} />} />}
-          aria-label={`Open ${first.id} in Linear`}
+          render={<ComposerControl size="xs" render={<a {...linkProps(latest.id)} />} />}
+          aria-label={`Open ${latest.id} in Linear`}
           data-composer-context-control
         >
-          <IssueBadgeContent issue={first} text={first.id} />
+          <IssueBadgeContent issue={latest} text={latest.id} />
         </TooltipTrigger>
         <TooltipPopup side="top">
-          {first.status ? `${first.status.title} · ${first.status.stateName}` : first.id}
+          {latest.status ? `${latest.status.title} · ${latest.status.stateName}` : latest.id}
         </TooltipPopup>
       </Tooltip>
     );
@@ -146,7 +146,7 @@ export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
         aria-label="Linked Linear issues"
         data-composer-context-control
       >
-        <IssueBadgeContent issue={first} text={`${first.id} +${others.length}`} />
+        <IssueBadgeContent issue={latest} text={`${latest.id} +${issues.length - 1}`} />
       </MenuTrigger>
       <MenuPopup side="top" align="end" className="max-w-96" {...composerFloatingLayerProps}>
         {issues.map((issue) => (
