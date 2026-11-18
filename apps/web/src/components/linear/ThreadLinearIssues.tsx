@@ -127,7 +127,7 @@ function IssueBadgeContent({ issue, text }: { issue: ThreadLinearIssue; text: st
   return (
     <span className="contents font-normal text-xs tabular-nums">
       <IssueIcon issue={issue} className="size-3" />
-      <span className="text-secondary-label">{text}</span>
+      <span className="ms-0.5 text-secondary-label">{text}</span>
     </span>
   );
 }
