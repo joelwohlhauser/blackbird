@@ -14,7 +14,7 @@ import { compileResolvedKeybindingsConfig, DEFAULT_KEYBINDINGS } from "@t3tools/
 import { Atom, AsyncResult } from "effect/reactivity";
 import type { GhosttyTerminalSurfaceOptions } from "~/terminal/ghostty/surface";
 import { AppAtomRegistryProvider, appAtomRegistry } from "../rpc/atomRegistry";
-import { useRightPanelStore } from "../rightPanelStore";
+import { useRightPanelStore, workspaceLayoutProbe } from "../rightPanelStore";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { extractTerminalLinks } from "../terminal-links";
 import { expect, it, vi } from "vite-plus/test";
@@ -318,6 +318,7 @@ it("closes an exited terminal on its own thread after navigating to one reusing 
 it("hands thread navigation shortcuts from a focused terminal back to the app", async () => {
   const { other: threadRef } = setup();
   using _platform = vi.spyOn(navigator, "platform", "get").mockReturnValue("Linux x86_64");
+  using _wideWindow = vi.spyOn(workspaceLayoutProbe, "isWide").mockReturnValue(true);
   useRightPanelStore.getState().openBrowser(threadRef, null);
   await using _screen = await render(
     <Drawer

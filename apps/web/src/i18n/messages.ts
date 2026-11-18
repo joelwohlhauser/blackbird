@@ -1,4 +1,10 @@
-import { decodeOptions, getReactI18nCache, gtFallback, type useMessages } from "gt-react";
+import {
+  decodeMsg,
+  decodeOptions,
+  getReactI18nCache,
+  gtFallback,
+  type useMessages,
+} from "gt-react";
 
 import { DEFAULT_LOCALE } from "./locales";
 
@@ -37,3 +43,7 @@ function resolve(message: string, variables: Parameters<MessageResolver>[1] = {}
  */
 export const m = ((message, variables) =>
   typeof message === "string" ? resolve(message, variables) : message) as MessageResolver;
+
+export function englishText(message: string): string {
+  return decodeOptions(message) ? decodeMsg(message) : message;
+}

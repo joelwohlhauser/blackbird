@@ -1,6 +1,6 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { decodeMsg, msg, T, useGT, useMessages, Var } from "gt-react";
-import { m, type MessageResolver } from "../i18n/messages";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { englishText, m, type MessageResolver } from "../i18n/messages";
 import { ThreadContextDragGhost } from "./chat/ThreadContextDragGhost";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
@@ -1789,7 +1789,7 @@ function OpenCommandPaletteDialog(props: {
       item.title,
       SETTINGS_SECTION_LABELS[item.to],
       ...(item.searchTerms ?? []),
-    ].flatMap((term) => [messages(term), decodeMsg(term)]),
+    ].flatMap((term) => [messages(term), englishText(term)]),
     title: messages(item.title),
     description: gt("Settings · {section}", {
       section: messages(SETTINGS_SECTION_LABELS[item.to]),
