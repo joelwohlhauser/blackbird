@@ -13,8 +13,6 @@ import type { MouseEvent } from "react";
 import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { cn } from "../../lib/utils";
 import { useQuietThreadShell } from "../../state/entities";
-import { issueEnvironment } from "../../state/issues";
-import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentScope } from "../../state/session";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -30,7 +28,8 @@ import { LinearIcon } from "../Icons";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { LinearStatusIcon } from "./LinearIssueIcons";
-import { LinearIssuePicker, useLinearConnection } from "./LinearIssuePicker";
+import { LinearIssuePicker } from "./LinearIssuePicker";
+import { useLinearConnection, useLinearIssues } from "./linearIssues";
 
 interface ThreadLinearIssuesProps {
   readonly threadRef: ScopedThreadRef;
@@ -64,30 +63,21 @@ const issueSummary = (link: ThreadIssueLink, issue: IssueListEntry | undefined) 
 function useThreadLinearIssues({ threadRef, onOpenLinearUrl }: ThreadLinearIssuesProps) {
   const thread = useQuietThreadShell(threadRef);
   const links = linearIssueLinks(thread?.issues);
-  const query = useEnvironmentQuery(
-    thread === null || links.length === 0
-      ? null
-      : issueEnvironment.list({
-          environmentId: threadRef.environmentId,
-          input: {
-            projectId: thread.projectId,
-            state: "all",
-            limit: links.length,
-            standalone: { tracker: LINEAR_ISSUE_TRACKER, keys: links.map((link) => link.key) },
-          },
-        }),
+  const issues = useLinearIssues(
+    threadRef.environmentId,
+    thread?.projectId ?? null,
+    links.map((link) => link.key),
   );
-  useLiveRefresh(query.refresh, {
+  useLiveRefresh(issues.refresh, {
     enabled: links.length > 0,
     key: `linear-issues:${threadRef.environmentId}:${threadRef.threadId}`,
   });
-  const issuesByKey = new Map((query.data?.entries ?? []).map((entry) => [entry.key, entry]));
   const unlink = useAtomCommand(threadEnvironment.unlinkIssue, { reportFailure: true });
   const link = useAtomCommand(threadEnvironment.linkIssue, { reportFailure: true });
   const canOperate = useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope);
   return {
     links,
-    issueOf: (link: ThreadIssueLink) => issuesByKey.get(link.key),
+    issueOf: (link: ThreadIssueLink) => issues.issueOf(link.key),
     canOperate,
     projectId: thread?.projectId ?? null,
     unlink: (issue: ThreadIssueLink) =>

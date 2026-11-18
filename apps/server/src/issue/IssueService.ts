@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import {
-  EVERY_ISSUE_SCOPE,
   IssueOperationError,
   IssueTrackerKind,
   IssueUnavailableError,
@@ -367,7 +366,7 @@ const make = Effect.gen(function* () {
                   input.projectId ??
                   (yield* new IssueUnavailableError({ reason: "tracker-unsupported" })),
                 tracker: input.standalone.tracker,
-                scope: input.standalone.scope ?? EVERY_ISSUE_SCOPE,
+                scope: input.standalone.scope,
               }),
             ],
             unimplemented: new Map<string, { tracker: IssueTrackerKind; projectCount: number }>(),

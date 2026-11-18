@@ -70,7 +70,11 @@ describe("workspace settings", () => {
     expect(formatWorkspaceStorageSize(10 * 1024 * 1024)).toBe("10 MB");
     expect(formatWorkspaceStorageSize(null)).toBe("Unavailable");
     expect(
-      formatWorkspaceLastUsed("2026-08-22T12:00:00.000Z", Date.parse("2026-08-23T12:00:00.000Z")),
+      formatWorkspaceLastUsed(
+        "2026-08-22T12:00:00.000Z",
+        undefined,
+        Date.parse("2026-08-23T12:00:00.000Z"),
+      ),
     ).toBe("Yesterday");
   });
 

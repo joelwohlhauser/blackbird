@@ -183,4 +183,14 @@ describe("LinearThreadIssues", () => {
       expect(other.tags).toEqual(["linear:AI-8"]);
     }),
   );
+
+  it.effect("removes the stored tag as written", () =>
+    Effect.gen(function* () {
+      const lower = thread("lower", ["linear:ai-3"]);
+      const { service, untagged } = harness([lower], (key) => Effect.succeed(detail(key)));
+      yield* (yield* service).convertTags();
+      expect(untagged).toEqual(["lower linear:ai-3"]);
+      expect(lower.tags).toEqual([]);
+    }),
+  );
 });

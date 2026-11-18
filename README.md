@@ -250,7 +250,7 @@ The normal right panel has browser-backed integration tabs:
 
 - **Linear** uses T3 Code's issue tracker integration: each environment connects Linear with a personal API key under Settings → Source control & issues. Blackbird has no Linear client of its own.
 - A chat can link several Linear issues, stored as T3 Code issue links. A branch named after an issue, such as `eng-123-add-login`, links it when the chat starts on that branch or moves to it. Link more with **Link issue** in the thread details card, and agents link one with the `link_issue` tool and the issue's URL. Linked issues show with their live status below the composer and in the thread details card, and open in the Linear tab; unlink one there and it stays unlinked. Linear issues work in every project of a connected environment; binding a project to a team in Settings only adds that team to the Issues page and allows writes there.
-- Older chats linked issues through `linear:<ID>` thread tags. Once an environment has a Linear key, its server converts those tags into issue links at startup and after the key is saved. A tag whose issue Linear cannot find stays as it is.
+- The branch link is first recorded as a `linear:<ID>` thread tag, as were older chats' links. The environment's server turns tags into issue links as soon as Linear can be read: for that chat right away, and for every chat at startup and after a Linear key is saved. A tag whose issue can't be read yet stays and is tried again later.
 - **PR** uses the authenticated GitHub CLI (`gh`) to detect the pull request for
   the current branch and open the GitHub page inside Blackbird.
 - **Previews** pills in a pull request's Summary tab list the preview

@@ -898,7 +898,7 @@ const layerMakeRoutes = Layer.mergeAll(
   // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
   Layer.provide(layerPullRequestService),
   Layer.provide(LinearThreadIssues.layerConnections),
-  Layer.provide(LinearThreadIssues.layer),
+  Layer.provide(LinearThreadIssues.layer.pipe(Layer.provide(RuntimeLayer.layerEventSink))),
   Layer.provide(layerThreadIssueService),
   Layer.provide(layerIssueService),
   // The same activity instance RunExecutionService reports to, by layer memoization.

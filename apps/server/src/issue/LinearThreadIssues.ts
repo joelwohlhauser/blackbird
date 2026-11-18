@@ -3,13 +3,11 @@ import {
   LINEAR_HOST,
   LINEAR_ISSUE_TRACKER,
   linearIssueIdsFromTags,
-  linearIssueTag,
   type IssueDetail,
   type IssueTrackerConnectInput,
   type OrchestrationV2DomainEvent,
   type ProjectId,
   type ThreadId,
-  type ThreadIssueLink,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -18,6 +16,7 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
+import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ThreadIssueService from "../orchestration-v2/ThreadIssueService.ts";
 import { forkParked } from "../serverActivation.ts";
@@ -27,7 +26,6 @@ import * as IssueTrackerConnections from "./IssueTrackerConnections.ts";
 interface LinkTarget {
   readonly id: ThreadId;
   readonly projectId: ProjectId;
-  readonly issues?: ReadonlyArray<ThreadIssueLink> | undefined;
 }
 
 type Resolution =
@@ -88,7 +86,7 @@ export const make = Effect.gen(function* () {
       source: "manual",
     });
 
-  const untag = (threadId: ThreadId, identifier: string) =>
+  const untag = (threadId: ThreadId, tag: string) =>
     random.uuidV4().pipe(
       Effect.orDie,
       Effect.flatMap((uuid) =>
@@ -96,7 +94,7 @@ export const make = Effect.gen(function* () {
           type: "thread.tag.set",
           commandId: CommandId.make(`server:linear-tag:${threadId}:${uuid}`),
           threadId,
-          tag: linearIssueTag(identifier),
+          tag,
           tagged: false,
         }),
       ),
@@ -111,57 +109,59 @@ export const make = Effect.gen(function* () {
           .getThreadShell(threadId)
           .pipe(Effect.map((thread) => (thread === null ? [] : [thread])));
 
-  const convert = Effect.fn("LinearThreadIssues.convertTags")(function* (threadId?: ThreadId) {
-    const tagged = new Map<string, Array<LinkTarget>>();
-    for (const thread of yield* taggedThreads(threadId)) {
-      if (thread.deletedAt !== null) continue;
-      for (const identifier of linearIssueIdsFromTags(thread.tags)) {
-        const threads = tagged.get(identifier.toUpperCase()) ?? [];
-        threads.push(thread);
-        tagged.set(identifier.toUpperCase(), threads);
+  const convertTags = Effect.fn("LinearThreadIssues.convertTags")(
+    function* (threadId?: ThreadId) {
+      const tagged = new Map<
+        string,
+        Array<{ readonly thread: LinkTarget; readonly tag: string }>
+      >();
+      for (const thread of yield* taggedThreads(threadId)) {
+        if (thread.deletedAt !== null) continue;
+        for (const tag of thread.tags ?? []) {
+          const [id] = linearIssueIdsFromTags([tag]);
+          if (id === undefined) continue;
+          const identifier = id.toUpperCase();
+          const entries = tagged.get(identifier) ?? [];
+          entries.push({ thread, tag });
+          tagged.set(identifier, entries);
+        }
       }
-    }
-    for (const [identifier, threads] of tagged) {
-      const resolution = yield* resolve(threads[0]!.projectId, identifier);
-      if (resolution._tag === "unavailable") {
-        yield* Effect.logInfo("Linear issue tags stay until Linear can be read", {
-          detail: resolution.detail,
-        });
-        return;
+      for (const [identifier, entries] of tagged) {
+        const resolution = yield* resolve(entries[0]!.thread.projectId, identifier);
+        if (resolution._tag === "unavailable") {
+          yield* Effect.logInfo("Linear issue tags stay until Linear can be read", {
+            detail: resolution.detail,
+          });
+          return;
+        }
+        if (resolution._tag === "unresolvable") {
+          yield* Effect.logInfo("Linear issue tag kept: the issue cannot be read", {
+            identifier,
+            detail: resolution.detail,
+          });
+          continue;
+        }
+        for (const { thread, tag } of entries) {
+          yield* link(thread, resolution.issue).pipe(
+            Effect.andThen(untag(thread.id, tag)),
+            Effect.catchCause((cause) =>
+              Effect.logWarning("Linear issue tag could not be converted", {
+                threadId: thread.id,
+                identifier,
+                cause,
+              }),
+            ),
+          );
+        }
       }
-      if (resolution._tag === "unresolvable") {
-        yield* Effect.logInfo("Linear issue tag kept: the issue cannot be read", {
-          identifier,
-          detail: resolution.detail,
-        });
-        continue;
-      }
-      for (const thread of threads) {
-        yield* link(thread, resolution.issue).pipe(
-          Effect.andThen(untag(thread.id, identifier)),
-          Effect.catchCause((cause) =>
-            Effect.logWarning("Linear issue tag could not be converted", {
-              threadId: thread.id,
-              identifier,
-              cause,
-            }),
-          ),
-        );
-      }
-    }
-  });
+    },
+    (effect) => conversions.withPermits(1)(effect),
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Linear issue tags could not be converted", { cause }),
+    ),
+  );
 
-  return LinearThreadIssues.of({
-    convertTags: Effect.fn("LinearThreadIssues.convertTagsInTurn")(function* (threadId?: ThreadId) {
-      yield* conversions.withPermits(1)(
-        convert(threadId).pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("Linear issue tags could not be converted", { cause }),
-          ),
-        ),
-      );
-    }),
-  });
+  return LinearThreadIssues.of({ convertTags });
 });
 
 const hasLinearTag = (event: OrchestrationV2DomainEvent) =>
@@ -172,9 +172,10 @@ const hasLinearTag = (event: OrchestrationV2DomainEvent) =>
 
 const followTags = Effect.fn("LinearThreadIssues.followTags")(
   function* (service: LinearThreadIssues["Service"]) {
-    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const events = yield* EventSink.EventSinkV2;
+    const afterSequence = yield* events.latestSequence();
     yield* Effect.forkChild(service.convertTags());
-    yield* Stream.runForEach(orchestrator.streamDomainEvents, (event) =>
+    yield* Stream.runForEach(events.stream({ afterSequence }), ({ event }) =>
       hasLinearTag(event) ? service.convertTags(event.threadId) : Effect.void,
     );
   },

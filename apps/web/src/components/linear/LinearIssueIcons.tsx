@@ -1,28 +1,15 @@
-import type { IssueState, IssueSummary } from "@t3tools/contracts";
+import { LINEAR_PRIORITY_ORDER, type IssueState, type IssueSummary } from "@t3tools/contracts";
 import { msg, useGT, useMessages } from "gt-react";
 
 import { cn } from "../../lib/utils";
 
-export const LINEAR_PRIORITY_ORDER = [1, 2, 3, 4, 0] as const;
-export type LinearPriority = (typeof LINEAR_PRIORITY_ORDER)[number];
+type LinearPriority = (typeof LINEAR_PRIORITY_ORDER)[number];
 
-interface LinearStateLook {
-  readonly name: string;
-  readonly type: string;
-  readonly color: string;
-  readonly progress: number;
-}
+const MUTED_COLOR = "#999a9c";
 
-function linearStateLook(state: IssueState): LinearStateLook {
-  return {
-    name: state.name,
-    type:
-      state.stateType ??
-      (state.category === "closed" ? (state.closeReason ?? "completed") : "unstarted"),
-    color: state.color ?? "#999a9c",
-    progress: 0.5,
-  };
-}
+const linearStateType = (state: IssueState) =>
+  state.stateType ??
+  (state.category === "closed" ? (state.closeReason ?? "completed") : "unstarted");
 
 const linearPriority = (priority: number | undefined): LinearPriority =>
   LINEAR_PRIORITY_ORDER.find((candidate) => candidate === priority) ?? 0;
@@ -43,10 +30,10 @@ const STATUS_CUTOUTS: Record<string, string> = {
   triage: "M3 8l3.5-3.5v2.75h3V4.5L13 8l-3.5 3.5V8.75h-3v2.75Z",
 };
 
-function StatusShape({ state }: { state: LinearStateLook }) {
-  const cutout = STATUS_CUTOUTS[state.type];
+function StatusShape({ type }: { type: string }) {
+  const cutout = STATUS_CUTOUTS[type];
   if (cutout) return <path fillRule="evenodd" d={`${FILLED_CIRCLE}${cutout}`} />;
-  if (state.type === "backlog") {
+  if (type === "backlog") {
     return (
       <circle
         cx="8"
@@ -59,40 +46,27 @@ function StatusShape({ state }: { state: LinearStateLook }) {
       />
     );
   }
-  const progress = Math.max(0.05, Math.min(0.95, state.progress));
-  const angle = progress * Math.PI * 2;
   return (
     <>
       <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      {state.type === "started" ? (
-        <path
-          d={`M8 8V3.75a4.25 4.25 0 ${progress > 0.5 ? 1 : 0} 1 ${4.25 * Math.sin(angle)} ${4.25 * (1 - Math.cos(angle))}Z`}
-        />
-      ) : null}
+      {type === "started" ? <path d="M8 8V3.75a4.25 4.25 0 0 1 0 8.5Z" /> : null}
     </>
   );
 }
 
-export function LinearStatusIcon({
-  state: issueState,
-  className,
-}: {
-  state: IssueState;
-  className?: string;
-}) {
+export function LinearStatusIcon({ state, className }: { state: IssueState; className?: string }) {
   const gt = useGT();
-  const state = linearStateLook(issueState);
   return (
     <svg
       viewBox="0 0 16 16"
       className={cn("size-3.5 shrink-0", className)}
       fill="currentColor"
-      style={{ color: state.color }}
+      style={{ color: state.color ?? MUTED_COLOR }}
       role="img"
       aria-label={gt("Status: {status}", { status: state.name })}
     >
       <title>{state.name}</title>
-      <StatusShape state={state} />
+      <StatusShape type={linearStateType(state)} />
     </svg>
   );
 }
@@ -112,7 +86,7 @@ export function LinearPriorityIcon({
       viewBox="0 0 16 16"
       className="size-3.5 shrink-0"
       fill="currentColor"
-      style={{ color: priority === 1 && !closed ? "#ff6b26" : "#999a9c" }}
+      style={{ color: priority === 1 && !closed ? "#ff6b26" : MUTED_COLOR }}
       role="img"
       aria-label={gt("Priority: {priority}", { priority: label })}
     >

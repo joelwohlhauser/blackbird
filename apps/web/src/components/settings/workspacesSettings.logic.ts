@@ -5,6 +5,7 @@ import {
 import type { IssueState } from "@t3tools/contracts";
 import { msg } from "gt-react";
 import { m, type MessageResolver } from "../../i18n/messages";
+import type { LinearIssuesStatus } from "../linear/linearIssues";
 
 export interface WorkspaceChatLike {
   readonly id: string;
@@ -82,12 +83,10 @@ export function sortWorkspaceRows<T extends WorkspaceSortableRow>(
   });
 }
 
-export type LinearWorkspaceStatus = "unavailable" | "pending" | "failed" | "ready";
-
 export function linearWorkspaceStatusLabel(
   issueId: string | null,
   state: IssueState | null,
-  status: LinearWorkspaceStatus,
+  status: LinearIssuesStatus,
   resolve: MessageResolver = m,
 ): { readonly label: string; readonly detail?: string; readonly tone: string } {
   if (!issueId) return { label: resolve(msg("No issue")), tone: "text-muted-foreground" };
@@ -179,8 +178,8 @@ export function formatWorkspaceStorageSize(
 
 export function formatWorkspaceLastUsed(
   value: string | null,
-  now = Date.now(),
   resolve: MessageResolver = m,
+  now = Date.now(),
 ): string {
   if (!value) return resolve(msg("No chats"));
   const timestamp = new Date(value).getTime();

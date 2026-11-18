@@ -1,5 +1,6 @@
 import {
   EVERY_ISSUE_SCOPE,
+  LINEAR_PRIORITY_ORDER,
   LINEAR_HOST,
   LINEAR_ISSUE_TRACKER,
   type EnvironmentId,
@@ -28,12 +29,7 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import {
-  LINEAR_PRIORITY_LABELS,
-  LINEAR_PRIORITY_ORDER,
-  LinearPriorityIcon,
-  LinearStatusIcon,
-} from "./LinearIssueIcons";
+import { LINEAR_PRIORITY_LABELS, LinearPriorityIcon, LinearStatusIcon } from "./LinearIssueIcons";
 
 const LinearIssueSort = Schema.Literals(["updated", "priority"]);
 

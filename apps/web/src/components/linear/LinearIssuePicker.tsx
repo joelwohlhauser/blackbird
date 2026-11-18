@@ -1,4 +1,5 @@
 import {
+  EVERY_ISSUE_SCOPE,
   LINEAR_APP_URL,
   LINEAR_ISSUE_TRACKER,
   type EnvironmentId,
@@ -16,10 +17,8 @@ import { memo, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { observeIntersection } from "../../lib/observeIntersection";
 import { cn } from "../../lib/utils";
-import { issueTrackerEnvironment } from "../../state/issueTrackers";
 import { issueEnvironment } from "../../state/issues";
 import { useDebouncedValue } from "../../state/queries";
-import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useComposerMenuProps } from "../chat/composerEventScope";
 import { ComposerContextLabel } from "../ComposerContextLabel";
@@ -38,6 +37,7 @@ import {
 } from "../ui/combobox";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { LinearIssueIcons } from "./LinearIssueIcons";
+import { useLinearConnection } from "./linearIssues";
 import {
   DEFAULT_LINEAR_ISSUE_PICKER_PREFERENCES,
   LinearIssueFilterMenu,
@@ -51,26 +51,6 @@ const MAX_QUERY_LENGTH = 200;
 const CREATE_POLL_MS = 4_000;
 const CREATE_TIMEOUT_MS = 10 * 60_000;
 const LOAD_AHEAD_PX = 160;
-
-export function useLinearConnection(
-  environmentId: EnvironmentId | null,
-  projectId: ProjectId | null,
-) {
-  const query = useEnvironmentQuery(
-    environmentId === null
-      ? null
-      : issueTrackerEnvironment.connections({ environmentId, input: {} }),
-  );
-  const tracker = query.data?.trackers.find(
-    (candidate) => candidate.tracker === LINEAR_ISSUE_TRACKER,
-  );
-  const binding = projectId === null ? undefined : query.data?.bindings[projectId];
-  return {
-    connected: tracker?.connected === true && tracker.account !== null,
-    teams: tracker?.scopes ?? [],
-    boundScope: binding?.tracker === LINEAR_ISSUE_TRACKER ? binding.scope : null,
-  };
-}
 
 interface IssueList {
   readonly key: string;
@@ -212,7 +192,7 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
     projectId,
     standalone: {
       tracker: LINEAR_ISSUE_TRACKER,
-      ...(scope === null ? {} : { scope }),
+      scope: scope ?? EVERY_ISSUE_SCOPE,
       stateIds: preferences.stateIds,
       stateTypes: preferences.view === "triage" ? ["triage"] : [],
       priorities: preferences.priorities,
@@ -291,7 +271,7 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
       sort: "created",
       limit: 1,
       projectId,
-      standalone: { tracker: LINEAR_ISSUE_TRACKER, ...(scope === null ? {} : { scope }) },
+      standalone: { tracker: LINEAR_ISSUE_TRACKER, scope: scope ?? EVERY_ISSUE_SCOPE },
     }).then((answer) => {
       if ("error" in answer) throw new Error(answer.error);
       const [newest] = answer.page.entries;

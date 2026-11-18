@@ -309,13 +309,14 @@ export const IssueListInput = Schema.Struct({
   sort: Schema.optional(IssueListSort),
   /**
    * Reads one standalone tracker through its connected account instead of the projects bound to
-   * it: only `scope`, or every scope the account reaches. Needs `projectId`, which serves the read.
+   * it: one `scope`, or `*` for every scope the account reaches. Needs `projectId`, which serves
+   * the read.
    */
   standalone: Schema.optional(
     Schema.Struct({
       ...IssueStandaloneListRefinement.fields,
       tracker: IssueTrackerKind,
-      scope: Schema.optional(TrimmedNonEmptyString),
+      scope: TrimmedNonEmptyString,
     }),
   ),
 });

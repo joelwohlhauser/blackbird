@@ -1,6 +1,6 @@
 import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { LINEAR_ISSUE_TRACKER, type EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import {
   ArrowDownIcon,
   ArrowUpDownIcon,
@@ -30,7 +30,6 @@ import {
   type EnvironmentPresentation,
 } from "../../state/environments";
 import { useProjects, useThreadShells } from "../../state/entities";
-import { issueEnvironment } from "../../state/issues";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useKnownTerminalSessions } from "../../state/terminalSessions";
@@ -41,7 +40,7 @@ import {
   connectionPhaseDotClassName,
   connectionPhasePingClassName,
 } from "../ConnectionStatusDot";
-import { useLinearConnection } from "../linear/LinearIssuePicker";
+import { useLinearIssues } from "../linear/linearIssues";
 import { Button } from "../ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -59,7 +58,6 @@ import {
   summarizeWorkspaceChats,
   workspacePathBasename,
   workspacePathsMatch,
-  type LinearWorkspaceStatus,
   type WorkspaceSortDirection,
   type WorkspaceSortKey,
 } from "./workspacesSettings.logic";
@@ -263,41 +261,16 @@ export function WorkspacesSettingsPanel() {
       };
     },
   );
-  const linearConnected = useLinearConnection(effectiveEnvironmentId, null).connected;
-  const issueIds = [...new Set(rows.flatMap((row) => (row.issueId ? [row.issueId] : [])))];
-  const projectId = rows[0]?.projectId;
-  const linearIssues = useEnvironmentQuery(
-    linearConnected &&
-      effectiveEnvironmentId !== null &&
-      projectId !== undefined &&
-      issueIds.length > 0
-      ? issueEnvironment.list({
-          environmentId: effectiveEnvironmentId,
-          input: {
-            projectId,
-            state: "all",
-            limit: 200,
-            standalone: { tracker: LINEAR_ISSUE_TRACKER, keys: issueIds.slice(0, 200) },
-          },
-        })
-      : null,
-  );
-  const linearStatus: LinearWorkspaceStatus = !linearConnected
-    ? "unavailable"
-    : linearIssues.data !== null &&
-        !(linearIssues.data.entries.length === 0 && linearIssues.data.errors.length > 0)
-      ? "ready"
-      : linearIssues.error !== null || linearIssues.data !== null
-        ? "failed"
-        : "pending";
-  const issueStates = new Map(
-    (linearIssues.data?.entries ?? []).map((entry) => [entry.key, entry.state]),
+  const linearIssues = useLinearIssues(
+    effectiveEnvironmentId,
+    rows[0]?.projectId ?? null,
+    rows.flatMap((row) => (row.issueId ? [row.issueId] : [])),
   );
   const sortableRows = rows.map((row) => {
     const linear = linearWorkspaceStatusLabel(
       row.issueId,
-      row.issueId === null ? null : (issueStates.get(row.issueId) ?? null),
-      linearStatus,
+      row.issueId === null ? null : (linearIssues.issueOf(row.issueId)?.state ?? null),
+      linearIssues.status,
       messages,
     );
     return {
@@ -541,11 +514,7 @@ export function WorkspacesSettingsPanel() {
                           />
                         </TableCell>
                         <TableCell>
-                          {formatWorkspaceLastUsed(
-                            row.chatSummary.latestUpdatedAt,
-                            undefined,
-                            messages,
-                          )}
+                          {formatWorkspaceLastUsed(row.chatSummary.latestUpdatedAt, messages)}
                         </TableCell>
                         <TableCell>
                           <Button

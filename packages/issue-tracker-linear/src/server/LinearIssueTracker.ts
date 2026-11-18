@@ -9,6 +9,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   EVERY_ISSUE_SCOPE,
+  LINEAR_PRIORITY_ORDER,
   type IssueActor,
   type IssueCapabilities,
   type IssueComment,
@@ -139,19 +140,9 @@ function toState(state: LinearApi.LinearWorkflowState): IssueState {
     : { category: "open", name: state.name, ...look };
 }
 
-function toWorkflowStates(
-  states: ReadonlyArray<
-    LinearApi.LinearWorkflowState & { readonly team: { readonly key: string } }
-  >,
-): IssueWorkflowState[] {
-  return inWorkflowOrder(states).map((state) => ({
-    ...toState(state),
-    id: state.id,
-    scope: state.team.key,
-  }));
+function toWorkflowState(state: LinearApi.LinearWorkflowState, scope: string): IssueWorkflowState {
+  return { ...toState(state), id: state.id, scope };
 }
-
-const PRIORITY_ORDER = [1, 2, 3, 4, 0];
 
 const PriorityCursor = Schema.fromJsonString(
   Schema.Struct({ priority: Schema.Number, after: Schema.NullOr(Schema.String) }),
@@ -538,7 +529,7 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
           return { items: page.nodes.map((node) => toSummary(node)), nextCursor: page.nextCursor };
         }
         // Linear pages by date only, so a priority sort walks one priority at a time.
-        const priorities = PRIORITY_ORDER.filter(
+        const priorities: ReadonlyArray<number> = LINEAR_PRIORITY_ORDER.filter(
           (priority) =>
             refinement.priorities === undefined ||
             refinement.priorities.length === 0 ||
@@ -710,7 +701,9 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
                 labels: [],
                 assignees: [],
                 truncated: false,
-                states: toWorkflowStates(states),
+                states: inWorkflowOrder(states).map((state) =>
+                  toWorkflowState(state, state.team.key),
+                ),
               })),
             )
           : requireTeam("listCandidates", input.scope).pipe(
@@ -725,11 +718,8 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
                   id: user.id,
                 })),
                 truncated: scope.truncated,
-                states: toWorkflowStates(
-                  scope.team.states.nodes.map((state) => ({
-                    ...state,
-                    team: { key: scope.team.key },
-                  })),
+                states: inWorkflowOrder(scope.team.states.nodes).map((state) =>
+                  toWorkflowState(state, scope.team.key),
                 ),
               })),
             ),

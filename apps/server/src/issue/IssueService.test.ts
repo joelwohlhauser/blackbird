@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import {
+  EVERY_ISSUE_SCOPE,
   IssueTrackerKind,
   type IssueTrackerProjectBinding,
   SourceControlProviderKind,
@@ -593,7 +594,7 @@ describe("IssueService with a standalone tracker", () => {
       const everyTeam = yield* unbound.list({
         state: "open",
         projectId: "notes" as ProjectId,
-        standalone: { tracker: LINEAR },
+        standalone: { tracker: LINEAR, scope: EVERY_ISSUE_SCOPE },
       });
       yield* unbound.list({
         state: "open",
@@ -627,6 +628,7 @@ describe("IssueService with a standalone tracker", () => {
         projectId: "notes" as ProjectId,
         standalone: {
           tracker: LINEAR,
+          scope: EVERY_ISSUE_SCOPE,
           priorities: [1],
           sortByPriority: true,
         },

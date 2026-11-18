@@ -3751,6 +3751,25 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         DateTime.toEpochMillis(untaggedShell.updatedAt),
       );
 
+      for (const [step, command, expected] of [
+        ["issue-branch", { branch: "feature/app-123-add-member" }, ["linear:APP-123"]],
+        ["unlink", { tag: "linear:APP-123" }, []],
+        ["same-branch", { branch: "feature/app-123-add-member" }, []],
+        ["plain-branch", { branch: "feature/v2" }, []],
+      ] as const) {
+        const commandId = CommandId.make(`runtime-layer-lifecycle-linear-${step}`);
+        yield* orchestrator.dispatch(
+          "tag" in command
+            ? { type: "thread.tag.set", commandId, threadId, tag: command.tag, tagged: false }
+            : { type: "thread.metadata.update", commandId, threadId, branch: command.branch },
+        );
+        assert.deepEqual(
+          shellOf(yield* orchestrator.getShellSnapshot()).tags ?? [],
+          expected,
+          step,
+        );
+      }
+
       const preAutoProjection = yield* orchestrator.getThreadProjection(threadId);
       const staleAutoSettle = yield* orchestrator
         .dispatch({
