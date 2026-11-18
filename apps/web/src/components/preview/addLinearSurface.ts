@@ -6,8 +6,12 @@ import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 
 import type { BrowserSettingsReadError, OpenPreviewMutation } from "~/browser/openFileInPreview";
+import { readThreadPreviewState } from "~/previewStateStore";
 import { type RightPanelSurface, useRightPanelStore } from "~/rightPanelStore";
+import { previewEnvironment } from "~/state/preview";
+import { useAtomCommand } from "~/state/use-atom-command";
 
+import { closePreviewSession } from "./closePreviewSession";
 import { openPreviewSession } from "./openPreviewSession";
 
 /**
@@ -33,4 +37,21 @@ export async function addLinearSurface<E>(input: {
     store.openLinear(input.threadRef, snapshot.tabId, input.url);
     return replaced;
   });
+}
+
+export function useOpenLinearUrl() {
+  const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
+  const closePreview = useAtomCommand(previewEnvironment.close, "preview close");
+  return (threadRef: ScopedThreadRef, url: string) =>
+    void addLinearSurface({ threadRef, openPreview, url }).then((result) => {
+      const replaced = result._tag === "Success" ? result.value : undefined;
+      if (replaced?.kind !== "linear") return;
+      const tabId = replaced.resourceId;
+      void closePreviewSession({
+        closePreview,
+        snapshot: readThreadPreviewState(threadRef).sessions[tabId] ?? null,
+        tabId,
+        threadRef,
+      });
+    });
 }

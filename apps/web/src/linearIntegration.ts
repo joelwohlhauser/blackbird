@@ -22,3 +22,7 @@ export function linearUrl(input: {
   const organizationUrl = `${LINEAR_APP_ORIGIN}/${organizationSlug}`;
   return input.issueId ? `${organizationUrl}/issue/${input.issueId}/` : organizationUrl;
 }
+
+export function isLinearAppUrl(href: string): boolean {
+  return URL.canParse(href) && new URL(href).origin === LINEAR_APP_ORIGIN;
+}

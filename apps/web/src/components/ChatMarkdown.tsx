@@ -197,6 +197,8 @@ import {
   isBrowserSettingsReadError,
 } from "../browser/openFileInPreview";
 import { PullRequestLinkPreview } from "./pullRequest/PullRequestLinkPreview";
+import { useOpenLinearUrl } from "./preview/addLinearSurface";
+import { isLinearAppUrl } from "../linearIntegration";
 import { MarkdownCodeBlock, SuspenseShikiCodeBlock } from "./chat/MarkdownCodeBlock";
 import { createMarkdownRenderer } from "./chat/markdownRenderer";
 import { splitMarkdownBlocks } from "./chat/markdownStreamBlocks";
@@ -697,6 +699,7 @@ function useChatMarkdownState({
   };
   const openChangeRequestLink = useOpenChangeRequestLink(threadRef, pullRequestPanelRef);
   const openDeferredMarkdownLink = useOpenLink(threadRef);
+  const openLinearUrl = useOpenLinearUrl();
   const mathEnabled = useClientSettings((settings) => settings.mathRenderingEnabled);
   // Keyed by the file links found, not the text, so streamed text that adds none keeps the
   // renderer context, and every block reading it, unchanged.
@@ -991,6 +994,7 @@ function useChatMarkdownState({
     openChangeRequestLink,
     openDeferredMarkdownLink,
     openExternalLinkInPreview,
+    openLinearUrl,
     openMarkdownMedia,
     projects,
     linkedThreadPullRequestFor,
@@ -1156,6 +1160,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       openChangeRequestLink,
       openDeferredMarkdownLink,
       openExternalLinkInPreview,
+      openLinearUrl,
       projects,
       linkedThreadPullRequestFor,
       resolveThreadPullRequest,
@@ -1269,6 +1274,21 @@ const CHAT_MARKDOWN_COMPONENTS = {
             if (event.defaultPrevented) return;
             if (href && openChangeRequestLink(event, href, undefined, environmentId ?? undefined))
               return;
+            if (
+              href &&
+              threadRef &&
+              canOpenInPreview &&
+              isLinearAppUrl(href) &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey &&
+              !event.altKey
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              openLinearUrl(threadRef, href);
+              return;
+            }
             if (!href || !faviconHost) return;
             event.preventDefault();
             event.stopPropagation();

@@ -102,7 +102,7 @@ renames the chat, replacing the old header title text — the project name is
 gone from the header), never scrolls out of view, and cannot be closed or
 moved to the panel.
 
-Linear opens in the right panel: click a linked issue below the composer or in the thread details card, or pick Linear on the New Tab page, which opens the chat's first linked issue. A chat has one Linear tab, so opening another issue replaces its page, and Home goes to the chat's first linked issue. Pull request views, including the chat's own PR, always open in the right panel, as in T3 Code. GitHub browser tabs remain available from New Tab.
+Linear opens in the right panel: click a linked issue below the composer or in the thread details card, click a Linear link in a chat message (Command-click opens it in your browser), or pick Linear on the New Tab page, which opens the chat's first linked issue. A chat has one Linear tab, so opening another issue replaces its page, and Home goes to the chat's first linked issue. Pull request views, including the chat's own PR, always open in the right panel, as in T3 Code. GitHub browser tabs remain available from New Tab.
 
 Tabs are draggable: reorder them within a container or drag them between the
 chat area and the right panel. Dragging toward the chat column's right edge

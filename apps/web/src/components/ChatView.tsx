@@ -226,7 +226,7 @@ import {
 } from "../previewStateStore";
 import { previewRuntimeTabId } from "../browser/previewRuntimeTabId";
 import { useGitHubPullRequestSurface } from "./preview/useGitHubPullRequestSurface";
-import { addLinearSurface } from "./preview/addLinearSurface";
+import { useOpenLinearUrl } from "./preview/addLinearSurface";
 import { closePreviewSession } from "./preview/closePreviewSession";
 import { markBrowserThreadViewed } from "../browser/browserTabRetention";
 import { openPreviewSession } from "./preview/openPreviewSession";
@@ -572,6 +572,7 @@ export default function ChatView(props: ChatViewProps) {
   });
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const closePreview = useAtomCommand(previewEnvironment.close, "preview close");
+  const openLinearUrlInPanel = useOpenLinearUrl();
   const deleteUnusedSideChat = useAtomCommand(threadEnvironment.delete, { reportFailure: false });
   const { settleThread } = useThreadActions();
   const { environments } = useEnvironments();
@@ -2348,9 +2349,7 @@ export default function ChatView(props: ChatViewProps) {
   };
   const openLinearUrl = (url: string) => {
     if (!activeThreadRef || !canOperatePreview || !browserAvailable) return;
-    void addLinearSurface({ threadRef: activeThreadRef, openPreview, url }).then((result) => {
-      if (result._tag === "Success" && result.value) cleanupRightPanelSurfaces([result.value]);
-    });
+    openLinearUrlInPanel(activeThreadRef, url);
   };
   const linkedLinearIssueUrl = linearUrl({
     organizationSlug: linearOrganizationSlug,
