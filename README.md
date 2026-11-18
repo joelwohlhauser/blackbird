@@ -252,7 +252,7 @@ The normal right panel has browser-backed integration tabs:
 
 - **Issue** opens a chat's linked Linear issue in the configured organization. The organization slug is
   configurable and empty by default. Set it under Settings → General → Linear to open and pin issue tabs; until then, the Linear action opens its home page.
-- A chat can link several Linear issues. A branch named after an issue, such as `eng-123-add-login`, links it when the chat starts on that branch or moves to it. Link more from the composer's **Issue** picker or **Link issue** in the thread details card, and agents can link one with the `link_linear_issue` tool. Linked issues show with their status below the composer and in the thread details card; unlink one there and it stays unlinked. The status needs the desktop app's Sign in with Linear.
+- A chat can link several Linear issues. A branch named after an issue, such as `eng-123-add-login`, links it when the chat starts on that branch or moves to it. Link more with **Link issue** in the thread details card, and agents can link one with the `link_linear_issue` tool. Linked issues show with their status below the composer and in the thread details card; unlink one there and it stays unlinked. The status needs the desktop app's Sign in with Linear.
 - **PR** uses the authenticated GitHub CLI (`gh`) to detect the pull request for
   the current branch and open the GitHub page inside Blackbird.
 - **Previews** pills in a pull request's Summary tab list the preview

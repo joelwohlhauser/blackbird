@@ -10,7 +10,7 @@ import type { MouseEvent } from "react";
 
 import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { useClientSettings } from "../../hooks/useSettings";
-import { getDesktopLinearBridge, useLinearIssueStatuses } from "../../lib/desktopLinear";
+import { useLinearIssueStatuses } from "../../lib/desktopLinear";
 import { cn } from "../../lib/utils";
 import { linearUrl } from "../../linearIntegration";
 import { useQuietThreadShell } from "../../state/entities";
@@ -109,19 +109,6 @@ function IssueIcon({ issue, className }: { issue: ThreadLinearIssue; className?:
 
 const issueSummary = (issue: ThreadLinearIssue) =>
   issue.status ? `${issue.id}: ${issue.status.title}` : issue.id;
-
-export function ThreadLinearIssuePicker(props: ThreadLinearIssuesProps) {
-  const { canOperate, issues, setLinked } = useThreadLinearIssues(props);
-  return issues.length === 0 && canOperate && getDesktopLinearBridge() ? (
-    <LinearIssuePicker
-      label="Issue"
-      disabled={false}
-      preferencesKey={props.preferencesKey}
-      onSelect={(issue) => setLinked(issue.identifier, true)}
-      onOpenLinear={props.onOpenLinearUrl}
-    />
-  ) : null;
-}
 
 function IssueBadgeContent({ issue, text }: { issue: ThreadLinearIssue; text: string }) {
   return (

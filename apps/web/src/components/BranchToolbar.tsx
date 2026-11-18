@@ -30,7 +30,7 @@ import { appAtomRegistry } from "../rpc/atomRegistry";
 import { vcsEnvironment } from "../state/vcs";
 import { linearIssueIdFromBranch } from "@t3tools/contracts";
 import { LinearIssuePicker } from "./linear/LinearIssuePicker";
-import { ThreadLinearIssueBadge, ThreadLinearIssuePicker } from "./linear/ThreadLinearIssues";
+import { ThreadLinearIssueBadge } from "./linear/ThreadLinearIssues";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { useProject, useThreadShellsForProjectRefs } from "../state/entities";
 import {
@@ -841,18 +841,21 @@ export const BranchToolbar = memo(function BranchToolbar({
     preferencesKey: `${environmentId}:${projectId}`,
     onOpenLinearUrl,
   };
-  const linearIssuePicker = !showGitControls ? null : isServerThread ? (
-    <ThreadLinearIssuePicker {...threadLinearIssues} />
-  ) : canReuseExistingWorktree && !forceNewWorktree && getDesktopLinearBridge() ? (
-    <LinearIssuePicker
-      label={selectedLinearIssueId ?? "Issue"}
-      disabled={resolvingLinearIssue}
-      preferencesKey={`${environmentId}:${projectId}`}
-      onSelect={(issue) => void onLinearIssueSelect(issue)}
-      onUnlink={selectedLinearIssueId ? onLinearIssueUnlink : undefined}
-      onOpenLinear={onOpenLinearUrl}
-    />
-  ) : null;
+  const linearIssuePicker =
+    showGitControls &&
+    !isServerThread &&
+    canReuseExistingWorktree &&
+    !forceNewWorktree &&
+    getDesktopLinearBridge() ? (
+      <LinearIssuePicker
+        label={selectedLinearIssueId ?? "Issue"}
+        disabled={resolvingLinearIssue}
+        preferencesKey={`${environmentId}:${projectId}`}
+        onSelect={(issue) => void onLinearIssueSelect(issue)}
+        onUnlink={selectedLinearIssueId ? onLinearIssueUnlink : undefined}
+        onOpenLinear={onOpenLinearUrl}
+      />
+    ) : null;
 
   if (!activeProject) return null;
 
