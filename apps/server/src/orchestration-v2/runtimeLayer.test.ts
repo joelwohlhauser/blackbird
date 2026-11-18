@@ -5880,7 +5880,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         yield* worker.drain();
         const woken = yield* wakes;
         assert.lengthOf(woken, 1);
-        assert.equal(woken[0]!.notification?.summary, "#16: checks passed");
+        assert.equal(woken[0]!.notification?.summary, "#16: checks passed, ready");
 
         yield* orchestrator.dispatch({
           type: "thread.pull-request.watch",
