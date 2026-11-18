@@ -10,6 +10,7 @@ import {
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
+  LINEAR_ISSUE_TRACKER,
   type ContextMenuItem,
   type EnvironmentId,
   type VcsRef,
@@ -921,7 +922,7 @@ export function BranchToolbarBranchSelector({
         ) : null}
         {displayMode === "panel" ? (
           <ThreadDetailsIssueRows
-            links={linkedIssues.filter((link) => link.tracker !== "linear")}
+            links={linkedIssues.filter((link) => link.tracker !== LINEAR_ISSUE_TRACKER)}
             onOpenLink={(event, link) => {
               event.stopPropagation();
               useRightPanelStore.getState().openIssue(threadRef, {

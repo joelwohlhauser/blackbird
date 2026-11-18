@@ -1,5 +1,7 @@
 import {
-  IssueTrackerKind,
+  EVERY_ISSUE_SCOPE,
+  LINEAR_HOST,
+  LINEAR_ISSUE_TRACKER,
   type EnvironmentId,
   type IssueTrackerScope,
   type ProjectId,
@@ -33,8 +35,6 @@ import {
   LinearStatusIcon,
 } from "./LinearIssueIcons";
 
-const LINEAR = IssueTrackerKind.make("linear");
-
 const LinearIssueSort = Schema.Literals(["updated", "priority"]);
 
 export const LinearIssuePickerPreferences = Schema.Struct({
@@ -65,12 +65,12 @@ function ActiveDot() {
 }
 
 export function LinearTeamSelect(props: {
-  teams: ReadonlyArray<IssueTrackerScope> | null;
+  teams: ReadonlyArray<IssueTrackerScope>;
   value: string | null;
   onChange: (scope: string | null) => void;
 }) {
   const gt = useGT();
-  const selected = props.teams?.find((team) => team.key === props.value);
+  const selected = props.teams.find((team) => team.key === props.value);
   return (
     <Select
       value={props.value ?? ""}
@@ -92,10 +92,10 @@ export function LinearTeamSelect(props: {
         </SelectItem>
         {props.value !== null && !selected ? (
           <SelectItem value={props.value} disabled>
-            {props.teams === null ? <T>Loading teams…</T> : <T>Unavailable team</T>}
+            <T>Unavailable team</T>
           </SelectItem>
         ) : null}
-        {props.teams?.map((team) => (
+        {props.teams.map((team) => (
           <SelectItem key={team.key} value={team.key}>
             {team.key} · {team.name}
           </SelectItem>
@@ -122,9 +122,9 @@ export function LinearIssueFilterMenu(props: {
           environmentId: props.environmentId,
           input: {
             projectId: props.projectId,
-            tracker: LINEAR,
-            host: "linear.app",
-            scope: props.scope ?? "*",
+            tracker: LINEAR_ISSUE_TRACKER,
+            host: LINEAR_HOST,
+            scope: props.scope ?? EVERY_ISSUE_SCOPE,
           },
         })
       : null,

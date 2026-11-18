@@ -70,13 +70,6 @@ fragment LinearIssue on Issue {
   canceledAt
   state {
     ...LinearWorkflowState
-    team {
-      states(filter: { type: { eq: "started" } }) {
-        nodes {
-          position
-        }
-      }
-    }
   }
   team {
     key

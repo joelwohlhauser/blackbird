@@ -73,6 +73,7 @@ import {
   type ResponseContextRecord,
   type ChatFileAttachment,
   isProviderNativeSubagentThread,
+  LINEAR_APP_URL,
   type EnvironmentId,
   type IssueTrackerKind,
   type MessageId,
@@ -297,7 +298,6 @@ import {
   useEnvironmentSettings,
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
-import { LINEAR_APP_URL } from "../linearIntegration";
 import { linearIssueLinks } from "./linear/ThreadLinearIssues";
 import { isQuickChatsProject } from "../quickChats";
 import { usePanelAnimationSettings } from "../panelAnimations";

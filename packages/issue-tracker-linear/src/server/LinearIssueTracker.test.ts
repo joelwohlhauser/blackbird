@@ -3,11 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { IssueTrackerKind } from "@t3tools/contracts";
-import {
-  EVERY_ISSUE_SCOPE,
-  type StandaloneIssueTrackerApi,
-} from "@t3tools/source-control-core/server/IssueTracker";
+import { EVERY_ISSUE_SCOPE, IssueTrackerKind } from "@t3tools/contracts";
+import type { StandaloneIssueTrackerApi } from "@t3tools/source-control-core/server/IssueTracker";
 import * as IssueTrackerHost from "@t3tools/source-control-core/server/IssueTrackerHost";
 
 import * as LinearApi from "./LinearApi.ts";
@@ -29,7 +26,6 @@ const state = (name: string, type: string, position = 0) => ({
   type,
   position,
   color: "#f2c94c",
-  team: { states: { nodes: [{ position: 1 }, { position: 2 }] } },
 });
 
 const issue = (
@@ -233,7 +229,6 @@ describe("LinearIssueTracker", () => {
             name: "In Progress",
             stateType: "started",
             color: "#f2c94c",
-            progress: 1 / 3,
           },
         ],
       ]);
@@ -360,11 +355,11 @@ describe("LinearIssueTracker", () => {
         scope: EVERY_ISSUE_SCOPE,
       });
       expect(
-        candidates.states?.map((entry) => [entry.id, entry.scope, entry.stateType, entry.progress]),
+        candidates.states?.map((entry) => [entry.id, entry.scope, entry.stateType, entry.color]),
       ).toEqual([
-        ["OPS_Triage", "OPS", "triage", undefined],
-        ["ENG_Doing", "ENG", "started", 1 / 3],
-        ["ENG_Review", "ENG", "started", 2 / 3],
+        ["OPS_Triage", "OPS", "triage", "#f2c94c"],
+        ["ENG_Doing", "ENG", "started", "#f2c94c"],
+        ["ENG_Review", "ENG", "started", "#f2c94c"],
       ]);
     }),
   );

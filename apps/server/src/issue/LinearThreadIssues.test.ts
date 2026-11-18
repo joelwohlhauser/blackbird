@@ -2,6 +2,8 @@ import { describe, expect, it } from "@effect/vitest";
 import {
   IssueOperationError,
   IssueUnavailableError,
+  LINEAR_HOST,
+  LINEAR_ISSUE_TRACKER,
   ProjectId,
   ThreadId,
   type IssueDetail,
@@ -41,6 +43,8 @@ const thread = (
 const detail = (key: string) =>
   ({
     key,
+    tracker: LINEAR_ISSUE_TRACKER,
+    host: LINEAR_HOST,
     scope: key.split("-")[0],
     displayKey: key,
     title: `Issue ${key}`,

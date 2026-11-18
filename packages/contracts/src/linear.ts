@@ -1,3 +1,10 @@
+import { IssueTrackerKind } from "./issue.ts";
+
+export const LINEAR_ISSUE_TRACKER = IssueTrackerKind.make("linear");
+export const LINEAR_HOST = "linear.app";
+export const LINEAR_APP_URL = `https://${LINEAR_HOST}`;
+export const EVERY_ISSUE_SCOPE = "*";
+
 const LINEAR_ISSUE_TAG_PREFIX = "linear:";
 const LINEAR_ISSUE_ID_IN_BRANCH = /(?:^|[^a-z0-9])([a-z][a-z0-9]*-\d+)(?=$|[^a-z0-9])/i;
 

@@ -1,7 +1,7 @@
 import {
   AuthOrchestrationOperateScope,
+  LINEAR_ISSUE_TRACKER,
   threadIssueKeyOf,
-  type EnvironmentId,
   type IssueListEntry,
   type ScopedThreadRef,
   type ThreadIssueLink,
@@ -41,72 +41,53 @@ interface ThreadLinearIssuesProps {
 export function linearIssueLinks(
   issues: ReadonlyArray<ThreadIssueLink> | undefined,
 ): ReadonlyArray<ThreadIssueLink> {
-  return (issues ?? []).filter((link) => link.tracker === "linear");
-}
-
-function useLinearIssue(environmentId: EnvironmentId, link: ThreadIssueLink) {
-  const query = useEnvironmentQuery(
-    issueEnvironment.detail({
-      environmentId,
-      input: {
-        projectId: link.projectId,
-        tracker: link.tracker,
-        host: link.host,
-        scope: link.scope,
-        key: link.key,
-      },
-    }),
-  );
-  useLiveRefresh(query.refresh, { key: `linear-issue:${environmentId}:${link.key}` });
-  return query.data;
+  return (issues ?? []).filter((link) => link.tracker === LINEAR_ISSUE_TRACKER);
 }
 
 function LinearIssueStatusIcon({
-  environmentId,
-  link,
+  issue,
   className,
 }: {
-  environmentId: EnvironmentId;
-  link: ThreadIssueLink;
+  issue: IssueListEntry | undefined;
   className?: string;
 }) {
-  const issue = useLinearIssue(environmentId, link);
-  return issue === null ? (
+  return issue === undefined ? (
     <LinearIcon aria-hidden className={cn("size-2.5 shrink-0", className)} />
   ) : (
     <LinearStatusIcon state={issue.state} {...(className ? { className } : {})} />
   );
 }
 
-function LinearIssueSummary({
-  environmentId,
-  link,
-}: {
-  environmentId: EnvironmentId;
-  link: ThreadIssueLink;
-}) {
-  const issue = useLinearIssue(environmentId, link);
-  return `${link.displayKey}: ${issue?.title ?? link.title}`;
-}
-
-function LinearIssueTooltip({
-  environmentId,
-  link,
-}: {
-  environmentId: EnvironmentId;
-  link: ThreadIssueLink;
-}) {
-  const issue = useLinearIssue(environmentId, link);
-  return issue === null ? link.displayKey : `${issue.title} · ${issue.state.name}`;
-}
+const issueSummary = (link: ThreadIssueLink, issue: IssueListEntry | undefined) =>
+  `${link.displayKey}: ${issue?.title ?? link.title}`;
 
 function useThreadLinearIssues({ threadRef, onOpenLinearUrl }: ThreadLinearIssuesProps) {
   const thread = useQuietThreadShell(threadRef);
+  const links = linearIssueLinks(thread?.issues);
+  const query = useEnvironmentQuery(
+    thread === null || links.length === 0
+      ? null
+      : issueEnvironment.list({
+          environmentId: threadRef.environmentId,
+          input: {
+            projectId: thread.projectId,
+            state: "all",
+            limit: links.length,
+            standalone: { tracker: LINEAR_ISSUE_TRACKER, keys: links.map((link) => link.key) },
+          },
+        }),
+  );
+  useLiveRefresh(query.refresh, {
+    enabled: links.length > 0,
+    key: `linear-issues:${threadRef.environmentId}:${threadRef.threadId}`,
+  });
+  const issuesByKey = new Map((query.data?.entries ?? []).map((entry) => [entry.key, entry]));
   const unlink = useAtomCommand(threadEnvironment.unlinkIssue, { reportFailure: true });
   const link = useAtomCommand(threadEnvironment.linkIssue, { reportFailure: true });
   const canOperate = useEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope);
   return {
-    links: linearIssueLinks(thread?.issues),
+    links,
+    issueOf: (link: ThreadIssueLink) => issuesByKey.get(link.key),
     canOperate,
     projectId: thread?.projectId ?? null,
     unlink: (issue: ThreadIssueLink) =>
@@ -151,18 +132,10 @@ function useThreadLinearIssues({ threadRef, onOpenLinearUrl }: ThreadLinearIssue
   };
 }
 
-function IssueBadgeContent({
-  environmentId,
-  link,
-  text,
-}: {
-  environmentId: EnvironmentId;
-  link: ThreadIssueLink;
-  text: string;
-}) {
+function IssueBadgeContent({ issue, text }: { issue: IssueListEntry | undefined; text: string }) {
   return (
     <span className="contents font-normal text-xs tabular-nums">
-      <LinearIssueStatusIcon environmentId={environmentId} link={link} className="size-3" />
+      <LinearIssueStatusIcon issue={issue} className="size-3" />
       <span className="ms-0.5 text-secondary-label">{text}</span>
     </span>
   );
@@ -170,10 +143,10 @@ function IssueBadgeContent({
 
 export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
   const gt = useGT();
-  const { links, linkProps } = useThreadLinearIssues(props);
-  const { environmentId } = props.threadRef;
+  const { links, issueOf, linkProps } = useThreadLinearIssues(props);
   const latest = links.at(-1);
   if (latest === undefined) return null;
+  const latestIssue = issueOf(latest);
   if (links.length === 1) {
     return (
       <Tooltip>
@@ -182,10 +155,12 @@ export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
           aria-label={gt("Open {key} in Linear", { key: latest.displayKey })}
           data-composer-context-control
         >
-          <IssueBadgeContent environmentId={environmentId} link={latest} text={latest.displayKey} />
+          <IssueBadgeContent issue={latestIssue} text={latest.displayKey} />
         </TooltipTrigger>
         <TooltipPopup side="top">
-          <LinearIssueTooltip environmentId={environmentId} link={latest} />
+          {latestIssue === undefined
+            ? latest.displayKey
+            : `${latestIssue.title} · ${latestIssue.state.name}`}
         </TooltipPopup>
       </Tooltip>
     );
@@ -197,19 +172,13 @@ export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
         aria-label={gt("Linked Linear issues")}
         data-composer-context-control
       >
-        <IssueBadgeContent
-          environmentId={environmentId}
-          link={latest}
-          text={`${latest.displayKey} +${links.length - 1}`}
-        />
+        <IssueBadgeContent issue={latestIssue} text={`${latest.displayKey} +${links.length - 1}`} />
       </MenuTrigger>
       <MenuPopup side="top" align="end" className="max-w-96" {...composerFloatingLayerProps}>
         {links.map((link) => (
           <MenuItem key={threadIssueKeyOf(link)} render={<a {...linkProps(link)} />}>
-            <LinearIssueStatusIcon environmentId={environmentId} link={link} />
-            <span className="min-w-0 truncate">
-              <LinearIssueSummary environmentId={environmentId} link={link} />
-            </span>
+            <LinearIssueStatusIcon issue={issueOf(link)} />
+            <span className="min-w-0 truncate">{issueSummary(link, issueOf(link))}</span>
           </MenuItem>
         ))}
       </MenuPopup>
@@ -219,7 +188,8 @@ export function ThreadLinearIssueBadge(props: ThreadLinearIssuesProps) {
 
 export function ThreadDetailsLinearRows(props: ThreadLinearIssuesProps) {
   const gt = useGT();
-  const { canOperate, links, projectId, link, unlink, linkProps } = useThreadLinearIssues(props);
+  const { canOperate, links, issueOf, projectId, link, unlink, linkProps } =
+    useThreadLinearIssues(props);
   const { environmentId } = props.threadRef;
   const connection = useLinearConnection(environmentId, projectId);
   return (
@@ -235,15 +205,14 @@ export function ThreadDetailsLinearRows(props: ThreadLinearIssuesProps) {
           >
             <span className="flex size-4 shrink-0 items-center justify-center">
               <LinearIssueStatusIcon
-                environmentId={environmentId}
-                link={issue}
+                issue={issueOf(issue)}
                 className="size-3.5 text-muted-foreground"
               />
             </span>
             <span
               className={cn("min-w-0 flex-1 truncate text-left", THREAD_DETAILS_PANEL_LABEL_CLASS)}
             >
-              <LinearIssueSummary environmentId={environmentId} link={issue} />
+              {issueSummary(issue, issueOf(issue))}
             </span>
           </ThreadDetailsControl>
           {canOperate ? (

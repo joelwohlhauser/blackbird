@@ -131,7 +131,6 @@ export class LinearApi extends Context.Service<
       IssueTrackerError
     >;
     readonly getTeam: (key: string) => Effect.Effect<LinearTeamScope | null, IssueTrackerError>;
-    /** Every team's workflow states the credential can see. */
     readonly listWorkflowStates: () => Effect.Effect<
       ReadonlyArray<LinearTeamWorkflowState>,
       IssueTrackerError

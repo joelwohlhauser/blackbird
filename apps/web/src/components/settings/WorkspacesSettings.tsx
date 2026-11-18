@@ -1,6 +1,6 @@
 import { connectionStatusText } from "@t3tools/client-runtime/connection";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { IssueTrackerKind, type EnvironmentId } from "@t3tools/contracts";
+import { LINEAR_ISSUE_TRACKER, type EnvironmentId } from "@t3tools/contracts";
 import {
   ArrowDownIcon,
   ArrowUpDownIcon,
@@ -63,8 +63,6 @@ import {
   type WorkspaceSortDirection,
   type WorkspaceSortKey,
 } from "./workspacesSettings.logic";
-
-const LINEAR = IssueTrackerKind.make("linear");
 
 interface WorkspaceSortState {
   readonly key: WorkspaceSortKey;
@@ -267,22 +265,19 @@ export function WorkspacesSettingsPanel() {
   );
   const linearConnected = useLinearConnection(effectiveEnvironmentId, null).connected;
   const issueIds = [...new Set(rows.flatMap((row) => (row.issueId ? [row.issueId] : [])))];
-  const firstProjectId = rows[0]?.projectId;
+  const projectId = rows[0]?.projectId;
   const linearIssues = useEnvironmentQuery(
     linearConnected &&
       effectiveEnvironmentId !== null &&
-      firstProjectId !== undefined &&
+      projectId !== undefined &&
       issueIds.length > 0
       ? issueEnvironment.list({
           environmentId: effectiveEnvironmentId,
           input: {
+            projectId,
             state: "all",
             limit: 200,
-            standalone: {
-              projectId: firstProjectId,
-              tracker: LINEAR,
-              keys: issueIds.slice(0, 200),
-            },
+            standalone: { tracker: LINEAR_ISSUE_TRACKER, keys: issueIds.slice(0, 200) },
           },
         })
       : null,

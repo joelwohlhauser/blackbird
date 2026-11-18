@@ -1,6 +1,4 @@
-import { linearIssueIdFromBranch } from "@t3tools/contracts";
-
-export const LINEAR_APP_URL = "https://linear.app";
+import { LINEAR_APP_URL, linearIssueIdFromBranch } from "@t3tools/contracts";
 
 export function linearIssueIdForWorkspace(input: {
   readonly branch: string | null | undefined;

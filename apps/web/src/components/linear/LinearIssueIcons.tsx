@@ -20,7 +20,7 @@ function linearStateLook(state: IssueState): LinearStateLook {
       state.stateType ??
       (state.category === "closed" ? (state.closeReason ?? "completed") : "unstarted"),
     color: state.color ?? "#999a9c",
-    progress: state.progress ?? 0.5,
+    progress: 0.5,
   };
 }
 

@@ -72,9 +72,6 @@ export interface IssueTarget extends IssueScopeTarget {
   readonly key: string;
 }
 
-/** The scope a standalone tracker reads as every scope its connected account reaches. */
-export const EVERY_ISSUE_SCOPE = "*";
-
 /**
  * An issue as the tracker sees it, before the service attaches project context. `scope` is the
  * issue's own, which a listing across every scope needs.

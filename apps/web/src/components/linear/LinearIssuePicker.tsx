@@ -1,5 +1,6 @@
 import {
-  IssueTrackerKind,
+  LINEAR_APP_URL,
+  LINEAR_ISSUE_TRACKER,
   type EnvironmentId,
   type IssueActor,
   type IssueListCursors,
@@ -45,7 +46,6 @@ import {
   LinearTeamSelect,
 } from "./LinearIssuePickerControls";
 
-const LINEAR = IssueTrackerKind.make("linear");
 const PAGE_SIZE = 50;
 const MAX_QUERY_LENGTH = 200;
 const CREATE_POLL_MS = 4_000;
@@ -61,12 +61,14 @@ export function useLinearConnection(
       ? null
       : issueTrackerEnvironment.connections({ environmentId, input: {} }),
   );
-  const tracker = query.data?.trackers.find((candidate) => candidate.tracker === LINEAR);
+  const tracker = query.data?.trackers.find(
+    (candidate) => candidate.tracker === LINEAR_ISSUE_TRACKER,
+  );
   const binding = projectId === null ? undefined : query.data?.bindings[projectId];
   return {
     connected: tracker?.connected === true && tracker.account !== null,
     teams: tracker?.scopes ?? [],
-    boundScope: binding?.tracker === LINEAR ? binding.scope : null,
+    boundScope: binding?.tracker === LINEAR_ISSUE_TRACKER ? binding.scope : null,
   };
 }
 
@@ -207,9 +209,9 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
     involvement: preferences.view === "assigned" ? "assigned" : "all",
     limit: PAGE_SIZE,
     ...(debouncedQuery === "" ? {} : { query: debouncedQuery }),
+    projectId,
     standalone: {
-      projectId,
-      tracker: LINEAR,
+      tracker: LINEAR_ISSUE_TRACKER,
       ...(scope === null ? {} : { scope }),
       stateIds: preferences.stateIds,
       stateTypes: preferences.view === "triage" ? ["triage"] : [],
@@ -288,7 +290,8 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
       involvement: "authored",
       sort: "created",
       limit: 1,
-      standalone: { projectId, tracker: LINEAR, ...(scope === null ? {} : { scope }) },
+      projectId,
+      standalone: { tracker: LINEAR_ISSUE_TRACKER, ...(scope === null ? {} : { scope }) },
     }).then((answer) => {
       if ("error" in answer) throw new Error(answer.error);
       const [newest] = answer.page.entries;
@@ -338,8 +341,8 @@ export const LinearIssuePicker = memo(function LinearIssuePicker({
     setIsOpen(false);
     onOpenLinear(
       scope === null
-        ? "https://linear.app/new"
-        : `https://linear.app/team/${encodeURIComponent(scope)}/new`,
+        ? `${LINEAR_APP_URL}/new`
+        : `${LINEAR_APP_URL}/team/${encodeURIComponent(scope)}/new`,
     );
   };
 

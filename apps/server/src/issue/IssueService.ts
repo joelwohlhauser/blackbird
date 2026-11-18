@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import {
+  EVERY_ISSUE_SCOPE,
   IssueOperationError,
   IssueTrackerKind,
   IssueUnavailableError,
@@ -34,7 +35,6 @@ import {
 } from "@t3tools/contracts";
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import {
-  EVERY_ISSUE_SCOPE,
   IssueTrackerError,
   isStandaloneIssueTracker,
   type IssueInvolvementFilter,
@@ -363,7 +363,9 @@ const make = Effect.gen(function* () {
         : {
             supported: [
               yield* readThroughAccount({
-                projectId: input.standalone.projectId,
+                projectId:
+                  input.projectId ??
+                  (yield* new IssueUnavailableError({ reason: "tracker-unsupported" })),
                 tracker: input.standalone.tracker,
                 scope: input.standalone.scope ?? EVERY_ISSUE_SCOPE,
               }),

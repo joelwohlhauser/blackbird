@@ -1,12 +1,14 @@
 /**
  * Linear as an issue tracker. A scope is a team key (`ENG`), or every team for a listing, and an
- * issue key its identifier (`ENG-123`). A workflow state is closed when its type is `completed` or `canceled`, so closing
- * picks the team's first state of that type, as Linear's own "Done" and "Canceled" do.
+ * issue key its identifier (`ENG-123`). A workflow state is closed when its type is `completed`
+ * or `canceled`, so closing picks the team's first state of that type, as Linear's own "Done" and
+ * "Canceled" do.
  */
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
+  EVERY_ISSUE_SCOPE,
   type IssueActor,
   type IssueCapabilities,
   type IssueComment,
@@ -22,7 +24,6 @@ import {
   type StandaloneIssueTrackerDescriptor,
 } from "@t3tools/contracts";
 import {
-  EVERY_ISSUE_SCOPE,
   IssueTrackerError,
   type IssueInvolvementFilter,
   type StandaloneIssueTrackerApi,
@@ -128,27 +129,10 @@ function parseIdentifier(key: string): string | null {
   return /^[A-Za-z][A-Za-z0-9]*-[1-9]\d*$/.test(key.trim()) ? key.trim().toUpperCase() : null;
 }
 
-/** Linear's own icon fills a started state by its place among the team's started states. */
-function startedProgress(position: number, startedPositions: ReadonlyArray<number>): number {
-  return (
-    (startedPositions.filter((other) => other < position).length + 1) /
-    (startedPositions.length + 1)
-  );
-}
-
-const startedPositionsOf = (states: ReadonlyArray<LinearApi.LinearWorkflowState>) =>
-  states.filter((state) => state.type === "started").map((state) => state.position);
-
-function toState(
-  state: LinearApi.LinearWorkflowState,
-  startedPositions: ReadonlyArray<number>,
-): IssueState {
+function toState(state: LinearApi.LinearWorkflowState): IssueState {
   const look = {
     stateType: state.type,
     ...(state.color.trim() === "" ? {} : { color: state.color }),
-    ...(state.type === "started"
-      ? { progress: startedProgress(state.position, startedPositions) }
-      : {}),
   };
   return CLOSED_STATE_TYPES.includes(state.type)
     ? { category: "closed", name: state.name, closeReason: state.type, ...look }
@@ -160,22 +144,13 @@ function toWorkflowStates(
     LinearApi.LinearWorkflowState & { readonly team: { readonly key: string } }
   >,
 ): IssueWorkflowState[] {
-  const startedByTeam = new Map<string, number[]>();
-  for (const state of states) {
-    if (state.type !== "started") continue;
-    startedByTeam.set(state.team.key, [
-      ...(startedByTeam.get(state.team.key) ?? []),
-      state.position,
-    ]);
-  }
   return inWorkflowOrder(states).map((state) => ({
-    ...toState(state, startedByTeam.get(state.team.key) ?? []),
+    ...toState(state),
     id: state.id,
     scope: state.team.key,
   }));
 }
 
-/** Linear lists most urgent first as Urgent, High, Medium, Low, then no priority. */
 const PRIORITY_ORDER = [1, 2, 3, 4, 0];
 
 const PriorityCursor = Schema.fromJsonString(
@@ -224,10 +199,7 @@ function toSummary(issue: LinearApi.LinearIssue, commentCount = 0): TrackerIssue
     url: issue.url,
     ...(issue.branchName.trim() === "" ? {} : { branchName: issue.branchName }),
     author: actorOf(issue.creator, issue.botActor),
-    state: toState(
-      issue.state,
-      issue.state.team.states.nodes.map((state) => state.position),
-    ),
+    state: toState(issue.state),
     priority: Math.max(0, Math.round(issue.priority)),
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
@@ -496,15 +468,15 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
       listIssues: Effect.fn("LinearIssueTracker.listIssues")(function* (input) {
         const refinement = input.refinement ?? {};
         const keys = (refinement.keys ?? []).flatMap((key) => {
-          const match = /^([A-Za-z][A-Za-z0-9]*)-([1-9]\d*)$/.exec(key.trim());
-          return match === null
-            ? []
-            : [
-                {
-                  team: { key: { eq: match[1]!.toUpperCase() } },
-                  number: { eq: Number(match[2]) },
-                },
-              ];
+          const identifier = parseIdentifier(key);
+          if (identifier === null) return [];
+          const separator = identifier.lastIndexOf("-");
+          return [
+            {
+              team: { key: { eq: identifier.slice(0, separator) } },
+              number: { eq: Number(identifier.slice(separator + 1)) },
+            },
+          ];
         });
         if (refinement.keys !== undefined && keys.length === 0) {
           return { items: [], nextCursor: null };
@@ -615,9 +587,7 @@ export const make: Effect.Effect<StandaloneIssueTrackerApi, never, LinearApi.Lin
           body: issue.description ?? "",
           viewer: me === null ? null : toActor(me).login,
           viewerPermissions: VIEWER_PERMISSIONS,
-          states: inWorkflowOrder(issue.team.states.nodes).map((state) =>
-            toState(state, startedPositionsOf(issue.team.states.nodes)),
-          ),
+          states: inWorkflowOrder(issue.team.states.nodes).map(toState),
           reactions: toReactions(issue.reactions, viewer),
           comments: issue.comments.nodes.map((comment) => toComment(comment, viewer)),
           commentsCursor: issue.comments.pageInfo.hasNextPage

@@ -52,8 +52,6 @@ export const IssueState = Schema.Struct({
   /** The tracker's own kind of state, where it has one: Linear's `triage`, `started`. */
   stateType: Schema.optional(TrimmedNonEmptyString),
   color: Schema.optional(TrimmedNonEmptyString),
-  /** How far a started state is through the started part of its workflow, from 0 to 1. */
-  progress: Schema.optional(Schema.Number),
 });
 export type IssueState = typeof IssueState.Type;
 
@@ -277,7 +275,6 @@ export const IssueStandaloneListRefinement = Schema.Struct({
   stateIds: Schema.optional(Schema.Array(TrimmedNonEmptyString).check(Schema.isMaxLength(100))),
   stateTypes: Schema.optional(Schema.Array(TrimmedNonEmptyString).check(Schema.isMaxLength(20))),
   priorities: Schema.optional(Schema.Array(NonNegativeInt).check(Schema.isMaxLength(10))),
-  /** Issue keys, for reading a known set of issues at once. */
   keys: Schema.optional(
     Schema.Array(TrimmedNonEmptyString.check(Schema.isMaxLength(64))).check(
       Schema.isMaxLength(200),
@@ -312,12 +309,11 @@ export const IssueListInput = Schema.Struct({
   sort: Schema.optional(IssueListSort),
   /**
    * Reads one standalone tracker through its connected account instead of the projects bound to
-   * it: only `scope`, or every scope the account reaches. `projectId` serves the read.
+   * it: only `scope`, or every scope the account reaches. Needs `projectId`, which serves the read.
    */
   standalone: Schema.optional(
     Schema.Struct({
       ...IssueStandaloneListRefinement.fields,
-      projectId: ProjectId,
       tracker: IssueTrackerKind,
       scope: Schema.optional(TrimmedNonEmptyString),
     }),

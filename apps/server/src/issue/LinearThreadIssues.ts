@@ -1,6 +1,7 @@
 import {
   CommandId,
-  IssueTrackerKind,
+  LINEAR_HOST,
+  LINEAR_ISSUE_TRACKER,
   linearIssueIdsFromTags,
   linearIssueTag,
   type IssueDetail,
@@ -22,9 +23,6 @@ import * as ThreadIssueService from "../orchestration-v2/ThreadIssueService.ts";
 import { forkParked } from "../serverActivation.ts";
 import * as IssueService from "./IssueService.ts";
 import * as IssueTrackerConnections from "./IssueTrackerConnections.ts";
-
-const LINEAR = IssueTrackerKind.make("linear");
-const LINEAR_HOST = "linear.app";
 
 interface LinkTarget {
   readonly id: ThreadId;
@@ -57,7 +55,7 @@ export const make = Effect.gen(function* () {
     issues
       .detail({
         projectId,
-        tracker: LINEAR,
+        tracker: LINEAR_ISSUE_TRACKER,
         host: LINEAR_HOST,
         scope: teamKeyOf(identifier),
         key: identifier,
@@ -79,9 +77,9 @@ export const make = Effect.gen(function* () {
       threadId: thread.id,
       ref: {
         projectId: thread.projectId,
-        tracker: LINEAR,
-        host: LINEAR_HOST,
-        scope: teamKeyOf(issue.key),
+        tracker: issue.tracker,
+        host: issue.host,
+        scope: issue.scope,
         key: issue.key,
       },
       url: issue.url,
@@ -204,7 +202,7 @@ export const layerConnections = Layer.effect(
       input: IssueTrackerConnectInput,
     ) {
       const connection = yield* connections.connect(input);
-      if (input.tracker === LINEAR && input.token !== null) {
+      if (input.tracker === LINEAR_ISSUE_TRACKER && input.token !== null) {
         yield* Effect.forkIn(linear.convertTags(), scope);
       }
       return connection;

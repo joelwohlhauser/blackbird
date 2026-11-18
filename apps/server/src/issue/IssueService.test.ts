@@ -592,11 +592,13 @@ describe("IssueService with a standalone tracker", () => {
       listed.length = 0;
       const everyTeam = yield* unbound.list({
         state: "open",
-        standalone: { projectId: "notes" as ProjectId, tracker: LINEAR },
+        projectId: "notes" as ProjectId,
+        standalone: { tracker: LINEAR },
       });
       yield* unbound.list({
         state: "open",
-        standalone: { projectId: "notes" as ProjectId, tracker: LINEAR, scope: "OPS" },
+        projectId: "notes" as ProjectId,
+        standalone: { tracker: LINEAR, scope: "OPS" },
       });
       expect(listed).toEqual(["linear linear.app *", "linear linear.app OPS"]);
       expect(everyTeam.entries.map((entry) => [entry.projectId, entry.key])).toEqual([
@@ -622,8 +624,8 @@ describe("IssueService with a standalone tracker", () => {
       });
       const ordered = yield* byPriority.list({
         state: "all",
+        projectId: "notes" as ProjectId,
         standalone: {
-          projectId: "notes" as ProjectId,
           tracker: LINEAR,
           priorities: [1],
           sortByPriority: true,
