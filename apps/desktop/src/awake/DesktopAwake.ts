@@ -38,6 +38,7 @@ import {
   FAILOVER_ONLINE,
   type HotspotStay,
   IPHONE_HOTSPOT_GATEWAY,
+  lidDisplayAction,
   parseBattery,
   parseDefaultGateway,
   parseKnownNetworks,
@@ -243,10 +244,16 @@ export const make = Effect.gen(function* () {
     const closed = parseLidClosed(
       (yield* run("/usr/sbin/ioreg", ["-r", "-k", "AppleClamshellState", "-d", "1"])).stdout,
     );
-    if (closed && !lidClosed) {
+    const action = lidDisplayAction({
+      closed,
+      wasClosed: lidClosed,
+      displaySlept,
+      externalDisplay: Electron.screen.getAllDisplays().some((display) => !display.internal),
+    });
+    if (action === "sleep") {
       yield* run(PMSET, ["displaysleepnow"]);
       displaySlept = true;
-    } else if (!closed && lidClosed && displaySlept) {
+    } else if (action === "wake") {
       yield* run("/usr/bin/caffeinate", ["-u", "-t", "1"]);
       displaySlept = false;
     }

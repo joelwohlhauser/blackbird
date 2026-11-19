@@ -4,6 +4,7 @@ import {
   awakeLevel,
   decideAwake,
   FAILOVER_ONLINE,
+  lidDisplayAction,
   parseBattery,
   stepFailover,
 } from "./AwakePolicy.ts";
@@ -103,6 +104,20 @@ describe("parsers", () => {
       onBattery: false,
     });
     expect(parseBattery("")).toBeNull();
+  });
+});
+
+describe("lidDisplayAction", () => {
+  const open = { closed: false, wasClosed: false, displaySlept: false, externalDisplay: false };
+
+  it("turns the built-in display off when the lid closes and back on when it opens", () => {
+    expect(lidDisplayAction({ ...open, closed: true })).toBe("sleep");
+    expect(lidDisplayAction({ ...open, wasClosed: true, displaySlept: true })).toBe("wake");
+    expect(lidDisplayAction({ ...open, wasClosed: true })).toBeNull();
+  });
+
+  it("leaves an external display on when the lid closes", () => {
+    expect(lidDisplayAction({ ...open, closed: true, externalDisplay: true })).toBeNull();
   });
 });
 

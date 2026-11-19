@@ -73,6 +73,19 @@ export function parseBattery(pmsetBatt: string): BatteryReading | null {
 
 export const parseLidClosed = (ioreg: string): boolean => /"AppleClamshellState" = Yes/.test(ioreg);
 
+interface LidReading {
+  readonly closed: boolean;
+  readonly wasClosed: boolean;
+  readonly displaySlept: boolean;
+  readonly externalDisplay: boolean;
+}
+
+export function lidDisplayAction(lid: LidReading): "sleep" | "wake" | null {
+  if (lid.closed && !lid.wasClosed && !lid.externalDisplay) return "sleep";
+  if (!lid.closed && lid.wasClosed && lid.displaySlept) return "wake";
+  return null;
+}
+
 export function parsePmsetFlag(pmsetG: string, name: "SleepDisabled" | "lowpowermode") {
   const value = new RegExp(`^\\s*${name}\\s+([01])\\b`, "m").exec(pmsetG)?.[1];
   return value === undefined ? null : value === "1";
