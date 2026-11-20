@@ -83,8 +83,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
           aria-label={gt("Toggle main sidebar")}
         />
       </div>
-      <div className="relative z-10 flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden py-0.5">
-        <SidebarBrand onBackdrop={backdropVariant !== null} />
+      <div className="relative z-10 flex h-8 min-w-0 flex-1 items-center overflow-hidden py-0.5 md:pl-(--workspace-titlebar-content-left)">
         {pillLabel ? (
           <div className="ml-1 flex h-7 items-center">
             <Badge data-environment-identification="pill" size="sm" variant="secondary">
@@ -103,7 +102,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   );
 });
 
-export function SidebarBrandWidthProbe({
+export function SidebarControlsWidthProbe({
   isElectron,
   onWidthChange,
 }: {
@@ -122,9 +121,7 @@ export function SidebarBrandWidthProbe({
       className="pointer-events-none invisible fixed top-0 left-0 flex w-max gap-2 border-r border-transparent pr-2"
       ref={observeWidth}
     >
-      <div className="ml-[var(--workspace-titlebar-content-left)] flex">
-        <SidebarBrandMark onBackdrop={false} />
-      </div>
+      <div className="ml-[var(--workspace-titlebar-content-left)]" />
       {isElectron ? <div className="w-[calc(2*var(--workspace-titlebar-control-size))]" /> : null}
     </div>
   );
@@ -170,27 +167,6 @@ function HistoryNavigationButton({
         {shortcutLabel ? ` (${shortcutLabel})` : ""}
       </TooltipPopup>
     </Tooltip>
-  );
-}
-
-function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
-  return (
-    <div className="relative z-10 ml-[var(--workspace-titlebar-content-left)] flex h-7 w-fit min-w-0 shrink-0 items-center select-none">
-      <SidebarBrandMark onBackdrop={onBackdrop} />
-    </div>
-  );
-}
-
-function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
-  return (
-    <span
-      className={cn(
-        "-translate-y-px truncate text-sm font-medium tracking-tight",
-        onBackdrop ? "text-white/70" : "text-muted-foreground",
-      )}
-    >
-      Blackbird
-    </span>
   );
 }
 
