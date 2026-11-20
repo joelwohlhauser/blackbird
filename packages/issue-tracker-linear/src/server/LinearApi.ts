@@ -18,7 +18,7 @@ import {
 } from "effect/graphql";
 import { HttpClient } from "effect/http";
 import * as Headers from "effect/http/Headers";
-import { IssueTrackerKind } from "@t3tools/contracts";
+import { LINEAR_KIND } from "../shared/issueUrl.ts";
 import { IssueTrackerError } from "@t3tools/source-control-core/server/IssueTracker";
 import * as IssueTrackerHost from "@t3tools/source-control-core/server/IssueTrackerHost";
 
@@ -54,7 +54,7 @@ export type { LinearWorkflowState } from "./LinearApi.graphql.ts";
 export type LinearAttachment = Attachment;
 export type LinearHistoryEntry = IssueHistory;
 
-export const KIND = IssueTrackerKind.make("linear");
+export const KIND = LINEAR_KIND;
 const DEFAULT_API_URL = "https://api.linear.app/graphql";
 
 const LinearApiConfig = Config.all({
@@ -99,6 +99,8 @@ export class LinearApi extends Context.Service<
     readonly viewer: (token?: string) => Effect.Effect<
       {
         readonly viewer: LinearUser;
+        /** The workspace's URL key, the first path segment of its issue links. */
+        readonly workspace: string;
         readonly teams: ReadonlyArray<{
           readonly id: string;
           readonly key: string;
@@ -302,7 +304,11 @@ export const make = Effect.gen(function* () {
 
   const viewer: LinearApi["Service"]["viewer"] = (token) =>
     call("viewer", (linear) => linear.T3Viewer(), token).pipe(
-      Effect.map((data) => ({ viewer: data.viewer, teams: data.teams.nodes })),
+      Effect.map((data) => ({
+        viewer: data.viewer,
+        workspace: data.organization.urlKey,
+        teams: data.teams.nodes,
+      })),
     );
 
   const listIssues: LinearApi["Service"]["listIssues"] = (input) =>

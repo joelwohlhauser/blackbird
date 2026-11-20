@@ -113,7 +113,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   files: msg("Available when a project is open."),
   diff: msg("Available for Git repositories."),
   pullRequest: msg("No pull request on this branch yet."),
-  pullRequests: msg("No linked pull requests available."),
+  pullRequests: msg("No linked items available."),
   device: msg("Available from a chat."),
   sideChat: msg("Available after the first message."),
 } as const;
@@ -298,8 +298,8 @@ export function NewTabPage(props: {
     ...(props.onAddPullRequests
       ? [
           {
-            label: gt("Linked pull requests"),
-            description: gt("Browse the pull requests linked to this chat."),
+            label: gt("Linked items"),
+            description: gt("Browse the pull requests and issues linked to this chat."),
             icon: PullRequestGlyph.link,
             shortcut: "R",
             available: props.pullRequestsAvailable === true,

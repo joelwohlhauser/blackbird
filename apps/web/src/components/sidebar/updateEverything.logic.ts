@@ -158,7 +158,7 @@ export interface ChannelSwitchRelease {
   readonly databaseMigration: number | undefined;
 }
 
-const channelSwitchLabel = (channel: DesktopUpdateChannel, resolve: MessageResolver) =>
+export const channelSwitchLabel = (channel: DesktopUpdateChannel, resolve: MessageResolver) =>
   channel === "nightly"
     ? resolve(msg("Nightly", { $context: "release track" }))
     : resolve(msg("Stable", { $context: "release track" }));

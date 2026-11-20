@@ -41,21 +41,22 @@ export async function addCapturedImageToDraft(
   const { id, file, dataUrl, source } = image;
   await readComposerImageBytes(file);
   const store = useComposerDraftStore.getState();
-  const alreadyAttached =
-    store.getComposerDraft(target)?.images.some((existing) => existing.id === id) ?? false;
-  if (!alreadyAttached) {
+  const existingImage = store
+    .getComposerDraft(target)
+    ?.images.find((existing) => existing.id === id);
+  const attachment: ComposerImageAttachment = existingImage ?? {
+    type: "image",
+    id,
+    name: file.name,
+    mimeType: file.type,
+    sizeBytes: file.size,
+    previewUrl: dataUrl,
+    file,
+    ...(source ? { source } : {}),
+  };
+  if (!existingImage) {
     const questionAttachmentCount =
       typeof target === "string" ? countQuestionRequestAttachments(target) : null;
-    const attachment = {
-      type: "image" as const,
-      id,
-      name: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      previewUrl: dataUrl,
-      file,
-      ...(source ? { source } : {}),
-    };
     const added =
       questionAttachmentCount === null
         ? store.addImage(target, attachment)
@@ -71,11 +72,7 @@ export async function addCapturedImageToDraft(
     dataUrl,
     ...(source ? { source } : {}),
   };
-  const persistedAttachments =
-    store
-      .getComposerDraft(target)
-      ?.persistedAttachments.filter((attachment) => attachment.id !== id) ?? [];
-  await store.syncPersistedAttachments(target, [...persistedAttachments, persisted]);
+  await store.appendPersistedAttachments(target, [attachment], [persisted]);
   if (!store.getComposerDraft(target)?.persistedAttachments.some((saved) => saved.id === id)) {
     throw new Error("The image could not be saved to the draft.");
   }

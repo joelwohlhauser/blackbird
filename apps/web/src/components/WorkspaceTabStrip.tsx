@@ -98,7 +98,7 @@ export function surfaceTitle(
     case "pull-request":
       return `#${surface.number}`;
     case "pull-requests":
-      return resolve(msg("Pull Requests"));
+      return resolve(msg("Linked items"));
     case "issue":
       return /^\d+$/.test(surface.key) ? `#${surface.key}` : surface.key;
     case "device":
