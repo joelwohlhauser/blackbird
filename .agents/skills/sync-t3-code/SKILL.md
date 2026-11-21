@@ -12,10 +12,11 @@ Run this workflow from the Blackbird repository root. Read the repository's `AGE
 1. Confirm `origin` points to `joelwohlhauser/blackbird`, `upstream` points to `pingdotgg/t3code`, and the current branch is `main`.
 2. Inspect `git status`. Do not fold unrelated uncommitted work into the sync. If the worktree is dirty and the changes are not clearly part of the current task, stop and ask Joel whether to commit them first.
 3. Fetch `upstream`, record the merge base between `main` and `upstream/main`, and report the ahead/behind counts before merging.
+4. Pick the merge target. The maintainer's machine refuses package versions younger than its minimum age (currently 72 hours), so use the newest first-parent `upstream/main` commit whose `pnpm-lock.yaml` adds no version younger than that. Compare each commit's locked versions with `HEAD` and read publish times from the npm registry's `time` field. Treat a version the registry does not show as too new. Do not pin, patch, or work around a blocked version. When the target is not `upstream/main`, report how many commits stay behind and which packages hold them.
 
 ## Merge
 
-Merge with `git merge --no-ff upstream/main`. Keep upstream history visible. Do not rebase or squash.
+Merge with `git merge --no-ff <target>`. Keep upstream history visible. Do not rebase or squash.
 
 Resolve conflicts by combining compatible behavior. Preserve Blackbird's custom behavior in the sidebar, chat switcher, unified workspace tabs, composer and worktree flows, preview and diff rendering, settings, persistence, remote environment handling, and branding. Do not resolve heavily customized files by blindly taking `ours` or `theirs`. Thread details (`ThreadDetailsPanel`, `ThreadDetailsCard`, `GitActionsControl`) tracks upstream closely, so prefer upstream's changes there.
 
