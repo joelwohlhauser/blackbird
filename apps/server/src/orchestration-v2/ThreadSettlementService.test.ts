@@ -564,6 +564,7 @@ interface HarnessOptions {
     input: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput,
   ) => Effect.Effect<void>;
   readonly onCloseTerminals?: () => Effect.Effect<void>;
+  readonly hasActiveSubprocess?: (input: { readonly threadId: string }) => Effect.Effect<boolean>;
   readonly currentThreads?: ReadonlyArray<OrchestrationV2AppThread>;
   readonly projections?: ProjectionStore.ProjectionStoreV2Shape;
 }
@@ -706,6 +707,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
         Queue.offer(closedTerminals, { threadId, idleOnly: false }).pipe(
           Effect.andThen(options.onCloseTerminals?.() ?? Effect.void),
         ),
+      hasActiveSubprocess: (input) => options.hasActiveSubprocess?.(input) ?? Effect.succeed(false),
     }),
     Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({
       runForThread: (input) =>
@@ -920,6 +922,26 @@ describe("ThreadSettlementServiceV2 worker", () => {
         expect((yield* Ref.get(fixture.commands)).map((command) => command.threadId)).toEqual([
           thread.id,
         ]);
+      }).pipe(Effect.provide(fixture.layer));
+    }),
+  );
+
+  it.effect("does not auto-settle a thread whose terminal has an active subprocess", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse(NOW));
+      const thread = makeThread("active-terminal");
+      const fixture = yield* makeHarness({
+        snapshot: makeSnapshot([thread]),
+        settings: {
+          ...DEFAULT_SERVER_SETTINGS,
+          sidebarAutoSettleAfterDays: 3,
+        },
+        hasActiveSubprocess: ({ threadId }) => Effect.succeed(threadId === thread.id),
+      });
+      yield* Effect.gen(function* () {
+        const service = yield* ThreadSettlementService.ThreadSettlementServiceV2;
+        yield* startHarness(service, fixture.activation, fixture.snapshotReads);
+        expect((yield* Ref.get(fixture.commands)).map((command) => command.threadId)).toEqual([]);
       }).pipe(Effect.provide(fixture.layer));
     }),
   );

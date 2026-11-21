@@ -333,6 +333,13 @@ export {
   DEFAULT_BROWSER_RECORDING_FRAME_RATE,
 } from "./preview.ts";
 /**
+ * Where a plain click opens a subagent, a side chat or a linked environment's thread: beside the
+ * thread you are in, or in its place. A modified click opens it in the other one.
+ */
+export const SideThreadOpenTarget = Schema.Literals(["panel", "main"]);
+export type SideThreadOpenTarget = typeof SideThreadOpenTarget.Type;
+const DEFAULT_SIDE_THREAD_OPEN_TARGET: SideThreadOpenTarget = "panel";
+/**
  * What the address bar searches with when the input is not an address.
  * "custom" uses `browserCustomSearchUrl`, a template with `%s` for the query.
  */
@@ -567,6 +574,9 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   followUpBehavior: Schema.Literals(["queue", "steer"]).pipe(
     Schema.withDecodingDefault(Effect.succeed("steer")),
+  ),
+  sideThreadOpenTarget: SideThreadOpenTarget.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDE_THREAD_OPEN_TARGET)),
   ),
   proactivePanelsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   showSkillsInSlashMenu: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -2194,6 +2204,7 @@ export const ClientSettingsPatch = Schema.Struct({
   composerRichTextEnabled: Schema.optionalKey(Schema.Boolean),
   sendShortcut: Schema.optionalKey(Schema.Literals(["enter", "mod-enter-multiline", "mod-enter"])),
   followUpBehavior: Schema.optionalKey(Schema.Literals(["queue", "steer"])),
+  sideThreadOpenTarget: Schema.optionalKey(SideThreadOpenTarget),
   proactivePanelsEnabled: Schema.optionalKey(Schema.Boolean),
   showSkillsInSlashMenu: Schema.optionalKey(Schema.Boolean),
   boringSidebarEnabled: Schema.optionalKey(Schema.Boolean),

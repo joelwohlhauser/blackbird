@@ -39,12 +39,15 @@ export function buildWorkspaceTabSwitcherItems(input: {
   panelSurfaces: readonly RightPanelSurface[];
   previewSessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   terminalLabelsById: ReadonlyMap<string, string>;
+  threadTitle?: (surface: RightPanelSurface) => string | undefined;
 }): WorkspaceTabSwitcherItem[] {
   const surfaceItem =
     (container: WorkspaceTabContainer) =>
     (surface: RightPanelSurface): WorkspaceTabSwitcherItem => ({
       id: surface.id,
-      title: surfaceTitle(surface, input.previewSessions, input.terminalLabelsById),
+      title:
+        input.threadTitle?.(surface) ??
+        surfaceTitle(surface, input.previewSessions, input.terminalLabelsById),
       surface,
       container,
     });

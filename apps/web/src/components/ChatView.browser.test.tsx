@@ -47,6 +47,7 @@ import {
   type FakeDriver,
 } from "../../test/fakeEnvironment";
 import { act, fakeTimers, render } from "../../test/render";
+import { startWorkspaceFocus } from "~/lib/workspaceFocus";
 
 const PNG = Uint8Array.from(
   atob(
@@ -692,6 +693,90 @@ it("a mounted thread view lets go of the thread structures it has replaced", asy
   // The thread keeps its latest structure, and the timeline may remember the one before it.
   const kept = shown.slice(0, -2).flatMap((structure, round) => (structure.deref() ? [round] : []));
   expect(kept).toEqual([]);
+});
+
+it("selecting a side-chat tab focuses that side chat's composer", async () => {
+  const parent = threadWithHistory("focus-parent", 1);
+  // The shell loaded by the file's first test stays; a family read serves side chats added later.
+  const sideChat = (name: string) => ({
+    ...threadWithHistory(name, 1),
+    sideChatOf: parent.id,
+    olderSettled: true as const,
+  });
+  const side = sideChat("focus-side");
+  const otherSide = sideChat("focus-other-side");
+  await page.viewport(1400, 900);
+  using _environment = installFakeEnvironment([parent, side, otherSide]);
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const parentRef = scopeThreadRef(ENVIRONMENT_ID, parent.id);
+  useRightPanelStore.getState().openThread(parentRef, otherSide.id, "panel");
+  useRightPanelStore.getState().openThread(parentRef, side.id, "panel");
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${parent.id}`] }),
+  );
+  await router.load();
+  await using screen = await render(<AppRoot router={router} />, {
+    // AppRoot brings its own router.
+    router: false,
+  });
+  using _focus = { [Symbol.dispose]: startWorkspaceFocus(router) };
+  const mainEditor = screen.getByRole("textbox", { name: `Message ${parent.title}`, exact: true });
+  const sideEditor = screen.getByRole("textbox", { name: `Message ${side.title}`, exact: true });
+  await expect.element(sideEditor).toBeVisible();
+  await userEvent.click(mainEditor);
+  await userEvent.keyboard("main draft");
+
+  await userEvent.click(screen.getByRole("button", { name: otherSide.title, exact: true }));
+  const otherEditor = screen.getByRole("textbox", {
+    name: `Message ${otherSide.title}`,
+    exact: true,
+  });
+  await expect.element(otherEditor).toHaveFocus();
+  await userEvent.keyboard("other draft");
+  await expect.element(otherEditor).toHaveTextContent("other draft");
+
+  await userEvent.click(screen.getByRole("button", { name: side.title, exact: true }));
+  await expect.element(sideEditor).toHaveFocus();
+  await expect.element(mainEditor).toHaveTextContent("main draft");
+});
+
+it("a subagent tab shows its read-only bar under no header of its own", async () => {
+  const parent = threadWithHistory("subagent-parent", 1);
+  const subagent = {
+    ...threadWithHistory("subagent-child", 1),
+    providerSubagentOf: parent.id,
+    olderSettled: true as const,
+  };
+  await page.viewport(1400, 900);
+  using _environment = installFakeEnvironment([parent, subagent]);
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const parentRef = scopeThreadRef(ENVIRONMENT_ID, parent.id);
+  useRightPanelStore.getState().openThread(parentRef, subagent.id);
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${parent.id}`] }),
+  );
+  await router.load();
+  await using screen = await render(<AppRoot router={router} />, {
+    // AppRoot brings its own router.
+    router: false,
+  });
+  const pane = screen.getByTestId("side-thread-pane");
+  // No header of its own: the tab names it, and only a side chat has actions to put in one.
+  await expect.element(pane.getByRole("heading", { name: subagent.title })).not.toBeInTheDocument();
+  await expect.element(pane.getByText("Runs on its own")).toBeVisible();
+  await expect.element(pane.getByRole("button", { name: "Add to chat" })).not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("textbox", { name: `Message ${subagent.title}`, exact: true }))
+    .not.toBeInTheDocument();
+  await expect
+    .element(screen.getByRole("textbox", { name: `Message ${parent.title}`, exact: true }))
+    .toBeVisible();
 });
 
 it("/side sends the draft's attachments and context, and keeps them when it does not start", async () => {

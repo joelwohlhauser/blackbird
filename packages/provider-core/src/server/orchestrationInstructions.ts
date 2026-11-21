@@ -131,21 +131,27 @@ export function t3OrchestrationPrompt(input: {
   readonly orchestrationDelivered: boolean;
   readonly deviceInstructionsDelivered: boolean;
   readonly agentInstructions?: string | undefined;
+  /** Guidance for this provider's own tools, sent until `providerInstructionsDelivered`. */
+  readonly providerInstructions?: string;
+  readonly providerInstructionsDelivered?: boolean;
 }): string {
   const instructions = input.hasT3Mcp
-    ? !input.orchestrationDelivered
-      ? orchestrationInstructions(input.hasDeviceTools)
-      : input.hasDeviceTools && !input.deviceInstructionsDelivered
-        ? T3_CODE_DEVICE_TOOL_INSTRUCTIONS
-        : undefined
-    : undefined;
+    ? [
+        !input.orchestrationDelivered
+          ? orchestrationInstructions(input.hasDeviceTools)
+          : input.hasDeviceTools && !input.deviceInstructionsDelivered
+            ? T3_CODE_DEVICE_TOOL_INSTRUCTIONS
+            : undefined,
+        input.providerInstructionsDelivered === true ? undefined : input.providerInstructions,
+      ].flatMap((part) => (part === undefined ? [] : [part.trim()]))
+    : [];
   const sections = [
     ...(input.agentInstructions ? [agentInstructionsBlock(input.agentInstructions)] : []),
-    ...(instructions
-      ? [
-          `<t3_code_orchestration_instructions>${instructions.trim()}</t3_code_orchestration_instructions>`,
-        ]
-      : []),
+    ...(instructions.length === 0
+      ? []
+      : [
+          `<t3_code_orchestration_instructions>${instructions.join("\n\n")}</t3_code_orchestration_instructions>`,
+        ]),
   ];
   return sections.length === 0
     ? input.prompt

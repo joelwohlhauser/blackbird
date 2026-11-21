@@ -26,6 +26,7 @@ const clientSettings: ClientSettings = {
   browserDefaultZoomFactor: 1.25,
   browserDefaultAppearance: "dark",
   browserRecordingFrameRate: 60,
+  sideThreadOpenTarget: "main",
   browserAutoShowFloatingPreview: false,
   browserProfiles: [{ id: "work", name: "Work", kind: "persistent" }],
   browserDefaultProfileId: "work",

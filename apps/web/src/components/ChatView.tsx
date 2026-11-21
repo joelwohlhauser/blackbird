@@ -45,7 +45,7 @@ import {
   useThreadFindStore,
 } from "./chat/threadFindStore";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
-import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
+import { useUsageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
 import {
   isThreadEnvironmentLocked,
   resolveDraftHeroState,
@@ -76,7 +76,6 @@ import {
   type AssistantCitation,
   type ResponseContextRecord,
   type ChatFileAttachment,
-  isProviderNativeSubagentThread,
   LINEAR_APP_URL,
   type EnvironmentId,
   type IssueTrackerKind,
@@ -219,7 +218,7 @@ import {
   workspaceTabCollisionDetection,
   workspaceTabDragState,
 } from "../workspaceTabs";
-import { WorkspaceTabDragPreview, WorkspaceTabStrip } from "./WorkspaceTabStrip";
+import { threadTabTitle, WorkspaceTabDragPreview, WorkspaceTabStrip } from "./WorkspaceTabStrip";
 import {
   adjacentWorkspaceTabIndex,
   buildWorkspaceTabSwitcherItems,
@@ -354,6 +353,7 @@ import {
   useQuietThreadVisibleTurnItems,
   useThreadStatus,
   useThreadHistory,
+  readThreadShell,
   useQuietThreadShell,
   useThreadCheckpointSummaries,
 } from "../state/entities";
@@ -372,14 +372,16 @@ import type { AssistantCitationRequest } from "./chat/AssistantCitationSource";
 import { useCitedHistory } from "./chat/citationProcedure";
 import type { MessagesTimelineHistoryControls } from "./chat/MessagesTimeline";
 import { ThreadTimeline } from "./chat/ThreadTimeline";
-import { ThreadTranscriptPanel } from "./chat/ThreadTranscriptPanel";
-import SideChatPane from "./chat/SideChatPane";
+import { LinkedThreadPane } from "./chat/LinkedThreadPane";
+import SideThreadPane from "./chat/SideThreadPane";
 import { NativeChildWorkDialog } from "./chat/NativeChildWorkDialog";
 import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
 import { useSideChat } from "./chat/useSideChat";
+import { sideThreadComposer, sideThreadKindOf } from "@t3tools/client-runtime/side-thread";
+import { useOpenSurfaceInMainView } from "../hooks/useOpenSurfaceInMainView";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
 import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
@@ -542,6 +544,7 @@ export default function ChatView(props: ChatViewProps) {
     embedded: parentPanel,
   } = props;
   const embedded = parentPanel !== undefined;
+  const panelHostShell = useQuietThreadShell(parentPanel?.hostRef ?? null);
   const canOperateThread = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
   const draftId = routeKind === "draft" ? props.draftId : null;
@@ -946,8 +949,9 @@ export default function ChatView(props: ChatViewProps) {
     serverProjection === null ? null : deriveRunlessWorkStartedAt(serverProjection);
   const providerSubagentStatus =
     serverProjection === null ? null : deriveProviderSubagentStatus(serverProjection);
+  const sideThreadKind = serverThread === null ? null : sideThreadKindOf(serverThread.source);
   const isProviderSubagent =
-    serverThread !== null && isProviderNativeSubagentThread(serverThread.source);
+    sideThreadKind !== null && sideThreadComposer(sideThreadKind) === "read-only";
   const supportsProviderSwitchingViaHandoff = threadSupportsProviderHandoff(serverProjection);
   const activeLatestRun = isServerThread ? serverLatestRun : (activeThread?.latestRun ?? null);
   const activeActivityRun = isServerThread ? serverActivityRun : (activeThread?.latestRun ?? null);
@@ -1030,8 +1034,16 @@ export default function ChatView(props: ChatViewProps) {
       };
     }
     if (parentSubagentThreadRef !== null) {
+      const title = parentSubagentThread?.title ?? gt("Parent thread");
+      // Embedded in its parent's panel, the parent is the view around it.
+      if (
+        parentPanel !== undefined &&
+        scopedThreadKey(parentPanel.hostRef) === scopedThreadKey(parentSubagentThreadRef)
+      ) {
+        return { title };
+      }
       return {
-        title: parentSubagentThread?.title ?? gt("Parent thread"),
+        title,
         open: (): void => {
           void navigate({
             to: "/$environmentId/$threadId",
@@ -2361,7 +2373,12 @@ export default function ChatView(props: ChatViewProps) {
           threadRef: activeThreadRef,
         });
       }
-      if (surface.kind === "side-chat" && canOperateThread) {
+      if (
+        surface.kind === "thread" &&
+        canOperateThread &&
+        readThreadShell(scopeThreadRef(activeThreadRef.environmentId, surface.threadId))?.lineage
+          .sideChat === true
+      ) {
         void deleteUnusedSideChat({
           environmentId: activeThreadRef.environmentId,
           input: { threadId: surface.threadId, onlyIfUnused: true },
@@ -3000,6 +3017,11 @@ export default function ChatView(props: ChatViewProps) {
     }
     if (!activeThread) return false;
     const items = buildWorkspaceTabSwitcherItems({
+      threadTitle: (surface) => {
+        if (surface.kind !== "thread") return undefined;
+        const shell = readThreadShell(scopeThreadRef(environmentId, surface.threadId));
+        return shell === null ? undefined : threadTabTitle(shell);
+      },
       chatTitle:
         activeThread.title.trim().length > 0
           ? activeThread.title
@@ -3151,7 +3173,6 @@ export default function ChatView(props: ChatViewProps) {
     threadDetailRef: routeThreadDetailRef,
     activeThreadKey,
     activeThreadShell,
-    serverProjection,
     activeLatestRun,
     limitRecoveryHoldsSnooze,
     activeProjectCwd,
@@ -3284,30 +3305,29 @@ export default function ChatView(props: ChatViewProps) {
     );
     return item ? [item] : [];
   });
-  const limitRecoveryBanner =
+  const limitRecoveryBanner = useUsageLimitRecoveryBannerItem(
     limitRecoveryRun !== null && activeThreadShell !== null
-      ? usageLimitRecoveryBannerItem(
-          {
-            runId: limitRecoveryRun.runId,
-            errorCode: serverRuntime?.lastErrorCode ?? null,
-            resetAt: serverRuntime?.usageLimitResetAt ?? null,
-            stoppedAt: limitRecoveryRun.completedAt ?? activeThreadShell.updatedAt,
-            settled: activeThreadShell.settledOverride === "settled",
-            requestPending: pendingApprovals.length > 0 || pendingUserInputs.length > 0,
-            recovery: activeThreadShell.limitRecovery ?? null,
-            snoozedUntil: activeThreadShell.snoozedUntil,
-            timestampFormat,
-            onChange: async (limitRecovery) => {
-              const result = await updateThreadMetadata({
-                environmentId,
-                input: { threadId: activeThreadShell.id, limitRecovery },
-              });
-              if (result._tag === "Failure") throw squashAtomCommandFailure(result);
-            },
+      ? {
+          runId: limitRecoveryRun.runId,
+          errorCode: serverRuntime?.lastErrorCode ?? null,
+          resetAt: serverRuntime?.usageLimitResetAt ?? null,
+          stoppedAt: limitRecoveryRun.completedAt ?? activeThreadShell.updatedAt,
+          settled: activeThreadShell.settledOverride === "settled",
+          requestPending: pendingApprovals.length > 0 || pendingUserInputs.length > 0,
+          recovery: activeThreadShell.limitRecovery ?? null,
+          snoozedUntil: activeThreadShell.snoozedUntil,
+          timestampFormat,
+          onChange: async (limitRecovery) => {
+            const result = await updateThreadMetadata({
+              environmentId,
+              input: { threadId: activeThreadShell.id, limitRecovery },
+            });
+            if (result._tag === "Failure") throw squashAtomCommandFailure(result);
           },
-          messages,
-        )
-      : null;
+        }
+      : null,
+    messages,
+  );
   const composerBannerItems = (() => {
     const fallbackSelection = draftFallback?.selection;
     const defaultSelection =
@@ -3573,6 +3593,9 @@ export default function ChatView(props: ChatViewProps) {
       if (activeThread) setThreadError(activeThread.id, message);
     },
   });
+  // An embedded thread's commands run in its host's terminal, which is the host's checkout.
+  const runsOutsideHostCheckout =
+    embedded && (activeThread?.worktreePath ?? null) !== (panelHostShell?.worktreePath ?? null);
   // Main-thread surfaces show this reason; `/side` sent anyway gets it as a toast.
   const sideChatDisabledReason =
     activeThread?.lineage.sideChat === true
@@ -3593,10 +3616,12 @@ export default function ChatView(props: ChatViewProps) {
                 ? gt("Available once the thread's worktree is set up.")
                 : null;
   const sideChatParentPanel: SideChatParentPanel = {
+    hostRef: scopeThreadRef(environmentId, threadId),
     openToolDiff: onOpenToolDiffStable,
     runShellCommand: runShellCommandStable,
   };
   const openSideChatStable = useStableCallback(() => void sideChat.open());
+  const openSurfaceInMainView = useOpenSurfaceInMainView(activeThreadRef);
   const sendSideChatStable = useStableCallback(sideChat.open);
   const { onConfirmRevertStable, onForkFromRunStable, onRevertTimelineTurnStable } =
     useTimelineRewind({
@@ -4142,37 +4167,23 @@ export default function ChatView(props: ChatViewProps) {
             />
           </Suspense>
         );
-      case "side-chat":
+      case "thread":
         return (
-          <SideChatPane
+          <SideThreadPane
             key={surface.id}
             parentRef={activeThreadRef}
-            threadId={surface.threadId}
+            surface={surface}
             parentPanel={sideChatParentPanel}
             onClose={() => closeRightPanelSurface(surface)}
           />
         );
-      case "thread":
+      case "linked-thread":
         return (
-          <ThreadTranscriptPanel
+          <LinkedThreadPane
             key={surface.id}
-            environmentId={activeThreadRef.environmentId}
-            parentThreadId={activeThreadRef.threadId}
-            threadId={surface.threadId}
-            {...(container === "panel"
-              ? {
-                  onOpenInMainTabBar: () =>
-                    useRightPanelStore.getState().moveSurface(activeThreadRef, surface.id, {
-                      container: "main",
-                      index: Number.MAX_SAFE_INTEGER,
-                    }),
-                }
-              : {})}
-            markdownCwd={gitCwd ?? undefined}
-            workspaceRoot={activeWorkspaceRoot}
-            resolvedTheme={resolvedTheme}
-            timestampFormat={timestampFormat}
-            onImageExpand={onExpandTimelineImageStable}
+            panelRef={activeThreadRef}
+            surface={surface}
+            visible={visible}
           />
         );
       case "terminal":
@@ -4402,6 +4413,7 @@ export default function ChatView(props: ChatViewProps) {
     <div className="flex h-full min-w-0 items-center gap-1">
       <WorkspaceTabStrip
         container="main"
+        environmentId={activeThreadRef?.environmentId ?? null}
         surfaces={rightPanelState.mainSurfaces}
         activeSurfaceId={activeMainSurface?.id ?? null}
         pendingSurfaceIds={pendingFileSurfaceIds}
@@ -4414,6 +4426,7 @@ export default function ChatView(props: ChatViewProps) {
         pullRequestStatuses={pullRequestTabStatuses}
         onActivate={activateRightPanelSurfaceStable}
         onCloseSurface={closeRightPanelSurfaceStable}
+        onOpenInMainView={openSurfaceInMainView}
         onCloseOtherSurfaces={closeOtherRightPanelSurfacesStable}
         onCloseSurfacesToRight={closeRightPanelSurfacesToRightStable}
         onCloseAllSurfaces={closeAllMainSurfacesStable}
@@ -4579,7 +4592,7 @@ export default function ChatView(props: ChatViewProps) {
                     citationHistory={citationHistory}
                     onCiteAssistantText={citeAssistantTextStable}
                     onReplyToResponse={replyToResponseStable}
-                    {...(activeProject
+                    {...(activeProject && !runsOutsideHostCheckout
                       ? { onRunShellCommand: parentPanel?.runShellCommand ?? runShellCommandStable }
                       : {})}
                     isWorking={isWorking}
@@ -5093,6 +5106,7 @@ export default function ChatView(props: ChatViewProps) {
               pullRequestStatuses={pullRequestTabStatuses}
               onActivate={activateRightPanelSurfaceStable}
               onCloseSurface={closeRightPanelSurfaceStable}
+              onOpenInMainView={openSurfaceInMainView}
               onCloseOtherSurfaces={closeOtherRightPanelSurfacesStable}
               onCloseSurfacesToRight={closeRightPanelSurfacesToRightStable}
               onCloseAllSurfaces={closeAllRightPanelSurfacesStable}
@@ -5149,6 +5163,7 @@ export default function ChatView(props: ChatViewProps) {
               pullRequestStatuses={pullRequestTabStatuses}
               onActivate={activateRightPanelSurfaceStable}
               onCloseSurface={closeRightPanelSurfaceStable}
+              onOpenInMainView={openSurfaceInMainView}
               onCloseOtherSurfaces={closeOtherRightPanelSurfacesStable}
               onCloseSurfacesToRight={closeRightPanelSurfacesToRightStable}
               onCloseAllSurfaces={closeAllRightPanelSurfacesStable}

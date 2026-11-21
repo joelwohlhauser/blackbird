@@ -58,6 +58,10 @@ export interface RightPanelTabsProps {
   terminalLabelsById: ReadonlyMap<string, string>;
   onActivate: (surface: RightPanelSurface) => void;
   onCloseSurface: (surface: RightPanelSurface) => void;
+  /** Moves a subagent, side chat or linked thread tab to the main screen. */
+  onOpenInMainView?: (
+    surface: Extract<RightPanelSurface, { kind: "thread" | "linked-thread" }>,
+  ) => void;
   onCloseOtherSurfaces: (surface: RightPanelSurface) => void;
   onCloseSurfacesToRight: (surface: RightPanelSurface) => void;
   onCloseAllSurfaces: () => void;
@@ -521,6 +525,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       >
         <WorkspaceTabStrip
           container="panel"
+          environmentId={props.environmentId}
+          {...(props.onOpenInMainView ? { onOpenInMainView: props.onOpenInMainView } : {})}
           surfaces={props.surfaces}
           activeSurfaceId={props.activeSurfaceId}
           pendingSurfaceIds={props.pendingSurfaceIds}

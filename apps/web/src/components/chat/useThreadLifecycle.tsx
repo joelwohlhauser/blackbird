@@ -2,7 +2,7 @@ import { msg, useGT, useMessages } from "gt-react";
 import { errorDisplayMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { m } from "~/i18n/messages";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
-import type { EnvironmentThreadShell, ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { Dispatch } from "react";
 import type { ComposerThreadTarget } from "../../composerDraftStore";
 import type { ComposerHandleRef } from "../../composerHandleContext";
@@ -65,7 +65,6 @@ import { environmentShell } from "../../state/shell";
 import { ThreadStatusLine } from "./ThreadStatusLine";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
-import { useRightPanelStore } from "../../rightPanelStore";
 import { readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
@@ -80,9 +79,9 @@ import { useAtomValue } from "@effect/atom-react";
 import type { RunStopPresentation } from "@t3tools/client-runtime/state/thread-execution";
 import { Atom } from "effect/reactivity";
 import { environmentThreadDetails } from "../../state/threads";
-import { resolveThreadOpenRoute } from "../../lib/sideChatPane";
+import { type SideThreadOpenIntent, sideThreadKindOf } from "@t3tools/client-runtime/side-thread";
+import { openSideThread, resolveThreadOpenRoute } from "../../lib/sideChatPane";
 import type { useLocalDispatchState } from "./useLocalDispatchState";
-import { subagentTabTitle } from "./ThreadTranscriptPanel";
 const RELATED_THREAD_SHELL_WAIT_MS = 1_000;
 
 function actionErrorMessage(error: unknown): string {
@@ -108,7 +107,6 @@ interface ThreadLifecycleInput {
   readonly threadDetailRef: ScopedThreadRef | null;
   readonly activeThreadKey: string | null;
   readonly activeThreadShell: EnvironmentThreadShell | null;
-  readonly serverProjection: ThreadStructure | null;
   /** The usage-limit recovery banner shows this snooze and its Wake now. */
   readonly limitRecoveryHoldsSnooze: boolean;
   readonly activeLatestRun: EnvironmentThreadShell["latestRun"];
@@ -164,7 +162,6 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
     threadDetailRef,
     activeThreadKey,
     activeThreadShell,
-    serverProjection,
     activeLatestRun,
     limitRecoveryHoldsSnooze,
     activeProjectCwd,
@@ -478,16 +475,12 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
   const handleStopBackgroundWorkStable = useStableCallback(handleStopBackgroundWork);
   const openRelatedThreadGenerationRef = useRef(0);
   // A task delegated to a linked environment opens there; the default is this thread's own.
+  // `intent` comes from the rows that open a subagent, and says the thread is one.
   const onOpenRelatedThread = async (
     threadId: ThreadId,
     threadEnvironmentId: EnvironmentId = environmentId,
+    intent?: SideThreadOpenIntent,
   ) => {
-    const subagentTitle =
-      threadEnvironmentId === environmentId ? subagentTabTitle(serverProjection, threadId) : null;
-    if (subagentTitle !== null && activeThreadRef) {
-      useRightPanelStore.getState().openThread(activeThreadRef, threadId, subagentTitle);
-      return;
-    }
     const generation = ++openRelatedThreadGenerationRef.current;
     const threadRef = scopeThreadRef(threadEnvironmentId, threadId);
     const isEnvironmentLive = () =>
@@ -512,6 +505,21 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
     const shell = readThreadShell(threadRef);
     if (shell === null ? !shellOmitsChildren && isEnvironmentLive() : shell.deletedAt != null) {
       toastManager.add({ type: "info", title: m(msg("This thread is no longer available")) });
+      return;
+    }
+    // A subagent or side chat opens beside this thread or in its place; its own parent, like any
+    // other thread, only in its place.
+    if (
+      (intent !== undefined || sideThreadKindOf(shell) !== null) &&
+      activeThread?.lineage.parentThreadId !== threadId
+    ) {
+      openSideThread({
+        threadRef,
+        panelRef: activeThreadRef,
+        intent: intent ?? "primary",
+        navigate: (ref) =>
+          void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(ref) }),
+      });
       return;
     }
     const routeRef = resolveThreadOpenRoute(threadRef, shell);

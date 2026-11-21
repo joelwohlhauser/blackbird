@@ -3,7 +3,15 @@
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { formatSubagentDisplayTitle } from "@t3tools/client-runtime/state/subagent-display";
+import type {
+  ContextMenuItem,
+  EnvironmentId,
+  PreviewSessionSnapshot,
+  PullRequestState,
+} from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   BotIcon,
@@ -29,6 +37,7 @@ import {
 } from "react";
 
 import { m, type MessageResolver } from "~/i18n/messages";
+import { linkedThreadTitle } from "~/linkedThreadSurface";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface, WorkspaceTabContainer } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
@@ -37,6 +46,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
 import { useTheme } from "~/hooks/useTheme";
+import { useQuietThreadShell } from "~/state/entities";
 import {
   MAIN_CHAT_TAB_ID,
   workspaceTabContainerDropId,
@@ -69,6 +79,9 @@ export function rightPanelTabWheelDelta(
   if (event.deltaMode === 2) return dominantDelta * pageWidth;
   return dominantDelta;
 }
+
+export const threadTabTitle = (shell: Pick<EnvironmentThreadShell, "title" | "lineage">): string =>
+  shell.lineage.sideChat === true ? shell.title : formatSubagentDisplayTitle(shell.title);
 
 export function surfaceTitle(
   surface: RightPanelSurface,
@@ -108,9 +121,12 @@ export function surfaceTitle(
         resolve(msg("Device", { $context: "workspace tab title" }))
       );
     case "thread":
-      return surface.title ?? resolve(msg("Subagent", { $context: "workspace tab title" }));
-    case "side-chat":
-      return resolve(msg("Side chat"));
+      return resolve(msg("Thread", { $context: "workspace tab title" }));
+    case "linked-thread":
+      return linkedThreadTitle(
+        surface,
+        resolve(msg("Thread on {label}", { label: surface.label })),
+      );
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return browserTitle();
@@ -149,12 +165,14 @@ export function SurfaceIcon({
   desktopByTabId,
   theme,
   pullRequestStatuses,
+  subagent = false,
 }: {
   surface: RightPanelSurface;
   sessions: Readonly<Record<string, PreviewSessionSnapshot>>;
   desktopByTabId?: Readonly<Record<string, DesktopPreviewOverlay>>;
   theme: "light" | "dark";
   pullRequestStatuses?: Readonly<Record<string, WorkspacePullRequestTabStatus>>;
+  subagent?: boolean;
 }) {
   switch (surface.kind) {
     case "new-tab":
@@ -213,13 +231,18 @@ export function SurfaceIcon({
         <Smartphone className="size-3 shrink-0" />
       );
     case "thread":
-      return <BotIcon className="size-3 shrink-0" />;
-    case "side-chat":
+      return subagent ? (
+        <BotIcon className="size-3 shrink-0" />
+      ) : (
+        <MessagesSquare className="size-3 shrink-0" />
+      );
+    case "linked-thread":
       return <MessagesSquare className="size-3 shrink-0" />;
   }
 }
 
 type TabContextMenuAction =
+  | "open-in-main-view"
   | "copy-path"
   | "toggle-mute"
   | "close"
@@ -430,6 +453,7 @@ function preventTabMiddleButtonDefault(event: ReactMouseEvent) {
 
 function WorkspaceSurfaceTab(props: {
   container: WorkspaceTabContainer;
+  environmentId: EnvironmentId | null;
   surface: RightPanelSurface;
   active: boolean;
   pending: boolean;
@@ -445,6 +469,12 @@ function WorkspaceSurfaceTab(props: {
   previewRuntimeTabId?: ((tabId: string) => string) | undefined;
 }) {
   const gt = useGT();
+  const threadShell = useQuietThreadShell(
+    props.surface.kind === "thread" && props.environmentId !== null
+      ? scopeThreadRef(props.environmentId, props.surface.threadId)
+      : null,
+  );
+  const title = threadShell === null ? props.title : threadTabTitle(threadShell);
   const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
     id: props.surface.id,
     data: { type: "workspace-tab", container: props.container },
@@ -474,7 +504,7 @@ function WorkspaceSurfaceTab(props: {
       <button
         type="button"
         className="group/close relative flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
-        aria-label={gt("Close {title}", { title: props.title })}
+        aria-label={gt("Close {title}", { title })}
         onClick={() => props.onCloseSurface(props.surface)}
       >
         <span className="relative flex size-3 items-center justify-center group-hover/tab:hidden group-focus-visible/close:hidden">
@@ -483,6 +513,7 @@ function WorkspaceSurfaceTab(props: {
             sessions={props.previewSessions}
             desktopByTabId={props.desktopByTabId}
             theme={props.theme}
+            subagent={threadShell !== null && threadShell.lineage.sideChat !== true}
             {...(props.pullRequestStatuses !== undefined
               ? { pullRequestStatuses: props.pullRequestStatuses }
               : {})}
@@ -505,8 +536,8 @@ function WorkspaceSurfaceTab(props: {
                 className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-muted"
                 aria-label={
                   audio === "muted"
-                    ? gt("Unmute {title}", { title: props.title })
-                    : gt("Mute {title}", { title: props.title })
+                    ? gt("Unmute {title}", { title })
+                    : gt("Mute {title}", { title })
                 }
                 onClick={(event) => {
                   event.stopPropagation();
@@ -534,11 +565,11 @@ function WorkspaceSurfaceTab(props: {
               className="flex min-w-0 flex-1 cursor-pointer items-center self-stretch"
               onClick={() => props.onActivate(props.surface)}
             >
-              <span className="truncate">{props.title}</span>
+              <span className="truncate">{title}</span>
             </button>
           }
         />
-        <TooltipPopup>{props.title}</TooltipPopup>
+        <TooltipPopup>{title}</TooltipPopup>
       </Tooltip>
     </div>
   );
@@ -546,6 +577,7 @@ function WorkspaceSurfaceTab(props: {
 
 export interface WorkspaceTabStripProps {
   container: WorkspaceTabContainer;
+  environmentId: EnvironmentId | null;
   surfaces: readonly RightPanelSurface[];
   activeSurfaceId: string | null;
   pendingSurfaceIds: ReadonlySet<string>;
@@ -561,6 +593,10 @@ export interface WorkspaceTabStripProps {
   onCloseSurfacesToRight: (surface: RightPanelSurface) => void;
   onCloseAllSurfaces: () => void;
   onCopyFilePath: (relativePath: string) => void;
+  /** Moves a subagent, side chat or linked thread tab to the main screen. */
+  onOpenInMainView?: (
+    surface: Extract<RightPanelSurface, { kind: "thread" | "linked-thread" }>,
+  ) => void;
   /** Pinned chat tab rendered at the head of the main container's strip. */
   chatTab?: MainChatTabProps;
   className?: string;
@@ -587,6 +623,9 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     if (surfaceIndex < 0) return;
 
     const items: ContextMenuItem<TabContextMenuAction>[] = [];
+    if ((surface.kind === "thread" || surface.kind === "linked-thread") && props.onOpenInMainView) {
+      items.push({ id: "open-in-main-view", label: gt("Open in main view") });
+    }
     if (surface.kind === "file") {
       items.push({ id: "copy-path", label: gt("Copy path") });
     }
@@ -626,6 +665,11 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
       y: event.clientY,
     });
     switch (action) {
+      case "open-in-main-view":
+        if (surface.kind === "thread" || surface.kind === "linked-thread") {
+          props.onOpenInMainView?.(surface);
+        }
+        break;
       case "copy-path":
         if (surface.kind === "file") {
           props.onCopyFilePath(surface.relativePath);
@@ -709,6 +753,7 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     <WorkspaceSurfaceTab
       key={surface.id}
       container={props.container}
+      environmentId={props.environmentId}
       surface={surface}
       active={surface.id === props.activeSurfaceId}
       pending={props.pendingSurfaceIds.has(surface.id)}
