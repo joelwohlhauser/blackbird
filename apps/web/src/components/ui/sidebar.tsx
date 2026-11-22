@@ -697,33 +697,38 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
 function SidebarContent({
   className,
   fixedHeader,
+  renderScrollArea,
   ...props
 }: React.ComponentProps<"div"> & {
   fixedHeader?: React.ReactNode;
+  renderScrollArea?: ((scrollArea: React.ReactNode) => React.ReactNode) | undefined;
 }) {
+  const scrollArea = (
+    <ScrollArea
+      hideScrollbars
+      scrollFade
+      scrollFadePadding={false}
+      // Rows provide keyboard access; exclude the viewport from tab order to flatten VoiceOver's WebKit
+      // interaction boundary.
+      viewportTabIndex={-1}
+      className="h-auto min-h-0 flex-1 [&>[data-slot=scroll-area-viewport]]:[--fade-size:0.75rem]"
+    >
+      <div
+        className={cn(
+          "flex w-full min-w-0 flex-col [overflow-anchor:none] group-data-[collapsible=icon]:overflow-hidden [&>[data-sidebar=group]+[data-sidebar=group]]:pt-0",
+          fixedHeader && "[&>[data-sidebar=group]:first-child]:pt-0",
+          className,
+        )}
+        data-sidebar="content"
+        data-slot="sidebar-content"
+        {...props}
+      />
+    </ScrollArea>
+  );
   return (
     <>
       {fixedHeader ? <div className="w-full shrink-0">{fixedHeader}</div> : null}
-      <ScrollArea
-        hideScrollbars
-        scrollFade
-        scrollFadePadding={false}
-        // Rows provide keyboard access; exclude the viewport from tab order to flatten VoiceOver's WebKit
-        // interaction boundary.
-        viewportTabIndex={-1}
-        className="h-auto min-h-0 flex-1 [&>[data-slot=scroll-area-viewport]]:[--fade-size:0.75rem]"
-      >
-        <div
-          className={cn(
-            "flex w-full min-w-0 flex-col [overflow-anchor:none] group-data-[collapsible=icon]:overflow-hidden [&>[data-sidebar=group]+[data-sidebar=group]]:pt-0",
-            fixedHeader && "[&>[data-sidebar=group]:first-child]:pt-0",
-            className,
-          )}
-          data-sidebar="content"
-          data-slot="sidebar-content"
-          {...props}
-        />
-      </ScrollArea>
+      {renderScrollArea ? renderScrollArea(scrollArea) : scrollArea}
     </>
   );
 }

@@ -45,6 +45,17 @@ export function claimThreadOpen(environmentId: EnvironmentId, threadId: string, 
   return true;
 }
 
+export function latestThreadOpenAt(thread: {
+  readonly environmentId: EnvironmentId;
+  readonly id: string;
+  readonly opens?: { readonly openedAt: number } | null | undefined;
+}): number {
+  return Math.max(
+    thread.opens?.openedAt ?? 0,
+    localThreadOpens.get(`${thread.environmentId}:${thread.id}`) ?? 0,
+  );
+}
+
 export interface EnvironmentThreadSearchMatch extends OrchestrationThreadSearchMatch {
   readonly environmentId: EnvironmentId;
 }

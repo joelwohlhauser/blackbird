@@ -33,6 +33,7 @@ export type SettingsPath =
   | "/settings/devices"
   | "/settings/scheduled-tasks"
   | "/settings/source-control"
+  | "/settings/spaces"
   | "/settings/worktrees"
   | "/settings/workspaces"
   | "/settings/skills"
@@ -111,6 +112,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/skills": msg("Skills"),
   "/settings/scheduled-tasks": msg("Scheduled tasks"),
   "/settings/source-control": msg("Source control & issues"),
+  "/settings/spaces": msg("Spaces"),
   "/settings/worktrees": msg("Worktrees"),
   "/settings/workspaces": msg("Workspaces"),
   "/settings/connections": msg("Environments"),
@@ -167,6 +169,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     heading: msg("Code"),
     paths: [
       "/settings/projects",
+      "/settings/spaces",
       "/settings/source-control",
       "/settings/worktrees",
       "/settings/workspaces",
@@ -503,6 +506,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: msg("Working section"),
     to: "/settings/general",
     searchTerms: [msg("hide fold running monitoring threads inbox sidebar shelf")],
+  },
+  {
+    id: "sidebar-spaces",
+    title: msg("Spaces"),
+    to: "/settings/spaces",
+    searchTerms: [msg("personal swipe sidebar projects arc")],
   },
   {
     id: "boring-sidebar",
@@ -1610,6 +1619,7 @@ const SEARCH_ITEMS_BY_ID = new Map(SETTINGS_SEARCH_ITEMS.map((item) => [item.id,
 const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScope | null>> = {
   "/settings/diagnostics": "environment",
   "/settings/projects": "project",
+  "/settings/spaces": null,
   "/settings/general": null,
   "/settings/workspaces": null,
   "/settings/voice": null,

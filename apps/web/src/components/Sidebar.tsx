@@ -39,6 +39,7 @@ import {
 } from "@t3tools/client-runtime/state/thread-inbox";
 import { sortSettledThreads } from "@t3tools/client-runtime/state/thread-sort";
 import {
+  latestThreadOpenAt,
   nextShownOrder,
   threadSearchMatchKey,
   threadSearchSubject,
@@ -113,6 +114,13 @@ import {
 } from "../sidebarProjectGrouping";
 import { resolveProjectExpanded, useUiStateStore } from "../uiStateStore";
 import {
+  enabledSidebarSpaces,
+  groupSpaceId,
+  mostRecentlyOpened,
+  projectGroupsInSpace,
+  resolveSpaceId,
+} from "../sidebarSpaces";
+import {
   getThreadKeysToDeselectAfterDelete,
   useThreadSelectionStore,
 } from "../threadSelectionStore";
@@ -124,6 +132,7 @@ import {
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
 import { useProjectPin } from "../hooks/useProjectGroupUpdate";
+import { useScratchProject } from "../hooks/useScratchProject";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
@@ -225,6 +234,8 @@ import { ProjectFavicon } from "./ProjectFavicon";
 import { deriveProviderEntriesByEnvironment } from "../providerInstances";
 import { useStableCallback } from "../hooks/useStableCallback";
 import {
+  completeSidebarRouteReveal,
+  pendingSidebarRouteReveal,
   resolveSidebarRouteReveal,
   type SidebarRouteReveal,
   useActiveRowReveal,
@@ -248,6 +259,7 @@ import {
 import { SettledShelfMoreRow } from "./sidebar/SettledShelfMoreRow";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
+import { SidebarSpaces, type SidebarSpacesHandle } from "./sidebar/SidebarSpaces";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { TooltipProvider } from "./ui/tooltip";
 import {
@@ -331,6 +343,8 @@ const SETTLED_TAIL_PAGE_COUNT = 25;
 const SETTLED_SHELF_EXPANDED_KEY = "t3code:sidebar:settled-expanded";
 const SNOOZED_SHELF_EXPANDED_KEY = "t3code:sidebar:snoozed-expanded";
 const WORKING_SHELF_EXPANDED_KEY = "t3code:sidebar:working-expanded";
+const ACTIVE_SPACE_KEY = "blackbird:sidebar:active-space";
+const ActiveSpaceId = Schema.NullOr(Schema.String);
 
 const inboxReturns = createInboxReturnTracker();
 
@@ -364,6 +378,14 @@ interface SidebarThreadPartitionInput {
 
 function scrollSidebarToTop(content: HTMLElement | null) {
   content?.closest("[data-slot=scroll-area-viewport]")?.scrollTo({ top: 0 });
+}
+
+function projectRefKeys(
+  groups: ReadonlyArray<Pick<SidebarProjectSnapshot, "memberProjectRefs">>,
+): string[] {
+  return groups.flatMap((group) =>
+    group.memberProjectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`),
+  );
 }
 
 function threadShellKey(thread: Pick<SidebarThreadSummary, "environmentId" | "id">): string {
@@ -984,6 +1006,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const boringSidebarEnabled = useClientSettings((settings) => settings.boringSidebarEnabled);
   const folderRowsMultiline = useClientSettings((settings) => settings.boringSidebarMultilineRows);
   const newThreadContext = useHandleNewThread();
+  const { scratchEnvironmentId, startScratchThread } = useScratchProject();
   // Row callbacks capture only the handler; the rest of the context changes with the route.
   const { handleNewThread } = newThreadContext;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -1004,6 +1027,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const projectGroupsRef = useRef(projectGroups);
   const persistedProjectScopeKeys = useUiStateStore((store) => store.sidebarProjectScopeKeys);
   const setPersistedProjectScopeKeys = useUiStateStore((store) => store.setSidebarProjectScopeKeys);
+  const spaces = enabledSidebarSpaces(useClientSettings((s) => s.sidebarSpaces));
+  const projectSpaces = useClientSettings((s) => s.sidebarProjectSpaces);
+  const [storedSpaceId, setStoredSpaceId] = useLocalStorage(ACTIVE_SPACE_KEY, null, ActiveSpaceId);
+  const [previewSpaceId, setPreviewSpaceId] = useState<string | null>(null);
+  const spacesRef = useRef<SidebarSpacesHandle>(null);
+  const previewPathRef = useRef<string | null>(null);
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
     reduceSidebarProjectScopeMenuState,
     { open: false, query: "" },
@@ -1078,7 +1107,53 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   // A scope whose project is gone reads as all projects once every snapshot has
   // loaded. The stored keys are left alone, so the scope returns with its project.
   // An archived project's scope reads as all projects, matching the menu.
-  const scopeGroups = pickableProjectGroups(projectGroups);
+  const threads = useQuietThreadShells();
+  const routeRowThreadKey =
+    routeThreadRef === null
+      ? null
+      : scopedThreadKey(resolveListedAncestorThreadRef(routeThreadRef, threads));
+  const isSearchingThreads = threadSearchQuery.trim().length > 0;
+  // The open draft's first send names its thread in place; a finalized draft reached by
+  // navigation resolves through its redirect instead, and still reveals.
+  const routeKeyInPlace = routeDraftThread?.promotedTo != null;
+  const pendingRevealKey = pendingSidebarRouteReveal(
+    routeReveal,
+    routeRowThreadKey,
+    routeKeyInPlace,
+  );
+  const pendingRevealThread =
+    pendingRevealKey === null || isSearchingThreads
+      ? undefined
+      : threads.find((thread) => threadShellKey(thread) === pendingRevealKey);
+  const threadSpaceId = (thread: Pick<SidebarThreadSummary, "environmentId" | "projectId">) => {
+    const group = projectGroups.find((candidate) =>
+      candidate.memberProjectRefs.some(
+        (ref) => ref.environmentId === thread.environmentId && ref.projectId === thread.projectId,
+      ),
+    );
+    return group === undefined ? null : groupSpaceId(group, spaces, projectSpaces);
+  };
+  const revealSpaceId =
+    pendingRevealThread === undefined ||
+    filterSidebarV2VisibleThreads([pendingRevealThread], null, delegatedUnderParent).length === 0
+      ? null
+      : threadSpaceId(pendingRevealThread);
+  const activeSpaceId = resolveSpaceId(spaces, previewSpaceId ?? revealSpaceId ?? storedSpaceId);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a route opened from outside the sidebar moves the persisted space to the thread's space
+  useEffect(() => {
+    if (previewSpaceId === null && revealSpaceId !== null && revealSpaceId !== storedSpaceId) {
+      setStoredSpaceId(revealSpaceId);
+    }
+  }, [previewSpaceId, revealSpaceId, setStoredSpaceId, storedSpaceId]);
+  const spaceProjectGroups = projectGroupsInSpace(
+    projectGroups,
+    spaces,
+    projectSpaces,
+    activeSpaceId,
+  );
+  const spaceScopeProjectKeys =
+    activeSpaceId === null ? null : new Set(projectRefKeys(spaceProjectGroups));
+  const scopeGroups = pickableProjectGroups(spaceProjectGroups);
   const archivedProjectKeys = new Set(
     projectGroups.filter((project) => project.archived).map((project) => project.projectKey),
   );
@@ -1087,13 +1162,17 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     keys: persistedProjectScopeKeys,
     settings: projectGroupingSettings,
     canClearMissingScope: allProjectSnapshotsReady && allProjectConfigsReady,
-  }).filter((key) => !archivedProjectKeys.has(key));
+  }).filter(
+    (key) =>
+      !archivedProjectKeys.has(key) &&
+      (activeSpaceId === null || scopeGroups.some((group) => group.projectKey === key)),
+  );
   const chosenProjectGroups = scopeGroups.filter((project) =>
     chosenProjectScopeKeys.includes(project.projectKey),
   );
   const chosenScopeProjectKeys =
     chosenProjectGroups.length === 0
-      ? null
+      ? spaceScopeProjectKeys
       : new Set(
           chosenProjectGroups.flatMap((project) =>
             project.memberProjectRefs.map(
@@ -1101,7 +1180,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
-  const threads = useQuietThreadShells();
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
   const listedThreads =
     promotingDraftThreadKeys.length === 0
@@ -1111,14 +1189,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ? asLaunchingThread(thread)
             : thread,
         );
-  const routeRowThreadKey =
-    routeThreadRef === null
-      ? null
-      : scopedThreadKey(resolveListedAncestorThreadRef(routeThreadRef, threads));
-  const isSearchingThreads = threadSearchQuery.trim().length > 0;
-  // The open draft's first send names its thread in place; a finalized draft reached by
-  // navigation resolves through its redirect instead, and still reveals.
-  const routeKeyInPlace = routeDraftThread?.promotedTo != null;
 
   // History, the palette and links can open a thread the scope hides or the list
   // scrolled away; a remount starts at the top, so each mount scrolls to the open
@@ -1168,7 +1238,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   };
   // Pinning from a row keeps rows in place while the menu is open.
   const projectScopeItems = useOrderWhileOpen(
-    lookupProjectScopeItems,
+    lookupProjectScopeItems.filter(
+      (item) =>
+        item.value === "all" || scopeGroups.some((group) => group.projectKey === item.value),
+    ),
     (item) => item.value,
     projectScopeMenuState.open,
   );
@@ -1184,14 +1257,20 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       projectScopeFilter.contains(item, query, (candidate) => candidate.label),
   });
   const scopedProjectGroups = revealWidensScope ? [] : chosenProjectGroups;
-  const scopedProjectRefs = scopedProjectGroups.flatMap((project) => project.memberProjectRefs);
-  const scopedProjectKeys = revealWidensScope ? null : chosenScopeProjectKeys;
+  const searchProjectRefs = (
+    scopedProjectGroups.length > 0
+      ? scopedProjectGroups
+      : activeSpaceId === null
+        ? []
+        : spaceProjectGroups
+  ).flatMap((project) => project.memberProjectRefs);
+  const scopedProjectKeys = revealWidensScope ? spaceScopeProjectKeys : chosenScopeProjectKeys;
   const threadSearch = useThreadSearch(
     connectedEnvironmentIds,
     threadSearchQuery,
-    scopedProjectGroups.length === 0
+    searchProjectRefs.length === 0
       ? {}
-      : { projectIds: scopedProjectRefs.map((projectRef) => projectRef.projectId) },
+      : { projectIds: searchProjectRefs.map((projectRef) => projectRef.projectId) },
   );
   const routeDraftIdForRows = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
   const visibleDraftSessionCount = useComposerDraftStore((store) => {
@@ -1348,7 +1427,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     folderGroups: boringSidebarEnabled
       ? scopedProjectGroups.length === 0
         ? // An archived project keeps a folder for its active threads, below the rest.
-          [...scopeGroups, ...projectGroups.filter((project) => project.archived)]
+          [...scopeGroups, ...spaceProjectGroups.filter((project) => project.archived)]
         : scopedProjectGroups
       : null,
     keepEmptyFolders: (group) =>
@@ -1443,6 +1522,55 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       setOpenMobile(false);
     }
     return router.navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
+    });
+  };
+
+  const routeMovedDuringSlide = () => router.history.location.pathname !== previewPathRef.current;
+  const previewSpace = (spaceId: string | null) => {
+    if (spaceId !== null) {
+      previewPathRef.current = router.history.location.pathname;
+    } else if (routeMovedDuringSlide()) {
+      const routeThread = threads.find((thread) => threadShellKey(thread) === routeRowThreadKey);
+      const routeSpaceId = routeThread === undefined ? null : threadSpaceId(routeThread);
+      if (routeSpaceId !== null) setStoredSpaceId(routeSpaceId);
+    }
+    setPreviewSpaceId(spaceId);
+  };
+  const commitSpace = (spaceId: string) => {
+    setPreviewSpaceId(null);
+    setStoredSpaceId(spaceId);
+    clearSelection();
+    setPersistedProjectScopeKeys([]);
+    if (routeMovedDuringSlide()) return;
+    completeSidebarRouteReveal(routeReveal);
+    const ownProjectKeys = new Set(
+      projectRefKeys(
+        projectGroups.filter((group) => groupSpaceId(group, spaces, projectSpaces) === spaceId),
+      ),
+    );
+    const thread = mostRecentlyOpened(
+      sortThreadsForSidebar(
+        filterSidebarV2VisibleThreads(threads, ownProjectKeys, delegatedUnderParent),
+      ),
+      latestThreadOpenAt,
+    );
+    if (thread === null) {
+      const open = newThreadContext.activeThread ?? newThreadContext.activeDraftThread;
+      const openSpaceId = open ? threadSpaceId(open) : undefined;
+      if (openSpaceId === null || openSpaceId === spaceId) return;
+      const project = pickableProjectGroups(projectGroups).find(
+        (group) => groupSpaceId(group, spaces, projectSpaces) === spaceId,
+      );
+      if (project) void handleNewThread(scopeProjectRef(project.environmentId, project.id));
+      else if (scratchEnvironmentId !== null) void startScratchThread(scratchEnvironmentId);
+      return;
+    }
+    if (threadShellKey(thread) === routeRowThreadKey) return;
+    const threadRef = scopeThreadRef(thread.environmentId, thread.id);
+    setSelectionAnchor(scopedThreadKey(threadRef));
+    void router.navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(threadRef),
     });
@@ -2004,9 +2132,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     dragState === null && sidebarListItems.length + visibleDraftSessionCount > 0;
   // Cache on both fields so layout-key changes trigger the effect even when animate is unchanged.
   const listMotionPass = { layoutKey: listMotionLayoutKey, animate: listMotionAnimate };
-  const shelfExpansionKey = [workingShelfExpanded, snoozedShelfExpanded, settledShelfExpanded].join(
-    ":",
-  );
+  const shelfExpansionKey = [
+    workingShelfExpanded,
+    snoozedShelfExpanded,
+    settledShelfExpanded,
+    activeSpaceId,
+  ].join(":");
   const previousShelfExpansionKeyRef = useRef(shelfExpansionKey);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records moved rows and updates list motion after each layout-affecting commit
   useLayoutEffect(() => {
@@ -2908,6 +3039,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         platform: navigator.platform,
         context: threadShortcutContext(routeThreadRef),
       });
+      if ((command === "space.next" || command === "space.previous") && spacesRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        spacesRef.current.step(command === "space.next" ? 1 : -1);
+        return;
+      }
       const navigateToThreadKey = (targetThreadKey: string | null) => {
         if (!targetThreadKey) return false;
         const targetThread = threadByKey.get(targetThreadKey);
@@ -2976,6 +3113,22 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       <SidebarContent
         ref={sidebarContentRef}
         className="min-h-full"
+        renderScrollArea={
+          activeSpaceId === null
+            ? undefined
+            : (scrollArea) => (
+                <SidebarSpaces
+                  ref={spacesRef}
+                  spaces={spaces}
+                  activeSpaceId={activeSpaceId}
+                  disabled={dragState !== null}
+                  onPreview={previewSpace}
+                  onCommit={commitSpace}
+                >
+                  {scrollArea}
+                </SidebarSpaces>
+              )
+        }
         fixedHeader={
           <SidebarGroup className="z-[1]">
             <SidebarThreadHeader
