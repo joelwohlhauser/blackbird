@@ -36,7 +36,7 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./modelSelection.ts";
-import { ProjectScript, type ProjectMutation } from "./project.ts";
+import { ProjectIconOverride, ProjectScript, type ProjectMutation } from "./project.ts";
 import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
@@ -80,6 +80,7 @@ export const DEFAULT_SIDEBAR_PROJECT_SORT_ORDER: SidebarProjectSortOrder = "upda
 export const SidebarSpace = Schema.Struct({
   id: TrimmedNonEmptyString,
   name: TrimmedNonEmptyString,
+  icon: Schema.optionalKey(ProjectIconOverride),
 });
 export type SidebarSpace = typeof SidebarSpace.Type;
 

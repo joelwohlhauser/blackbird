@@ -12,7 +12,7 @@ import { ProjectMonogram } from "./ProjectMonogram";
 import { cn } from "~/lib/utils";
 
 // All lucide icons load as one chunk, only once a project uses a lucide override.
-const LucideProjectIcon = lazy(() =>
+export const LucideProjectIcon = lazy(() =>
   import("../lib/lucideIconByName").then(({ lucideIconByName }) => ({
     default: function LucideProjectIcon(props: { name: string; className: string }) {
       return createElement(lucideIconByName(props.name) ?? FolderCodeIcon, {

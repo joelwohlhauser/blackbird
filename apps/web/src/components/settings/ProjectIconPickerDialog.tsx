@@ -44,12 +44,14 @@ function iconLabel(name: string): string {
 export function ProjectIconPickerDialog({
   current,
   projectName,
+  subject = "project",
   open,
   onOpenChange,
   onSelect,
 }: {
   readonly current: ProjectIconOverride | null;
   readonly projectName: string;
+  readonly subject?: "project" | "space";
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onSelect: (icon: ProjectIconOverride | null) => void;
@@ -61,6 +63,7 @@ export function ProjectIconPickerDialog({
         <ProjectIconPickerBody
           current={current}
           projectName={projectName}
+          subject={subject}
           onClose={() => onOpenChange(false)}
           onSelect={onSelect}
         />
@@ -72,11 +75,13 @@ export function ProjectIconPickerDialog({
 function ProjectIconPickerBody({
   current,
   projectName,
+  subject,
   onClose,
   onSelect,
 }: {
   readonly current: ProjectIconOverride | null;
   readonly projectName: string;
+  readonly subject: "project" | "space";
   readonly onClose: () => void;
   readonly onSelect: (icon: ProjectIconOverride | null) => void;
 }) {
@@ -119,10 +124,14 @@ function ProjectIconPickerBody({
     <>
       <DialogHeader>
         <DialogTitle>
-          <T>Choose project icon</T>
+          {subject === "space" ? <T>Choose space icon</T> : <T>Choose project icon</T>}
         </DialogTitle>
         <DialogDescription>
-          <T>Use no icon, a Lucide icon and color, an emoji, or a monogram.</T>
+          {subject === "space" ? (
+            <T>Use the first letter, a Lucide icon, or an emoji.</T>
+          ) : (
+            <T>Use no icon, a Lucide icon and color, an emoji, or a monogram.</T>
+          )}
         </DialogDescription>
       </DialogHeader>
       <DialogPanel className="flex min-h-0 flex-col">
@@ -151,18 +160,24 @@ function ProjectIconPickerBody({
           <Toggle value="emoji">
             <T>Emoji</T>
           </Toggle>
-          <Toggle value="monogram">
-            <T>Monogram</T>
-          </Toggle>
+          {subject === "project" ? (
+            <Toggle value="monogram">
+              <T>Monogram</T>
+            </Toggle>
+          ) : null}
         </ToggleGroup>
 
         {mode === "none" ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            <T>This project will not show an icon.</T>
+            {subject === "space" ? (
+              <T>This space will show its first letter.</T>
+            ) : (
+              <T>This project will not show an icon.</T>
+            )}
           </p>
         ) : null}
 
-        {mode !== "emoji" && mode !== "none" ? (
+        {subject === "project" && mode !== "emoji" && mode !== "none" ? (
           <div>
             <div className="mb-2 text-xs font-medium text-muted-foreground">
               <T>Color</T>
@@ -207,7 +222,7 @@ function ProjectIconPickerBody({
                     className={cn(
                       "flex aspect-square items-center justify-center rounded-md border border-transparent outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                       iconName === name && "border-border bg-accent",
-                      selectedColorClassName,
+                      subject === "project" && selectedColorClassName,
                     )}
                     onClick={() => setIconName(name)}
                   >
@@ -246,7 +261,7 @@ function ProjectIconPickerBody({
               </p>
             </div>
           </div>
-        ) : (
+        ) : mode === "emoji" ? (
           <>
             <ScrollArea scrollFade className="max-h-64">
               <div className="grid grid-cols-8 gap-1 p-0.5 sm:grid-cols-10">
@@ -284,7 +299,7 @@ function ProjectIconPickerBody({
               />
             </div>
           </>
-        )}
+        ) : null}
       </DialogPanel>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>

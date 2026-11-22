@@ -1,4 +1,3 @@
-import { ProjectId, QUICK_CHATS_PROJECT_ID } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -12,10 +11,7 @@ import {
 const work = { id: "work", name: "Work" } as never;
 const personal = { id: "personal", name: "Personal" } as never;
 const spaces = [work, personal];
-const group = (projectKey: string, id: string = projectKey) => ({
-  projectKey,
-  memberProjects: [{ id: ProjectId.make(id) }],
-});
+const group = (projectKey: string) => ({ projectKey });
 
 describe("sidebar spaces", () => {
   it("treats a single space as no spaces", () => {
@@ -37,13 +33,13 @@ describe("sidebar spaces", () => {
     expect(resolveSpaceId([], "work")).toBeNull();
   });
 
-  it("keeps Quick chats in every space and each project in one", () => {
-    const groups = [group("api"), group("blog"), group("quick", QUICK_CHATS_PROJECT_ID)];
+  it("keeps each project, including Quick chats, in one space", () => {
+    const groups = [group("api"), group("blog"), group("quick")];
     const inSpace = (spaceId: string) =>
-      projectGroupsInSpace(groups, spaces, { blog: "personal" }, spaceId).map(
+      projectGroupsInSpace(groups, spaces, { blog: "personal", quick: "personal" }, spaceId).map(
         (entry) => entry.projectKey,
       );
-    expect(inSpace("work")).toEqual(["api", "quick"]);
+    expect(inSpace("work")).toEqual(["api"]);
     expect(inSpace("personal")).toEqual(["blog", "quick"]);
   });
 

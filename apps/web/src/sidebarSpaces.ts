@@ -1,12 +1,9 @@
 import type { SidebarSpace } from "@t3tools/contracts";
 
-import { isQuickChatsProject } from "./quickChats";
-
 type ProjectSpaces = Readonly<Record<string, string>>;
 
 interface SpaceProjectGroup {
   readonly projectKey: string;
-  readonly memberProjects: ReadonlyArray<Parameters<typeof isQuickChatsProject>[0]>;
 }
 
 export function enabledSidebarSpaces(
@@ -27,9 +24,7 @@ export function groupSpaceId(
   spaces: ReadonlyArray<SidebarSpace>,
   projectSpaces: ProjectSpaces,
 ): string | null {
-  return group.memberProjects.some(isQuickChatsProject)
-    ? null
-    : resolveSpaceId(spaces, projectSpaces[group.projectKey]);
+  return resolveSpaceId(spaces, projectSpaces[group.projectKey]);
 }
 
 export function projectGroupsInSpace<TGroup extends SpaceProjectGroup>(
@@ -39,10 +34,7 @@ export function projectGroupsInSpace<TGroup extends SpaceProjectGroup>(
   spaceId: string | null,
 ): ReadonlyArray<TGroup> {
   if (spaceId === null) return groups;
-  return groups.filter((group) => {
-    const groupSpace = groupSpaceId(group, spaces, projectSpaces);
-    return groupSpace === null || groupSpace === spaceId;
-  });
+  return groups.filter((group) => groupSpaceId(group, spaces, projectSpaces) === spaceId);
 }
 
 export function mostRecentlyOpened<TThread>(

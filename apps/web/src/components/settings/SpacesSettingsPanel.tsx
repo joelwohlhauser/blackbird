@@ -1,18 +1,26 @@
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
-import type { SidebarSpace } from "@t3tools/contracts";
+import type { ProjectIconOverride, SidebarSpace } from "@t3tools/contracts";
 import { ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useGT } from "gt-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import { updateClientSettings, useClientSettings } from "~/hooks/useSettings";
 import { useSidebarProjectGroups } from "~/hooks/useSidebarProjectGroups";
 import { randomUUID } from "~/lib/utils";
+import { projectGroupsSpanEnvironments } from "~/sidebarProjectGrouping";
 import { groupSpaceId } from "~/sidebarSpaces";
 
+import { SidebarSpaceIcon } from "../sidebar/SidebarSpaceIcon";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
+
+const ProjectIconPickerDialog = lazy(() =>
+  import("./ProjectIconPickerDialog").then((module) => ({
+    default: module.ProjectIconPickerDialog,
+  })),
+);
 
 function SpaceNameInput({
   space,
@@ -47,10 +55,10 @@ export function SpacesSettingsPanel() {
   const gt = useGT();
   const spaces = useClientSettings((settings) => settings.sidebarSpaces);
   const projectSpaces = useClientSettings((settings) => settings.sidebarProjectSpaces);
-  const projectGroups = pickableProjectGroups(useSidebarProjectGroups()).flatMap((group) => {
-    const spaceId = groupSpaceId(group, spaces, projectSpaces);
-    return spaceId === null ? [] : [{ group, spaceId }];
-  });
+  const projectGroups = pickableProjectGroups(useSidebarProjectGroups());
+  const showEnvironments = projectGroupsSpanEnvironments(projectGroups);
+  const [iconSpaceId, setIconSpaceId] = useState<string | null>(null);
+  const iconSpace = spaces.find((space) => space.id === iconSpaceId);
 
   const addSpace = () =>
     void updateClientSettings({
@@ -66,6 +74,16 @@ export function SpacesSettingsPanel() {
   const renameSpace = (id: string, name: string) =>
     void updateClientSettings({
       sidebarSpaces: spaces.map((space) => (space.id === id ? { ...space, name } : space)),
+    });
+  const setSpaceIcon = (id: string, icon: ProjectIconOverride | null) =>
+    void updateClientSettings({
+      sidebarSpaces: spaces.map((space) =>
+        space.id !== id
+          ? space
+          : icon === null
+            ? { id: space.id, name: space.name }
+            : { ...space, icon },
+      ),
     });
   const moveSpaceUp = (index: number) => {
     const next = [...spaces];
@@ -108,6 +126,14 @@ export function SpacesSettingsPanel() {
         ) : (
           spaces.map((space, index) => (
             <div key={space.id} className="flex items-center gap-1.5 px-4 py-2">
+              <Button
+                size="icon-sm"
+                variant="outline"
+                aria-label={gt("Icon for {space}", { space: space.name })}
+                onClick={() => setIconSpaceId(space.id)}
+              >
+                <SidebarSpaceIcon space={space} />
+              </Button>
               <div className="min-w-0 flex-1">
                 <SpaceNameInput space={space} onRename={(name) => renameSpace(space.id, name)} />
               </div>
@@ -134,11 +160,21 @@ export function SpacesSettingsPanel() {
       </SettingsSection>
       {spaces.length > 1 ? (
         <SettingsSection title={gt("Projects")}>
-          {projectGroups.map(({ group, spaceId }) => {
+          {projectGroups.map((group) => {
+            const spaceId = groupSpaceId(group, spaces, projectSpaces);
             return (
               <SettingsRow
                 key={group.projectKey}
                 title={group.displayName}
+                description={
+                  showEnvironments
+                    ? [
+                        ...new Set(
+                          group.memberProjects.flatMap((member) => member.environmentLabel ?? []),
+                        ),
+                      ].join(", ")
+                    : undefined
+                }
                 control={
                   <Select
                     value={spaceId}
@@ -168,6 +204,20 @@ export function SpacesSettingsPanel() {
             );
           })}
         </SettingsSection>
+      ) : null}
+      {iconSpace ? (
+        <Suspense fallback={null}>
+          <ProjectIconPickerDialog
+            subject="space"
+            current={iconSpace.icon ?? null}
+            projectName={iconSpace.name}
+            open
+            onOpenChange={(open) => {
+              if (!open) setIconSpaceId(null);
+            }}
+            onSelect={(icon) => setSpaceIcon(iconSpace.id, icon)}
+          />
+        </Suspense>
       ) : null}
     </SettingsPageContainer>
   );

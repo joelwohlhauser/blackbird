@@ -33,6 +33,11 @@ export function completeSidebarRouteReveal(reveal: SidebarRouteReveal): void {
   reveal.pendingKey = null;
 }
 
+export function resetSidebarRouteReveal(reveal: SidebarRouteReveal): void {
+  reveal.observedKey = null;
+  reveal.pendingKey = null;
+}
+
 // Each route change and each mount scroll to the open thread once. Render records
 // the route, so a thread left before its row mounted still counts as a change.
 // The row can mount after the route, once its shells arrive, so its ref scrolls.

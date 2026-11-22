@@ -17,6 +17,7 @@ import { cn } from "~/lib/utils";
 
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
+import { SidebarSpaceIcon } from "./SidebarSpaceIcon";
 import { createSpaceSwipe, type SwipeDirection } from "./sidebarSpaceSwipe";
 
 export interface SidebarSpacesHandle {
@@ -191,7 +192,6 @@ export function SidebarSpaces({
     };
   }, [handleWheel, swipe]);
 
-  const activeSpace = spaces[activeIndex];
   return (
     <div ref={rootRef} className="flex min-h-0 flex-1 flex-col">
       <div ref={clipRef} className="relative min-h-0 flex-1 overflow-hidden">
@@ -199,9 +199,6 @@ export function SidebarSpaces({
           ref={pageRef}
           className="flex h-full min-h-0 flex-col data-sliding:[&_li]:[content-visibility:visible]"
         >
-          <div className="shrink-0 truncate px-4 pt-1 pb-1 font-medium text-sidebar-foreground text-xs">
-            {activeSpace?.name}
-          </div>
           {children}
         </div>
       </div>
@@ -223,7 +220,7 @@ export function SidebarSpaces({
                     aria-current={index === activeIndex ? "true" : undefined}
                     onClick={() => swipe.slide(() => resolveTarget(() => index))}
                     className={cn(
-                      "relative flex size-7 items-center justify-center rounded-md font-medium text-xs uppercase hover:bg-sidebar-row-hover",
+                      "relative flex size-7 items-center justify-center rounded-md font-medium text-xs hover:bg-sidebar-row-hover",
                       index === activeIndex
                         ? "text-sidebar-foreground"
                         : "text-sidebar-muted-foreground",
@@ -231,7 +228,7 @@ export function SidebarSpaces({
                   />
                 }
               >
-                {Array.from(space.name)[0]}
+                <SidebarSpaceIcon space={space} />
               </TooltipTrigger>
               <TooltipPopup side="top">{space.name}</TooltipPopup>
             </Tooltip>

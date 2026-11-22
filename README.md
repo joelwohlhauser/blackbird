@@ -37,7 +37,7 @@ The left sidebar includes:
 - persistent open/closed state;
 - resizing while docked or while temporarily overlaid;
 - edge-hover reveal when the sidebar is hidden, without reflowing the app; and
-- optional **Spaces** (Settings → Spaces), such as Work and Personal. Each project belongs to one space, Quick chats appear in all of them, and a two-finger swipe on the sidebar, the space buttons, or Option+Command+Left/Right switches between them and reopens that space's last chat.
+- optional **Spaces** (Settings → Spaces), such as Work and Personal. Each project, including Quick chats, belongs to one space, and each space can have an icon. A two-finger swipe on the sidebar, the space buttons, or Option+Command+Left/Right switches between them and reopens that space's last chat.
 
 Option+Tab immediately opens the next chat in the sidebar; Shift+Option+Tab opens the previous one. Navigation follows the sidebar's displayed order and stops at either end. There is no chat switcher or recent-chat ordering. Command+Shift+N opens the Quick-chat start page.
 

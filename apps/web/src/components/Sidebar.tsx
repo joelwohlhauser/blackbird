@@ -132,7 +132,6 @@ import {
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
 import { useProjectPin } from "../hooks/useProjectGroupUpdate";
-import { useScratchProject } from "../hooks/useScratchProject";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
@@ -236,6 +235,7 @@ import { useStableCallback } from "../hooks/useStableCallback";
 import {
   completeSidebarRouteReveal,
   pendingSidebarRouteReveal,
+  resetSidebarRouteReveal,
   resolveSidebarRouteReveal,
   type SidebarRouteReveal,
   useActiveRowReveal,
@@ -1006,7 +1006,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const boringSidebarEnabled = useClientSettings((settings) => settings.boringSidebarEnabled);
   const folderRowsMultiline = useClientSettings((settings) => settings.boringSidebarMultilineRows);
   const newThreadContext = useHandleNewThread();
-  const { scratchEnvironmentId, startScratchThread } = useScratchProject();
   // Row callbacks capture only the handler; the rest of the context changes with the route.
   const { handleNewThread } = newThreadContext;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -1033,6 +1032,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const [previewSpaceId, setPreviewSpaceId] = useState<string | null>(null);
   const spacesRef = useRef<SidebarSpacesHandle>(null);
   const previewPathRef = useRef<string | null>(null);
+  const spaceDraftIdsRef = useRef(new Map<string, DraftId>());
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
     reduceSidebarProjectScopeMenuState,
     { open: false, query: "" },
@@ -1145,6 +1145,32 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       setStoredSpaceId(revealSpaceId);
     }
   }, [previewSpaceId, revealSpaceId, setStoredSpaceId, storedSpaceId]);
+  const routeProjectThread = newThreadContext.activeThread ?? newThreadContext.activeDraftThread;
+  const routeSpaceId = routeProjectThread ? threadSpaceId(routeProjectThread) : null;
+  const routeDraftId = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
+  const observedDraftIdRef = useRef(routeDraftId);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records each space's last draft and moves the persisted space when the route opens a draft elsewhere
+  useEffect(() => {
+    if (routeSpaceId === null) return;
+    if (routeDraftId === null) spaceDraftIdsRef.current.delete(routeSpaceId);
+    else spaceDraftIdsRef.current.set(routeSpaceId, routeDraftId);
+    if (routeDraftId !== null && routeRowThreadKey === null) resetSidebarRouteReveal(routeReveal);
+    const openedDraft = routeDraftId !== null && routeDraftId !== observedDraftIdRef.current;
+    observedDraftIdRef.current = routeDraftId;
+    if (openedDraft && previewSpaceId === null && routeSpaceId !== storedSpaceId) {
+      setStoredSpaceId(routeSpaceId);
+    }
+  }, [
+    observedDraftIdRef,
+    previewSpaceId,
+    routeDraftId,
+    routeReveal,
+    routeRowThreadKey,
+    routeSpaceId,
+    setStoredSpaceId,
+    spaceDraftIdsRef,
+    storedSpaceId,
+  ]);
   const spaceProjectGroups = projectGroupsInSpace(
     projectGroups,
     spaces,
@@ -1531,20 +1557,32 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const previewSpace = (spaceId: string | null) => {
     if (spaceId !== null) {
       previewPathRef.current = router.history.location.pathname;
-    } else if (routeMovedDuringSlide()) {
-      const routeThread = threads.find((thread) => threadShellKey(thread) === routeRowThreadKey);
-      const routeSpaceId = routeThread === undefined ? null : threadSpaceId(routeThread);
-      if (routeSpaceId !== null) setStoredSpaceId(routeSpaceId);
+    } else if (routeMovedDuringSlide() && routeSpaceId !== null) {
+      setStoredSpaceId(routeSpaceId);
     }
     setPreviewSpaceId(spaceId);
   };
   const commitSpace = (spaceId: string) => {
     setPreviewSpaceId(null);
-    setStoredSpaceId(spaceId);
+    setStoredSpaceId(routeMovedDuringSlide() ? (routeSpaceId ?? spaceId) : spaceId);
     clearSelection();
     setPersistedProjectScopeKeys([]);
     if (routeMovedDuringSlide()) return;
     completeSidebarRouteReveal(routeReveal);
+    const spaceDraftId = spaceDraftIdsRef.current.get(spaceId);
+    const spaceDraft =
+      spaceDraftId === undefined
+        ? null
+        : useComposerDraftStore.getState().getDraftSession(spaceDraftId);
+    if (
+      spaceDraftId !== undefined &&
+      spaceDraft &&
+      spaceDraft.promotedTo == null &&
+      threadSpaceId(spaceDraft) === spaceId
+    ) {
+      void router.navigate({ to: "/draft/$draftId", params: { draftId: spaceDraftId } });
+      return;
+    }
     const ownProjectKeys = new Set(
       projectRefKeys(
         projectGroups.filter((group) => groupSpaceId(group, spaces, projectSpaces) === spaceId),
@@ -1559,12 +1597,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     if (thread === null) {
       const open = newThreadContext.activeThread ?? newThreadContext.activeDraftThread;
       const openSpaceId = open ? threadSpaceId(open) : undefined;
-      if (openSpaceId === null || openSpaceId === spaceId) return;
+      if (openSpaceId === spaceId) return;
       const project = pickableProjectGroups(projectGroups).find(
         (group) => groupSpaceId(group, spaces, projectSpaces) === spaceId,
       );
       if (project) void handleNewThread(scopeProjectRef(project.environmentId, project.id));
-      else if (scratchEnvironmentId !== null) void startScratchThread(scratchEnvironmentId);
       return;
     }
     if (threadShellKey(thread) === routeRowThreadKey) return;
