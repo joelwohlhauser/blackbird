@@ -15,7 +15,7 @@ T3 Code must remain the base of the application. Preserve Blackbird's custom beh
 
 - Keep prose paragraphs on single lines. Let the editor wrap them visually instead of inserting mid-sentence line breaks.
 
-- Work directly on `main`. When a change is complete and verified, commit and push it directly to `origin/main` without asking; do not create a branch or pull request unless explicitly asked.
+- Work directly on `main`. When a change is complete and verified, commit and push it directly to `origin/main`; do not create a branch or pull request unless explicitly asked. Never ask Joel whether to push, including after a review-round limit or when something can only be tested in the installed app. Fix what is real, run the checks, push, and report anything still unverified afterward.
 - This is a personal hobby app. Prefer the smallest safe solution over enterprise process, compatibility machinery with no concrete use, or abstractions intended for hypothetical teams.
 - Browser development is supported and is often the quickest way to test UI. Desktop releases are built, signed, checked, and published by the Blackbird release workflow on GitHub. Do not recreate a personal deployment script or put deployment hosts in the repository.
 - When running inside Blackbird, never restart or replace its installed app because that ends your own session. An agent running outside Blackbird can install, restart, and verify the app when Joel requests it.
