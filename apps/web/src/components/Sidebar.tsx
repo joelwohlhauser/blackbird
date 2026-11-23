@@ -1986,7 +1986,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     threadListRef.current = node;
     const motion = createSidebarListMotion(node);
     listMotionRef.current = motion;
-    motion.update(false);
+    motion.update("none");
     const shiftGuard = createSidebarShiftGuard(node);
     shiftGuardRef.current = shiftGuard;
     return () => {
@@ -2306,15 +2306,31 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     settledShelfExpanded,
     activeSpaceId,
   ].join(":");
-  const previousShelfExpansionKeyRef = useRef(shelfExpansionKey);
+  const previousShelvesRef = useRef({
+    key: shelfExpansionKey,
+    snoozed: snoozedShelfExpanded,
+    settled: settledShelfExpanded,
+  });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records moved rows and updates list motion after each layout-affecting commit
   useLayoutEffect(() => {
     shiftGuardRef.current?.update();
-    // Shelf rows would travel over stationary headers below the bottom-anchored shelf.
-    const shelvesUnchanged = previousShelfExpansionKeyRef.current === shelfExpansionKey;
-    previousShelfExpansionKeyRef.current = shelfExpansionKey;
-    listMotionRef.current?.update(listMotionPass.animate && shelvesUnchanged);
-  }, [listMotionPass, shelfExpansionKey]);
+    const previous = previousShelvesRef.current;
+    previousShelvesRef.current = {
+      key: shelfExpansionKey,
+      snoozed: snoozedShelfExpanded,
+      settled: settledShelfExpanded,
+    };
+    const shelfOpened =
+      (snoozedShelfExpanded && !previous.snoozed) || (settledShelfExpanded && !previous.settled);
+    // Sliding shelf rows would travel over stationary headers below the bottom-anchored shelf.
+    const shelfMode = shelfOpened ? "reveal" : "none";
+    const mode = !listMotionPass.animate
+      ? "none"
+      : previous.key === shelfExpansionKey
+        ? "slide"
+        : shelfMode;
+    listMotionRef.current?.update(mode);
+  }, [listMotionPass, settledShelfExpanded, shelfExpansionKey, snoozedShelfExpanded]);
   const handleThreadDragOver = (event: DragOverEvent) => {
     const target = event.over
       ? resolveSidebarDropTarget(sidebarListItems, String(event.active.id), String(event.over.id))

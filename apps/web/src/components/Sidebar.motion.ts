@@ -1,9 +1,13 @@
 const motionTiming = { duration: 150, easing: "ease-out" };
+const revealMoveTiming = { duration: 100, easing: "ease-out" };
+const revealTiming = { duration: 120, easing: "ease-out", delay: 80, fill: "backwards" as const };
+const REVEAL_TRAVEL = 4;
 const rowTravel = (height: number) => Math.min(height, 40);
 // Fades clone removed rows and animate clones and entries; intervening layout reads force reflows.
 const MAX_FADED_ROWS_PER_UPDATE = 40;
 
 type RowPosition = { top: number; left: number; width: number; height: number };
+export type SidebarListMotionMode = "none" | "slide" | "reveal";
 
 function progress(animation: Animation) {
   return animation.playState === "finished"
@@ -19,7 +23,10 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
     "(prefers-reduced-motion: reduce)",
   );
   const running = new Map<HTMLElement, { animation: Animation; offset: number }>();
-  const entering = new Map<HTMLElement, { animation: Animation; travel: number }>();
+  const entering = new Map<
+    HTMLElement,
+    { animation: Animation; travel: number; revealing: boolean }
+  >();
   const exiting = new Map<HTMLElement, Animation>();
   let released: Map<HTMLElement, number> | null = null;
   const scroller = parent.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
@@ -104,14 +111,14 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
     positions = null;
     released = null;
   };
-  const move = (node: HTMLElement, offset: number) => {
+  const move = (node: HTMLElement, offset: number, timing = motionTiming) => {
     cancel(node);
     const entry = entering.get(node);
     if (entry) entry.travel = 0;
     if (offset === 0 && !entry) return;
     const animation = node.animate(
       [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0px)" }],
-      motionTiming,
+      timing,
     );
     running.set(node, { animation, offset });
     animation.addEventListener(
@@ -124,7 +131,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
   };
 
   return {
-    update(animate: boolean) {
+    update(requestedMode: SidebarListMotionMode) {
       if (disposed) return;
       // A hidden list (the closed narrow sheet stays mounted) reports zero
       // offsets, which would make the first pass after it opens animate every row.
@@ -132,6 +139,8 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
         suspend();
         return;
       }
+      const revealing = [...entering.values()].some((entry) => entry.revealing);
+      const mode = requestedMode === "slide" && revealing ? "reveal" : requestedMode;
       const next = new Map(
         Array.from(parent.children)
           .filter((node): node is HTMLElement => node instanceof HTMLElement && !exiting.has(node))
@@ -155,7 +164,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
         }
       }
       const shouldAnimate =
-        animate &&
+        mode !== "none" &&
         positions !== null &&
         !reducedMotion?.matches &&
         fadeCount <= MAX_FADED_ROWS_PER_UPDATE;
@@ -211,16 +220,24 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
           const previousTop = positions!.get(node)?.top;
           if (previousTop === undefined) {
             if (position.height > 0) {
-              const delta = ridingDelta(nextOrder, index, (n) => positions!.has(n));
+              const delta =
+                mode === "reveal"
+                  ? -REVEAL_TRAVEL
+                  : ridingDelta(nextOrder, index, (n) => positions!.has(n));
               const travel = delta === undefined ? -rowTravel(position.height) : delta;
               const animation = node.animate(
-                [
-                  { opacity: 0, transform: `translateY(${travel}px)` },
-                  { opacity: 1, transform: "translateY(0px)" },
-                ],
-                motionTiming,
+                mode === "reveal"
+                  ? [
+                      { opacity: 0, transform: `translateY(${travel}px)`, pointerEvents: "none" },
+                      { opacity: 1, transform: "translateY(0px)", pointerEvents: "none" },
+                    ]
+                  : [
+                      { opacity: 0, transform: `translateY(${travel}px)` },
+                      { opacity: 1, transform: "translateY(0px)" },
+                    ],
+                mode === "reveal" ? revealTiming : motionTiming,
               );
-              entering.set(node, { animation, travel });
+              entering.set(node, { animation, travel, revealing: mode === "reveal" });
               animation.addEventListener(
                 "finish",
                 () => {
@@ -234,7 +251,9 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
           const delta = movedDelta.get(node);
           // Computed progress includes easing; carry forward only our translation, never dnd-kit's
           // transforms.
-          if (delta !== undefined) move(node, delta);
+          if (delta !== undefined) {
+            move(node, delta, mode === "reveal" ? revealMoveTiming : motionTiming);
+          }
         }
       }
       if (released !== null) {
