@@ -11,7 +11,7 @@ Turn a request into a short brief the user approves. Everything here happens in 
 
 1. Make sure the main checkout is current: fetch `origin` and fast-forward the default branch. If it has local changes or isn't on the default branch, stop and say so. Never stash, reset, or clean to get there.
 2. Read existing documentation for the area to understand why the feature exists, its constraints, and which options were already turned down.
-3. Search for earlier work before forming a theory: issues in the tracker including closed ones, pull requests including closed and unmerged ones, matching error-tracker issues, and git history (`git log -S`, `git log --grep`).
+3. Search for earlier work before forming a theory: earlier chats (`thread_search`), issues in the tracker including closed ones, pull requests including closed and unmerged ones, matching error-tracker issues, and git history (`git log -S`, `git log --grep`).
 4. Read the code the change touches. Investigation is read-only; production reads are fine.
 
 ## 2. Interview
