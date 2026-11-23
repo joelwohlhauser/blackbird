@@ -1,4 +1,4 @@
-import { assert, it, vi } from "@effect/vitest";
+import { assert, it } from "@effect/vitest";
 import { DEFAULT_SERVER_SETTINGS, type McpGatewayService } from "@t3tools/contracts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Checks the PKCE challenge the gateway sent.
 import * as NodeCrypto from "node:crypto";
@@ -236,38 +236,26 @@ const harness = (options: {
   return { layer, stored, seen, listedTools };
 };
 
-const call = (tool: string, approved: boolean) => {
-  const approve = vi.fn((_request: McpGateway.WriteApprovalRequest) => Effect.succeed(approved));
-  return {
-    approve,
-    run: McpGateway.McpGateway.pipe(
-      Effect.flatMap((gateway) =>
-        gateway.call({ service: SERVICE.id, tool, arguments: { title: "x" } }, approve),
-      ),
+const call = (tool: string) =>
+  McpGateway.McpGateway.pipe(
+    Effect.flatMap((gateway) =>
+      gateway.call({ service: SERVICE.id, tool, arguments: { title: "x" } }),
     ),
-  };
-};
+  );
 
-it.effect.each([
-  { tool: "read_item", approved: false, asks: 0, runs: true },
-  { tool: "save_item", approved: true, asks: 1, runs: true },
-  { tool: "save_item", approved: false, asks: 1, runs: false },
-  { tool: "unmarked", approved: false, asks: 1, runs: false },
-])("asks before writes only: $tool approved=$approved", ({ tool, approved, asks, runs }) => {
+it.effect.each(["read_item", "save_item", "unmarked"])("runs %s right away", (tool) => {
   const test = harness({ tokens: TOKENS });
-  const { approve, run } = call(tool, approved);
   return Effect.gen(function* () {
-    const result = yield* run;
-    assert.equal(approve.mock.calls.length, asks);
-    assert.deepEqual(test.seen.toolCalls, runs ? [tool] : []);
-    assert.equal(result.isError === true, !runs);
+    const result = yield* call(tool);
+    assert.notEqual(result.isError, true);
+    assert.deepEqual(test.seen.toolCalls, [tool]);
   }).pipe(Effect.provide(test.layer));
 });
 
 it.effect("refreshes an expired token once for concurrent calls and keeps the rotation", () => {
   const test = harness({ tokens: { ...TOKENS, expiresAt: 0 } });
   return Effect.gen(function* () {
-    yield* Effect.all([call("read_item", false).run, call("read_item", false).run], {
+    yield* Effect.all([call("read_item"), call("read_item")], {
       concurrency: "unbounded",
     });
     assert.equal(test.seen.refreshes, 1);
@@ -280,7 +268,7 @@ it.effect("refreshes an expired token once for concurrent calls and keeps the ro
 it.effect("sends credentials only on requests that refuse redirects", () => {
   const test = harness({ tokens: { ...TOKENS, expiresAt: 0 } });
   return Effect.gen(function* () {
-    yield* call("save_item", true).run;
+    yield* call("save_item");
     assert.isAbove(test.seen.credentialRedirectModes.length, 2);
     assert.isTrue(test.seen.credentialRedirectModes.every((mode) => mode === "error"));
   }).pipe(Effect.provide(test.layer));
@@ -296,7 +284,7 @@ it.effect("a refresh in flight cannot undo a sign-out", () =>
     });
     yield* Effect.gen(function* () {
       const gateway = yield* McpGateway.McpGateway;
-      const reading = yield* Effect.forkChild(Effect.exit(call("read_item", false).run));
+      const reading = yield* Effect.forkChild(Effect.exit(call("read_item")));
       yield* Deferred.await(started);
       const signingOut = yield* Effect.forkChild(gateway.signOut(SERVICE.id));
       yield* Effect.yieldNow;
@@ -315,7 +303,7 @@ it.effect("a stalled token response cannot hold the credential lock", () =>
     const test = harness({ tokens: { ...TOKENS, expiresAt: 0 }, stalledTokenBody: stalled });
     yield* Effect.gen(function* () {
       const gateway = yield* McpGateway.McpGateway;
-      const reading = yield* Effect.forkChild(Effect.exit(call("read_item", false).run));
+      const reading = yield* Effect.forkChild(Effect.exit(call("read_item")));
       yield* Deferred.await(stalled);
       yield* TestClock.adjust("21 seconds");
       yield* Fiber.join(reading);
@@ -345,41 +333,10 @@ it.effect("a replaced sign-in cannot store tokens after sign-out", () => {
   }).pipe(Effect.provide(test.layer));
 });
 
-it.effect("rechecks the allowlist after approval", () => {
-  const test = harness({ tokens: TOKENS });
-  return Effect.gen(function* () {
-    const gateway = yield* McpGateway.McpGateway;
-    const error = yield* gateway
-      .call({ service: SERVICE.id, tool: "save_item", arguments: {} }, () =>
-        gateway.save({ ...SERVICE, tools: ["read_item"] }).pipe(Effect.as(true)),
-      )
-      .pipe(Effect.flip);
-    assert.include(error.message, "no available tool");
-    assert.deepEqual(test.seen.toolCalls, []);
-  }).pipe(Effect.provide(test.layer));
-});
-
-it.effect("refuses an approved write after the account changed", () => {
-  const test = harness({ tokens: TOKENS });
-  return Effect.gen(function* () {
-    const gateway = yield* McpGateway.McpGateway;
-    const error = yield* gateway
-      .call({ service: SERVICE.id, tool: "save_item", arguments: {} }, () =>
-        Effect.sync(() => {
-          test.stored.set(SERVICE.id, { ...TOKENS, clientId: "other-account" });
-          return true;
-        }),
-      )
-      .pipe(Effect.flip);
-    assert.include(error.message, "changed while waiting");
-    assert.deepEqual(test.seen.toolCalls, []);
-  }).pipe(Effect.provide(test.layer));
-});
-
 it.effect("connects to a service on an older MCP protocol", () => {
   const test = harness({ tokens: TOKENS, protocolVersion: "2025-06-18" });
   return Effect.gen(function* () {
-    const result = yield* call("read_item", false).run;
+    const result = yield* call("read_item");
     assert.notEqual(result.isError, true);
     assert.deepEqual(test.seen.toolCalls, ["read_item"]);
   }).pipe(Effect.provide(test.layer));
@@ -424,36 +381,20 @@ it.effect("keeps every service when saves run concurrently", () => {
   }).pipe(Effect.provide(test.layer));
 });
 
-it.effect("retries an approved write after a 401 without asking again", () => {
+it.effect("retries a write once after a 401", () => {
   const test = harness({ tokens: TOKENS, rejectedToolCallTokens: ["current"] });
-  const { approve, run } = call("save_item", true);
   return Effect.gen(function* () {
-    const result = yield* run;
+    const result = yield* call("save_item");
     assert.notEqual(result.isError, true);
-    assert.equal(approve.mock.calls.length, 1);
     assert.deepEqual(test.seen.toolCalls, ["save_item"]);
     assert.equal(test.seen.refreshes, 1);
-  }).pipe(Effect.provide(test.layer));
-});
-
-it.effect("asks as soon as a service relabels a read tool as a write", () => {
-  const test = harness({ tokens: TOKENS });
-  return Effect.gen(function* () {
-    yield* call("read_item", false).run;
-    test.listedTools.current = TOOLS.map((tool) =>
-      tool.name === "read_item" ? { ...tool, annotations: { readOnlyHint: false } } : tool,
-    );
-    const { approve, run } = call("read_item", false);
-    yield* run;
-    assert.equal(approve.mock.calls.length, 1);
-    assert.deepEqual(test.seen.toolCalls, ["read_item"]);
   }).pipe(Effect.provide(test.layer));
 });
 
 it.effect("refuses a tool outside the allowlist", () => {
   const test = harness({ tokens: TOKENS, services: [{ ...SERVICE, tools: ["read_item"] }] });
   return Effect.gen(function* () {
-    const error = yield* call("save_item", true).run.pipe(Effect.flip);
+    const error = yield* call("save_item").pipe(Effect.flip);
     assert.include(error.message, "no available tool");
     assert.deepEqual(test.seen.toolCalls, []);
   }).pipe(Effect.provide(test.layer));
@@ -465,7 +406,7 @@ it.effect("drops tokens the service no longer accepts and asks for a new sign-in
     refreshError: "invalid_grant",
   });
   return Effect.gen(function* () {
-    const error = yield* call("read_item", false).run.pipe(Effect.flip);
+    const error = yield* call("read_item").pipe(Effect.flip);
     assert.include(error.message, "not signed in");
     assert.isFalse(test.stored.has(SERVICE.id));
   }).pipe(Effect.provide(test.layer));
@@ -474,7 +415,7 @@ it.effect("drops tokens the service no longer accepts and asks for a new sign-in
 it.effect("keeps stored tokens after a transient refresh failure", () => {
   const test = harness({ tokens: { ...TOKENS, expiresAt: 0 }, refreshError: "server_error" });
   return Effect.gen(function* () {
-    yield* call("read_item", false).run.pipe(Effect.flip);
+    yield* call("read_item").pipe(Effect.flip);
     assert.isTrue(test.stored.has(SERVICE.id));
   }).pipe(Effect.provide(test.layer));
 });
@@ -483,7 +424,7 @@ it.effect("never sends a token to a URL it was not issued for", () => {
   const moved = { ...SERVICE, url: "https://other.example.test/mcp" };
   const test = harness({ tokens: TOKENS, services: [moved] });
   return Effect.gen(function* () {
-    const error = yield* call("read_item", false).run.pipe(Effect.flip);
+    const error = yield* call("read_item").pipe(Effect.flip);
     assert.include(error.message, "not signed in");
     assert.deepEqual(test.seen.bearers, []);
   }).pipe(Effect.provide(test.layer));

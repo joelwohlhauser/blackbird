@@ -34,20 +34,7 @@ interface GatewayToolSummary {
   readonly service: string;
   readonly name: string;
   readonly description: string;
-  readonly access: "read" | "write";
 }
-
-export interface WriteApprovalRequest {
-  readonly approvalId: string;
-  readonly serviceName: string;
-  readonly toolName: string;
-  readonly arguments: Readonly<Record<string, unknown>>;
-}
-
-type FirstCallStep =
-  | { readonly _tag: "missing" }
-  | { readonly _tag: "done"; readonly result: McpSchema.CallToolResult }
-  | { readonly _tag: "needsApproval"; readonly tool: McpSchema.Tool };
 
 interface PendingSignIn {
   readonly serviceId: string;
@@ -62,9 +49,6 @@ interface PendingSignIn {
 }
 
 const randomToken = () => NodeCrypto.randomBytes(32).toString("base64url");
-
-const accessOf = (tool: McpSchema.Tool) =>
-  tool.annotations?.readOnlyHint === true ? ("read" as const) : ("write" as const);
 
 const NEWER_PROTOCOLS = [
   McpProtocol.v2025_11_25,
@@ -138,14 +122,11 @@ export class McpGateway extends Context.Service<
       readonly service: string;
       readonly tool: string;
     }) => Effect.Effect<GatewayToolSummary & { readonly inputSchema: unknown }, McpGatewayError>;
-    readonly call: <E, R>(
-      input: {
-        readonly service: string;
-        readonly tool: string;
-        readonly arguments: Readonly<Record<string, unknown>>;
-      },
-      approve: (request: WriteApprovalRequest) => Effect.Effect<boolean, E, R>,
-    ) => Effect.Effect<McpSchema.CallToolResult, McpGatewayError | E, R>;
+    readonly call: (input: {
+      readonly service: string;
+      readonly tool: string;
+      readonly arguments: Readonly<Record<string, unknown>>;
+    }) => Effect.Effect<McpSchema.CallToolResult, McpGatewayError>;
   }
 >()("t3/mcpGateway/McpGateway") {}
 
@@ -300,7 +281,6 @@ const make = Effect.gen(function* () {
     service: service.id,
     name: tool.name,
     description: shortDescription(tool),
-    access: accessOf(tool),
   });
 
   return McpGateway.of({
@@ -488,65 +468,10 @@ const make = Effect.gen(function* () {
         inputSchema: tool.inputSchema,
       };
     }),
-    call: Effect.fn("McpGateway.call")(function* <E, R>(
-      input: {
-        readonly service: string;
-        readonly tool: string;
-        readonly arguments: Readonly<Record<string, unknown>>;
-      },
-      approve: (request: WriteApprovalRequest) => Effect.Effect<boolean, E, R>,
-    ) {
+    call: Effect.fn("McpGateway.call")(function* (input) {
       const service = yield* requireService(input.service);
-      const runTool = (client: McpClient.McpClient, tool: McpSchema.Tool) =>
-        client.callTool({ tool, arguments: { ...input.arguments } }, { timeout: CALL_TIMEOUT });
-      const first = yield* withSession(service, (client) =>
+      const result = yield* withSession(service, (client) =>
         allowedTools(service, client).pipe(
-          Effect.flatMap((tools): Effect.Effect<FirstCallStep, McpClientError.McpClientError> => {
-            const tool = tools.find((candidate) => candidate.name === input.tool);
-            if (tool === undefined) return Effect.succeed({ _tag: "missing" as const });
-            return accessOf(tool) === "read"
-              ? runTool(client, tool).pipe(
-                  Effect.map((result) => ({ _tag: "done" as const, result })),
-                )
-              : Effect.succeed({ _tag: "needsApproval" as const, tool });
-          }),
-        ),
-      );
-      if (first._tag === "missing") return yield* noSuchTool(service, input.tool);
-      if (first._tag === "done") return first.result;
-      const grantAtRequest = Option.map(yield* storedTokens(service), (tokens) => tokens.clientId);
-      const approved = yield* approve({
-        approvalId: randomToken(),
-        serviceName: service.name,
-        toolName: first.tool.name,
-        arguments: input.arguments,
-      });
-      if (!approved) {
-        return new McpSchema.CallToolResult({
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `The user did not approve ${service.name} ${first.tool.name}. Nothing was changed.`,
-            },
-          ],
-        });
-      }
-      const approvedService = yield* requireService(input.service);
-      const grantAtApproval = Option.map(
-        yield* storedTokens(approvedService),
-        (tokens) => tokens.clientId,
-      );
-      if (
-        approvedService.url !== service.url ||
-        Option.getOrUndefined(grantAtApproval) !== Option.getOrUndefined(grantAtRequest)
-      ) {
-        return yield* new McpGatewayError({
-          message: `${service.name} changed while waiting for approval. Nothing was changed.`,
-        });
-      }
-      const result = yield* withSession(approvedService, (client) =>
-        allowedTools(approvedService, client).pipe(
           Effect.flatMap(
             (
               tools,
@@ -557,12 +482,17 @@ const make = Effect.gen(function* () {
               const tool = tools.find((candidate) => candidate.name === input.tool);
               return tool === undefined
                 ? Effect.succeedNone
-                : runTool(client, tool).pipe(Effect.asSome);
+                : client
+                    .callTool(
+                      { tool, arguments: { ...input.arguments } },
+                      { timeout: CALL_TIMEOUT },
+                    )
+                    .pipe(Effect.asSome);
             },
           ),
         ),
       );
-      if (Option.isNone(result)) return yield* noSuchTool(approvedService, input.tool);
+      if (Option.isNone(result)) return yield* noSuchTool(service, input.tool);
       return result.value;
     }),
   });

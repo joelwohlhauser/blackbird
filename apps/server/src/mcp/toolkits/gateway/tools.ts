@@ -3,13 +3,11 @@ import * as Schema from "effect/Schema";
 import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as McpGateway from "../../../mcpGateway/McpGateway.ts";
-import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const ServiceName = Schema.String.check(Schema.isMaxLength(40));
 const ToolName = Schema.String.check(Schema.isMaxLength(200));
-const Access = Schema.Literals(["read", "write"]);
 
 const readDependencies = [McpInvocationContext.McpInvocationContext, McpGateway.McpGateway];
 
@@ -26,7 +24,6 @@ const GatewaySearchTool = Tool.make("gateway_search", {
         service: Schema.String,
         name: Schema.String,
         description: Schema.String,
-        access: Access,
       }),
     ),
     unavailable: Schema.Array(Schema.Struct({ service: Schema.String, reason: Schema.String })),
@@ -46,7 +43,6 @@ const GatewayDescribeTool = Tool.make("gateway_describe", {
     service: Schema.String,
     name: Schema.String,
     description: Schema.String,
-    access: Access,
     inputSchema: Schema.Unknown,
   }),
   failure: OrchestratorMcpFailure,
@@ -59,7 +55,7 @@ const GatewayDescribeTool = Tool.make("gateway_describe", {
 
 export const GatewayCallTool = Tool.make("gateway_call", {
   description:
-    "Run a connected service tool. Read tools run at once. Write tools wait for the user's approval in Blackbird.",
+    "Run a connected service tool. Reads and writes run immediately, so only run a write the task calls for.",
   parameters: Schema.Struct({
     service: ServiceName,
     tool: ToolName,
@@ -67,11 +63,7 @@ export const GatewayCallTool = Tool.make("gateway_call", {
   }),
   success: McpSchema.CallToolResult,
   failure: OrchestratorMcpFailure,
-  dependencies: [
-    ...readDependencies,
-    ProjectionStore.ProjectionStoreV2,
-    ThreadManagementService.ThreadManagementService,
-  ],
+  dependencies: [...readDependencies, ThreadManagementService.ThreadManagementService],
 })
   .annotate(Tool.Readonly, false)
   .annotate(Tool.Destructive, true)

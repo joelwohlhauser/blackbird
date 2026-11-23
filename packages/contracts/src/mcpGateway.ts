@@ -25,14 +25,6 @@ export type McpGatewayServiceStatus = typeof McpGatewayServiceStatus.Type;
 export const McpGatewaySignInResult = Schema.Struct({ authorizationUrl: Schema.String });
 export type McpGatewaySignInResult = typeof McpGatewaySignInResult.Type;
 
-const GATEWAY_APPROVAL_REQUEST_PREFIX = "mcp-gateway-approval:";
-
-export const mcpGatewayApprovalRequestId = (uuid: string) =>
-  `${GATEWAY_APPROVAL_REQUEST_PREFIX}${uuid}`;
-
-export const isMcpGatewayApprovalRequestId = (requestId: string) =>
-  requestId.startsWith(GATEWAY_APPROVAL_REQUEST_PREFIX);
-
 export class McpGatewayError extends Schema.TaggedError<McpGatewayError>()("McpGatewayError", {
   message: Schema.String,
 }) {}

@@ -1,6 +1,5 @@
 import { assert, it, vi } from "@effect/vitest";
 import {
-  mcpGatewayApprovalRequestId,
   NodeId,
   ProviderSessionId,
   RuntimeRequestId,
@@ -15,39 +14,6 @@ import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAda
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
-
-it.effect("delivers a gateway approval answer to no provider", () => {
-  const threadId = ThreadId.make("thread-runtime-request-gateway");
-  const providerSessionId = ProviderSessionId.make("provider-session-runtime-request-gateway");
-  const requestId = RuntimeRequestId.make(mcpGatewayApprovalRequestId("gateway"));
-  const getSession = vi.fn(() => Effect.succeedNone);
-  const request = {
-    id: requestId,
-    nodeId: NodeId.make("node-runtime-request-gateway"),
-    providerTurnId: null,
-    nativeRequestRef: null,
-    kind: "permission",
-    status: "resolved",
-    responseCapability: { type: "live", providerSessionId },
-    createdAt: DateTime.makeUnsafe("2026-07-29T00:00:00.000Z"),
-    resolvedAt: DateTime.makeUnsafe("2026-07-29T00:00:01.000Z"),
-  } satisfies OrchestrationV2ThreadProjection["runtimeRequests"][number];
-  const layerTest = RuntimeRequestService.layer.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        Layer.mock(ProjectionStore.ProjectionStoreV2)({
-          getRuntimeRequest: () => Effect.succeed(request),
-        }),
-        Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({ get: getSession }),
-      ),
-    ),
-  );
-  return Effect.gen(function* () {
-    const service = yield* RuntimeRequestService.RuntimeRequestServiceV2;
-    yield* service.respond({ threadId, providerSessionId, requestId, decision: "accept" });
-    assert.equal(getSession.mock.calls.length, 0);
-  }).pipe(Effect.provide(layerTest));
-});
 
 it.effect.each(["expired", "resolved"] as const)(
   "responds only to resolved requests and preserves feedback (%s)",

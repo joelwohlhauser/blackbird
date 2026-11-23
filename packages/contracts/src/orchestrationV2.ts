@@ -3844,16 +3844,6 @@ const OrchestrationV2InternalCommand = Schema.Union([
       }),
     ),
   }),
-  Schema.Struct({
-    type: Schema.Literal("gateway_approval.open"),
-    commandId: CommandId,
-    threadId: ThreadId,
-    runId: RunId,
-    nodeId: NodeId,
-    requestId: RuntimeRequestId,
-    appName: TrimmedNonEmptyString,
-    prompt: Schema.String,
-  }),
   /**
    * Internal so no client can mark a request saved without the value being
    * stored.

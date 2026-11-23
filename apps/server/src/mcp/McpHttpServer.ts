@@ -978,7 +978,6 @@ const decodeGatewayCallResult = Schema.decodeUnknownSync(
 
 const registerGatewayCall = Effect.fn("McpHttpServer.registerGatewayCall")(function* () {
   const gateway = yield* McpGateway.McpGateway;
-  const projections = yield* ProjectionStore.ProjectionStoreV2;
   const threads = yield* ThreadManagementService.ThreadManagementService;
   const built = yield* decodeAsAdvertised(GatewayCallToolkit);
   yield* registerImageTool(
@@ -990,7 +989,6 @@ const registerGatewayCall = Effect.fn("McpHttpServer.registerGatewayCall")(funct
     (effect) =>
       effect.pipe(
         Effect.provideService(McpGateway.McpGateway, gateway),
-        Effect.provideService(ProjectionStore.ProjectionStoreV2, projections),
         Effect.provideService(ThreadManagementService.ThreadManagementService, threads),
       ),
     "call",
