@@ -32,6 +32,7 @@ import {
   createBuildConfig,
   DESKTOP_EXTRA_RESOURCES,
   DESKTOP_FILE_EXCLUSIONS,
+  MAC_APPLE_SPEECH_EXTRA_RESOURCES,
   MAC_HOTSPOT_EXTRA_RESOURCES,
   InvalidMacPasskeyRpDomainError,
   InvalidMacPasskeyPublishableKeyError,
@@ -272,6 +273,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.deepStrictEqual(mac.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
         ...MAC_HOTSPOT_EXTRA_RESOURCES,
+        ...MAC_APPLE_SPEECH_EXTRA_RESOURCES,
       ]);
       assert.equal((mac.dmg as Record<string, unknown>).title, "Blackbird 1.2.3 Installer");
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),

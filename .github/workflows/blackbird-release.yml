@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     if: github.repository == 'joelwohlhauser/blackbird' && github.ref == 'refs/heads/main'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       VERSION: 0.3.${{ github.run_number }}
