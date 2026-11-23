@@ -129,6 +129,11 @@ export function CloudEnvironmentConnectRows({
   const [connectingEnvironmentIds, setConnectingEnvironmentIds] = useState<
     ReadonlySet<EnvironmentId>
   >(new Set());
+  const renamedLabels = new Map(
+    savedEnvironments.flatMap(({ environmentId, entry }) =>
+      entry.target.customLabel === true ? [[environmentId, entry.target.label] as const] : [],
+    ),
+  );
   const savedById = new Map(
     savedEnvironments
       .filter((environment) => environment.relayManaged)
@@ -182,7 +187,7 @@ export function CloudEnvironmentConnectRows({
           : gt("Environment added"),
         description: savedWithoutRelay.has(environment.environmentId)
           ? gt("{environment} falls back to T3 Connect when its other routes are unreachable.", {
-              environment: environment.label,
+              environment: renamedLabels.get(environment.environmentId) ?? environment.label,
             })
           : gt("Connecting to {environment} through T3 Connect.", {
               environment: environment.label,
@@ -338,6 +343,7 @@ export function CloudEnvironmentConnectRows({
 
   return visibleEnvironments.map(({ environment, availability, error, status }) => {
     const savedEnvironment = savedById.get(environment.environmentId);
+    const label = renamedLabels.get(environment.environmentId) ?? environment.label;
     const compatibilityError = discoveredCompatibilityError(status);
     const unsupported =
       compatibilityError !== null || savedEnvironment?.connection.phase === "unsupported";
@@ -423,7 +429,7 @@ export function CloudEnvironmentConnectRows({
             className="size-4 shrink-0 text-muted-foreground"
           />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium">{environment.label}</span>
+            <span className="block truncate text-sm font-medium">{label}</span>
             {unsupportedDetail !== null ? (
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {unsupportedDetail}
@@ -489,7 +495,7 @@ export function CloudEnvironmentConnectRows({
                 kind={machineKind}
                 className="size-4 shrink-0 text-muted-foreground"
               />
-              <p className="truncate text-sm font-medium">{environment.label}</p>
+              <p className="truncate text-sm font-medium">{label}</p>
             </div>
             <p
               className={cn(

@@ -272,7 +272,7 @@ New drafts in a Git project show a Linear issue picker in the composer when the 
 
 ## Local and remote environments
 
-Environment settings are host-specific. Remote worktrees default to `~/repositories/.worktrees`; `~`, `.env` links, and setup scripts resolve on the machine that owns the repository. Environment labels are user-chosen and can differ from the SSH hostname.
+Environment settings are host-specific. Remote worktrees default to `~/repositories/.worktrees`; `~`, `.env` links, and setup scripts resolve on the machine that owns the repository. Environment labels are user-chosen and can differ from the SSH hostname. Rename a saved environment from its row in Settings → Environments; the name is saved on that device and the server's name does not replace it.
 
 The desktop app bundles a matching remote server. Desktop and mobile share an existing remote service through its Remote link. Keep desktop and remote versions aligned rather than starting a separate upstream backend against the same database.
 

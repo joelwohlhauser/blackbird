@@ -44,6 +44,7 @@ import {
 import * as Persistence from "../platform/persistence.ts";
 import * as EnvironmentRegistry from "./registry.ts";
 import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
+import { connectionCatalogLabel } from "./presentation.ts";
 import { connectionRoutes, routeEntry, sshTargetKey } from "./routes.ts";
 
 export interface PairingConnectionInput {
@@ -264,7 +265,9 @@ const updateBearerConnection = Effect.fn(
     entry: Option.fromUndefinedOr(entry),
     credential,
   });
-  yield* registry.register(registration);
+  const labelChanged =
+    saved !== undefined && connectionCatalogLabel(saved) !== registration.target.label;
+  yield* registry.register(registration, labelChanged ? { label: registration.target.label } : {});
 });
 
 export const prepareBearerConnectionUpdate = Effect.fn(
