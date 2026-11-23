@@ -16,6 +16,8 @@ import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
 
+const ALL_SPACES = "all-spaces";
+
 const ProjectIconPickerDialog = lazy(() =>
   import("./ProjectIconPickerDialog").then((module) => ({
     default: module.ProjectIconPickerDialog,
@@ -55,6 +57,7 @@ export function SpacesSettingsPanel() {
   const gt = useGT();
   const spaces = useClientSettings((settings) => settings.sidebarSpaces);
   const projectSpaces = useClientSettings((settings) => settings.sidebarProjectSpaces);
+  const sharedProjects = useClientSettings((settings) => settings.sidebarSharedProjects);
   const projectGroups = pickableProjectGroups(useSidebarProjectGroups());
   const showEnvironments = projectGroupsSpanEnvironments(projectGroups);
   const [iconSpaceId, setIconSpaceId] = useState<string | null>(null);
@@ -99,10 +102,15 @@ export function SpacesSettingsPanel() {
         Object.entries(projectSpaces).filter(([, spaceId]) => spaceId !== id),
       ),
     });
-  const assignProject = (projectKey: string, spaceId: string) =>
-    void updateClientSettings({
-      sidebarProjectSpaces: { ...projectSpaces, [projectKey]: spaceId },
-    });
+  const assignProject = (projectKey: string, value: string) =>
+    void updateClientSettings(
+      value === ALL_SPACES
+        ? { sidebarSharedProjects: [...new Set([...sharedProjects, projectKey])] }
+        : {
+            sidebarProjectSpaces: { ...projectSpaces, [projectKey]: value },
+            sidebarSharedProjects: sharedProjects.filter((key) => key !== projectKey),
+          },
+    );
 
   return (
     <SettingsPageContainer>
@@ -161,7 +169,9 @@ export function SpacesSettingsPanel() {
       {spaces.length > 1 ? (
         <SettingsSection title={gt("Projects")}>
           {projectGroups.map((group) => {
-            const spaceId = groupSpaceId(group, spaces, projectSpaces);
+            const spaceId = sharedProjects.includes(group.projectKey)
+              ? ALL_SPACES
+              : groupSpaceId(group, spaces, projectSpaces);
             return (
               <SettingsRow
                 key={group.projectKey}
@@ -188,7 +198,9 @@ export function SpacesSettingsPanel() {
                       aria-label={gt("Space for {project}", { project: group.displayName })}
                     >
                       <SelectValue>
-                        {spaces.find((space) => space.id === spaceId)?.name}
+                        {spaceId === ALL_SPACES
+                          ? gt("All spaces")
+                          : spaces.find((space) => space.id === spaceId)?.name}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -197,6 +209,9 @@ export function SpacesSettingsPanel() {
                           {space.name}
                         </SelectItem>
                       ))}
+                      <SelectItem hideIndicator value={ALL_SPACES}>
+                        {gt("All spaces")}
+                      </SelectItem>
                     </SelectPopup>
                   </Select>
                 }

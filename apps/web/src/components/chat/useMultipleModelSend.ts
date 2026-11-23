@@ -13,6 +13,7 @@ import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { useNavigate } from "@tanstack/react-router";
 import { newMessageId } from "~/lib/utils";
+import type { useThreadSpaceTags } from "../../hooks/useThreadSpaceTags";
 import { collapseExpandedComposerCursor } from "../../composer-logic";
 import {
   type ComposerThreadTarget,
@@ -89,6 +90,7 @@ export function useMultipleModelSend(input: MultipleModelSendInput) {
 
   return async ({
     threadId,
+    startInDraftSpace,
     project,
     branch,
     selections,
@@ -103,6 +105,9 @@ export function useMultipleModelSend(input: MultipleModelSendInput) {
     draftChangedDuringPreparation,
   }: {
     readonly threadId: ThreadId;
+    readonly startInDraftSpace: ReturnType<
+      ReturnType<typeof useThreadSpaceTags>["claimDraftSpace"]
+    >;
     readonly project: EnvironmentProject;
     readonly branch: string;
     readonly selections: ReadonlyArray<ModelSelection>;
@@ -167,47 +172,48 @@ export function useMultipleModelSend(input: MultipleModelSendInput) {
             ]),
             model: target.selection.model,
             uncertainSubmissions: uncertainSubmissionsRef.current,
-            start: (targetThreadId) => {
-              return startThreadTurn({
-                environmentId,
-                input: {
-                  threadId: targetThreadId,
-                  message: {
-                    messageId: newMessageId(),
-                    role: "user",
-                    attachments,
-                    ...withMessageContext({
-                      text: target.text,
-                      context,
-                    }),
-                  },
-                  modelSelection: target.selection,
-                  titleSeed: title,
-                  runtimeMode,
-                  interactionMode: DEFAULT_INTERACTION_MODE,
-                  bootstrap: {
-                    createThread: {
-                      projectId: project.id,
-                      title,
-                      modelSelection: target.selection,
-                      runtimeMode,
-                      interactionMode: DEFAULT_INTERACTION_MODE,
-                      branch,
-                      worktreePath: null,
-                      createdAt: createdAt,
+            start: (targetThreadId) =>
+              startInDraftSpace(scopeThreadRef(environmentId, targetThreadId), () =>
+                startThreadTurn({
+                  environmentId,
+                  input: {
+                    threadId: targetThreadId,
+                    message: {
+                      messageId: newMessageId(),
+                      role: "user",
+                      attachments,
+                      ...withMessageContext({
+                        text: target.text,
+                        context,
+                      }),
                     },
-                    prepareWorktree: {
-                      projectCwd: project.workspaceRoot,
-                      baseBranch: branch,
-                      requireWorktree: true,
-                      ...(startFromOrigin ? { startFromOrigin: true } : {}),
+                    modelSelection: target.selection,
+                    titleSeed: title,
+                    runtimeMode,
+                    interactionMode: DEFAULT_INTERACTION_MODE,
+                    bootstrap: {
+                      createThread: {
+                        projectId: project.id,
+                        title,
+                        modelSelection: target.selection,
+                        runtimeMode,
+                        interactionMode: DEFAULT_INTERACTION_MODE,
+                        branch,
+                        worktreePath: null,
+                        createdAt: createdAt,
+                      },
+                      prepareWorktree: {
+                        projectCwd: project.workspaceRoot,
+                        baseBranch: branch,
+                        requireWorktree: true,
+                        ...(startFromOrigin ? { startFromOrigin: true } : {}),
+                      },
+                      runSetupScript: true,
                     },
-                    runSetupScript: true,
+                    createdAt: createdAt,
                   },
-                  createdAt: createdAt,
-                },
-              });
-            },
+                }),
+              ),
             openThread: (threadId) =>
               void navigate({
                 to: "/$environmentId/$threadId",

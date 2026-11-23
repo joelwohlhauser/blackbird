@@ -65,6 +65,7 @@ import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { newMessageId, newThreadId } from "~/lib/utils";
+import { useThreadSpaceTags } from "../../hooks/useThreadSpaceTags";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useUiStateStore } from "../../uiStateStore";
 import { buildThreadRouteParams } from "../../threadRoutes";
@@ -381,6 +382,7 @@ export function useComposerSend(input: ComposerSendInput) {
   const uploadThreadFeedback = useOrchestrationCommand(threadEnvironment.uploadFeedback, {
     reportFailure: false,
   });
+  const { claimDraftSpace } = useThreadSpaceTags();
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const sendToMultipleModels = useMultipleModelSend({
@@ -940,6 +942,7 @@ export function useComposerSend(input: ComposerSendInput) {
       return;
     }
     const threadIdForSend = activeThread.id;
+    const startInDraftSpace = claimDraftSpace(isLocalDraftThread ? draftId : null);
     const sendSnapshot = snapshotComposerSend({
       prompt: promptForSend,
       images: composerImages,
@@ -1308,6 +1311,7 @@ export function useComposerSend(input: ComposerSendInput) {
     if (multipleModelSelections !== null) {
       await sendToMultipleModels({
         threadId: threadIdForSend,
+        startInDraftSpace,
         project: activeProject,
         branch: activeThreadBranch!,
         selections: multipleModelSelections,
@@ -1492,31 +1496,33 @@ export function useComposerSend(input: ComposerSendInput) {
           )
         : null;
       if (backgroundThreadRef) beginBackgroundDraftSubmissionByRef(backgroundThreadRef);
-      const startPromise = startThreadTurn({
-        environmentId,
-        input: {
-          threadId: threadIdForSend,
-          message: {
-            messageId: messageIdForSend,
-            role: "user",
-            attachments: turnAttachmentsResult.value,
-            ...withMessageContext({
-              text: outgoingMessageText,
-              context: buildOutgoingMessageContext(
-                boundAttachmentIds(turnAttachmentsResult.value, composerAttachmentsSnapshot),
-              ),
-            }),
+      const startPromise = startInDraftSpace(scopeThreadRef(environmentId, threadIdForSend), () =>
+        startThreadTurn({
+          environmentId,
+          input: {
+            threadId: threadIdForSend,
+            message: {
+              messageId: messageIdForSend,
+              role: "user",
+              attachments: turnAttachmentsResult.value,
+              ...withMessageContext({
+                text: outgoingMessageText,
+                context: buildOutgoingMessageContext(
+                  boundAttachmentIds(turnAttachmentsResult.value, composerAttachmentsSnapshot),
+                ),
+              }),
+            },
+            modelSelection: ctxSelectedModelSelection,
+            titleSeed: title,
+            runtimeMode,
+            interactionMode: DEFAULT_INTERACTION_MODE,
+            dispatchMode: turnDispatchMode,
+            ...(freshArm === undefined ? {} : { freshContext: true }),
+            ...(bootstrap ? { bootstrap } : {}),
+            createdAt: messageCreatedAt,
           },
-          modelSelection: ctxSelectedModelSelection,
-          titleSeed: title,
-          runtimeMode,
-          interactionMode: DEFAULT_INTERACTION_MODE,
-          dispatchMode: turnDispatchMode,
-          ...(freshArm === undefined ? {} : { freshContext: true }),
-          ...(bootstrap ? { bootstrap } : {}),
-          createdAt: messageCreatedAt,
-        },
-      });
+        }),
+      );
       if (backgroundThreadRef) {
         try {
           backgroundDraftOpened = Boolean(

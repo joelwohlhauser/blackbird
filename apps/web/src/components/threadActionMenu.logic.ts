@@ -8,6 +8,8 @@ export type ThreadActionMenuId =
   | "find"
   | "new-thread-on-branch"
   | "filter-by-project"
+  | "move-to-space"
+  | `move-to-space:${string}`
   | "turn-into-project"
   | "project-settings"
   | "pin"
@@ -123,6 +125,10 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
+  readonly spaceMove?: {
+    readonly spaces: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+    readonly currentSpaceId: string | null;
+  } | null;
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
@@ -231,6 +237,20 @@ export function buildThreadActionMenuItems(
               ? resolve(msg("Show all projects"))
               : resolve(msg("Filter by {project}", { project: state.projectFilter.label })),
             icon: "folder-tree",
+          },
+        ]
+      : []),
+    ...(state.spaceMove
+      ? [
+          {
+            id: "move-to-space" as const,
+            label: resolve(msg("Move to space")),
+            icon: "folder-tree",
+            children: state.spaceMove.spaces.map((space) => ({
+              id: `move-to-space:${space.id}` as const,
+              label: space.name,
+              checked: space.id === state.spaceMove?.currentSpaceId,
+            })),
           },
         ]
       : []),

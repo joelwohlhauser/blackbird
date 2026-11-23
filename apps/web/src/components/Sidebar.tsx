@@ -119,6 +119,9 @@ import {
   mostRecentlyOpened,
   projectGroupsInSpace,
   resolveSpaceId,
+  sharedThreadSpaceId,
+  useDraftSpaces,
+  useSentThreadSpaces,
 } from "../sidebarSpaces";
 import {
   getThreadKeysToDeselectAfterDelete,
@@ -129,6 +132,7 @@ import {
   useAcknowledgeThreadWoke,
   useThreadActions,
 } from "../hooks/useThreadActions";
+import { useThreadSpaceTags } from "../hooks/useThreadSpaceTags";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
 import { useProjectPin } from "../hooks/useProjectGroupUpdate";
@@ -362,6 +366,7 @@ type SidebarOptimisticDrop = {
 interface SidebarThreadPartitionInput {
   readonly threads: readonly EnvironmentThreadShell[];
   readonly scopedProjectKeys: ReadonlySet<string> | null;
+  readonly isThreadInSpace: (thread: EnvironmentThreadShell) => boolean;
   /** Tasks linked environments run for a listed thread; they show under it. */
   readonly delegatedUnderParent: ReadonlySet<string>;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
@@ -437,6 +442,7 @@ function routeThreadOnly(
 function useSidebarThreads(input: {
   readonly projectScopeKey: string | null;
   readonly scopedProjectKeys: ReadonlySet<string> | null;
+  readonly isThreadInSpace: (thread: EnvironmentThreadShell) => boolean;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly connectedEnvironmentIds: readonly EnvironmentId[];
   readonly optimisticDrop: SidebarOptimisticDrop | null;
@@ -451,6 +457,7 @@ function useSidebarThreads(input: {
   const {
     projectScopeKey,
     scopedProjectKeys,
+    isThreadInSpace,
     serverConfigs,
     connectedEnvironmentIds,
     optimisticDrop,
@@ -501,6 +508,7 @@ function useSidebarThreads(input: {
   const partition = partitionSidebarThreads({
     threads,
     scopedProjectKeys,
+    isThreadInSpace,
     delegatedUnderParent,
     serverConfigs,
     connectedEnvironmentIds,
@@ -644,7 +652,11 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     sortActiveBySend,
   } = input;
   const preciseNow = new Date().toISOString();
-  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, delegatedUnderParent);
+  const visible = filterSidebarV2VisibleThreads(
+    threads,
+    scopedProjectKeys,
+    delegatedUnderParent,
+  ).filter(input.isThreadInSpace);
   const inboxObservation = inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
@@ -1028,8 +1040,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const setPersistedProjectScopeKeys = useUiStateStore((store) => store.setSidebarProjectScopeKeys);
   const spaces = enabledSidebarSpaces(useClientSettings((s) => s.sidebarSpaces));
   const projectSpaces = useClientSettings((s) => s.sidebarProjectSpaces);
+  const sharedProjectKeys = new Set(useClientSettings((s) => s.sidebarSharedProjects));
+  const placedDraftSpaces = useDraftSpaces((store) => store.placed);
+  const placedThreadSpaces = useSentThreadSpaces((store) => store.placed);
+  const placeDraftInSpace = useDraftSpaces((store) => store.place);
   const [storedSpaceId, setStoredSpaceId] = useLocalStorage(ACTIVE_SPACE_KEY, null, ActiveSpaceId);
   const [previewSpaceId, setPreviewSpaceId] = useState<string | null>(null);
+  const { moveThreadToSpace } = useThreadSpaceTags();
   const spacesRef = useRef<SidebarSpacesHandle>(null);
   const previewPathRef = useRef<string | null>(null);
   const spaceDraftIdsRef = useRef(new Map<string, DraftId>());
@@ -1125,13 +1142,41 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     pendingRevealKey === null || isSearchingThreads
       ? undefined
       : threads.find((thread) => threadShellKey(thread) === pendingRevealKey);
-  const threadSpaceId = (thread: Pick<SidebarThreadSummary, "environmentId" | "projectId">) => {
-    const group = projectGroups.find((candidate) =>
-      candidate.memberProjectRefs.some(
-        (ref) => ref.environmentId === thread.environmentId && ref.projectId === thread.projectId,
+  const projectGroupByRef = new Map<string, SidebarProjectSnapshot>(
+    projectGroups.flatMap((group) =>
+      group.memberProjectRefs.map(
+        (ref) => [`${ref.environmentId}:${ref.projectId}`, group] as const,
       ),
+    ),
+  );
+  const spaceGroupOf = (item: { readonly environmentId: string; readonly projectId: string }) =>
+    projectGroupByRef.get(`${item.environmentId}:${item.projectId}`);
+  const threadSpaceId = (
+    thread: Pick<EnvironmentThreadShell, "environmentId" | "id" | "projectId" | "source">,
+  ) => {
+    const group = spaceGroupOf(thread);
+    if (group === undefined) return null;
+    const projectSpaceId = groupSpaceId(group, spaces, projectSpaces);
+    if (!sharedProjectKeys.has(group.projectKey)) return projectSpaceId;
+    return (
+      sharedThreadSpaceId(spaces, thread.source.tags, placedThreadSpaces[threadShellKey(thread)]) ??
+      projectSpaceId
     );
-    return group === undefined ? null : groupSpaceId(group, spaces, projectSpaces);
+  };
+  const draftSpaceId = (
+    draftId: string,
+    draft: { readonly environmentId: string; readonly projectId: string },
+    unplacedSpaceId?: string | null,
+  ) => {
+    const group = spaceGroupOf(draft);
+    if (group === undefined) return null;
+    const projectSpaceId = groupSpaceId(group, spaces, projectSpaces);
+    if (!sharedProjectKeys.has(group.projectKey)) return projectSpaceId;
+    return (
+      sharedThreadSpaceId(spaces, undefined, placedDraftSpaces[draftId]) ??
+      unplacedSpaceId ??
+      projectSpaceId
+    );
   };
   const revealSpaceId =
     pendingRevealThread === undefined ||
@@ -1139,31 +1184,76 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       ? null
       : threadSpaceId(pendingRevealThread);
   const activeSpaceId = resolveSpaceId(spaces, previewSpaceId ?? revealSpaceId ?? storedSpaceId);
+  const isDraftInSpace = (
+    draftId: string,
+    draft: { readonly environmentId: string; readonly projectId: string },
+  ) => activeSpaceId === null || draftSpaceId(draftId, draft) === activeSpaceId;
+  const isThreadInSpace = (thread: EnvironmentThreadShell) =>
+    activeSpaceId === null || threadSpaceId(thread) === activeSpaceId;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a route opened from outside the sidebar moves the persisted space to the thread's space
   useEffect(() => {
     if (previewSpaceId === null && revealSpaceId !== null && revealSpaceId !== storedSpaceId) {
       setStoredSpaceId(revealSpaceId);
     }
   }, [previewSpaceId, revealSpaceId, setStoredSpaceId, storedSpaceId]);
-  const routeProjectThread = newThreadContext.activeThread ?? newThreadContext.activeDraftThread;
-  const routeSpaceId = routeProjectThread ? threadSpaceId(routeProjectThread) : null;
   const routeDraftId = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
+  const routeDraftHasContent = useComposerDraftStore(
+    (store) =>
+      routeDraftId !== null && composerDraftHasUserContent(store.draftsByThreadKey[routeDraftId]),
+  );
+  const routeThreadShell =
+    routeRowThreadKey === null
+      ? undefined
+      : threads.find((thread) => threadShellKey(thread) === routeRowThreadKey);
+  const routeSpaceId = routeThreadShell
+    ? threadSpaceId(routeThreadShell)
+    : routeDraftId !== null && routeDraftThread
+      ? draftSpaceId(routeDraftId, routeDraftThread, resolveSpaceId(spaces, storedSpaceId))
+      : newThreadContext.activeThread
+        ? threadSpaceId(newThreadContext.activeThread)
+        : null;
+  const routeDraftIsShared =
+    routeDraftThread != null &&
+    routeDraftThread.promotedTo == null &&
+    sharedProjectKeys.has(spaceGroupOf(routeDraftThread)?.projectKey ?? "");
   const observedDraftIdRef = useRef(routeDraftId);
+  const observedRouteSpaceRef = useRef({
+    item: routeRowThreadKey ?? routeDraftId,
+    spaceId: routeSpaceId,
+  });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- records each space's last draft and moves the persisted space when the route opens a draft elsewhere
   useEffect(() => {
+    const routeItem = routeRowThreadKey ?? routeDraftId;
+    const observedRoute = observedRouteSpaceRef.current;
+    observedRouteSpaceRef.current = { item: routeItem, spaceId: routeSpaceId };
     if (routeSpaceId === null) return;
     if (routeDraftId === null) spaceDraftIdsRef.current.delete(routeSpaceId);
     else spaceDraftIdsRef.current.set(routeSpaceId, routeDraftId);
     if (routeDraftId !== null && routeRowThreadKey === null) resetSidebarRouteReveal(routeReveal);
+    if (routeDraftId !== null && routeDraftIsShared) {
+      placeDraftInSpace(routeDraftId, routeDraftHasContent ? routeSpaceId : null);
+    }
     const openedDraft = routeDraftId !== null && routeDraftId !== observedDraftIdRef.current;
     observedDraftIdRef.current = routeDraftId;
-    if (openedDraft && previewSpaceId === null && routeSpaceId !== storedSpaceId) {
+    const routeItemMoved =
+      observedRoute.item === routeItem &&
+      observedRoute.spaceId !== null &&
+      observedRoute.spaceId !== routeSpaceId;
+    if (
+      (openedDraft || routeItemMoved) &&
+      previewSpaceId === null &&
+      routeSpaceId !== storedSpaceId
+    ) {
       setStoredSpaceId(routeSpaceId);
     }
   }, [
     observedDraftIdRef,
+    observedRouteSpaceRef,
+    placeDraftInSpace,
     previewSpaceId,
+    routeDraftHasContent,
     routeDraftId,
+    routeDraftIsShared,
     routeReveal,
     routeRowThreadKey,
     routeSpaceId,
@@ -1175,6 +1265,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     projectGroups,
     spaces,
     projectSpaces,
+    sharedProjectKeys,
     activeSpaceId,
   );
   const spaceScopeProjectKeys =
@@ -1314,6 +1405,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       ) {
         continue;
       }
+      if (!isDraftInSpace(draftKey, session)) continue;
       count += 1;
     }
     return count;
@@ -1444,6 +1536,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   } = useSidebarThreads({
     projectScopeKey,
     scopedProjectKeys,
+    isThreadInSpace,
     serverConfigs,
     connectedEnvironmentIds,
     optimisticDrop,
@@ -1578,28 +1671,27 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       spaceDraftId !== undefined &&
       spaceDraft &&
       spaceDraft.promotedTo == null &&
-      threadSpaceId(spaceDraft) === spaceId
+      draftSpaceId(spaceDraftId, spaceDraft, spaceId) === spaceId
     ) {
       void router.navigate({ to: "/draft/$draftId", params: { draftId: spaceDraftId } });
       return;
     }
-    const ownProjectKeys = new Set(
-      projectRefKeys(
-        projectGroups.filter((group) => groupSpaceId(group, spaces, projectSpaces) === spaceId),
-      ),
-    );
     const thread = mostRecentlyOpened(
       sortThreadsForSidebar(
-        filterSidebarV2VisibleThreads(threads, ownProjectKeys, delegatedUnderParent),
+        filterSidebarV2VisibleThreads(threads, null, delegatedUnderParent).filter(
+          (candidate) => threadSpaceId(candidate) === spaceId,
+        ),
       ),
       latestThreadOpenAt,
     );
     if (thread === null) {
-      const open = newThreadContext.activeThread ?? newThreadContext.activeDraftThread;
-      const openSpaceId = open ? threadSpaceId(open) : undefined;
-      if (openSpaceId === spaceId) return;
-      const project = pickableProjectGroups(projectGroups).find(
-        (group) => groupSpaceId(group, spaces, projectSpaces) === spaceId,
+      if (routeSpaceId === spaceId) return;
+      const [project] = projectGroupsInSpace(
+        pickableProjectGroups(projectGroups),
+        spaces,
+        projectSpaces,
+        sharedProjectKeys,
+        spaceId,
       );
       if (project) void handleNewThread(scopeProjectRef(project.environmentId, project.id));
       return;
@@ -2834,6 +2926,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+              spaceMove:
+                threadProjectGroup && sharedProjectKeys.has(threadProjectGroup.projectKey)
+                  ? { spaces, currentSpaceId: threadSpaceId(thread) }
+                  : null,
               canRename: !fromSearch,
               supports: {
                 settlement: configLoaded,
@@ -2861,6 +2957,25 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   thread.environmentId,
                 );
           if (preset) attemptSnooze(threadRef, preset);
+          return;
+        }
+        if (clicked.value.startsWith("move-to-space:")) {
+          const result = await moveThreadToSpace(
+            threadRef,
+            thread.source.tags,
+            clicked.value.slice("move-to-space:".length),
+          );
+          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: gt("Failed to move thread"),
+                description:
+                  thrownErrorMessage(squashAtomCommandFailure(result), m) ??
+                  gt("An error occurred."),
+              }),
+            );
+          }
           return;
         }
         switch (clicked.value) {
@@ -3713,6 +3828,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           projectByKey={projectByKey}
                           projectDisplayNameByKey={projectDisplayNameByKey}
                           scopedProjectKeys={scopedProjectKeys}
+                          isDraftInSpace={isDraftInSpace}
                           routeDraftId={routeDraftIdForRows}
                           onNavigateToDraft={navigateToDraft}
                           onDraftContextMenu={handleDraftContextMenu}
