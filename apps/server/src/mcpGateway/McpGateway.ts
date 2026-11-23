@@ -66,6 +66,17 @@ const randomToken = () => NodeCrypto.randomBytes(32).toString("base64url");
 const accessOf = (tool: McpSchema.Tool) =>
   tool.annotations?.readOnlyHint === true ? ("read" as const) : ("write" as const);
 
+const NEWER_PROTOCOLS = [
+  McpProtocol.v2025_11_25,
+  McpProtocol.v2025_06_18,
+] as unknown as ReadonlyArray<McpProtocol.ProtocolAdapter<McpClient.ProtocolVersion>>;
+const OLDEST_PROTOCOL =
+  McpProtocol.v2025_03_26 as unknown as McpProtocol.ProtocolAdapter<McpClient.ProtocolVersion>;
+
+const isProtocolRejection = (error: McpClientError.McpClientError) =>
+  error.reason._tag === "UnsupportedError" ||
+  (error.reason._tag === "HttpError" && error.reason.status === 400);
+
 const isUnauthorized = (error: McpClientError.McpClientError) =>
   error.reason._tag === "HttpError" && error.reason.status === 401;
 
@@ -232,23 +243,33 @@ const make = Effect.gen(function* () {
     service: McpGatewayService,
     use: (client: McpClient.McpClient) => Effect.Effect<A, McpClientError.McpClientError>,
   ): Effect.fn.Return<A, McpGatewayError> {
-    const run = (accessToken: string) =>
-      sendingCredentials(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const transport = yield* McpClient.http({
-              url: service.url,
-              protocol: McpProtocol.v2025_11_25,
-              headers: { authorization: `Bearer ${accessToken}` },
-            });
-            const client = yield* McpClient.make({
-              name: "Blackbird",
-              version: packageJson.version,
-            }).pipe(Effect.provideService(McpClient.Transport, transport));
-            return yield* use(client);
-          }),
+    const openClient = (
+      protocol: McpProtocol.ProtocolAdapter<McpClient.ProtocolVersion>,
+      accessToken: string,
+    ) =>
+      McpClient.http({
+        url: service.url,
+        protocol,
+        headers: { authorization: `Bearer ${accessToken}` },
+      }).pipe(
+        Effect.flatMap((transport) =>
+          McpClient.make({ name: "Blackbird", version: packageJson.version }).pipe(
+            Effect.provideService(McpClient.Transport, transport),
+          ),
         ),
       );
+    const connect = Effect.fn("McpGateway.connect")(function* (accessToken: string) {
+      for (const protocol of NEWER_PROTOCOLS) {
+        const client = yield* openClient(protocol, accessToken).pipe(
+          Effect.asSome,
+          Effect.catchIf(isProtocolRejection, () => Effect.succeedNone),
+        );
+        if (Option.isSome(client)) return client.value;
+      }
+      return yield* openClient(OLDEST_PROTOCOL, accessToken);
+    });
+    const run = (accessToken: string) =>
+      sendingCredentials(Effect.scoped(Effect.flatMap(connect(accessToken), use)));
     const accessToken = yield* validAccessToken(service);
     return yield* run(accessToken).pipe(
       Effect.catchIf(isUnauthorized, () =>
@@ -315,6 +336,8 @@ const make = Effect.gen(function* () {
     signIn: Effect.fn("McpGateway.signIn")(function* (id) {
       const service = yield* requireService(id);
       yield* vault.ready;
+      const state = randomToken();
+      latestSignIns.set(service.id, state);
       const loopbackHost = config.host === "::1" ? "[::1]" : "127.0.0.1";
       const redirectUri = `http://${loopbackHost}:${config.port}${CALLBACK_PATH}`;
       const provided = Effect.provideService(HttpClient.HttpClient, httpClient);
@@ -326,12 +349,10 @@ const make = Effect.gen(function* () {
         scope,
       }).pipe(provided);
       const codeVerifier = randomToken();
-      const state = randomToken();
       const now = yield* Clock.currentTimeMillis;
       for (const [key, pending] of pendingSignIns) {
         if (pending.expiresAt <= now) pendingSignIns.delete(key);
       }
-      latestSignIns.set(service.id, state);
       pendingSignIns.set(state, {
         serviceId: service.id,
         resource: service.url,
@@ -493,6 +514,7 @@ const make = Effect.gen(function* () {
       );
       if (first._tag === "missing") return yield* noSuchTool(service, input.tool);
       if (first._tag === "done") return first.result;
+      const grantAtRequest = Option.map(yield* storedTokens(service), (tokens) => tokens.clientId);
       const approved = yield* approve({
         approvalId: randomToken(),
         serviceName: service.name,
@@ -511,7 +533,14 @@ const make = Effect.gen(function* () {
         });
       }
       const approvedService = yield* requireService(input.service);
-      if (approvedService.url !== service.url) {
+      const grantAtApproval = Option.map(
+        yield* storedTokens(approvedService),
+        (tokens) => tokens.clientId,
+      );
+      if (
+        approvedService.url !== service.url ||
+        Option.getOrUndefined(grantAtApproval) !== Option.getOrUndefined(grantAtRequest)
+      ) {
         return yield* new McpGatewayError({
           message: `${service.name} changed while waiting for approval. Nothing was changed.`,
         });

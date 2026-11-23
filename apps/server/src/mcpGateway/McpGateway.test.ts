@@ -72,6 +72,12 @@ const harness = (options: {
   readonly rejectedToolCallTokens?: ReadonlyArray<string>;
   readonly refreshError?: string;
   readonly stalledTokenBody?: Deferred.Deferred<void>;
+  readonly protocolVersion?: string;
+  readonly discoveryGate?: {
+    armed: boolean;
+    readonly started: Deferred.Deferred<void>;
+    readonly release: Deferred.Deferred<void>;
+  };
   readonly holdRefresh?: {
     readonly started: Deferred.Deferred<void>;
     readonly release: Deferred.Deferred<void>;
@@ -119,6 +125,11 @@ const harness = (options: {
         return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }));
       }
       if (request.method === "GET") {
+        if (options.discoveryGate?.armed === true) {
+          options.discoveryGate.armed = false;
+          yield* Deferred.succeed(options.discoveryGate.started, undefined);
+          yield* Deferred.await(options.discoveryGate.release);
+        }
         return url.pathname.includes("oauth-protected-resource")
           ? json(request, { authorization_servers: ["https://mcp.example.test"] })
           : json(request, {
@@ -168,7 +179,7 @@ const harness = (options: {
             jsonrpc: "2.0",
             id: message.id,
             result: {
-              protocolVersion: "2025-11-25",
+              protocolVersion: options.protocolVersion ?? "2025-11-25",
               capabilities: { tools: {} },
               serverInfo: { name: "fake", version: "1" },
             },
@@ -347,6 +358,56 @@ it.effect("rechecks the allowlist after approval", () => {
     assert.deepEqual(test.seen.toolCalls, []);
   }).pipe(Effect.provide(test.layer));
 });
+
+it.effect("refuses an approved write after the account changed", () => {
+  const test = harness({ tokens: TOKENS });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    const error = yield* gateway
+      .call({ service: SERVICE.id, tool: "save_item", arguments: {} }, () =>
+        Effect.sync(() => {
+          test.stored.set(SERVICE.id, { ...TOKENS, clientId: "other-account" });
+          return true;
+        }),
+      )
+      .pipe(Effect.flip);
+    assert.include(error.message, "changed while waiting");
+    assert.deepEqual(test.seen.toolCalls, []);
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("connects to a service on an older MCP protocol", () => {
+  const test = harness({ tokens: TOKENS, protocolVersion: "2025-06-18" });
+  return Effect.gen(function* () {
+    const result = yield* call("read_item", false).run;
+    assert.notEqual(result.isError, true);
+    assert.deepEqual(test.seen.toolCalls, ["read_item"]);
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("a retry cancels the earlier sign-in as soon as it starts", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    const discoveryGate = { armed: false, started, release };
+    const test = harness({ discoveryGate });
+    yield* Effect.gen(function* () {
+      const gateway = yield* McpGateway.McpGateway;
+      const { authorizationUrl } = yield* gateway.signIn(SERVICE.id);
+      const state = new URL(authorizationUrl).searchParams.get("state") ?? undefined;
+      discoveryGate.armed = true;
+      const retry = yield* Effect.forkChild(gateway.signIn(SERVICE.id));
+      yield* Deferred.await(started);
+      const error = yield* gateway
+        .completeSignIn({ state, code: "code", error: undefined, issuer: undefined })
+        .pipe(Effect.flip);
+      assert.include(error.message, "replaced");
+      assert.isFalse(test.stored.has(SERVICE.id));
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(retry);
+    }).pipe(Effect.provide(test.layer));
+  }),
+);
 
 it.effect("keeps every service when saves run concurrently", () => {
   const test = harness({ services: [] });
