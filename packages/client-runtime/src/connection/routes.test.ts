@@ -18,6 +18,7 @@ import {
   entryWithRoutes,
   isNearbyAddress,
   mergeLearnedRoutes,
+  routeWithLabel,
   pendingRouteOrder,
   removedWithRelay,
   routeKeepsItsHost,
@@ -168,6 +169,20 @@ describe("learned routes", () => {
       authorization: "t3-connect",
       wsBaseUrl: "ws://192.168.1.10:3773/",
     });
+  });
+
+  it("carries a renamed environment's name onto a learned route", () => {
+    const renamed = routeWithLabel(RELAY, "Renamed environment");
+    const routes = mergeLearnedRoutes({
+      entry: { target: renamed.target, profile: renamed.profile, enabled: true },
+      activeRoute: renamed,
+      reported: [{ httpBaseUrl: "http://192.168.1.10:3773/" }],
+      allowInsecure: true,
+    });
+    expect(routes?.map((route) => route.target)).toMatchObject([
+      { label: "Renamed environment", customLabel: true },
+      { label: "Renamed environment", customLabel: true },
+    ]);
   });
 
   it("replaces a learned LAN address when the server reports a new one", () => {

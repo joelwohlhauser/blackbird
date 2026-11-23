@@ -56,6 +56,7 @@ import {
 } from "./model.ts";
 import * as Persistence from "../platform/persistence.ts";
 import * as ConnectionProfileStore from "./profileStore.ts";
+import { connectionCatalogLabel } from "./presentation.ts";
 import * as EnvironmentRegistry from "./registry.ts";
 import {
   PullRequestRoutingPermissions,
@@ -1588,6 +1589,8 @@ describe("EnvironmentRegistry", () => {
 
         const error = yield* Effect.flip(registry.remove(TARGET.environmentId));
         expect(error._tag).toBe("PlatformEnvironmentRemovalError");
+        const renameError = yield* Effect.flip(registry.rename(TARGET.environmentId, "Renamed"));
+        expect(renameError._tag).toBe("PlatformEnvironmentRemovalError");
         expect(
           (yield* SubscriptionRef.get(registry.entries)).get(TARGET.environmentId)?.target,
         ).toEqual(TARGET);
@@ -2089,6 +2092,131 @@ describe("EnvironmentRegistry routes", () => {
           repaired,
           RELAY_TARGET,
         ]);
+      }).pipe(Effect.provide(harness.layer), Effect.scoped);
+    }),
+  );
+
+  it.effect("a rename reaches every route, keeps the session, and survives re-pairing", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness(
+        [LAN_TARGET, RELAY_TARGET],
+        [LAN_PROFILE],
+        [[LAN_TARGET.connectionId, BEARER_CREDENTIAL]],
+      );
+      yield* Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const environmentId = LAN_TARGET.environmentId;
+        yield* registry.start;
+        yield* awaitConnectionState(
+          registry,
+          environmentId,
+          (state) => state.phase === "connected",
+        );
+
+        yield* registry.rename(environmentId, "  Renamed environment  ");
+
+        expect(yield* Ref.get(harness.releasedSessions)).toBe(0);
+        expect((yield* Ref.get(harness.storedProfiles)).get(LAN_PROFILE.connectionId)).toEqual(
+          LAN_PROFILE,
+        );
+        yield* registry.register(
+          new RelayConnectionRegistration({
+            target: new RelayConnectionTarget({ environmentId, label: "Server name" }),
+          }),
+        );
+
+        const stored = routesOf(yield* Ref.get(harness.storedTargets), environmentId);
+        expect(stored.map((target) => target.label)).toEqual([
+          "Renamed environment",
+          "Renamed environment",
+        ]);
+        expect(yield* Effect.flip(registry.rename(environmentId, "   "))).toMatchObject({
+          _tag: "ConnectionBlockedError",
+          reason: "configuration",
+        });
+
+        yield* registry.register(
+          new RelayConnectionRegistration({
+            target: new RelayConnectionTarget({ environmentId, label: "Edited environment" }),
+          }),
+          { label: "Edited environment" },
+        );
+        expect(routesOf(yield* Ref.get(harness.storedTargets), environmentId)).toMatchObject([
+          { label: "Edited environment", customLabel: true },
+          { label: "Edited environment", customLabel: true },
+        ]);
+      }).pipe(Effect.provide(harness.layer), Effect.scoped);
+    }),
+  );
+
+  it.effect("a rename keeps durable streams on their supervisor", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness([RELAY_TARGET]);
+      yield* Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        const firstObserved = yield* Deferred.make<void>();
+        const nextObserved = yield* Deferred.make<void>();
+        const labels = yield* Ref.make<ReadonlyArray<string>>([]);
+        yield* registry.start;
+        yield* awaitConnectionState(
+          registry,
+          RELAY_TARGET.environmentId,
+          (state) => state.phase === "connected",
+        );
+        const subscription = yield* Effect.forkChild(
+          registry
+            .followStream(
+              RELAY_TARGET.environmentId,
+              Stream.unwrap(
+                EnvironmentSupervisor.EnvironmentSupervisor.pipe(
+                  Effect.map((supervisor) =>
+                    Stream.concat(Stream.succeed(supervisor.target.label), Stream.never),
+                  ),
+                ),
+              ),
+            )
+            .pipe(
+              Stream.tap((label) =>
+                Ref.updateAndGet(labels, (current) => [...current, label]).pipe(
+                  Effect.flatMap((current) =>
+                    Deferred.succeed(
+                      current.length === 1 ? firstObserved : nextObserved,
+                      undefined,
+                    ),
+                  ),
+                ),
+              ),
+              Stream.runDrain,
+            ),
+        );
+
+        yield* Deferred.await(firstObserved).pipe(Effect.timeout("1 second"));
+        yield* registry.rename(RELAY_TARGET.environmentId, "Renamed environment");
+        yield* registry.register(new RelayConnectionRegistration({ target: RELAY_TARGET }));
+        yield* Deferred.await(nextObserved).pipe(Effect.timeout("1 second"));
+        yield* Fiber.interrupt(subscription);
+
+        expect(yield* Ref.get(labels)).toEqual([RELAY_TARGET.label, "Renamed environment"]);
+      }).pipe(Effect.provide(harness.layer), Effect.scoped);
+    }),
+  );
+
+  it.effect("a renamed SSH environment shows its name and keeps its saved profile", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness([SSH_CONNECTION], [SSH_PROFILE]);
+      yield* Effect.gen(function* () {
+        const registry = yield* EnvironmentRegistry.EnvironmentRegistry;
+        yield* registry.rename(SSH_CONNECTION.environmentId, "Renamed environment");
+
+        const entry = (yield* SubscriptionRef.get(registry.entries)).get(
+          SSH_CONNECTION.environmentId,
+        );
+        expect(entry === undefined ? null : connectionCatalogLabel(entry)).toBe(
+          "Renamed environment",
+        );
+        expect((yield* Ref.get(harness.storedProfiles)).get(SSH_PROFILE.connectionId)).toEqual(
+          SSH_PROFILE,
+        );
       }).pipe(Effect.provide(harness.layer), Effect.scoped);
     }),
   );

@@ -12,7 +12,13 @@ import {
   type ConnectionCatalogEntry,
   type ConnectionRoute,
 } from "./catalog.ts";
-import { BearerConnectionTarget, type ConnectionTarget } from "./model.ts";
+import {
+  BearerConnectionTarget,
+  type ConnectionTarget,
+  PrimaryConnectionTarget,
+  RelayConnectionTarget,
+  SshConnectionTarget,
+} from "./model.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 
@@ -65,6 +71,23 @@ export function routeEntry(
   route: ConnectionRoute,
 ): ConnectionCatalogEntry {
   return entryWithRoutes(entry, [route]);
+}
+
+function targetWithLabel(target: ConnectionTarget, label: string): ConnectionTarget {
+  switch (target._tag) {
+    case "PrimaryConnectionTarget":
+      return new PrimaryConnectionTarget({ ...target, label, customLabel: true });
+    case "BearerConnectionTarget":
+      return new BearerConnectionTarget({ ...target, label, customLabel: true });
+    case "RelayConnectionTarget":
+      return new RelayConnectionTarget({ ...target, label, customLabel: true });
+    case "SshConnectionTarget":
+      return new SshConnectionTarget({ ...target, label, customLabel: true });
+  }
+}
+
+export function routeWithLabel(route: ConnectionRoute, label: string): ConnectionRoute {
+  return { target: targetWithLabel(route.target, label), profile: route.profile };
 }
 
 export function routeHttpBaseUrl(route: ConnectionRoute): string | null {
@@ -335,6 +358,7 @@ export function mergeLearnedRoutes(input: {
       target: new BearerConnectionTarget({
         environmentId: entry.target.environmentId,
         label: entry.target.label,
+        ...(entry.target.customLabel === true ? { customLabel: true as const } : {}),
         connectionId,
       }),
       profile: Option.some(

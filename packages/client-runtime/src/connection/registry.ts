@@ -53,6 +53,7 @@ import {
   findRouteToSameAddress,
   hasSavedBearerRoute,
   mergeLearnedRoutes,
+  routeWithLabel,
   routesAfterRemoving,
   upsertRoute,
   type ReportedEndpoint,
@@ -108,7 +109,7 @@ export class EnvironmentRegistry extends Context.Service<
      */
     readonly register: (
       registration: ConnectionRegistration,
-      options?: { readonly knownAddressOnly?: boolean },
+      options?: { readonly knownAddressOnly?: boolean; readonly label?: string },
     ) => Effect.Effect<boolean, Persistence.ConnectionPersistenceError | ConnectionBlockedError>;
     /**
      * Fails when the route would add a new address to a saved user environment. Pairing that does
@@ -160,6 +161,16 @@ export class EnvironmentRegistry extends Context.Service<
       | PlatformEnvironmentRemovalError
     >;
     readonly retryNow: (environmentId: EnvironmentId) => Effect.Effect<void>;
+    readonly rename: (
+      environmentId: EnvironmentId,
+      label: string,
+    ) => Effect.Effect<
+      void,
+      | Persistence.ConnectionPersistenceError
+      | ConnectionBlockedError
+      | EnvironmentNotRegisteredError
+      | PlatformEnvironmentRemovalError
+    >;
     readonly setEnabled: (
       environmentId: EnvironmentId,
       enabled: boolean,
@@ -270,6 +281,7 @@ export const make = Effect.gen(function* () {
   );
   const entries =
     yield* SubscriptionRef.make<ReadonlyMap<EnvironmentId, ConnectionCatalogEntry>>(initialEntries);
+  const renamedFrom = new WeakMap<ConnectionCatalogEntry, ConnectionCatalogEntry>();
   const networkStatus = yield* SubscriptionRef.make(yield* connectivity.status);
   const serviceScopes = yield* SubscriptionRef.make<
     ReadonlyMap<EnvironmentId, EnvironmentServiceScope>
@@ -446,9 +458,14 @@ export const make = Effect.gen(function* () {
       SubscriptionRef.changes(entries),
     ).pipe(
       Stream.map((current) => Option.fromUndefinedOr(current.get(environmentId))),
-      Stream.changesWith(
-        (previous, current) => Option.getOrNull(previous) === Option.getOrNull(current),
-      ),
+      Stream.changesWith((previous, current) => {
+        const previousEntry = Option.getOrNull(previous);
+        const currentEntry = Option.getOrNull(current);
+        return (
+          (previousEntry && (renamedFrom.get(previousEntry) ?? previousEntry)) ===
+          (currentEntry && (renamedFrom.get(currentEntry) ?? currentEntry))
+        );
+      }),
       Stream.switchMap(
         Option.match({
           onNone: () => Stream.empty,
@@ -567,21 +584,21 @@ export const make = Effect.gen(function* () {
 
   const register = Effect.fn("EnvironmentRegistry.register")(function* (
     registration: ConnectionRegistration,
-    options?: { readonly knownAddressOnly?: boolean },
+    options?: { readonly knownAddressOnly?: boolean; readonly label?: string },
   ) {
-    const registered = connectionRegistrationCatalogEntry(registration);
-    const environmentId = registered.target.environmentId;
-    const route: ConnectionRoute = { target: registered.target, profile: registered.profile };
+    const environmentId = registration.target.environmentId;
     return yield* withLeaseLock(
       environmentId,
       Effect.gen(function* () {
         if ((yield* Ref.get(platformEnvironmentIds)).has(environmentId)) {
           return false;
         }
+        const previous = (yield* SubscriptionRef.get(entries)).get(environmentId);
+        const registered = connectionRegistrationCatalogEntry(registration);
+        const route: ConnectionRoute = { target: registered.target, profile: registered.profile };
         if (options?.knownAddressOnly === true) {
           yield* assertKnownAddress(route);
         }
-        const previous = (yield* SubscriptionRef.get(entries)).get(environmentId);
         let entry = registered;
         if (previous !== undefined) {
           const existing = connectionRoutes(previous);
@@ -596,6 +613,14 @@ export const make = Effect.gen(function* () {
             yield* forgetRoutingTrust(environmentId, "register-connection");
           }
           entry = next.entry;
+        }
+        const label =
+          options?.label ?? (previous?.target.customLabel === true ? previous.target.label : null);
+        if (label !== null) {
+          entry = entryWithRoutes(
+            entry,
+            connectionRoutes(entry).map((saved) => routeWithLabel(saved, label)),
+          );
         }
         yield* registrations.register(registration, persistedRoutes(entry));
         yield* Ref.update(persistedEnvironmentIds, (current) =>
@@ -1064,6 +1089,41 @@ export const make = Effect.gen(function* () {
       Effect.catchTags({ EnvironmentNotRegisteredError: () => Effect.void }),
       Effect.withSpan("EnvironmentRegistry.retryNow"),
     );
+  const rename = Effect.fn("EnvironmentRegistry.rename")(function* (
+    environmentId: EnvironmentId,
+    requestedLabel: string,
+  ) {
+    const label = requestedLabel.trim();
+    if (label === "") {
+      return yield* new ConnectionBlockedError({
+        reason: "configuration",
+        ...translatableDetail(msg("Environment label cannot be empty.")),
+      });
+    }
+    yield* withLeaseLock(
+      environmentId,
+      Effect.gen(function* () {
+        const entry = yield* userEntry(environmentId);
+        if (entry.target.customLabel === true && entry.target.label === label) return;
+        const next = entryWithRoutes(
+          entry,
+          connectionRoutes(entry).map((route) => routeWithLabel(route, label)),
+        );
+        yield* registrations.setRoutes(environmentId, persistedRoutes(next));
+        renamedFrom.set(next, renamedFrom.get(entry) ?? entry);
+        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(environmentId);
+        if (lease !== undefined) {
+          yield* SubscriptionRef.update(serviceScopes, (current) =>
+            new Map(current).set(environmentId, { ...lease, entry: next }),
+          );
+        }
+        yield* SubscriptionRef.update(entries, (current) =>
+          new Map(current).set(environmentId, next),
+        );
+      }),
+    );
+  });
+
   const setEnabled = Effect.fn("EnvironmentRegistry.setEnabled")(function* (
     environmentId: EnvironmentId,
     enabled: boolean,
@@ -1206,6 +1266,7 @@ export const make = Effect.gen(function* () {
     reorderRoutes,
     removeRelayEnvironments,
     retryNow,
+    rename,
     setEnabled,
     setCompatibility,
     state,

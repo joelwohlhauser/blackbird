@@ -205,7 +205,8 @@ export function connectionCatalogLabel(entry: ConnectionCatalogEntry): string {
   if (
     entry.target._tag === "SshConnectionTarget" &&
     Option.isSome(entry.profile) &&
-    entry.profile.value._tag === "SshConnectionProfile"
+    entry.profile.value._tag === "SshConnectionProfile" &&
+    entry.target.customLabel !== true
   ) {
     const alias = entry.profile.value.target.alias.trim();
     if (alias.length > 0) return alias;

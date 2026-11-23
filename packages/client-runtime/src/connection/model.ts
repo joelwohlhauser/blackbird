@@ -7,6 +7,7 @@ import { MarkedText } from "../errors/translatable.ts";
 const ConnectionTargetBase = {
   environmentId: EnvironmentId,
   label: Schema.String,
+  customLabel: Schema.optionalKey(Schema.Literal(true)),
 };
 
 export class PrimaryConnectionTarget extends Schema.TaggedClass<PrimaryConnectionTarget>()(
