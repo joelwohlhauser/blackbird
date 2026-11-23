@@ -35,8 +35,6 @@ const StoredTokensJson = Schema.fromJsonString(StoredTokens);
 const encodeTokens = Schema.encodeSync(StoredTokensJson);
 const decodeTokens = Schema.decodeUnknownOption(StoredTokensJson);
 
-const vaultError = (message: string) => new McpGatewayError({ message });
-
 export const seal = (key: Uint8Array, serviceId: string, plaintext: string): Uint8Array => {
   const iv = NodeCrypto.randomBytes(IV_BYTES);
   const cipher = NodeCrypto.createCipheriv("aes-256-gcm", key, iv);
@@ -61,7 +59,7 @@ export const unseal = (key: Uint8Array, serviceId: string, sealed: Uint8Array): 
   }
 };
 
-export class McpGatewayVaultKey extends Context.Service<
+class McpGatewayVaultKey extends Context.Service<
   McpGatewayVaultKey,
   { readonly get: Effect.Effect<Uint8Array, McpGatewayError> }
 >()("t3/mcpGateway/McpGatewayVault/McpGatewayVaultKey") {}
@@ -84,7 +82,11 @@ export const layerKeychainKey = Layer.effect(
           timeout: "30 seconds",
           ...(stdin === undefined ? {} : { stdin }),
         })
-        .pipe(Effect.mapError(() => vaultError("Could not reach the macOS Keychain.")));
+        .pipe(
+          Effect.mapError(
+            () => new McpGatewayError({ message: "Could not reach the macOS Keychain." }),
+          ),
+        );
 
     const read = Effect.gen(function* () {
       const result = yield* security([
@@ -97,11 +99,15 @@ export const layerKeychainKey = Layer.effect(
       ]);
       if (result.code === SECURITY_ITEM_NOT_FOUND) return Option.none<Uint8Array>();
       if (result.code !== 0) {
-        return yield* vaultError("The macOS Keychain refused to read the gateway key.");
+        return yield* new McpGatewayError({
+          message: "The macOS Keychain refused to read the gateway key.",
+        });
       }
       const key = Buffer.from(result.stdout.trim(), "base64");
       if (key.byteLength !== KEY_BYTES) {
-        return yield* vaultError("The gateway key in the macOS Keychain is invalid.");
+        return yield* new McpGatewayError({
+          message: "The gateway key in the macOS Keychain is invalid.",
+        });
       }
       return Option.some<Uint8Array>(key);
     });
@@ -113,11 +119,15 @@ export const layerKeychainKey = Layer.effect(
         `add-generic-password -a ${account} -s ${KEYCHAIN_SERVICE} -w ${key.toString("base64")}\n`,
       );
       if (result.code !== 0) {
-        return yield* vaultError("The macOS Keychain refused to store the gateway key.");
+        return yield* new McpGatewayError({
+          message: "The macOS Keychain refused to store the gateway key.",
+        });
       }
       const stored = yield* read;
       if (Option.isNone(stored) || !key.equals(stored.value)) {
-        return yield* vaultError("The macOS Keychain did not keep the gateway key.");
+        return yield* new McpGatewayError({
+          message: "The macOS Keychain did not keep the gateway key.",
+        });
       }
       return stored.value;
     });
@@ -126,7 +136,11 @@ export const layerKeychainKey = Layer.effect(
       get: Effect.suspend(() => {
         if (cached !== undefined) return Effect.succeed(cached);
         if (platform !== "darwin") {
-          return Effect.fail(vaultError("The MCP gateway stores tokens in the macOS Keychain."));
+          return Effect.fail(
+            new McpGatewayError({
+              message: "The MCP gateway stores tokens in the macOS Keychain.",
+            }),
+          );
         }
         return lock.withPermits(1)(
           Effect.gen(function* () {
@@ -161,7 +175,8 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const store = yield* ServerSecretStore.ServerSecretStore;
     const vaultKey = yield* McpGatewayVaultKey;
-    const storeError = () => vaultError("Could not access the stored gateway tokens.");
+    const storeError = () =>
+      new McpGatewayError({ message: "Could not access the stored gateway tokens." });
 
     return McpGatewayVault.of({
       ready: Effect.asVoid(vaultKey.get),
@@ -170,9 +185,10 @@ export const layer = Layer.effect(
         if (Option.isNone(sealed)) return Option.none();
         const plaintext = unseal(yield* vaultKey.get, serviceId, sealed.value);
         if (plaintext === null) {
-          return yield* vaultError(
-            "The stored gateway tokens could not be decrypted. Sign in to the service again.",
-          );
+          return yield* new McpGatewayError({
+            message:
+              "The stored gateway tokens could not be decrypted. Sign in to the service again.",
+          });
         }
         return decodeTokens(plaintext);
       }),

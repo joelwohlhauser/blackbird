@@ -2,7 +2,10 @@ import type { EnvironmentId, McpGatewayServiceStatus } from "@t3tools/contracts"
 import { T, useGT } from "gt-react";
 import { useEffect, useEffectEvent, useState } from "react";
 
+import { isLoopbackHostname } from "../../environments/primary/target";
+import { isElectron } from "../../env";
 import { ensureLocalApi } from "../../localApi";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
@@ -52,6 +55,10 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
   const remove = useAtomCommand(serverEnvironment.removeMcpGatewayService);
   const signIn = useAtomCommand(serverEnvironment.signInMcpGatewayService);
   const signOut = useAtomCommand(serverEnvironment.signOutMcpGatewayService);
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const canSignInHere =
+    environmentId === primaryEnvironmentId &&
+    (isElectron || isLoopbackHostname(window.location.hostname));
   const [services, setServices] = useState<ReadonlyArray<McpGatewayServiceStatus>>([]);
   const [waitingFor, setWaitingFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +172,7 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
                     >
                       <T>Sign out</T>
                     </Button>
-                  ) : (
+                  ) : canSignInHere ? (
                     <Button
                       size="xs"
                       variant="outline"
@@ -173,6 +180,10 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
                     >
                       <T>Sign in</T>
                     </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      <T>Sign in on the computer running this environment</T>
+                    </span>
                   )}
                   <Button
                     size="xs"

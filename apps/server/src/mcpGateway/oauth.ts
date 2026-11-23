@@ -34,25 +34,15 @@ const TokenResponse = Schema.Struct({
 
 const OAuthErrorResponse = Schema.Struct({ error: Schema.String });
 
-export interface OAuthServer {
-  readonly issuer: string | undefined;
-  readonly authorizationEndpoint: string;
-  readonly tokenEndpoint: string;
-  readonly registrationEndpoint: string;
-  readonly challengedScope: string | undefined;
-}
-
 export class OAuthGrantRejected extends Schema.TaggedError<OAuthGrantRejected>()(
   "OAuthGrantRejected",
   {},
 ) {}
 
-const failure = (message: string) => new McpGatewayError({ message });
-
 const requireHttps = (value: string, label: string) =>
   URL.canParse(value) && new URL(value).protocol === "https:"
     ? Effect.succeed(value)
-    : Effect.fail(failure(`The service's ${label} is not an https URL.`));
+    : Effect.fail(new McpGatewayError({ message: `The service's ${label} is not an https URL.` }));
 
 const readJson = <S extends Schema.Top & { readonly DecodingServices: never }>(
   response: HttpClientResponse.HttpClientResponse,
@@ -61,7 +51,9 @@ const readJson = <S extends Schema.Top & { readonly DecodingServices: never }>(
 ) =>
   response.json.pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(schema)),
-    Effect.mapError(() => failure(`The service returned an invalid ${label}.`)),
+    Effect.mapError(
+      () => new McpGatewayError({ message: `The service returned an invalid ${label}.` }),
+    ),
   );
 
 const fetchMetadata = Effect.fn("McpGatewayOAuth.fetchMetadata")(function* <
@@ -75,7 +67,7 @@ const fetchMetadata = Effect.fn("McpGatewayOAuth.fetchMetadata")(function* <
     const decoded = yield* readJson(response.value, schema, label).pipe(Effect.option);
     if (Option.isSome(decoded)) return decoded.value;
   }
-  return yield* failure(`Could not find the service's ${label}.`);
+  return yield* new McpGatewayError({ message: `Could not find the service's ${label}.` });
 }, Effect.scoped);
 
 const challengeParam = (header: string | undefined, name: string) =>
@@ -122,10 +114,12 @@ export const discover = Effect.fn("McpGatewayOAuth.discover")(function* (resourc
     server.code_challenge_methods_supported !== undefined &&
     !server.code_challenge_methods_supported.includes("S256")
   ) {
-    return yield* failure("The service does not support PKCE with S256.");
+    return yield* new McpGatewayError({ message: "The service does not support PKCE with S256." });
   }
   if (server.registration_endpoint === undefined) {
-    return yield* failure("The service does not support dynamic client registration.");
+    return yield* new McpGatewayError({
+      message: "The service does not support dynamic client registration.",
+    });
   }
   return {
     issuer: server.issuer,
@@ -139,7 +133,7 @@ export const discover = Effect.fn("McpGatewayOAuth.discover")(function* (resourc
       "registration endpoint",
     ),
     challengedScope: challengeParam(challenge, "scope"),
-  } satisfies OAuthServer;
+  };
 });
 
 export const registerClient = Effect.fn("McpGatewayOAuth.registerClient")(function* (input: {
@@ -159,14 +153,20 @@ export const registerClient = Effect.fn("McpGatewayOAuth.registerClient")(functi
       token_endpoint_auth_method: "none",
       ...(input.scope === undefined ? {} : { scope: input.scope }),
     }),
-    Effect.mapError(() => failure("Could not build the client registration.")),
+    Effect.mapError(
+      () => new McpGatewayError({ message: "Could not build the client registration." }),
+    ),
   );
   const response = yield* client.execute(request).pipe(
     Effect.timeout(HTTP_TIMEOUT),
-    Effect.mapError(() => failure("Could not reach the service to register Blackbird.")),
+    Effect.mapError(
+      () => new McpGatewayError({ message: "Could not reach the service to register Blackbird." }),
+    ),
   );
   if (response.status < 200 || response.status >= 300) {
-    return yield* failure(`The service refused client registration (HTTP ${response.status}).`);
+    return yield* new McpGatewayError({
+      message: `The service refused client registration (HTTP ${response.status}).`,
+    });
   }
   return yield* readJson(response, ClientRegistration, "client registration");
 }, Effect.scoped);
@@ -192,7 +192,9 @@ const requestTokens = Effect.fn("McpGatewayOAuth.requestTokens")(function* (inpu
     )
     .pipe(
       Effect.timeout(HTTP_TIMEOUT),
-      Effect.mapError(() => failure("Could not reach the service's token endpoint.")),
+      Effect.mapError(
+        () => new McpGatewayError({ message: "Could not reach the service's token endpoint." }),
+      ),
     );
   if (response.status < 200 || response.status >= 300) {
     const rejection = yield* readJson(response, OAuthErrorResponse, "token error").pipe(
@@ -201,11 +203,11 @@ const requestTokens = Effect.fn("McpGatewayOAuth.requestTokens")(function* (inpu
     if (Option.isSome(rejection) && rejection.value.error === "invalid_grant") {
       return yield* new OAuthGrantRejected();
     }
-    return yield* failure(
-      `The service refused the token request (${
+    return yield* new McpGatewayError({
+      message: `The service refused the token request (${
         Option.isSome(rejection) ? rejection.value.error : `HTTP ${response.status}`
       }).`,
-    );
+    });
   }
   const tokens = yield* readJson(response, TokenResponse, "token response");
   const now = yield* Clock.currentTimeMillis;
@@ -239,7 +241,11 @@ export const exchangeCode = Effect.fn("McpGatewayOAuth.exchangeCode")(function* 
   }).pipe(
     Effect.catchTags({
       OAuthGrantRejected: () =>
-        Effect.fail(failure("The service rejected the sign-in code. Try signing in again.")),
+        Effect.fail(
+          new McpGatewayError({
+            message: "The service rejected the sign-in code. Try signing in again.",
+          }),
+        ),
     }),
   );
   return {

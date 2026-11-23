@@ -68,6 +68,7 @@ const harness = (options: {
   readonly tokens?: McpGatewayVault.StoredTokens;
   readonly services?: ReadonlyArray<McpGatewayService>;
   readonly rejectedAccessTokens?: ReadonlyArray<string>;
+  readonly rejectedToolCallTokens?: ReadonlyArray<string>;
   readonly refreshError?: string;
   readonly holdRefresh?: {
     readonly started: Deferred.Deferred<void>;
@@ -78,6 +79,7 @@ const harness = (options: {
     options.tokens === undefined ? [] : [[SERVICE.id, options.tokens]],
   );
   let services = options.services ?? [SERVICE];
+  const listedTools = { current: TOOLS };
   const seen = {
     toolCalls: [] as Array<string>,
     bearers: [] as Array<string>,
@@ -164,8 +166,13 @@ const harness = (options: {
         );
       }
       if (message.method === "tools/list") {
-        return json(request, { jsonrpc: "2.0", id: message.id, result: { tools: TOOLS } });
+        return json(request, {
+          jsonrpc: "2.0",
+          id: message.id,
+          result: { tools: listedTools.current },
+        });
       }
+      if (options.rejectedToolCallTokens?.includes(bearer)) return json(request, {}, 401);
       seen.toolCalls.push(message.params?.name ?? "");
       return json(request, {
         jsonrpc: "2.0",
@@ -203,7 +210,7 @@ const harness = (options: {
       ),
     ),
   );
-  return { layer, stored, seen };
+  return { layer, stored, seen, listedTools };
 };
 
 const call = (tool: string, approved: boolean) => {
@@ -295,17 +302,37 @@ it.effect("keeps every service when saves run concurrently", () => {
 });
 
 it.effect("retries an approved write after a 401 without asking again", () => {
-  const test = harness({ tokens: TOKENS, rejectedAccessTokens: ["current"] });
+  const test = harness({ tokens: TOKENS, rejectedToolCallTokens: ["current"] });
   const { approve, run } = call("save_item", true);
   return Effect.gen(function* () {
-    yield* McpGateway.McpGateway.pipe(
-      Effect.flatMap((gateway) => gateway.search({ query: "item" })),
-    );
     const result = yield* run;
     assert.notEqual(result.isError, true);
     assert.equal(approve.mock.calls.length, 1);
     assert.deepEqual(test.seen.toolCalls, ["save_item"]);
     assert.equal(test.seen.refreshes, 1);
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("asks as soon as a service relabels a read tool as a write", () => {
+  const test = harness({ tokens: TOKENS });
+  return Effect.gen(function* () {
+    yield* call("read_item", false).run;
+    test.listedTools.current = TOOLS.map((tool) =>
+      tool.name === "read_item" ? { ...tool, annotations: { readOnlyHint: false } } : tool,
+    );
+    const { approve, run } = call("read_item", false);
+    yield* run;
+    assert.equal(approve.mock.calls.length, 1);
+    assert.deepEqual(test.seen.toolCalls, ["read_item"]);
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("refuses a tool outside the allowlist", () => {
+  const test = harness({ tokens: TOKENS, services: [{ ...SERVICE, tools: ["read_item"] }] });
+  return Effect.gen(function* () {
+    const error = yield* call("save_item", true).run.pipe(Effect.flip);
+    assert.include(error.message, "no available tool");
+    assert.deepEqual(test.seen.toolCalls, []);
   }).pipe(Effect.provide(test.layer));
 });
 

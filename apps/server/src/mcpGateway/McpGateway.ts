@@ -26,12 +26,11 @@ export const CALLBACK_PATH = "/oauth/mcp-gateway/callback";
 
 const SIGN_IN_TTL_MS = 10 * 60 * 1000;
 const REFRESH_MARGIN_MS = 60 * 1000;
-const TOOL_LIST_TTL_MS = 5 * 60 * 1000;
 const CALL_TIMEOUT = "5 minutes";
 const MAX_SEARCH_RESULTS = 15;
 const MAX_SEARCH_DESCRIPTION = 160;
 
-export interface GatewayToolSummary {
+interface GatewayToolSummary {
   readonly service: string;
   readonly name: string;
   readonly description: string;
@@ -45,6 +44,11 @@ export interface WriteApprovalRequest {
   readonly arguments: Readonly<Record<string, unknown>>;
 }
 
+type FirstCallStep =
+  | { readonly _tag: "missing" }
+  | { readonly _tag: "done"; readonly result: McpSchema.CallToolResult }
+  | { readonly _tag: "needsApproval"; readonly tool: McpSchema.Tool };
+
 interface PendingSignIn {
   readonly serviceId: string;
   readonly resource: string;
@@ -57,8 +61,6 @@ interface PendingSignIn {
   readonly expiresAt: number;
 }
 
-const failure = (message: string) => new McpGatewayError({ message });
-
 const randomToken = () => NodeCrypto.randomBytes(32).toString("base64url");
 
 const accessOf = (tool: McpSchema.Tool) =>
@@ -68,11 +70,12 @@ const isUnauthorized = (error: McpClientError.McpClientError) =>
   error.reason._tag === "HttpError" && error.reason.status === 401;
 
 const clientFailure = (service: McpGatewayService) => (error: McpClientError.McpClientError) =>
-  failure(
-    error.reason._tag === "HttpError"
-      ? `${service.name} answered with HTTP ${error.reason.status}.`
-      : `${service.name} request failed (${error.reason._tag}).`,
-  );
+  new McpGatewayError({
+    message:
+      error.reason._tag === "HttpError"
+        ? `${service.name} answered with HTTP ${error.reason.status}.`
+        : `${service.name} request failed (${error.reason._tag}).`,
+  });
 
 const score = (tool: McpSchema.Tool, terms: ReadonlyArray<string>) => {
   const name = tool.name.toLowerCase();
@@ -142,10 +145,6 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const credentialLock = yield* Semaphore.make(1);
   const pendingSignIns = new Map<string, PendingSignIn>();
-  const toolLists = new Map<
-    string,
-    { readonly tools: ReadonlyArray<McpSchema.Tool>; readonly fetchedAt: number }
-  >();
 
   const sendingCredentials = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
@@ -155,17 +154,22 @@ const make = Effect.gen(function* () {
 
   const services = settings.getSettings.pipe(
     Effect.map((current) => current.mcpGatewayServices),
-    Effect.mapError(() => failure("Could not read the gateway settings.")),
+    Effect.mapError(() => new McpGatewayError({ message: "Could not read the gateway settings." })),
   );
 
   const writeServices = (next: ReadonlyArray<McpGatewayService>) =>
     settings
       .updateSettings({ mcpGatewayServices: next })
-      .pipe(Effect.mapError(() => failure("Could not save the gateway settings.")));
+      .pipe(
+        Effect.mapError(
+          () => new McpGatewayError({ message: "Could not save the gateway settings." }),
+        ),
+      );
 
   const requireService = Effect.fn("McpGateway.requireService")(function* (id: string) {
     const service = (yield* services).find((candidate) => candidate.id === id);
-    if (service === undefined) return yield* failure(`No connected service is named "${id}".`);
+    if (service === undefined)
+      return yield* new McpGatewayError({ message: `No connected service is named "${id}".` });
     return service;
   });
 
@@ -175,9 +179,9 @@ const make = Effect.gen(function* () {
       .pipe(Effect.map(Option.filter((tokens) => tokens.resource === service.url)));
 
   const notSignedIn = (service: McpGatewayService) =>
-    failure(
-      `${service.name} is not signed in. Ask the user to sign in under Settings, Connected services.`,
-    );
+    new McpGatewayError({
+      message: `${service.name} is not signed in. Ask the user to sign in under Settings, Connected services.`,
+    });
 
   const list = Effect.gen(function* () {
     const configured = yield* services;
@@ -200,10 +204,7 @@ const make = Effect.gen(function* () {
     const next = yield* sendingCredentials(OAuth.refreshTokens(current.value)).pipe(
       Effect.catchTags({
         OAuthGrantRejected: () =>
-          vault.remove(service.id).pipe(
-            Effect.tap(() => Effect.sync(() => toolLists.delete(service.id))),
-            Effect.andThen(Effect.fail(notSignedIn(service))),
-          ),
+          vault.remove(service.id).pipe(Effect.andThen(Effect.fail(notSignedIn(service)))),
       }),
     );
     yield* vault.set(service.id, next);
@@ -226,10 +227,10 @@ const make = Effect.gen(function* () {
       : stored.value.accessToken;
   });
 
-  const withSession = <A>(
+  const withSession = Effect.fn("McpGateway.withSession")(function* <A>(
     service: McpGatewayService,
     use: (client: McpClient.McpClient) => Effect.Effect<A, McpClientError.McpClientError>,
-  ) => {
+  ): Effect.fn.Return<A, McpGatewayError> {
     const run = (accessToken: string) =>
       sendingCredentials(
         Effect.scoped(
@@ -247,43 +248,31 @@ const make = Effect.gen(function* () {
           }),
         ),
       );
-    return Effect.gen(function* () {
-      const accessToken = yield* validAccessToken(service);
-      return yield* run(accessToken).pipe(
-        Effect.catchIf(isUnauthorized, () =>
-          refresh(service, accessToken).pipe(
-            Effect.flatMap((fresh) => run(fresh).pipe(Effect.mapError(clientFailure(service)))),
-          ),
+    const accessToken = yield* validAccessToken(service);
+    return yield* run(accessToken).pipe(
+      Effect.catchIf(isUnauthorized, () =>
+        refresh(service, accessToken).pipe(
+          Effect.flatMap((fresh) => run(fresh).pipe(Effect.mapError(clientFailure(service)))),
         ),
-        Effect.mapError((error) =>
-          error._tag === "McpGatewayError" ? error : clientFailure(service)(error),
-        ),
-      );
-    });
-  };
-
-  const toolsFor = Effect.fn("McpGateway.toolsFor")(function* (service: McpGatewayService) {
-    const now = yield* Clock.currentTimeMillis;
-    const cached = toolLists.get(service.id);
-    if (cached !== undefined && now - cached.fetchedAt < TOOL_LIST_TTL_MS) return cached.tools;
-    const listed = yield* withSession(service, (client) => client.listTools());
-    const allowed = service.tools;
-    const tools =
-      allowed === undefined ? listed : listed.filter((tool) => allowed.includes(tool.name));
-    toolLists.set(service.id, { tools, fetchedAt: now });
-    return tools;
+      ),
+      Effect.mapError((error) =>
+        error._tag === "McpGatewayError" ? error : clientFailure(service)(error),
+      ),
+    );
   });
 
-  const requireTool = Effect.fn("McpGateway.requireTool")(function* (
-    service: McpGatewayService,
-    name: string,
-  ) {
-    const tool = (yield* toolsFor(service)).find((candidate) => candidate.name === name);
-    if (tool === undefined) {
-      return yield* failure(`${service.name} has no available tool named "${name}".`);
-    }
-    return tool;
-  });
+  const allowedTools = (service: McpGatewayService, client: McpClient.McpClient) =>
+    client.listTools().pipe(
+      Effect.map((listed) => {
+        const allowed = service.tools;
+        return allowed === undefined
+          ? listed
+          : listed.filter((tool) => allowed.includes(tool.name));
+      }),
+    );
+
+  const noSuchTool = (service: McpGatewayService, name: string) =>
+    new McpGatewayError({ message: `${service.name} has no available tool named "${name}".` });
 
   const summary = (service: McpGatewayService, tool: McpSchema.Tool): GatewayToolSummary => ({
     service: service.id,
@@ -307,7 +296,6 @@ const make = Effect.gen(function* () {
           if (previous !== undefined && previous.url !== service.url) {
             yield* vault.remove(service.id);
           }
-          toolLists.delete(service.id);
         }),
       );
       return yield* list;
@@ -317,7 +305,6 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           yield* writeServices((yield* services).filter((service) => service.id !== id));
           yield* vault.remove(id);
-          toolLists.delete(id);
         }),
       );
       return yield* list;
@@ -371,18 +358,23 @@ const make = Effect.gen(function* () {
       if (input.state !== undefined) pendingSignIns.delete(input.state);
       const now = yield* Clock.currentTimeMillis;
       if (pending === undefined || pending.expiresAt <= now) {
-        return yield* failure("This sign-in expired. Start it again from Blackbird.");
+        return yield* new McpGatewayError({
+          message: "This sign-in expired. Start it again from Blackbird.",
+        });
       }
       if (input.error !== undefined) {
-        return yield* failure("The service did not grant access.");
+        return yield* new McpGatewayError({ message: "The service did not grant access." });
       }
-      if (input.code === undefined) return yield* failure("The service sent no sign-in code.");
+      if (input.code === undefined)
+        return yield* new McpGatewayError({ message: "The service sent no sign-in code." });
       if (
         input.issuer !== undefined &&
         pending.issuer !== undefined &&
         input.issuer !== pending.issuer
       ) {
-        return yield* failure("The sign-in came from an unexpected server.");
+        return yield* new McpGatewayError({
+          message: "The sign-in came from an unexpected server.",
+        });
       }
       const tokens = yield* sendingCredentials(
         OAuth.exchangeCode({
@@ -399,17 +391,17 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           const service = yield* requireService(pending.serviceId);
           if (service.url !== pending.resource) {
-            return yield* failure("This service changed during sign-in. Start it again.");
+            return yield* new McpGatewayError({
+              message: "This service changed during sign-in. Start it again.",
+            });
           }
           yield* vault.set(service.id, tokens);
-          toolLists.delete(service.id);
           return service.name;
         }),
       );
     }),
     signOut: Effect.fn("McpGateway.signOut")(function* (id) {
       yield* credentialLock.withPermits(1)(vault.remove(id));
-      toolLists.delete(id);
       return yield* list;
     }),
     search: Effect.fn("McpGateway.search")(function* (input) {
@@ -418,13 +410,15 @@ const make = Effect.gen(function* () {
         (service) => input.service === undefined || service.id === input.service,
       );
       if (input.service !== undefined && targets.length === 0) {
-        return yield* failure(`No connected service is named "${input.service}".`);
+        return yield* new McpGatewayError({
+          message: `No connected service is named "${input.service}".`,
+        });
       }
       const unavailable: Array<{ readonly service: string; readonly reason: string }> = [];
       const listed = yield* Effect.forEach(
         targets,
         (service) =>
-          toolsFor(service).pipe(
+          withSession(service, (client) => allowedTools(service, client)).pipe(
             Effect.map((tools) => tools.map((tool) => ({ service, tool }))),
             Effect.catch((error) => {
               unavailable.push({ service: service.id, reason: error.message });
@@ -448,7 +442,9 @@ const make = Effect.gen(function* () {
     }),
     describe: Effect.fn("McpGateway.describe")(function* (input) {
       const service = yield* requireService(input.service);
-      const tool = yield* requireTool(service, input.tool);
+      const tools = yield* withSession(service, (client) => allowedTools(service, client));
+      const tool = tools.find((candidate) => candidate.name === input.tool);
+      if (tool === undefined) return yield* noSuchTool(service, input.tool);
       return {
         ...summary(service, tool),
         description: tool.description ?? "",
@@ -464,29 +460,41 @@ const make = Effect.gen(function* () {
       approve: (request: WriteApprovalRequest) => Effect.Effect<boolean, E, R>,
     ) {
       const service = yield* requireService(input.service);
-      const tool = yield* requireTool(service, input.tool);
-      if (accessOf(tool) === "write") {
-        const approved = yield* approve({
-          approvalId: randomToken(),
-          serviceName: service.name,
-          toolName: tool.name,
-          arguments: input.arguments,
-        });
-        if (!approved) {
-          return new McpSchema.CallToolResult({
-            isError: true,
-            content: [
-              {
-                type: "text",
-                text: `The user did not approve ${service.name} ${tool.name}. Nothing was changed.`,
-              },
-            ],
-          });
-        }
-      }
-      return yield* withSession(service, (client) =>
-        client.callTool({ tool, arguments: { ...input.arguments } }, { timeout: CALL_TIMEOUT }),
+      const runTool = (client: McpClient.McpClient, tool: McpSchema.Tool) =>
+        client.callTool({ tool, arguments: { ...input.arguments } }, { timeout: CALL_TIMEOUT });
+      const first = yield* withSession(service, (client) =>
+        allowedTools(service, client).pipe(
+          Effect.flatMap((tools): Effect.Effect<FirstCallStep, McpClientError.McpClientError> => {
+            const tool = tools.find((candidate) => candidate.name === input.tool);
+            if (tool === undefined) return Effect.succeed({ _tag: "missing" as const });
+            return accessOf(tool) === "read"
+              ? runTool(client, tool).pipe(
+                  Effect.map((result) => ({ _tag: "done" as const, result })),
+                )
+              : Effect.succeed({ _tag: "needsApproval" as const, tool });
+          }),
+        ),
       );
+      if (first._tag === "missing") return yield* noSuchTool(service, input.tool);
+      if (first._tag === "done") return first.result;
+      const approved = yield* approve({
+        approvalId: randomToken(),
+        serviceName: service.name,
+        toolName: first.tool.name,
+        arguments: input.arguments,
+      });
+      if (!approved) {
+        return new McpSchema.CallToolResult({
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `The user did not approve ${service.name} ${first.tool.name}. Nothing was changed.`,
+            },
+          ],
+        });
+      }
+      return yield* withSession(service, (client) => runTool(client, first.tool));
     }),
   });
 });

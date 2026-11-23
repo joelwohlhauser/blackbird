@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import type { OrchestrationV2Run, OrchestrationV2RuntimeRequest } from "@t3tools/contracts";
 
-import { approvalState } from "./approvalState.ts";
+import { approvalState } from "./McpGatewayApproval.ts";
 
 const opened = { rootNodeId: "root", activeAttemptId: "attempt" } as unknown as OrchestrationV2Run;
 const run = (patch: Record<string, unknown> = {}) =>

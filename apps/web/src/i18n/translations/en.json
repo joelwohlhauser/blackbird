@@ -9035,6 +9035,7 @@
   "3bb48e5328b5004e": "Allowed tools, comma separated. Empty allows all.",
   "dbd296ad6c86bbe0": "Connect an environment to manage its connected services.",
   "78a1a02732fc74e8": "Sign out",
+  "b41157528ac69544": "Sign in on the computer running this environment",
   "111a44209dc6e701": "Remove",
   "84c6b409bae93f31": "Add service",
   "b8c82ba62b34f0e4": "Microphones, preferred first",
