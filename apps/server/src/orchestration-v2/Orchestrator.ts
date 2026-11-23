@@ -11025,11 +11025,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           ),
         );
       const run = projection.runs.find((candidate) => candidate.id === command.runId);
-      if (run === undefined || run.rootNodeId !== command.nodeId) {
+      if (run === undefined || !isActiveRun(run) || run.rootNodeId !== command.nodeId) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
-          cause: `Node ${command.nodeId} is not the root of run ${command.runId}.`,
+          cause: `Node ${command.nodeId} is not the root of active run ${command.runId}.`,
         });
       }
       const providerSessionId = providerThreadForRun(projection, run)?.providerSessionId ?? null;

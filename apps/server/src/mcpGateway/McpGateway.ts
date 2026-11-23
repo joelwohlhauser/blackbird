@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Semaphore from "effect/Semaphore";
 import { McpClient, McpClientError, McpProtocol, McpSchema } from "effect/ai";
-import { HttpClient } from "effect/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
@@ -140,12 +140,18 @@ const make = Effect.gen(function* () {
   const vault = yield* McpGatewayVault.McpGatewayVault;
   const httpClient = yield* HttpClient.HttpClient;
   const config = yield* ServerConfig.ServerConfig;
-  const refreshLock = yield* Semaphore.make(1);
+  const credentialLock = yield* Semaphore.make(1);
   const pendingSignIns = new Map<string, PendingSignIn>();
   const toolLists = new Map<
     string,
     { readonly tools: ReadonlyArray<McpSchema.Tool>; readonly fetchedAt: number }
   >();
+
+  const sendingCredentials = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+    );
 
   const services = settings.getSettings.pipe(
     Effect.map((current) => current.mcpGatewayServices),
@@ -191,8 +197,7 @@ const make = Effect.gen(function* () {
     const current = yield* storedTokens(service);
     if (Option.isNone(current)) return yield* notSignedIn(service);
     if (current.value.accessToken !== staleAccessToken) return current.value.accessToken;
-    const next = yield* OAuth.refreshTokens(current.value).pipe(
-      Effect.provideService(HttpClient.HttpClient, httpClient),
+    const next = yield* sendingCredentials(OAuth.refreshTokens(current.value)).pipe(
       Effect.catchTags({
         OAuthGrantRejected: () =>
           vault.remove(service.id).pipe(
@@ -206,7 +211,7 @@ const make = Effect.gen(function* () {
   });
 
   const refresh = (service: McpGatewayService, staleAccessToken: string) =>
-    Effect.forkDetach(refreshLock.withPermits(1)(refreshStored(service, staleAccessToken))).pipe(
+    Effect.forkDetach(credentialLock.withPermits(1)(refreshStored(service, staleAccessToken))).pipe(
       Effect.flatMap(Fiber.join),
     );
 
@@ -226,20 +231,22 @@ const make = Effect.gen(function* () {
     use: (client: McpClient.McpClient) => Effect.Effect<A, McpClientError.McpClientError>,
   ) => {
     const run = (accessToken: string) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const transport = yield* McpClient.http({
-            url: service.url,
-            protocol: McpProtocol.v2025_11_25,
-            headers: { authorization: `Bearer ${accessToken}` },
-          });
-          const client = yield* McpClient.make({
-            name: "Blackbird",
-            version: packageJson.version,
-          }).pipe(Effect.provideService(McpClient.Transport, transport));
-          return yield* use(client);
-        }),
-      ).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
+      sendingCredentials(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const transport = yield* McpClient.http({
+              url: service.url,
+              protocol: McpProtocol.v2025_11_25,
+              headers: { authorization: `Bearer ${accessToken}` },
+            });
+            const client = yield* McpClient.make({
+              name: "Blackbird",
+              version: packageJson.version,
+            }).pipe(Effect.provideService(McpClient.Transport, transport));
+            return yield* use(client);
+          }),
+        ),
+      );
     return Effect.gen(function* () {
       const accessToken = yield* validAccessToken(service);
       return yield* run(accessToken).pipe(
@@ -288,25 +295,36 @@ const make = Effect.gen(function* () {
   return McpGateway.of({
     list,
     save: Effect.fn("McpGateway.save")(function* (service) {
-      const current = yield* services;
-      const previous = current.find((candidate) => candidate.id === service.id);
-      yield* writeServices(
-        previous === undefined
-          ? [...current, service]
-          : current.map((candidate) => (candidate.id === service.id ? service : candidate)),
+      yield* credentialLock.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* services;
+          const previous = current.find((candidate) => candidate.id === service.id);
+          yield* writeServices(
+            previous === undefined
+              ? [...current, service]
+              : current.map((candidate) => (candidate.id === service.id ? service : candidate)),
+          );
+          if (previous !== undefined && previous.url !== service.url) {
+            yield* vault.remove(service.id);
+          }
+          toolLists.delete(service.id);
+        }),
       );
-      if (previous !== undefined && previous.url !== service.url) yield* vault.remove(service.id);
-      toolLists.delete(service.id);
       return yield* list;
     }),
     remove: Effect.fn("McpGateway.remove")(function* (id) {
-      yield* writeServices((yield* services).filter((service) => service.id !== id));
-      yield* vault.remove(id);
-      toolLists.delete(id);
+      yield* credentialLock.withPermits(1)(
+        Effect.gen(function* () {
+          yield* writeServices((yield* services).filter((service) => service.id !== id));
+          yield* vault.remove(id);
+          toolLists.delete(id);
+        }),
+      );
       return yield* list;
     }),
     signIn: Effect.fn("McpGateway.signIn")(function* (id) {
       const service = yield* requireService(id);
+      yield* vault.ready;
       const redirectUri = `http://127.0.0.1:${config.port}${CALLBACK_PATH}`;
       const provided = Effect.provideService(HttpClient.HttpClient, httpClient);
       const server = yield* OAuth.discover(service.url).pipe(provided);
@@ -366,25 +384,31 @@ const make = Effect.gen(function* () {
       ) {
         return yield* failure("The sign-in came from an unexpected server.");
       }
-      const service = yield* requireService(pending.serviceId);
-      if (service.url !== pending.resource) {
-        return yield* failure("This service changed during sign-in. Start it again.");
-      }
-      const tokens = yield* OAuth.exchangeCode({
-        tokenEndpoint: pending.tokenEndpoint,
-        clientId: pending.clientId,
-        clientSecret: pending.clientSecret,
-        resource: pending.resource,
-        code: input.code,
-        codeVerifier: pending.codeVerifier,
-        redirectUri: pending.redirectUri,
-      }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
-      yield* vault.set(service.id, tokens);
-      toolLists.delete(service.id);
-      return service.name;
+      const tokens = yield* sendingCredentials(
+        OAuth.exchangeCode({
+          tokenEndpoint: pending.tokenEndpoint,
+          clientId: pending.clientId,
+          clientSecret: pending.clientSecret,
+          resource: pending.resource,
+          code: input.code,
+          codeVerifier: pending.codeVerifier,
+          redirectUri: pending.redirectUri,
+        }),
+      );
+      return yield* credentialLock.withPermits(1)(
+        Effect.gen(function* () {
+          const service = yield* requireService(pending.serviceId);
+          if (service.url !== pending.resource) {
+            return yield* failure("This service changed during sign-in. Start it again.");
+          }
+          yield* vault.set(service.id, tokens);
+          toolLists.delete(service.id);
+          return service.name;
+        }),
+      );
     }),
     signOut: Effect.fn("McpGateway.signOut")(function* (id) {
-      yield* vault.remove(id);
+      yield* credentialLock.withPermits(1)(vault.remove(id));
       toolLists.delete(id);
       return yield* list;
     }),

@@ -147,6 +147,7 @@ const storeName = (serviceId: string) => `mcp-gateway-${serviceId}`;
 export class McpGatewayVault extends Context.Service<
   McpGatewayVault,
   {
+    readonly ready: Effect.Effect<void, McpGatewayError>;
     readonly get: (
       serviceId: string,
     ) => Effect.Effect<Option.Option<StoredTokens>, McpGatewayError>;
@@ -163,6 +164,7 @@ export const layer = Layer.effect(
     const storeError = () => vaultError("Could not access the stored gateway tokens.");
 
     return McpGatewayVault.of({
+      ready: Effect.asVoid(vaultKey.get),
       get: Effect.fn("McpGatewayVault.get")(function* (serviceId) {
         const sealed = yield* store.get(storeName(serviceId)).pipe(Effect.mapError(storeError));
         if (Option.isNone(sealed)) return Option.none();

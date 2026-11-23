@@ -13,6 +13,7 @@ import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
+import { approvalState } from "./approvalState.ts";
 import { GatewayCallToolkit, GatewayLookupToolkit } from "./tools.ts";
 
 const APPROVAL_TIMEOUT = Duration.minutes(30);
@@ -77,13 +78,19 @@ const askForWriteApproval = Effect.fn("McpGateway.askForWriteApproval")(function
 
   const awaitAnswer = Effect.gen(function* () {
     while (true) {
-      const current = yield* projections
+      const { runs } = yield* threads
+        .getThreadRecords(threadId, ["runs"])
+        .pipe(Effect.mapError(toToolFailure));
+      const approvalRequest = yield* projections
         .getRuntimeRequest(threadId, requestId)
         .pipe(Effect.mapError(toToolFailure));
-      if (current === undefined) return false;
-      if (current.status !== "pending") {
-        return current.status === "resolved" && current.decision === "accept";
-      }
+      const state = approvalState(
+        run,
+        runs.find((candidate) => candidate.id === run.id),
+        approvalRequest,
+      );
+      if (state === "abandoned") yield* close;
+      if (state !== "pending") return state === "approved";
       yield* Effect.sleep(APPROVAL_POLL_INTERVAL);
     }
   });

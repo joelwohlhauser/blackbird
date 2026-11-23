@@ -2,10 +2,17 @@ import { assert, it, vi } from "@effect/vitest";
 import { DEFAULT_SERVER_SETTINGS, type McpGatewayService } from "@t3tools/contracts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Checks the PKCE challenge the gateway sent.
 import * as NodeCrypto from "node:crypto";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
+import {
+  FetchHttpClient,
+  HttpClient,
+  type HttpClientRequest,
+  HttpClientResponse,
+} from "effect/http";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -62,6 +69,10 @@ const harness = (options: {
   readonly services?: ReadonlyArray<McpGatewayService>;
   readonly rejectedAccessTokens?: ReadonlyArray<string>;
   readonly refreshError?: string;
+  readonly holdRefresh?: {
+    readonly started: Deferred.Deferred<void>;
+    readonly release: Deferred.Deferred<void>;
+  };
 }) => {
   const stored = new Map<string, McpGatewayVault.StoredTokens>(
     options.tokens === undefined ? [] : [[SERVICE.id, options.tokens]],
@@ -72,11 +83,24 @@ const harness = (options: {
     bearers: [] as Array<string>,
     refreshes: 0,
     tokenRequests: [] as Array<URLSearchParams>,
+    credentialRedirectModes: [] as Array<string | undefined>,
   };
 
   const http = HttpClient.make((request) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const url = new URL(request.url);
+      if (request.method === "POST" && url.pathname !== "/register" && bodyText(request) !== "{}") {
+        const init = yield* Effect.serviceOption(FetchHttpClient.RequestInit);
+        seen.credentialRedirectModes.push(Option.getOrUndefined(init)?.redirect);
+      }
+      if (
+        options.holdRefresh !== undefined &&
+        url.pathname === "/token" &&
+        new URLSearchParams(bodyText(request)).get("grant_type") === "refresh_token"
+      ) {
+        yield* Deferred.succeed(options.holdRefresh.started, undefined);
+        yield* Deferred.await(options.holdRefresh.release);
+      }
       if (request.method === "DELETE") {
         return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }));
       }
@@ -156,6 +180,7 @@ const harness = (options: {
       Layer.mergeAll(
         Layer.succeed(HttpClient.HttpClient, http),
         Layer.succeed(McpGatewayVault.McpGatewayVault, {
+          ready: Effect.void,
           get: (id) => Effect.sync(() => Option.fromNullishOr(stored.get(id))),
           set: (id, tokens) => Effect.sync(() => void stored.set(id, tokens)),
           remove: (id) => Effect.sync(() => void stored.delete(id)),
@@ -219,6 +244,53 @@ it.effect("refreshes an expired token once for concurrent calls and keeps the ro
     assert.isFalse(test.seen.bearers.includes("current"));
     assert.equal(test.stored.get(SERVICE.id)?.refreshToken, "rotated");
     assert.equal(test.stored.get(SERVICE.id)?.accessToken, "fresh");
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("sends credentials only on requests that refuse redirects", () => {
+  const test = harness({ tokens: { ...TOKENS, expiresAt: 0 } });
+  return Effect.gen(function* () {
+    yield* call("save_item", true).run;
+    assert.isAbove(test.seen.credentialRedirectModes.length, 2);
+    assert.isTrue(test.seen.credentialRedirectModes.every((mode) => mode === "error"));
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("a refresh in flight cannot undo a sign-out", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    const test = harness({
+      tokens: { ...TOKENS, expiresAt: 0 },
+      holdRefresh: { started, release },
+    });
+    yield* Effect.gen(function* () {
+      const gateway = yield* McpGateway.McpGateway;
+      const reading = yield* Effect.forkChild(Effect.exit(call("read_item", false).run));
+      yield* Deferred.await(started);
+      const signingOut = yield* Effect.forkChild(gateway.signOut(SERVICE.id));
+      yield* Effect.yieldNow;
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(signingOut);
+      yield* Fiber.join(reading);
+      assert.isFalse(test.stored.has(SERVICE.id));
+      assert.isFalse((yield* gateway.list)[0]?.signedIn);
+    }).pipe(Effect.provide(test.layer));
+  }),
+);
+
+it.effect("keeps every service when saves run concurrently", () => {
+  const test = harness({ services: [] });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    yield* Effect.all(
+      [gateway.save(SERVICE), gateway.save({ ...SERVICE, id: "second", name: "Second" })],
+      { concurrency: "unbounded" },
+    );
+    assert.deepEqual((yield* gateway.list).map((service) => service.id).sort(), [
+      "example",
+      "second",
+    ]);
   }).pipe(Effect.provide(test.layer));
 });
 
