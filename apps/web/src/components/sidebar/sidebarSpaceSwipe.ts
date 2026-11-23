@@ -38,7 +38,8 @@ type Gesture =
       recent: number[];
       sign: number;
     }
-  | { readonly kind: "released"; readonly sign: number; lastAbs: number };
+  | { readonly kind: "released"; readonly sign: number; lastAbs: number }
+  | { readonly kind: "landed"; readonly sign: number };
 
 interface Slide {
   readonly direction: SwipeDirection;
@@ -90,6 +91,14 @@ export function createSpaceSwipe(host: SpaceSwipeHost) {
     slide = null;
     host.render(active.target);
     host.settle(active.target === 1);
+  };
+
+  const landIfFull = (active: Slide) => {
+    if (active.progress < 1) return false;
+    gesture = { kind: "landed", sign: active.direction };
+    active.target = 1;
+    finish(active);
+    return true;
   };
 
   const tick = (time: number) => {
@@ -149,6 +158,7 @@ export function createSpaceSwipe(host: SpaceSwipeHost) {
       recent: [Math.abs(deltaX)],
       sign: Math.sign(deltaX),
     };
+    if (landIfFull(active)) return;
     host.render(active.progress);
   };
 
@@ -160,6 +170,7 @@ export function createSpaceSwipe(host: SpaceSwipeHost) {
     if (active === null) return;
     if (deltaX === 0 && deltaY === 0) return release(tracking, timeStamp);
     const step = advance(active, deltaX);
+    if (landIfFull(active)) return;
     tracking.samples = [...tracking.samples.slice(-9), { time: timeStamp, step }];
     if (deltaX !== 0 && Math.sign(deltaX) !== tracking.sign) {
       tracking.sign = Math.sign(deltaX);
@@ -212,6 +223,9 @@ export function createSpaceSwipe(host: SpaceSwipeHost) {
           }
           return;
         }
+        case "landed":
+          if (deltaX * gesture.sign < 0 && Math.abs(deltaX) >= 2) beginTracking(deltaX, timeStamp);
+          return;
         case "ignored":
           return;
       }

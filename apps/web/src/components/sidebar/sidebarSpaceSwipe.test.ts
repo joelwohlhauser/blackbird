@@ -77,6 +77,37 @@ describe("space swipe", () => {
     expect(held.settled).toEqual([true]);
   });
 
+  it.each([
+    ["steady wheel events", steady(20, 10)],
+    [
+      "one merged wheel event",
+      [
+        [3, 0],
+        [200, 0],
+      ] as const,
+    ],
+  ])("commits on reaching the next space through %s", (_name, deltas) => {
+    const full = setup();
+    full.swipe.scrollBegin();
+    full.move(deltas);
+    expect(full.settled).toEqual([true]);
+    full.move(steady(30, 10));
+    expect(full.started).toEqual([1]);
+  });
+
+  it("accepts a quick swipe back after landing when the browser has no gesture signals", () => {
+    const quick = setup();
+    quick.move(steady(20, 10));
+    quick.move([
+      [22, 0],
+      [40, 0],
+    ]);
+    quick.move(steady(30, 10));
+    expect(quick.started).toEqual([1]);
+    quick.move(steady(4, -10));
+    expect(quick.started).toEqual([1, -1]);
+  });
+
   it("ignores a shortcut while the fingers are swiping", () => {
     const swiping = setup();
     swiping.swipe.scrollBegin();
