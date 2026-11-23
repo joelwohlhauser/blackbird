@@ -1941,6 +1941,26 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:check-secret-source",
       tag: WS_METHODS.serverCheckSecretSource,
     }),
+    listMcpGatewayServices: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:list-mcp-gateway-services",
+      tag: WS_METHODS.mcpGatewayList,
+    }),
+    saveMcpGatewayService: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:save-mcp-gateway-service",
+      tag: WS_METHODS.mcpGatewaySave,
+    }),
+    removeMcpGatewayService: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:remove-mcp-gateway-service",
+      tag: WS_METHODS.mcpGatewayRemove,
+    }),
+    signInMcpGatewayService: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:sign-in-mcp-gateway-service",
+      tag: WS_METHODS.mcpGatewaySignIn,
+    }),
+    signOutMcpGatewayService: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:sign-out-mcp-gateway-service",
+      tag: WS_METHODS.mcpGatewaySignOut,
+    }),
     listTextGeneratorModels: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:list-text-generator-models",
       tag: WS_METHODS.serverListTextGeneratorModels,

@@ -245,6 +245,12 @@ Agents drive the same browser tabs you see with upstream T3 Code's `preview_*` M
 
 Scheduled tasks don't start while the machine is offline, because their runs would only fail. A due task waits until a request to `api.anthropic.com` gets an answer, checked every 5 seconds, and then starts. Time spent waiting counts as late for fixed-time tasks. Run now and webhook deliveries start without this check.
 
+### Connected services
+
+**Settings → Connected services** connects remote MCP services once for every agent in that environment. Add a service's URL and sign in with its own OAuth page. Blackbird stores the tokens encrypted, with the key in the macOS Keychain, and refreshes them itself, so this feature needs a macOS environment.
+
+Agents get three small tools instead of every service's tool list: `gateway_search`, `gateway_describe`, and `gateway_call`. Tools a service marks as read-only run at once. Every other tool waits for an approval card in the thread, including in full-access mode. An optional allowlist limits which tools of a service agents can see. Agents running outside Blackbird don't use this gateway.
+
 ### Linear, GitHub, and links
 
 The normal right panel has browser-backed integration tabs:

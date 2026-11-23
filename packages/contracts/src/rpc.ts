@@ -429,6 +429,13 @@ import {
 } from "./scheduledTask.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import {
+  McpGatewayError,
+  McpGatewayService,
+  McpGatewayServiceId,
+  McpGatewayServiceStatus,
+  McpGatewaySignInResult,
+} from "./mcpGateway.ts";
+import {
   ProjectCloneActionInput,
   ProjectCloneActionResult,
   ProjectCloneListEvent,
@@ -575,6 +582,11 @@ export const WS_METHODS = {
   serverUpdateSettings: "server.updateSettings",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverCheckSecretSource: "server.checkSecretSource",
+  mcpGatewayList: "mcpGateway.list",
+  mcpGatewaySave: "mcpGateway.save",
+  mcpGatewayRemove: "mcpGateway.remove",
+  mcpGatewaySignIn: "mcpGateway.signIn",
+  mcpGatewaySignOut: "mcpGateway.signOut",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
   serverPrepareAcpRegistryAgent: "server.prepareAcpRegistryAgent",
   serverUninstallAcpRegistryManagedBinary: "server.uninstallAcpRegistryManagedBinary",
@@ -1001,6 +1013,40 @@ const WsServerCheckSecretSourceRpc = Rpc.make(WS_METHODS.serverCheckSecretSource
   payload: Schema.Struct({ source: SecretReference }),
   success: SecretSourceCheckResult,
   error: EnvironmentAuthorizationError,
+});
+
+const McpGatewayRpcError = Schema.Union([McpGatewayError, EnvironmentAuthorizationError]);
+const McpGatewayServiceTarget = Schema.Struct({ id: McpGatewayServiceId });
+const McpGatewayServiceList = Schema.Array(McpGatewayServiceStatus);
+
+const WsMcpGatewayListRpc = Rpc.make(WS_METHODS.mcpGatewayList, {
+  payload: Schema.Struct({}),
+  success: McpGatewayServiceList,
+  error: McpGatewayRpcError,
+});
+
+const WsMcpGatewaySaveRpc = Rpc.make(WS_METHODS.mcpGatewaySave, {
+  payload: McpGatewayService,
+  success: McpGatewayServiceList,
+  error: McpGatewayRpcError,
+});
+
+const WsMcpGatewayRemoveRpc = Rpc.make(WS_METHODS.mcpGatewayRemove, {
+  payload: McpGatewayServiceTarget,
+  success: McpGatewayServiceList,
+  error: McpGatewayRpcError,
+});
+
+const WsMcpGatewaySignInRpc = Rpc.make(WS_METHODS.mcpGatewaySignIn, {
+  payload: McpGatewayServiceTarget,
+  success: McpGatewaySignInResult,
+  error: McpGatewayRpcError,
+});
+
+const WsMcpGatewaySignOutRpc = Rpc.make(WS_METHODS.mcpGatewaySignOut, {
+  payload: McpGatewayServiceTarget,
+  success: McpGatewayServiceList,
+  error: McpGatewayRpcError,
 });
 
 const WsServerSearchAcpRegistryRpc = Rpc.make(WS_METHODS.serverSearchAcpRegistry, {
@@ -2378,6 +2424,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerReclaimDatabaseSpaceRpc,
   WsServerUpdateSettingsRpc,
+  WsMcpGatewayListRpc,
+  WsMcpGatewaySaveRpc,
+  WsMcpGatewayRemoveRpc,
+  WsMcpGatewaySignInRpc,
+  WsMcpGatewaySignOutRpc,
   WsPeerLinksListRpc,
   WsPeerLinksNamesRpc,
   WsPeerLinksLinkRpc,

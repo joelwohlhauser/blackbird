@@ -40,6 +40,7 @@ export type SettingsPath =
   | "/settings/connections"
   | "/settings/access"
   | "/settings/secrets"
+  | "/settings/connected-services"
   | "/settings/maintenance"
   | "/settings/labs"
   | "/settings/about"
@@ -118,6 +119,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/connections": msg("Environments"),
   "/settings/access": msg("Sharing & access"),
   "/settings/secrets": msg("Secrets"),
+  "/settings/connected-services": msg("Connected services"),
   "/settings/maintenance": msg("Maintenance"),
   "/settings/labs": msg("Labs"),
   "/settings/about": msg("About"),
@@ -180,6 +182,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     paths: [
       "/settings/connections",
       "/settings/access",
+      "/settings/connected-services",
       ...(isSecretsFeatureEnabled ? (["/settings/secrets"] as const) : []),
     ],
   },
@@ -1566,6 +1569,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "connected-services",
+    title: msg("Connected services"),
+    to: "/settings/connected-services",
+    searchTerms: [msg("mcp gateway oauth sign in linear sentry tools")],
+    environmentOnly: true,
+  },
+  {
     id: "secret-providers",
     title: msg("Secret providers"),
     to: "/settings/secrets",
@@ -1639,6 +1649,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/connections": "connections",
   "/settings/access": "connections",
   "/settings/secrets": null,
+  "/settings/connected-services": "environment",
   "/settings/scheduled-tasks": null,
   "/settings/maintenance": null,
   "/settings/labs": null,

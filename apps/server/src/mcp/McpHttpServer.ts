@@ -73,6 +73,13 @@ import * as WorktreeHandlers from "./toolkits/worktree/handlers.ts";
 import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
 import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
+import * as McpGateway from "../mcpGateway/McpGateway.ts";
+import * as GatewayHandlers from "./toolkits/gateway/handlers.ts";
+import {
+  GatewayCallTool,
+  GatewayCallToolkit,
+  GatewayLookupToolkit,
+} from "./toolkits/gateway/tools.ts";
 import * as ToolSearchHandlers from "./toolkits/toolSearch/handlers.ts";
 import { ToolSearchToolkit } from "./toolkits/toolSearch/tools.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
@@ -903,6 +910,7 @@ const registerImageTool = Effect.fn("McpHttpServer.registerImageTool")(function*
   >,
   operation: string,
   failureText: string | ((error: E) => string),
+  toResult: (encodedResult: unknown) => McpSchema.CallToolResult = imageToolResult,
 ) {
   const server = yield* McpServer.McpServer;
   const advertised = asAdvertised(tool);
@@ -933,35 +941,65 @@ const registerImageTool = Effect.fn("McpHttpServer.registerImageTool")(function*
           Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
           Effect.matchCauseEffect({
             onFailure: imageToolFailure(tool.name, operation, failureText),
-            onSuccess: ({ encodedResult }) => {
-              const { screenshot, ...rest } = encodedResult as ImageToolResult;
-              const metadata = {
-                ...rest,
-                screenshot: {
-                  mimeType: screenshot.mimeType,
-                  width: screenshot.width,
-                  height: screenshot.height,
-                },
-              };
-              return Effect.succeed(
-                new McpSchema.CallToolResult({
-                  isError: false,
-                  structuredContent: metadata,
-                  content: [
-                    { type: "text", text: JSON.stringify(metadata) },
-                    {
-                      type: "image" as const,
-                      data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
-                      mimeType: screenshot.mimeType,
-                    },
-                  ],
-                }),
-              );
-            },
+            onSuccess: ({ encodedResult }) => Effect.succeed(toResult(encodedResult)),
           }),
         );
       }),
   });
+});
+
+const imageToolResult = (encodedResult: unknown) => {
+  const { screenshot, ...rest } = encodedResult as ImageToolResult;
+  const metadata = {
+    ...rest,
+    screenshot: {
+      mimeType: screenshot.mimeType,
+      width: screenshot.width,
+      height: screenshot.height,
+    },
+  };
+  return new McpSchema.CallToolResult({
+    isError: false,
+    structuredContent: metadata,
+    content: [
+      { type: "text", text: JSON.stringify(metadata) },
+      {
+        type: "image" as const,
+        data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
+        mimeType: screenshot.mimeType,
+      },
+    ],
+  });
+};
+
+const decodeGatewayCallResult = Schema.decodeUnknownSync(
+  Schema.toCodecJson(McpSchema.CallToolResult),
+);
+
+const registerGatewayCall = Effect.fn("McpHttpServer.registerGatewayCall")(function* () {
+  const gateway = yield* McpGateway.McpGateway;
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const threads = yield* ThreadManagementService.ThreadManagementService;
+  const built = yield* decodeAsAdvertised(GatewayCallToolkit);
+  yield* registerImageTool(
+    GatewayCallTool,
+    (payload) =>
+      built
+        .handle("gateway_call", payload)
+        .pipe(Stream.unwrap, Stream.run(Sink.last()), Effect.flatMap(Effect.fromOption)),
+    (effect) =>
+      effect.pipe(
+        Effect.provideService(McpGateway.McpGateway, gateway),
+        Effect.provideService(ProjectionStore.ProjectionStoreV2, projections),
+        Effect.provideService(ThreadManagementService.ThreadManagementService, threads),
+      ),
+    "call",
+    (error) =>
+      isOrchestratorMcpFailure(error) || AiError.isAiError(error)
+        ? error.message
+        : "The connected service call failed.",
+    decodeGatewayCallResult,
+  );
 });
 
 const registerDeviceScreenshot = Effect.fn("McpHttpServer.registerDeviceScreenshot")(function* () {
@@ -1289,9 +1327,15 @@ export const layerToolSearch = Layer.mergeAll(
   layerDeferredListing,
 ).pipe(Layer.provide(layerToolExposure));
 
+const layerGatewayToolkit = Layer.mergeAll(
+  toolkitRegistration(GatewayLookupToolkit, GatewayHandlers.layerLookup),
+  imageToolRegistration(registerGatewayCall(), GatewayHandlers.layerCall),
+);
+
 export const layer = layerMcpTransport(
   Layer.mergeAll(
     layerTools,
+    layerGatewayToolkit,
     toolkitRegistration(PeerThreadDeletion.PeerThreadDeletionToolkit, PeerThreadDeletion.layer),
     layerToolSearch,
   ),

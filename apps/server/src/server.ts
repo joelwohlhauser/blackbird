@@ -171,6 +171,9 @@ import * as RelayDeliveryProof from "./scheduledTasks/RelayDeliveryProof.ts";
 import * as HeldHooksWaker from "./relay/HeldHooksWaker.ts";
 import * as McpOAuth from "./auth/McpOAuth.ts";
 import * as McpOAuthHttp from "./auth/mcpOAuthHttp.ts";
+import * as McpGateway from "./mcpGateway/McpGateway.ts";
+import * as McpGatewayHttp from "./mcpGateway/http.ts";
+import * as McpGatewayVault from "./mcpGateway/McpGatewayVault.ts";
 import {
   layerNetworkCheck as layerScheduledTaskNetworkCheck,
   relayHookBaseUrl,
@@ -289,6 +292,16 @@ const layerProviderEventLoggers = Layer.effect(
 );
 
 const layerPtyAdapter = NodePtyAdapter.layer;
+
+const layerMcpGateway = McpGateway.layer.pipe(
+  Layer.provide(
+    McpGatewayVault.layer.pipe(
+      Layer.provide(McpGatewayVault.layerKeychainKey.pipe(Layer.provide(ProcessRunner.layer))),
+      Layer.provide(ServerSecretStore.layer),
+    ),
+  ),
+  Layer.provide(FetchHttpClient.layer),
+);
 
 const layerServerSettings = ServerSettings.layer.pipe(
   Layer.provide(ServerSecretStore.layer),
@@ -765,7 +778,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),
   Layer.provideMerge(WorkspaceCleanupService.layer),
   Layer.provideMerge(PeerMcpClient.layer.pipe(Layer.provideMerge(PeerLinks.layer))),
-  Layer.provideMerge(SecretCheck.layer),
+  Layer.provideMerge(Layer.merge(layerMcpGateway, SecretCheck.layer)),
   Layer.provideMerge(SecretResolver.layer),
   // Above the settings it writes when a theme is applied.
   Layer.provideMerge(EnvironmentTheme.layer),
@@ -886,6 +899,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
     ServerHttp.layerAttachmentUploadRoute,
+    McpGatewayHttp.layerCallbackRoute,
     GuestHttp.layer,
     LinkThreadHttp.layer,
     DeviceHubProxy.layer,

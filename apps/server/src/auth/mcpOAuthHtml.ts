@@ -31,6 +31,10 @@ const shell = (title: string, body: string) => `<!doctype html>
   </body>
 </html>`;
 
+export function renderMessagePage(title: string, description: string): string {
+  return shell(title, `<h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p>`);
+}
+
 export function renderErrorPage(description: string): string {
   return shell(
     "Sign-in failed",

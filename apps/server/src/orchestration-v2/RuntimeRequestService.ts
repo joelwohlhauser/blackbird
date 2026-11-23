@@ -1,4 +1,5 @@
 import {
+  isMcpGatewayApprovalRequestId,
   ProviderApprovalDecision,
   ProviderSessionId,
   ProviderUserInputAnswers,
@@ -106,6 +107,7 @@ export const layer: Layer.Layer<
               requestId: input.requestId,
             });
           }
+          if (isMcpGatewayApprovalRequestId(input.requestId)) return;
           const session = yield* sessions.get(input.providerSessionId);
           if (Option.isNone(session)) {
             return yield* new RuntimeRequestResponseExecutionError({

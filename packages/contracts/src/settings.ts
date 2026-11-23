@@ -22,6 +22,7 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
+import { McpGatewayService } from "./mcpGateway.ts";
 import { SkillSourceConfig } from "./skillSync.ts";
 import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
 import { UsageModelFilter } from "./usage.ts";
@@ -1706,6 +1707,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   autopilotEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  mcpGatewayServices: Schema.Array(McpGatewayService).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   /** Sent by the Usage tab with each summary request to this environment; edit in settings.json. Invalid values are ignored. */
   usageModelFilter: ForwardCompatibleOptional(UsageModelFilter),
 });
@@ -2052,6 +2056,7 @@ export const ServerSettingsPatch = Schema.Struct({
   skillSources: Schema.optionalKey(Schema.Array(SkillSourceConfig)),
   disabledSkills: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
   autopilotEnabled: Schema.optionalKey(Schema.Boolean),
+  mcpGatewayServices: Schema.optionalKey(Schema.Array(McpGatewayService)),
   branchNamingMode: Schema.optionalKey(BranchNamingMode),
   branchNamePrefix: Schema.optionalKey(TrimmedString),
   branchNameInstructions: Schema.optionalKey(TrimmedString),
@@ -2104,9 +2109,15 @@ export const ServerSettingsPatch = Schema.Struct({
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
-/** The theme service sets theme defaults after it validates them, so clients cannot. */
+/** The theme service and MCP gateway validate these fields, so clients cannot set them directly. */
 export const ClientServerSettingsPatch = ServerSettingsPatch.mapFields(
-  Struct.omit(["defaultTheme", "defaultThemeSetAt", "defaultAppearance", "defaultAppearanceSetAt"]),
+  Struct.omit([
+    "defaultTheme",
+    "defaultThemeSetAt",
+    "defaultAppearance",
+    "defaultAppearanceSetAt",
+    "mcpGatewayServices",
+  ]),
 );
 
 export function requiredScopesForServerSettingsPatch(

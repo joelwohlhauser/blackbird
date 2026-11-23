@@ -701,6 +701,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "delegated_task.completion-delivery.dispose":
     case "thread.created.record":
       return command.parentThreadId;
+    case "gateway_approval.open":
     case "secret_request.record":
     case "link_request.record":
       return command.threadId;
@@ -11011,6 +11012,118 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  const dispatchGatewayApprovalOpen = Effect.fn("orchestrationV2.dispatch.gatewayApprovalOpen")(
+    function* (
+      command: Extract<OrchestrationV2InternalCommand, { readonly type: "gateway_approval.open" }>,
+      events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    ) {
+      const projection = yield* projectionStore
+        .getRunProviderRecords(command.threadId, command.runId, command.nodeId)
+        .pipe(
+          Effect.mapError(
+            (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+          ),
+        );
+      const run = projection.runs.find((candidate) => candidate.id === command.runId);
+      if (run === undefined || run.rootNodeId !== command.nodeId) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: `Node ${command.nodeId} is not the root of run ${command.runId}.`,
+        });
+      }
+      const providerSessionId = providerThreadForRun(projection, run)?.providerSessionId ?? null;
+      if (providerSessionId === null) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: `Run ${command.runId} has no provider session.`,
+        });
+      }
+      const now = yield* DateTime.now;
+      const providerTurnId = providerTurnForRun(projection, run)?.id ?? null;
+      const nodeId = idAllocator.derive.approvalNode({ requestId: command.requestId });
+      const emitEvent = emit(events, command);
+      yield* emitEvent({
+        type: "node.updated",
+        threadId: command.threadId,
+        runId: command.runId,
+        nodeId,
+        providerInstanceId: run.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          id: nodeId,
+          threadId: command.threadId,
+          runId: command.runId,
+          parentNodeId: command.nodeId,
+          rootNodeId: command.nodeId,
+          kind: "approval_request",
+          status: "waiting",
+          countsForRun: false,
+          providerThreadId: run.providerThreadId,
+          providerTurnId,
+          nativeItemRef: null,
+          runtimeRequestId: command.requestId,
+          checkpointScopeId: null,
+          startedAt: now,
+          completedAt: null,
+        },
+      });
+      yield* emitEvent({
+        type: "runtime-request.updated",
+        threadId: command.threadId,
+        runId: command.runId,
+        nodeId,
+        providerInstanceId: run.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          id: command.requestId,
+          nodeId,
+          providerTurnId,
+          nativeRequestRef: null,
+          kind: "permission",
+          status: "pending",
+          responseCapability: { type: "live", providerSessionId },
+          createdAt: now,
+          resolvedAt: null,
+        },
+      });
+      yield* emitEvent({
+        type: "turn-item.updated",
+        threadId: command.threadId,
+        runId: command.runId,
+        nodeId,
+        providerInstanceId: run.providerInstanceId,
+        occurredAt: now,
+        payload: {
+          id: idAllocator.derive.approvalTurnItem({ requestId: command.requestId }),
+          threadId: command.threadId,
+          runId: command.runId,
+          nodeId,
+          providerThreadId: run.providerThreadId,
+          providerTurnId,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal: yield* nextTurnItemOrdinal(projection),
+          status: "waiting",
+          title: null,
+          startedAt: now,
+          completedAt: null,
+          updatedAt: now,
+          type: "approval_request",
+          requestId: command.requestId,
+          requestKind: "permission",
+          prompt: command.prompt,
+          appName: command.appName,
+          options: [
+            { decision: "decline", label: "Decline" },
+            { decision: "accept", label: "Approve" },
+          ],
+        },
+      });
+    },
+  );
+
   /**
    * Records or updates the card for a link an agent asked the user to make.
    * The pairing code goes straight to the link and never through orchestration.
@@ -15891,6 +16004,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         break;
       case "thread.created.record":
         yield* dispatchCreatedThreadRecord(command, events);
+        break;
+      case "gateway_approval.open":
+        yield* dispatchGatewayApprovalOpen(command, events);
         break;
       case "secret_request.record":
         yield* dispatchSecretRequestRecord(command, events);

@@ -48,6 +48,12 @@ const make = Effect.gen(function* () {
       const text = yield* readText(path.join(checkout, "AGENTS.md"));
       if (text.length > 0) sections.push(`# ${source.label || source.id} instructions\n\n${text}`);
     }
+    if (settings.mcpGatewayServices.length > 0) {
+      const names = settings.mcpGatewayServices.map((service) => service.name).join(", ");
+      sections.push(
+        `# Connected services\n\nBlackbird connects to: ${names}. Use them through \`gateway_search\`, \`gateway_describe\`, and \`gateway_call\`.`,
+      );
+    }
     return sections.filter((section) => section.length > 0).join("\n\n");
   });
 
