@@ -277,12 +277,9 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
 
   return (
     <SidebarMenu
-      className={cn("flex-row items-center", followsSpaces && "justify-end [&>li:last-child]:ml-0")}
+      className={cn("flex-row items-center", followsSpaces && "[&>li]:ml-0")}
       size={followsSpaces ? "compact" : "default"}
     >
-      {followsSpaces ? (
-        <SidebarThreadUndoNotice className="-ml-8 min-w-8 has-[~[data-update-capsule]]:grow-0" />
-      ) : null}
       {isOnUtilityPage ? (
         <SidebarMenuItem className="min-w-fit flex-1">
           <SidebarMenuButton onClick={handleBackClick}>
@@ -336,6 +333,9 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
       )}
       {followsSpaces ? null : <SidebarThreadUndoNotice />}
       <SidebarUpdatePill />
+      {followsSpaces ? (
+        <SidebarThreadUndoNotice className="-mr-8 min-w-8 [[data-update-capsule]~&]:grow-0" />
+      ) : null}
     </SidebarMenu>
   );
 });
@@ -353,10 +353,10 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter({
       <SidebarUpdateArchitectureWarning />
       {showsSpaces ? (
         <div className="flex flex-wrap items-center gap-y-1 overflow-x-clip">
-          <div ref={spacesSlotRef} className="max-w-full shrink-0 pr-2" />
-          <div className="relative flex min-w-0 flex-auto items-center pl-8 before:absolute before:-left-1 before:h-4 before:w-px before:bg-sidebar-border">
+          <div className="relative flex min-w-0 flex-auto items-center pr-8 after:absolute after:-right-1 after:h-4 after:w-px after:bg-sidebar-border">
             <SidebarUtilityMenu followsSpaces />
           </div>
+          <div ref={spacesSlotRef} className="ml-auto max-w-full shrink-0 pl-2" />
         </div>
       ) : (
         <SidebarUtilityMenu followsSpaces={false} />
