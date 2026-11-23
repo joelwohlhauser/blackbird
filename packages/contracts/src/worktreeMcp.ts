@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import { ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { GitRefName, ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 /** Uses the managed worktree folder; handoff detaches the provider, ending this turn and resuming in the new workspace next run. */
 export const WorktreeMcpHandoffInput = Schema.Struct({
@@ -11,13 +11,13 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
     }),
   ),
   branch: Schema.optional(
-    TrimmedNonEmptyString.annotate({
+    GitRefName.annotate({
       description:
         "Existing local branch: reuse its worktree or check it out in a new one. Remote-only branch: check it out tracking the remote. Other names: new branch from `baseRef`.",
     }),
   ),
   baseRef: Schema.optional(
-    TrimmedNonEmptyString.annotate({
+    GitRefName.annotate({
       description: "Start of a new branch. Default: the repository's default branch.",
     }),
   ),
@@ -42,7 +42,7 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
 export type WorktreeMcpHandoffInput = typeof WorktreeMcpHandoffInput.Type;
 
 export const WorktreeMcpCreateInput = Schema.Struct({
-  branch: TrimmedNonEmptyString.annotate({
+  branch: GitRefName.annotate({
     description:
       "Branch for the worktree (e.g. 'feature/my-change'). An existing local branch is reused, returning its existing worktree if it has one. A branch that exists only on a remote is checked out tracking it. Any other name creates a new branch from baseRef.",
   }),
@@ -65,7 +65,7 @@ export type WorktreeMcpCreateInput = typeof WorktreeMcpCreateInput.Type;
 
 export const WorktreeMcpCreateResult = Schema.Struct({
   path: TrimmedNonEmptyString,
-  branch: TrimmedNonEmptyString,
+  branch: GitRefName,
   created: Schema.Boolean.annotate({
     description: "False when the branch already had a checkout and its path was returned.",
   }),
@@ -123,8 +123,8 @@ export type WorktreeMcpContinuationStatus = typeof WorktreeMcpContinuationStatus
 export const WorktreeMcpHandoffResult = Schema.Struct({
   projectId: ProjectId,
   worktreePath: TrimmedNonEmptyString,
-  branch: Schema.NullOr(TrimmedNonEmptyString),
-  baseRef: Schema.NullOr(TrimmedNonEmptyString),
+  branch: Schema.NullOr(GitRefName),
+  baseRef: Schema.NullOr(GitRefName),
   startedFromOrigin: Schema.Boolean,
   setupScript: WorktreeMcpSetupScriptStatus,
   continuation: WorktreeMcpContinuationStatus,
@@ -134,7 +134,7 @@ export type WorktreeMcpHandoffResult = typeof WorktreeMcpHandoffResult.Type;
 
 export const WorktreeMcpSwitchDirectoryResult = Schema.Struct({
   path: TrimmedNonEmptyString,
-  branch: Schema.NullOr(TrimmedNonEmptyString),
+  branch: Schema.NullOr(GitRefName),
   continuation: WorktreeMcpContinuationStatus,
   note: Schema.String,
 });
@@ -143,7 +143,7 @@ export type WorktreeMcpSwitchDirectoryResult = typeof WorktreeMcpSwitchDirectory
 export const WorktreeMcpStatusResult = Schema.Struct({
   attached: Schema.Boolean,
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
-  branch: Schema.NullOr(TrimmedNonEmptyString),
+  branch: Schema.NullOr(GitRefName),
   projectWorkspaceRoot: TrimmedNonEmptyString,
   defaultStartFromOrigin: Schema.Boolean.annotate({
     description: "`startFromOrigin` default for `create_worktree` and `t3_worktree_handoff`.",

@@ -67,6 +67,7 @@ export interface RightPanelTabsProps {
   onCloseAllSurfaces: () => void;
   onCopyFilePath: (relativePath: string) => void;
   onOpenNewTab?: () => void;
+  onDuplicateBrowser?: (surface: RightPanelSurface) => void;
   onAddBrowser: () => void;
   onAddLinear: () => void;
   onAddGitHubPullRequest: () => void;
@@ -545,6 +546,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           onCloseSurfacesToRight={props.onCloseSurfacesToRight}
           onCloseAllSurfaces={props.onCloseAllSurfaces}
           onCopyFilePath={props.onCopyFilePath}
+          {...(props.onDuplicateBrowser ? { onDuplicateBrowser: props.onDuplicateBrowser } : {})}
         />
         {props.onOpenNewTab ? (
           <NewTabButton ariaLabel={gt("New panel tab")} onClick={props.onOpenNewTab} />

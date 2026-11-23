@@ -47,15 +47,15 @@ export function observeSelectionActions({
   element,
   getActionElement,
   restoreAfterScroll = false,
-  waitForMultiClick = true,
+  immediateMultiClick = false,
   onSelection,
   onDismiss,
 }: {
   element: HTMLElement;
   getActionElement?: () => HTMLElement | null;
   restoreAfterScroll?: boolean;
-  waitForMultiClick?: boolean;
-  onSelection: (pointer: SelectionActionPoint | null, clicks: number) => void;
+  immediateMultiClick?: boolean;
+  onSelection: (pointer: SelectionActionPoint | null) => void;
   onDismiss: (reason: "interaction" | "cancel") => void;
 }) {
   const document = element.ownerDocument;
@@ -65,7 +65,6 @@ export function observeSelectionActions({
   let dismissed = false;
   let restorable = false;
   let pointer: SelectionActionPoint | null = null;
-  let clicks = 0;
   let timer: number | null = null;
   let frame: number | null = null;
 
@@ -99,7 +98,7 @@ export function observeSelectionActions({
       timer = null;
       frame = view.requestAnimationFrame(() => {
         frame = null;
-        onSelection(pointer, pointer === null ? 0 : clicks);
+        onSelection(pointer);
       });
     }, delay);
   };
@@ -136,8 +135,7 @@ export function observeSelectionActions({
     if (!gestureActive) return;
     gestureActive = false;
     pointer = { x: event.clientX, y: event.clientY };
-    clicks = event.detail;
-    schedule(waitForMultiClick && event.detail >= 2 ? SELECTION_MULTI_CLICK_INTERVAL_MS : 0);
+    schedule(event.detail >= 2 && !immediateMultiClick ? SELECTION_MULTI_CLICK_INTERVAL_MS : 0);
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (isActionTarget(event.target) && event.key !== "Escape") return;

@@ -252,12 +252,23 @@ describe("environment grouping", () => {
       workspaceRoot: "/tmp/destination",
       repositoryIdentity: destinationRepositoryIdentity,
     });
+    const destinationRemoteIdentity = {
+      ...destinationRepositoryIdentity,
+      rootPath: "/remote/destination",
+    };
+    const destinationRemoteSubfolder = makeProject({
+      id: ProjectId.make("destination-remote-subfolder"),
+      environmentId: remoteEnvironmentId,
+      title: "destination-app",
+      workspaceRoot: "/remote/destination/app",
+      repositoryIdentity: destinationRemoteIdentity,
+    });
     const destinationRemote = makeProject({
       id: ProjectId.make("destination-remote"),
       environmentId: remoteEnvironmentId,
       title: "destination",
       workspaceRoot: "/remote/destination",
-      repositoryIdentity: destinationRepositoryIdentity,
+      repositoryIdentity: destinationRemoteIdentity,
     });
     const fallbackPrimary = makeProject({
       id: ProjectId.make("fallback-primary"),
@@ -269,6 +280,7 @@ describe("environment grouping", () => {
         currentPrimary,
         currentRemote,
         destinationPrimary,
+        destinationRemoteSubfolder,
         destinationRemote,
         fallbackPrimary,
       ],

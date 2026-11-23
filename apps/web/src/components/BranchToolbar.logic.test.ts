@@ -1,4 +1,10 @@
-import { EnvironmentId, ProviderInstanceId, RunId, type VcsRef } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  GitCommandError,
+  ProviderInstanceId,
+  RunId,
+  type VcsRef,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { dedupeRemoteBranchesWithLocalMatches } from "@t3tools/shared/git";
 import {
@@ -18,11 +24,14 @@ import {
   resolveDefaultWorktreeBaseBranch,
   resolveLinearIssueWorkspace,
   resolveLocalCheckoutBranchMismatch,
+  resolveLockedWorkspaceLabel,
   reusesExistingWorktree,
   sanitizeNewRefName,
   shouldIncludeBranchPickerItem,
   validateNewWorktreeBranchName,
   isBranchHoldCurrent,
+  offersWorkspaceModes,
+  toBranchActionErrorMessage,
 } from "./BranchToolbar.logic";
 
 describe("validateNewWorktreeBranchName", () => {
@@ -42,6 +51,22 @@ describe("validateNewWorktreeBranchName", () => {
       expect(validateNewWorktreeBranchName(branchName)).toBe("Enter a valid Git branch name.");
     },
   );
+});
+
+describe("toBranchActionErrorMessage", () => {
+  it("shows a Git failure's detail without the operation and cwd", () => {
+    const error = new GitCommandError({
+      operation: "GitVcsDriver.switchRef.checkout",
+      command: "git",
+      cwd: "/tmp/repo",
+      detail: "Commit, stash, or discard them, then switch again.",
+    });
+
+    expect(toBranchActionErrorMessage(error)).toBe(
+      "Commit, stash, or discard them, then switch again.",
+    );
+    expect(toBranchActionErrorMessage(new Error("boom"))).toBe("boom");
+  });
 });
 
 describe("resolveDraftEnvModeAfterBranchChange", () => {
@@ -312,6 +337,29 @@ describe("resolveEnvModeLabel", () => {
     expect(createsNewWorktreeBranch("worktree")).toBe(true);
     expect(reusesExistingWorktree("worktree-reuse")).toBe(true);
     expect(reusesExistingWorktree("worktree")).toBe(false);
+  });
+});
+
+describe("offersWorkspaceModes", () => {
+  it("offers worktrees from a repository or tracked repositories, never in No project", () => {
+    const folder = { isScratchProject: false, isGitRepo: false, tracksGitRepositories: false };
+    expect(offersWorkspaceModes(folder)).toBe(false);
+    expect(offersWorkspaceModes({ ...folder, isGitRepo: true })).toBe(true);
+    expect(offersWorkspaceModes({ ...folder, tracksGitRepositories: true })).toBe(true);
+    // Git status assumes a repository until it loads.
+    expect(offersWorkspaceModes({ ...folder, isScratchProject: true, isGitRepo: true })).toBe(
+      false,
+    );
+  });
+});
+
+describe("resolveLockedWorkspaceLabel", () => {
+  it.each([
+    ["/home/me/.t3/worktrees/app/t3-ff466c42", "t3-ff466c42"],
+    ["/home/me/.t3/worktrees/app/t3-ff466c42/", "t3-ff466c42"],
+    ["C:\\Users\\me\\worktrees\\feature-x", "feature-x"],
+  ])("names the worktree at %s", (path, label) => {
+    expect(resolveLockedWorkspaceLabel(path, "worktree")).toBe(label);
   });
 });
 

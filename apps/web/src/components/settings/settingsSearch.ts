@@ -1,4 +1,4 @@
-import { isElectron, isSecretsFeatureEnabled } from "~/env";
+import { isElectron } from "~/env";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
 import type { EnvironmentId } from "@t3tools/contracts";
@@ -64,7 +64,7 @@ export interface SettingsSearchItem {
   readonly desktopOnly?: boolean;
   readonly macOnly?: boolean;
   readonly windowsOnly?: boolean;
-  readonly secretsFeatureOnly?: boolean;
+  readonly secretProvidersOnly?: boolean;
   readonly cloudOnly?: boolean;
   readonly environmentOnly?: boolean;
   readonly providerSettingsOnly?: boolean;
@@ -94,6 +94,7 @@ export interface SettingsSearchAvailability {
   /** An environment without a provider allow-list, which hides text generators. */
   readonly hasTextGeneratorsEnvironment?: boolean;
   readonly hasPrimaryEnvironment?: boolean;
+  readonly hasSecretProvidersEnvironment?: boolean;
 }
 
 export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
@@ -136,12 +137,14 @@ export const SETTINGS_NAV_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/access": msg("Sharing & access", { $context: "settings navigation item" }),
 };
 
-/** Sidebar order. A group with a hidden heading is set apart on screen by space alone. */
-export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
+type SettingsNavGroup = {
   readonly heading: string;
   readonly headingHidden?: true;
   readonly paths: ReadonlyArray<SettingsPath>;
-}> = [
+};
+
+/** Sidebar order. A group with a hidden heading is set apart on screen by space alone. */
+const ALL_SETTINGS_NAV_GROUPS: ReadonlyArray<SettingsNavGroup> = [
   {
     heading: msg("Preferences"),
     headingHidden: true,
@@ -183,7 +186,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
       "/settings/connections",
       "/settings/access",
       "/settings/connected-services",
-      ...(isSecretsFeatureEnabled ? (["/settings/secrets"] as const) : []),
+      "/settings/secrets",
     ],
   },
   {
@@ -192,6 +195,18 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     paths: ["/settings/maintenance", "/settings/labs", "/settings/about", "/settings/archived"],
   },
 ];
+
+const SETTINGS_NAV_GROUPS_WITHOUT_SECRETS = ALL_SETTINGS_NAV_GROUPS.map((group) => ({
+  ...group,
+  paths: group.paths.filter((path) => path !== "/settings/secrets"),
+}));
+
+/** Sidebar groups; Secrets shows only when some environment's server enables secret providers. */
+export function settingsNavGroups(hasSecretProvidersEnvironment: boolean) {
+  return hasSecretProvidersEnvironment
+    ? ALL_SETTINGS_NAV_GROUPS
+    : SETTINGS_NAV_GROUPS_WITHOUT_SECRETS;
+}
 
 export function keybindingSearchAnchorId<Command extends KeybindingCommand>(command: Command) {
   return `keybinding-${command}` as const;
@@ -536,6 +551,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "boring-sidebar",
     searchTerms: [msg("beta boring sidebar folder rows multiline branch pull request details")],
   },
+
   {
     id: "tool-call-visibility",
     title: msg("Tool calls in chat"),
@@ -579,6 +595,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/labs",
     scope: "environment",
     searchTerms: [msg("beta link another machine vps peer agents work there delegate")],
+  },
+  {
+    id: "workflows-beta",
+    title: msg("Workflows"),
+    to: "/settings/labs",
+    scope: "environment",
+    searchTerms: [msg("beta workflow durable runs automation steps schedule webhook folder")],
   },
   {
     id: "prompt-suggestions-beta",
@@ -1430,6 +1453,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("commands scripts setup run dev server checkout worktree t3.json import")],
   },
   {
+    id: "project-repositories",
+    title: msg("Repositories"),
+    to: "/settings/projects",
+    searchTerms: [msg("tracked folders multi repo workspace code-workspace rescan add folder")],
+  },
+  {
     id: "environment-icon",
     title: msg("Environment icon"),
     to: "/settings/access",
@@ -1586,7 +1615,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: msg("Secret providers"),
     to: "/settings/secrets",
     searchTerms: [msg("1password vault credentials api key")],
-    secretsFeatureOnly: true,
+    secretProvidersOnly: true,
   },
   {
     id: "secret-providers-add",
@@ -1594,7 +1623,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/secrets",
     targetId: "secret-providers",
     searchTerms: [msg("new 1password vault op cli account")],
-    secretsFeatureOnly: true,
+    secretProvidersOnly: true,
   },
   {
     id: "skills-autopilot",
@@ -1796,7 +1825,8 @@ export function filterAvailableSettingsSearchItems(
       (!item.peerLinksOnly || availability.hasPeerLinkHost === true) &&
       (!item.fastWorktreeCheckoutOnly ||
         availability.hasFastWorktreeCheckoutEnvironment === true) &&
-      (!item.textGeneratorsOnly || availability.hasTextGeneratorsEnvironment === true),
+      (!item.textGeneratorsOnly || availability.hasTextGeneratorsEnvironment === true) &&
+      (!item.secretProvidersOnly || availability.hasSecretProvidersEnvironment === true),
   );
 }
 
@@ -1808,7 +1838,6 @@ export function settingsForThisPlatform(
   return items.filter(
     (item) =>
       (isElectron || item.desktopOnly !== true) &&
-      (!item.secretsFeatureOnly || isSecretsFeatureEnabled) &&
       (!item.macOnly || isMacPlatform(platform)) &&
       (!item.windowsOnly || isWindowsPlatform(platform)),
   );

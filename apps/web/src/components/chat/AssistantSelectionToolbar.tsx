@@ -201,7 +201,7 @@ export function AssistantSelectionToolbar({
       element: viewport,
       getActionElement: () => commentPopupRef.current ?? toolbarRef.current,
       restoreAfterScroll: true,
-      waitForMultiClick: false,
+      immediateMultiClick: true,
       onSelection: update,
       onDismiss: clear,
     });

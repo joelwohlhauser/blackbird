@@ -12,7 +12,13 @@ import {
 } from "react";
 import { type TurnDiffFileChange } from "../../types";
 import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../lib/turnDiffTree";
-import { ChevronRightIcon, FileDiffIcon, FolderClosedIcon, FolderIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  FileDiffIcon,
+  FolderClosedIcon,
+  FolderGit2Icon,
+  FolderIcon,
+} from "lucide-react";
 import { cn } from "~/lib/utils";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { PierreEntryIcon } from "./PierreEntryIcon";
@@ -20,6 +26,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { observeResize } from "~/lib/observeResize";
+import { repositoryFilePath } from "@t3tools/client-runtime/state/thread-repositories";
 
 const EMPTY_DIRECTORY_OVERRIDES: Record<string, boolean> = {};
 const VIRTUALIZE_AFTER_ROWS = 250;
@@ -30,13 +37,38 @@ interface ChangedFileRow {
   depth: number;
 }
 
-type ChangedFileContextMenuHandler = (filePath: string, event: MouseEvent) => void;
+/** One folder's share of a turn that changed several repositories. */
+export interface ChangedFilesGroup {
+  readonly key: string;
+  readonly name: string;
+  /** Paths relative to this group's folder. */
+  readonly files: ReadonlyArray<TurnDiffFileChange>;
+  readonly totals: OrchestrationV2CheckpointFileTotals;
+  /** The folder from the thread's folder; undefined when the diff cannot be opened at a file. */
+  readonly relativePath: string | undefined;
+  /** Shown in place of the files when they cannot be listed. */
+  readonly note?: string | undefined;
+}
+
+type ChangedFileContextMenuHandler = (
+  filePath: string,
+  event: MouseEvent,
+  group?: ChangedFilesGroup,
+) => void;
+
+function groupDiffPath(group: ChangedFilesGroup, filePath: string | undefined) {
+  return filePath === undefined || group.relativePath === undefined
+    ? undefined
+    : repositoryFilePath(group.relativePath, filePath);
+}
 
 export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   runId: RunId;
   /** May be a prefix of the changed files; `totals` covers all of them. */
   files: ReadonlyArray<TurnDiffFileChange>;
   totals: OrchestrationV2CheckpointFileTotals;
+  /** Set when the turn changed tracked repositories; replaces the single tree built from `files`. */
+  groups?: ReadonlyArray<ChangedFilesGroup> | undefined;
   expanded: boolean;
   resolvedTheme: "light" | "dark";
   onExpandedChange: (expanded: boolean) => void;
@@ -47,6 +79,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
     runId,
     files,
     totals,
+    groups,
     expanded,
     resolvedTheme,
     onExpandedChange,
@@ -54,8 +87,13 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
     onFileContextMenu,
   } = props;
   const gt = useGT();
-  const hiddenFileCount = totals.count - files.length;
   const treeId = useId();
+  const listedFiles = groups ? groups.flatMap((group) => group.files) : files;
+  const hiddenFileCount = totals.count - listedFiles.length;
+  const firstGroup = groups?.find((group) => group.files.length > 0);
+  const firstFilePath = groups
+    ? firstGroup && groupDiffPath(firstGroup, firstGroup.files[0]?.path)
+    : files[0]?.path;
 
   return (
     <div
@@ -105,7 +143,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
                 variant="ghost-muted"
                 className="shrink-0"
                 aria-label={gt("Open diff")}
-                onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
+                onClick={() => onOpenTurnDiff(runId, firstFilePath)}
               />
             }
           >
@@ -121,21 +159,37 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
       </div>
       {expanded && (
         <div id={treeId}>
-          <ChangedFilesTree
-            runId={runId}
-            files={files}
-            allDirectoriesExpanded
-            resolvedTheme={resolvedTheme}
-            onOpenTurnDiff={onOpenTurnDiff}
-            onFileContextMenu={onFileContextMenu}
-          />
+          <div className="p-2">
+            {groups ? (
+              groups.map((group) => (
+                <ChangedFilesGroupSection
+                  key={group.key}
+                  runId={runId}
+                  group={group}
+                  allDirectoriesExpanded
+                  resolvedTheme={resolvedTheme}
+                  onOpenTurnDiff={onOpenTurnDiff}
+                  onFileContextMenu={onFileContextMenu}
+                />
+              ))
+            ) : (
+              <ChangedFilesTree
+                runId={runId}
+                files={files}
+                allDirectoriesExpanded
+                resolvedTheme={resolvedTheme}
+                onOpenTurnDiff={onOpenTurnDiff}
+                onFileContextMenu={onFileContextMenu}
+              />
+            )}
+          </div>
           {hiddenFileCount > 0 && (
             <div className="px-3 pb-2">
               <Button
                 type="button"
                 size="xs"
                 variant="ghost-muted"
-                onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
+                onClick={() => onOpenTurnDiff(runId, firstFilePath)}
               >
                 {gt(
                   "{count, plural, one {{formattedCount} more file in the full diff} other {{formattedCount} more files in the full diff}}",
@@ -150,14 +204,78 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   );
 });
 
-const ChangedFilesTree = memo(function ChangedFilesTree(props: {
+function ChangedFilesGroupSection(props: {
   runId: RunId;
-  files: ReadonlyArray<TurnDiffFileChange>;
+  group: ChangedFilesGroup;
   allDirectoriesExpanded: boolean;
   resolvedTheme: "light" | "dark";
   onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
   onFileContextMenu?: ChangedFileContextMenuHandler | undefined;
 }) {
+  const { runId, group, allDirectoriesExpanded, resolvedTheme, onOpenTurnDiff, onFileContextMenu } =
+    props;
+  const [collapsed, setCollapsed] = useState(false);
+  const syncTimelineLayout = useSyncLayout();
+  return (
+    <section data-changed-files-group={group.name}>
+      <button
+        type="button"
+        data-scroll-anchor-ignore
+        aria-expanded={!collapsed}
+        className="group flex h-7 w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 pl-2 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        onClick={() => {
+          setCollapsed(!collapsed);
+          syncTimelineLayout();
+        }}
+      >
+        <ChevronRightIcon
+          aria-hidden="true"
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-hover:text-foreground/80",
+            !collapsed && "rotate-90",
+          )}
+        />
+        <FolderGit2Icon className="size-3.5 shrink-0 text-muted-foreground/75" />
+        <span className="truncate font-mono text-2xs text-foreground/90">{group.name}</span>
+        {hasNonZeroStat(group.totals) && (
+          <span className="ml-auto shrink-0 font-mono text-3xs tabular-nums">
+            <DiffStatLabel additions={group.totals.additions} deletions={group.totals.deletions} />
+          </span>
+        )}
+      </button>
+      {collapsed ? null : group.note !== undefined ? (
+        <p className="py-1.5 pr-2 pl-9.5 text-2xs text-muted-foreground">{group.note}</p>
+      ) : (
+        <ChangedFilesTree
+          key={`${runId}:${allDirectoriesExpanded}`}
+          runId={runId}
+          files={group.files}
+          baseDepth={1}
+          allDirectoriesExpanded={allDirectoriesExpanded}
+          resolvedTheme={resolvedTheme}
+          onOpenTurnDiff={(run, filePath) => onOpenTurnDiff(run, groupDiffPath(group, filePath))}
+          onFileContextMenu={
+            onFileContextMenu
+              ? (filePath, event) => onFileContextMenu(filePath, event, group)
+              : undefined
+          }
+        />
+      )}
+    </section>
+  );
+}
+
+const ChangedFilesTree = memo(function ChangedFilesTree(props: {
+  runId: RunId;
+  files: ReadonlyArray<TurnDiffFileChange>;
+  /** Rows start this deep, below the row of the folder the files belong to. */
+  baseDepth?: number;
+  allDirectoriesExpanded: boolean;
+  resolvedTheme: "light" | "dark";
+  onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
+  onFileContextMenu?: ChangedFileContextMenuHandler | undefined;
+}) {
+  const baseDepth = props.baseDepth ?? 0;
   const { files, allDirectoriesExpanded, onOpenTurnDiff, resolvedTheme, runId, onFileContextMenu } =
     props;
   // Place state before tree derivation to preserve its compiler cache.
@@ -194,7 +312,7 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
   const virtualized = rows.length > VIRTUALIZE_AFTER_ROWS;
 
   const renderRow = ({ node, depth }: ChangedFileRow) => {
-    const leftPadding = 8 + depth * 14;
+    const leftPadding = 8 + (baseDepth + depth) * 14;
     if (node.kind === "directory") {
       const isExpanded = expandedDirectories[node.path] ?? allDirectoriesExpanded;
       return (
@@ -247,7 +365,7 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
             : undefined
         }
       >
-        {hasDirectoryNodes || depth > 0 ? (
+        {hasDirectoryNodes || baseDepth + depth > 0 ? (
           <span aria-hidden="true" className="size-3.5 shrink-0" />
         ) : null}
         <PierreEntryIcon
@@ -358,40 +476,38 @@ function ChangedFilesRows({
   if (focusedIndex >= 0 && focusedIndex < start) indices.unshift(focusedIndex);
   if (focusedIndex >= end) indices.push(focusedIndex);
   return (
-    <div className="p-2">
-      <div
-        ref={containerRef}
-        className="relative"
-        style={virtualized ? { height: rows.length * range.rowHeight } : undefined}
-        onFocusCapture={(event) => {
-          const row = event.target.closest<HTMLElement>("[data-changed-file-row]");
-          setFocusedPath(row?.dataset.changedFileRow ?? null);
-        }}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setFocusedPath(null);
-        }}
-      >
-        {virtualized && (
+    <div
+      ref={containerRef}
+      className="relative"
+      style={virtualized ? { height: rows.length * range.rowHeight } : undefined}
+      onFocusCapture={(event) => {
+        const row = event.target.closest<HTMLElement>("[data-changed-file-row]");
+        setFocusedPath(row?.dataset.changedFileRow ?? null);
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocusedPath(null);
+      }}
+    >
+      {virtualized && (
+        <div
+          ref={rowSizeRef}
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute h-7"
+        />
+      )}
+      {indices.map((index) => {
+        const row = rows[index]!;
+        return (
           <div
-            ref={rowSizeRef}
-            aria-hidden="true"
-            className="pointer-events-none invisible absolute h-7"
-          />
-        )}
-        {indices.map((index) => {
-          const row = rows[index]!;
-          return (
-            <div
-              key={`${row.node.kind}:${row.node.path}`}
-              data-changed-file-row={row.node.path}
-              className={virtualized ? "absolute inset-x-0" : undefined}
-              style={virtualized ? { top: index * range.rowHeight } : undefined}
-            >
-              {renderRow(row)}
-            </div>
-          );
-        })}
-      </div>
+            key={`${row.node.kind}:${row.node.path}`}
+            data-changed-file-row={row.node.path}
+            className={virtualized ? "absolute inset-x-0" : undefined}
+            style={virtualized ? { top: index * range.rowHeight } : undefined}
+          >
+            {renderRow(row)}
+          </div>
+        );
+      })}
     </div>
   );
 }

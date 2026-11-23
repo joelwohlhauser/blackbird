@@ -4,7 +4,7 @@ Blackbird is Joel Wohlhauser's personal IDE built on top of [T3 Code](https://gi
 
 Blackbird works with Claude Code, Codex, Cursor, Grok Build, OpenCode, Google Antigravity, Kiro, Pi, Muse Code, fx, and agents from the ACP registry.
 
-[Install Blackbird](docs/user/install.md) on an Apple Silicon Mac, or [run it from source](docs/operations/development.md#first-checkout). The public page is [joelwohlhauser.github.io/blackbird](https://joelwohlhauser.github.io/blackbird/); its source is in `site/`. Blackbird preserves T3 Code's [MIT license](LICENSE), including the T3 Tools Inc. copyright notice.
+[Install Blackbird](docs/user/install.md) on an Apple Silicon Mac, or [run it from source](docs/user/install.md#run-from-source). The public page is [joelwohlhauser.github.io/blackbird](https://joelwohlhauser.github.io/blackbird/); its source is in `site/`. Blackbird preserves T3 Code's [MIT license](LICENSE), including the T3 Tools Inc. copyright notice.
 
 The repository has two remotes:
 
@@ -295,7 +295,7 @@ pnpm install
 pnpm dev
 ```
 
-The web client is suitable for everyday UI development and browser testing. See [Development](docs/operations/development.md) for setup, isolated data, and desktop builds. Use focused tests and typechecks for the code being changed; `AGENTS.md` contains the repository's detailed safety and verification rules.
+The web client is suitable for everyday UI development and browser testing. See [Development](docs/operations/00_development.md) for setup, isolated data, and desktop builds. Use focused tests and typechecks for the code being changed; `AGENTS.md` contains the repository's detailed safety and verification rules.
 
 Every push to `main` runs the **Blackbird release** GitHub Actions workflow. It builds macOS Apple Silicon installers, signs them with the same persistent certificate, checks that the packaged app opens an existing conversation, and publishes the DMG, update ZIP, checksums, and update metadata as one GitHub release. Versions are `0.3.<workflow run number>`. The workflow can also be started manually from GitHub's Actions tab. Failed builds never replace the latest release.
 
@@ -346,5 +346,7 @@ Start with [Blackbird's installation and update guides](./docs). The remaining u
 - [Connect Claude Code, Codex, ChatGPT and other agents over MCP](./docs/user/outside-agents.md)
 - [Updating Blackbird](./docs/user/updating.md)
 - [Source control integrations](./docs/user/source-control.md)
-- [Internal architecture overview](./docs/internals/overview.md)
+- [Internal architecture overview](./docs/internals/01_architecture.md)
 - Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
+
+[All docs](./docs/README.md) has the full list.

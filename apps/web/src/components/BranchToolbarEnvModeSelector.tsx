@@ -34,6 +34,7 @@ interface BranchToolbarEnvModeSelectorProps {
   activeWorktreePath: string | null;
   onEnvModeChange: (mode: EnvMode) => void;
   canReuseExistingWorktree?: boolean;
+  canUseExistingWorktree?: boolean;
   previousWorktreeLabel?: string | null;
   previousWorktreeBranch?: string | null;
   onUsePreviousWorktree?: () => void;
@@ -46,6 +47,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   activeWorktreePath,
   onEnvModeChange,
   canReuseExistingWorktree = false,
+  canUseExistingWorktree = true,
   previousWorktreeLabel,
   previousWorktreeBranch = null,
   onUsePreviousWorktree,
@@ -66,7 +68,9 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
     ...(canReuseExistingWorktree
       ? [{ value: "worktree-reuse", label: resolveEnvModeLabel("worktree-reuse", m) }]
       : []),
-    { value: "worktree-existing", label: resolveEnvModeLabel("worktree-existing", m) },
+    ...(canUseExistingWorktree
+      ? [{ value: "worktree-existing", label: resolveEnvModeLabel("worktree-existing", m) }]
+      : []),
     { value: "worktree", label: resolveEnvModeLabel("worktree", m) },
     ...(showPreviousWorktree && previousWorktreeLabel
       ? [{ value: PREVIOUS_WORKTREE_SELECT_VALUE, label: previousWorktreeLabel }]
@@ -186,12 +190,14 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
               </span>
             </SelectItem>
           ) : null}
-          <SelectItem value="worktree-existing">
-            <span className="inline-flex items-center gap-1.5">
-              <FolderGitIcon className="size-3" />
-              {resolveEnvModeLabel("worktree-existing", m)}
-            </span>
-          </SelectItem>
+          {canUseExistingWorktree ? (
+            <SelectItem value="worktree-existing">
+              <span className="inline-flex items-center gap-1.5">
+                <FolderGitIcon className="size-3" />
+                {resolveEnvModeLabel("worktree-existing", m)}
+              </span>
+            </SelectItem>
+          ) : null}
           <SelectItem value="worktree">
             <span className="inline-flex items-center gap-1.5">
               <FolderGit2Icon className="size-3" />

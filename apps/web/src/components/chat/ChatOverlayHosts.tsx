@@ -6,6 +6,7 @@ import type {
   ScopedThreadRef,
   ThreadId,
 } from "@t3tools/contracts";
+import { rewindFileRestore } from "@t3tools/client-runtime/state/thread-repositories";
 import { useAtomValue } from "@effect/atom-react";
 import { T, Var } from "gt-react";
 import { Atom } from "effect/reactivity";
@@ -27,6 +28,8 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { WizardPopup } from "../ui/wizard";
 import { findRevertCheckpoint } from "../../session-logic";
+import { filesystemEnvironment } from "../../state/filesystem";
+import { useEnvironmentQuery } from "../../state/query";
 import { registerThreadOverlay } from "./threadOverlayRetention";
 
 /**
@@ -206,19 +209,40 @@ export function openRevertConfirm(threadKey: string, pending: PendingRevert): vo
 
 export function RevertConfirmHost(props: {
   readonly threadKey: string;
-  readonly checkpoints: OrchestrationV2ThreadProjection["checkpoints"] | undefined;
+  readonly environmentId: EnvironmentId;
+  /** The thread's worktree, which may be a task folder. */
+  readonly taskFolderPath: string | null;
+  readonly projection: Pick<
+    OrchestrationV2ThreadProjection,
+    "checkpoints" | "checkpointScopes"
+  > | null;
   readonly worktreePath: string | null;
   readonly onConfirm: (turnCount: number, messageId: MessageId, restoreFiles: boolean) => void;
 }) {
   const pending = useThreadOverlay(revertConfirmAtom, props.threadKey);
-  // The server refuses file restore outside an isolated worktree.
   const restoreFilesAvailable = props.worktreePath !== null;
-  const canRestoreFiles =
-    pending !== null &&
-    restoreFilesAvailable &&
-    findRevertCheckpoint(props.checkpoints ?? [], pending.turnCount)?.status === "ready";
+  const checkpoint =
+    pending === null ? undefined : findRevertCheckpoint(props.projection, pending.turnCount);
+  // Only a missing snapshot depends on the task folder: its repositories may still restore.
+  const taskFolderQuery = useEnvironmentQuery(
+    checkpoint?.status === "missing" && props.taskFolderPath !== null
+      ? filesystemEnvironment.taskFolder({
+          environmentId: props.environmentId,
+          input: { worktreePath: props.taskFolderPath },
+        })
+      : null,
+  );
+  const fileRestore =
+    // The server refuses file restore outside an isolated worktree.
+    props.projection === null || !restoreFilesAvailable
+      ? null
+      : rewindFileRestore({
+          projection: props.projection,
+          checkpoint,
+          taskFolder: taskFolderQuery.data?.taskFolder,
+        });
   const confirm = (restoreFiles: boolean) => {
-    if (pending === null || (restoreFiles && !canRestoreFiles)) return;
+    if (pending === null || (restoreFiles && fileRestore === null)) return;
     closeThreadOverlay(revertConfirmAtom);
     props.onConfirm(pending.turnCount, pending.messageId, restoreFiles);
   };
@@ -235,14 +259,25 @@ export function RevertConfirmHost(props: {
             <T>Edit from here?</T>
           </AlertDialogTitle>
           <AlertDialogDescription>
-            <T>
-              Rewind chat to before this message. Your prompt and attachments return to the
-              composer.
-            </T>{" "}
-            {restoreFilesAvailable ? (
-              <T>“Revert files too” also undoes your own edits.</T>
+            {fileRestore === "repositories" ? (
+              <T>
+                Rewind chat to before this message. Your prompt and attachments return to the
+                composer. “Revert repositories too” also undoes your own edits in this thread’s
+                repository worktrees. Files in the project folder itself stay as they are.
+              </T>
+            ) : restoreFilesAvailable ? (
+              <T>
+                Rewind chat to before this message. Your prompt and attachments return to the
+                composer. “Revert files too” also undoes your own edits.
+              </T>
             ) : (
-              <T>Files stay as they are because this thread shares the project directory.</T>
+              <>
+                <T>
+                  Rewind chat to before this message. Your prompt and attachments return to the
+                  composer.
+                </T>{" "}
+                <T>Files stay as they are because this thread shares the project directory.</T>
+              </>
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -253,10 +288,14 @@ export function RevertConfirmHost(props: {
           {restoreFilesAvailable ? (
             <Button
               variant="destructive-outline"
-              disabled={!canRestoreFiles}
+              disabled={fileRestore === null}
               onClick={() => confirm(true)}
             >
-              <T>Revert files too</T>
+              {fileRestore === "repositories" ? (
+                <T>Revert repositories too</T>
+              ) : (
+                <T>Revert files too</T>
+              )}
             </Button>
           ) : null}
           <Button onClick={() => confirm(false)}>

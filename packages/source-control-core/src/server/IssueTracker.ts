@@ -79,6 +79,7 @@ export interface IssueTarget extends IssueScopeTarget {
 export type TrackerIssueSummary = Omit<IssueSummary, "tracker" | "host" | "scope"> & {
   readonly scope?: string;
 };
+export type TrackerIssueLink = Pick<TrackerIssueSummary, "title" | "url" | "displayKey">;
 
 export interface TrackerIssuePage {
   readonly items: ReadonlyArray<TrackerIssueSummary>;
@@ -141,6 +142,11 @@ export interface IssueTrackerApi {
 
   /** The issue with its first page of conversation, in one read where the tracker allows. */
   readonly getIssue: (input: IssueTarget) => Effect.Effect<TrackerIssueDetail, IssueTrackerError>;
+
+  /** Confirms an issue exists and names it for a thread link. */
+  readonly getIssueLink?: (
+    input: IssueTarget,
+  ) => Effect.Effect<TrackerIssueLink, IssueTrackerError>;
 
   /** One page of older comments past a cursor `getIssue` or a previous page handed over. */
   readonly getComments: (

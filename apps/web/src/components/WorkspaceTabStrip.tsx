@@ -244,6 +244,7 @@ export function SurfaceIcon({
 type TabContextMenuAction =
   | "open-in-main-view"
   | "copy-path"
+  | "duplicate"
   | "toggle-mute"
   | "close"
   | "close-others"
@@ -593,6 +594,7 @@ export interface WorkspaceTabStripProps {
   onCloseSurfacesToRight: (surface: RightPanelSurface) => void;
   onCloseAllSurfaces: () => void;
   onCopyFilePath: (relativePath: string) => void;
+  onDuplicateBrowser?: (surface: RightPanelSurface) => void;
   /** Moves a subagent, side chat or linked thread tab to the main screen. */
   onOpenInMainView?: (
     surface: Extract<RightPanelSurface, { kind: "thread" | "linked-thread" }>,
@@ -634,6 +636,11 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
     const menuMuted = menuOverlay?.audioMuted ?? false;
     if (surface.kind === "preview") {
       items.push({
+        id: "duplicate",
+        label: gt("Duplicate"),
+        disabled: !menuPreviewTabId || !props.onDuplicateBrowser,
+      });
+      items.push({
         id: "toggle-mute",
         ...tabMuteMenuItem({
           overlay: menuOverlay,
@@ -674,6 +681,9 @@ export function WorkspaceTabStrip(props: WorkspaceTabStripProps) {
         if (surface.kind === "file") {
           props.onCopyFilePath(surface.relativePath);
         }
+        break;
+      case "duplicate":
+        props.onDuplicateBrowser?.(surface);
         break;
       case "toggle-mute": {
         const runtimeTabId =
