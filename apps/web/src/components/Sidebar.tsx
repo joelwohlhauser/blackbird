@@ -3282,7 +3282,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               )
         }
         fixedHeader={
-          <SidebarGroup className="z-[1]">
+          <SidebarGroup className="z-[1] -mt-2">
             <SidebarThreadHeader
               hasProjects={projectGroups.length > 0}
               projectScope={

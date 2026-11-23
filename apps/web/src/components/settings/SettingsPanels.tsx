@@ -380,6 +380,10 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarWorkingShelfEnabled !== DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled
       ? [gt("Working section")]
       : []),
+    ...(settings.sidebarWorkListLinksEnabled !==
+    DEFAULT_UNIFIED_SETTINGS.sidebarWorkListLinksEnabled
+      ? [gt("Pull requests and issues in sidebar")]
+      : []),
     ...(settings.sidebarAutoSettleAfterDays !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
       ? [gt("Auto-settle inactive threads")]
       : []),
@@ -579,6 +583,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarShowThreadDetails: DEFAULT_UNIFIED_SETTINGS.sidebarShowThreadDetails,
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
       sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
+      sidebarWorkListLinksEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkListLinksEnabled,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
@@ -867,6 +872,35 @@ export function GeneralSettingsPanel() {
                 updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
               }
               aria-label={gt("Working section")}
+            />
+          }
+        />
+        <SettingsRow
+          {...setting("sidebar-work-list-links")}
+          description={
+            <T>Show the Pull requests and Issues buttons at the bottom of the sidebar.</T>
+          }
+          resetAction={
+            settings.sidebarWorkListLinksEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarWorkListLinksEnabled ? (
+              <SettingResetButton
+                ariaLabel={gt("Reset pull requests and issues in sidebar to default")}
+                onClick={() =>
+                  updateSettings({
+                    sidebarWorkListLinksEnabled:
+                      DEFAULT_UNIFIED_SETTINGS.sidebarWorkListLinksEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarWorkListLinksEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarWorkListLinksEnabled: Boolean(checked) })
+              }
+              aria-label={gt("Pull requests and issues in sidebar")}
             />
           }
         />

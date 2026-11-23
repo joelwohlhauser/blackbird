@@ -225,6 +225,9 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const isOnUtilityPage = useLocation({
     select: (location) => isSidebarUtilityPage(location.pathname),
   });
+  const workListLinksEnabled = useClientSettings(
+    (settings) => settings.sidebarWorkListLinksEnabled,
+  );
   const pullRequestsSupported = usePullRequestsSupported();
   const [awakeState] = useDesktopAwakeState();
   const awakeEnabled = useClientSettings((settings) => settings.awakeEnabled);
@@ -286,14 +289,14 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label={gt("Settings")}
             onClick={handleSettingsClick}
           />
-          {pullRequestsSupported ? (
+          {workListLinksEnabled && pullRequestsSupported ? (
             <SidebarUtilityItem
               icon={<PullRequestGlyph.pullRequest />}
               label={gt("Pull requests")}
               onClick={handlePullRequestsClick}
             />
           ) : null}
-          {issuesSupported ? (
+          {workListLinksEnabled && issuesSupported ? (
             <SidebarUtilityItem
               icon={<IssueGlyph.issue />}
               label={gt("Issues", { $context: "sidebar link to the list of issues" })}

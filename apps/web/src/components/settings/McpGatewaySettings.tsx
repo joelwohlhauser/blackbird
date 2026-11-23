@@ -28,10 +28,20 @@ const splitList = (value: string) => value.split(/[\s,]+/u).filter(Boolean);
 
 export function McpGatewaySettingsPanel() {
   const setting = useSearchableSetting();
+  const gt = useGT();
   const { environment } = useSettingsScope();
+  const connected = environment?.connection.phase === "connected";
   return (
     <SettingsPageContainer>
-      {environment?.connection.phase === "connected" ? (
+      {connected && environment.serverConfig !== null && !environment.serverConfig.mcpGateway ? (
+        <SettingsSection {...setting("connected-services")}>
+          <p className="px-4 py-3 text-sm text-muted-foreground">
+            {gt("Connected services on {environment} need Blackbird 0.3.77 or later on macOS.", {
+              environment: environment.label,
+            })}
+          </p>
+        </SettingsSection>
+      ) : connected ? (
         <ConnectedServices
           key={environment.environmentId}
           environmentId={environment.environmentId}

@@ -511,6 +511,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("hide fold running monitoring threads inbox sidebar shelf")],
   },
   {
+    id: "sidebar-work-list-links",
+    title: msg("Pull requests and issues in sidebar"),
+    to: "/settings/general",
+    searchTerms: [msg("show hide sidebar footer buttons pull requests issues")],
+  },
+  {
     id: "sidebar-spaces",
     title: msg("Spaces"),
     to: "/settings/spaces",

@@ -1832,6 +1832,7 @@ export const layerWsRpc = (
           threadSnapshotPagination: true,
           threadFind: true,
           threadFindProgressive: true,
+          mcpGateway: (yield* HostProcess.Platform) === "darwin",
           secretProviderSettings: true,
           secretReferences: true,
           secretRequestReferences: true,
