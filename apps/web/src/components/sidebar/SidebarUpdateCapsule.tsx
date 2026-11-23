@@ -102,7 +102,9 @@ export function SidebarUpdateCapsule({
       <div
         className={cn(
           "relative ml-auto flex h-8 w-8 shrink-0 items-center justify-end rounded-full bg-sidebar-control-surface text-sidebar-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none",
-          "@min-[5rem]/sidebar-update:w-full",
+          view.action !== null
+            ? "@min-[4.5rem]/sidebar-update:w-full"
+            : "@min-[5rem]/sidebar-update:w-full",
           view.tone === "slow" && "ring-1 ring-warning/40 ring-inset",
           view.tone === "failed" && "ring-1 ring-destructive/40 ring-inset",
         )}
@@ -118,33 +120,36 @@ export function SidebarUpdateCapsule({
             />
           }
         />
-        <span
-          className={cn(
-            "pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs transition-opacity duration-200 ease-out starting:opacity-0 motion-reduce:transition-none",
-            "@min-[5rem]/sidebar-update:block",
-          )}
-        >
-          <span className={cn(view.tone === "failed" && "text-destructive")}>{view.label}</span>
-          {view.slow ? (
-            <span className="text-warning tabular-nums"> {view.slow.elapsed}</span>
-          ) : null}
-        </span>
         {view.action !== null ? (
-          <button
-            type="button"
-            className={cn(
-              "relative hidden shrink-0 cursor-pointer pr-3 pl-1.5 text-xs underline decoration-muted-foreground/60 underline-offset-3 hover:decoration-current transition-opacity duration-200 ease-out starting:opacity-0 motion-reduce:transition-none",
-              "@min-[5rem]/sidebar-update:block",
-            )}
-            onClick={runAction}
-          >
-            {actionLabel}
-          </button>
-        ) : null}
+          <div className="pointer-events-none relative hidden h-8 min-w-0 flex-1 flex-row-reverse flex-wrap items-center justify-center overflow-hidden text-xs transition-opacity duration-200 ease-out starting:opacity-0 motion-reduce:transition-none @min-[4.5rem]/sidebar-update:flex">
+            <button
+              type="button"
+              className="pointer-events-auto relative h-8 shrink-0 cursor-pointer px-2.5 underline decoration-muted-foreground/60 underline-offset-3 hover:decoration-current"
+              onClick={runAction}
+            >
+              {actionLabel}
+            </button>
+            <span
+              className={cn(
+                "h-8 grow pl-3 leading-8 whitespace-nowrap",
+                view.tone === "failed" && "text-destructive",
+              )}
+            >
+              {view.label}
+            </span>
+          </div>
+        ) : (
+          <span className="pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs transition-opacity duration-200 ease-out starting:opacity-0 motion-reduce:transition-none @min-[5rem]/sidebar-update:block">
+            <span className={cn(view.tone === "failed" && "text-destructive")}>{view.label}</span>
+            {view.slow ? (
+              <span className="text-warning tabular-nums"> {view.slow.elapsed}</span>
+            ) : null}
+          </span>
+        )}
         <span
           className={cn(
             "pointer-events-none relative grid size-8 shrink-0 place-items-center",
-            view.action !== null && "@min-[5rem]/sidebar-update:hidden",
+            view.action !== null && "@min-[4.5rem]/sidebar-update:hidden",
           )}
         >
           {icon}

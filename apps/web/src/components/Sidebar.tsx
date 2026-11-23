@@ -1060,6 +1060,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const [previewSpaceId, setPreviewSpaceId] = useState<string | null>(null);
   const { moveThreadToSpace } = useThreadSpaceTags();
   const spacesRef = useRef<SidebarSpacesHandle>(null);
+  const [spacesFooterSlot, setSpacesFooterSlot] = useState<HTMLDivElement | null>(null);
   const previewPathRef = useRef<string | null>(null);
   const spaceDraftIdsRef = useRef(new Map<string, DraftId>());
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
@@ -3335,6 +3336,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   spaces={spaces}
                   activeSpaceId={activeSpaceId}
                   disabled={dragState !== null}
+                  navContainer={spacesFooterSlot}
                   onPreview={previewSpace}
                   onCommit={commitSpace}
                 >
@@ -4070,7 +4072,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           ) : null}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarChromeFooter />
+      <SidebarChromeFooter
+        showsSpaces={activeSpaceId !== null}
+        spacesSlotRef={setSpacesFooterSlot}
+      />
     </SidebarFolderDrop>
   );
 }

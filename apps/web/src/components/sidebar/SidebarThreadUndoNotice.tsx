@@ -22,7 +22,7 @@ const SHORT_SUMMARY = {
 };
 
 /** Fills the free space in the sidebar footer's utility row, so it never moves or covers the list. */
-export function SidebarThreadUndoNotice() {
+export function SidebarThreadUndoNotice({ className }: { readonly className?: string }) {
   const notice = useThreadUndoNotice((state) => state.notice);
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const m = useMessages();
@@ -37,7 +37,7 @@ export function SidebarThreadUndoNotice() {
 
   return (
     <SidebarMenuItem
-      className="@container flex min-w-0 flex-1"
+      className={cn("@container flex min-w-0 flex-1", className)}
       aria-hidden={!summary}
       inert={!summary}
     >

@@ -6,7 +6,7 @@ import {
   SettingsIcon,
 } from "lucide-react";
 import type { DesktopAwakeState } from "@t3tools/contracts";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { memo } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -216,7 +216,11 @@ function SidebarUtilityItem({
   );
 }
 
-const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
+const SidebarUtilityMenu = memo(function SidebarUtilityMenu({
+  followsSpaces,
+}: {
+  followsSpaces: boolean;
+}) {
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
   const gt = useGT();
@@ -272,9 +276,15 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   };
 
   return (
-    <SidebarMenu className="flex-row items-center">
+    <SidebarMenu
+      className={cn("flex-row items-center", followsSpaces && "justify-end [&>li:last-child]:ml-0")}
+      size={followsSpaces ? "compact" : "default"}
+    >
+      {followsSpaces ? (
+        <SidebarThreadUndoNotice className="-ml-8 min-w-8 has-[~[data-update-capsule]]:grow-0" />
+      ) : null}
       {isOnUtilityPage ? (
-        <SidebarMenuItem className="min-w-0 flex-1">
+        <SidebarMenuItem className="min-w-fit flex-1">
           <SidebarMenuButton onClick={handleBackClick}>
             <ArrowLeftIcon />
             <span>
@@ -324,18 +334,33 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           ) : null}
         </>
       )}
-      <SidebarThreadUndoNotice />
+      {followsSpaces ? null : <SidebarThreadUndoNotice />}
       <SidebarUpdatePill />
     </SidebarMenu>
   );
 });
 
-export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
+export const SidebarChromeFooter = memo(function SidebarChromeFooter({
+  showsSpaces,
+  spacesSlotRef,
+}: {
+  showsSpaces: boolean;
+  spacesSlotRef: Ref<HTMLDivElement>;
+}) {
   return (
     <SidebarFooter>
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
-      <SidebarUtilityMenu />
+      {showsSpaces ? (
+        <div className="flex flex-wrap items-center gap-y-1 overflow-x-clip">
+          <div ref={spacesSlotRef} className="max-w-full shrink-0 pr-2" />
+          <div className="relative flex min-w-0 flex-auto items-center pl-8 before:absolute before:-left-1 before:h-4 before:w-px before:bg-sidebar-border">
+            <SidebarUtilityMenu followsSpaces />
+          </div>
+        </div>
+      ) : (
+        <SidebarUtilityMenu followsSpaces={false} />
+      )}
     </SidebarFooter>
   );
 });

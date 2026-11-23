@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { cn } from "~/lib/utils";
@@ -42,6 +42,7 @@ export function SidebarSpaces({
   spaces,
   activeSpaceId,
   disabled,
+  navContainer,
   onPreview,
   onCommit,
   children,
@@ -50,6 +51,7 @@ export function SidebarSpaces({
   readonly spaces: ReadonlyArray<SidebarSpace>;
   readonly activeSpaceId: string;
   readonly disabled: boolean;
+  readonly navContainer: HTMLElement | null;
   readonly onPreview: (spaceId: string | null) => void;
   readonly onCommit: (spaceId: string) => void;
   readonly children: ReactNode;
@@ -202,39 +204,44 @@ export function SidebarSpaces({
           {children}
         </div>
       </div>
-      <nav aria-label={gt("Spaces")} className="flex shrink-0 justify-center px-2 py-1">
-        <div className="relative flex gap-0.5">
-          <span
-            ref={pillRef}
-            aria-hidden="true"
-            className="absolute top-0 left-0 size-7 translate-x-[calc(var(--space-position)*(100%+0.125rem))] rounded-md bg-sidebar-row-active"
-            style={{ "--space-position": activeIndex } as CSSProperties}
-          />
-          {spaces.map((space, index) => (
-            <Tooltip key={space.id}>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={space.name}
-                    aria-current={index === activeIndex ? "true" : undefined}
-                    onClick={() => swipe.slide(() => resolveTarget(() => index))}
-                    className={cn(
-                      "relative flex size-7 items-center justify-center rounded-md font-medium text-xs hover:bg-sidebar-row-hover",
-                      index === activeIndex
-                        ? "text-sidebar-foreground"
-                        : "text-sidebar-muted-foreground",
-                    )}
-                  />
-                }
-              >
-                <SidebarSpaceIcon space={space} />
-              </TooltipTrigger>
-              <TooltipPopup side="top">{space.name}</TooltipPopup>
-            </Tooltip>
-          ))}
-        </div>
-      </nav>
+      {navContainer
+        ? createPortal(
+            <nav aria-label={gt("Spaces")} className="overflow-x-auto [scrollbar-width:none]">
+              <div className="relative flex w-max gap-0.5">
+                <span
+                  ref={pillRef}
+                  aria-hidden="true"
+                  className="absolute top-0 left-0 size-7 translate-x-[calc(var(--space-position)*(100%+0.125rem))] rounded-md bg-sidebar-row-active"
+                  style={{ "--space-position": activeIndex } as CSSProperties}
+                />
+                {spaces.map((space, index) => (
+                  <Tooltip key={space.id}>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          aria-label={space.name}
+                          aria-current={index === activeIndex ? "true" : undefined}
+                          onClick={() => swipe.slide(() => resolveTarget(() => index))}
+                          className={cn(
+                            "relative flex size-7 items-center justify-center rounded-md font-medium text-xs hover:bg-sidebar-row-hover",
+                            index === activeIndex
+                              ? "text-sidebar-foreground"
+                              : "text-sidebar-muted-foreground",
+                          )}
+                        />
+                      }
+                    >
+                      <SidebarSpaceIcon space={space} />
+                    </TooltipTrigger>
+                    <TooltipPopup side="top">{space.name}</TooltipPopup>
+                  </Tooltip>
+                ))}
+              </div>
+            </nav>,
+            navContainer,
+          )
+        : null}
     </div>
   );
 }
