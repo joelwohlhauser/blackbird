@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as TestClock from "effect/testing/TestClock";
 import {
   FetchHttpClient,
   HttpClient,
@@ -70,6 +71,7 @@ const harness = (options: {
   readonly rejectedAccessTokens?: ReadonlyArray<string>;
   readonly rejectedToolCallTokens?: ReadonlyArray<string>;
   readonly refreshError?: string;
+  readonly stalledTokenBody?: Deferred.Deferred<void>;
   readonly holdRefresh?: {
     readonly started: Deferred.Deferred<void>;
     readonly release: Deferred.Deferred<void>;
@@ -102,6 +104,16 @@ const harness = (options: {
       ) {
         yield* Deferred.succeed(options.holdRefresh.started, undefined);
         yield* Deferred.await(options.holdRefresh.release);
+      }
+      if (options.stalledTokenBody !== undefined && url.pathname === "/token") {
+        yield* Deferred.succeed(options.stalledTokenBody, undefined);
+        return HttpClientResponse.fromWeb(
+          request,
+          new Response(new ReadableStream(), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
       }
       if (request.method === "DELETE") {
         return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }));
@@ -285,6 +297,56 @@ it.effect("a refresh in flight cannot undo a sign-out", () =>
     }).pipe(Effect.provide(test.layer));
   }),
 );
+
+it.effect("a stalled token response cannot hold the credential lock", () =>
+  Effect.gen(function* () {
+    const stalled = yield* Deferred.make<void>();
+    const test = harness({ tokens: { ...TOKENS, expiresAt: 0 }, stalledTokenBody: stalled });
+    yield* Effect.gen(function* () {
+      const gateway = yield* McpGateway.McpGateway;
+      const reading = yield* Effect.forkChild(Effect.exit(call("read_item", false).run));
+      yield* Deferred.await(stalled);
+      yield* TestClock.adjust("21 seconds");
+      yield* Fiber.join(reading);
+      yield* gateway.signOut(SERVICE.id);
+      assert.isFalse(test.stored.has(SERVICE.id));
+    }).pipe(Effect.provide(test.layer));
+  }),
+);
+
+it.effect("a replaced sign-in cannot store tokens after sign-out", () => {
+  const test = harness({});
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    const stateOf = (url: string) => new URL(url).searchParams.get("state") ?? undefined;
+    const first = stateOf((yield* gateway.signIn(SERVICE.id)).authorizationUrl);
+    const second = stateOf((yield* gateway.signIn(SERVICE.id)).authorizationUrl);
+    const replaced = yield* gateway
+      .completeSignIn({ state: first, code: "code", error: undefined, issuer: undefined })
+      .pipe(Effect.flip);
+    assert.include(replaced.message, "replaced");
+    yield* gateway.signOut(SERVICE.id);
+    const cancelled = yield* gateway
+      .completeSignIn({ state: second, code: "code", error: undefined, issuer: undefined })
+      .pipe(Effect.flip);
+    assert.include(cancelled.message, "replaced");
+    assert.isFalse(test.stored.has(SERVICE.id));
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("rechecks the allowlist after approval", () => {
+  const test = harness({ tokens: TOKENS });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    const error = yield* gateway
+      .call({ service: SERVICE.id, tool: "save_item", arguments: {} }, () =>
+        gateway.save({ ...SERVICE, tools: ["read_item"] }).pipe(Effect.as(true)),
+      )
+      .pipe(Effect.flip);
+    assert.include(error.message, "no available tool");
+    assert.deepEqual(test.seen.toolCalls, []);
+  }).pipe(Effect.provide(test.layer));
+});
 
 it.effect("keeps every service when saves run concurrently", () => {
   const test = harness({ services: [] });

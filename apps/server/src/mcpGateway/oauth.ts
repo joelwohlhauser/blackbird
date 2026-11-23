@@ -56,19 +56,33 @@ const readJson = <S extends Schema.Top & { readonly DecodingServices: never }>(
     ),
   );
 
+const withinHttpTimeout = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.scoped,
+    Effect.timeoutOrElse({
+      duration: HTTP_TIMEOUT,
+      orElse: () =>
+        Effect.fail(new McpGatewayError({ message: "The service did not answer in time." })),
+    }),
+  );
+
 const fetchMetadata = Effect.fn("McpGatewayOAuth.fetchMetadata")(function* <
   S extends Schema.Top & { readonly DecodingServices: never },
 >(client: HttpClient.HttpClient, urls: ReadonlyArray<string>, schema: S, label: string) {
   for (const url of urls) {
-    const response = yield* client
-      .execute(HttpClientRequest.get(url, { acceptJson: true }))
-      .pipe(Effect.timeout(HTTP_TIMEOUT), Effect.option);
-    if (Option.isNone(response) || response.value.status !== 200) continue;
-    const decoded = yield* readJson(response.value, schema, label).pipe(Effect.option);
+    const decoded = yield* client.execute(HttpClientRequest.get(url, { acceptJson: true })).pipe(
+      Effect.flatMap((response) =>
+        response.status === 200
+          ? readJson(response, schema, label)
+          : Effect.fail(new McpGatewayError({ message: `Could not find the service's ${label}.` })),
+      ),
+      withinHttpTimeout,
+      Effect.option,
+    );
     if (Option.isSome(decoded)) return decoded.value;
   }
   return yield* new McpGatewayError({ message: `Could not find the service's ${label}.` });
-}, Effect.scoped);
+});
 
 const challengeParam = (header: string | undefined, name: string) =>
   header?.match(new RegExp(`${name}="([^"]*)"`, "u"))?.[1];
@@ -91,7 +105,7 @@ export const discover = Effect.fn("McpGatewayOAuth.discover")(function* (resourc
         headers: { accept: "application/json, text/event-stream" },
       }).pipe(HttpClientRequest.bodyText("{}", "application/json")),
     )
-    .pipe(Effect.timeout(HTTP_TIMEOUT), Effect.scoped, Effect.option);
+    .pipe(withinHttpTimeout, Effect.option);
   const challenge = Option.getOrUndefined(probe)?.headers["www-authenticate"];
   const hinted = challengeParam(challenge, "resource_metadata");
   const resource = yield* fetchMetadata(
@@ -157,19 +171,21 @@ export const registerClient = Effect.fn("McpGatewayOAuth.registerClient")(functi
       () => new McpGatewayError({ message: "Could not build the client registration." }),
     ),
   );
-  const response = yield* client.execute(request).pipe(
-    Effect.timeout(HTTP_TIMEOUT),
-    Effect.mapError(
-      () => new McpGatewayError({ message: "Could not reach the service to register Blackbird." }),
-    ),
-  );
+  const response = yield* client
+    .execute(request)
+    .pipe(
+      Effect.mapError(
+        () =>
+          new McpGatewayError({ message: "Could not reach the service to register Blackbird." }),
+      ),
+    );
   if (response.status < 200 || response.status >= 300) {
     return yield* new McpGatewayError({
       message: `The service refused client registration (HTTP ${response.status}).`,
     });
   }
   return yield* readJson(response, ClientRegistration, "client registration");
-}, Effect.scoped);
+}, withinHttpTimeout);
 
 const requestTokens = Effect.fn("McpGatewayOAuth.requestTokens")(function* (input: {
   readonly tokenEndpoint: string;
@@ -191,7 +207,6 @@ const requestTokens = Effect.fn("McpGatewayOAuth.requestTokens")(function* (inpu
       ),
     )
     .pipe(
-      Effect.timeout(HTTP_TIMEOUT),
       Effect.mapError(
         () => new McpGatewayError({ message: "Could not reach the service's token endpoint." }),
       ),
@@ -216,7 +231,7 @@ const requestTokens = Effect.fn("McpGatewayOAuth.requestTokens")(function* (inpu
     ...(tokens.refresh_token === undefined ? {} : { refreshToken: tokens.refresh_token }),
     ...(tokens.expires_in === undefined ? {} : { expiresAt: now + tokens.expires_in * 1000 }),
   };
-}, Effect.scoped);
+}, withinHttpTimeout);
 
 export const exchangeCode = Effect.fn("McpGatewayOAuth.exchangeCode")(function* (input: {
   readonly tokenEndpoint: string;

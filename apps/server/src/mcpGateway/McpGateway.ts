@@ -145,6 +145,7 @@ const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const credentialLock = yield* Semaphore.make(1);
   const pendingSignIns = new Map<string, PendingSignIn>();
+  const latestSignIns = new Map<string, string>();
 
   const sendingCredentials = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
@@ -294,6 +295,7 @@ const make = Effect.gen(function* () {
               : current.map((candidate) => (candidate.id === service.id ? service : candidate)),
           );
           if (previous !== undefined && previous.url !== service.url) {
+            latestSignIns.delete(service.id);
             yield* vault.remove(service.id);
           }
         }),
@@ -304,6 +306,7 @@ const make = Effect.gen(function* () {
       yield* credentialLock.withPermits(1)(
         Effect.gen(function* () {
           yield* writeServices((yield* services).filter((service) => service.id !== id));
+          latestSignIns.delete(id);
           yield* vault.remove(id);
         }),
       );
@@ -312,7 +315,8 @@ const make = Effect.gen(function* () {
     signIn: Effect.fn("McpGateway.signIn")(function* (id) {
       const service = yield* requireService(id);
       yield* vault.ready;
-      const redirectUri = `http://127.0.0.1:${config.port}${CALLBACK_PATH}`;
+      const loopbackHost = config.host === "::1" ? "[::1]" : "127.0.0.1";
+      const redirectUri = `http://${loopbackHost}:${config.port}${CALLBACK_PATH}`;
       const provided = Effect.provideService(HttpClient.HttpClient, httpClient);
       const server = yield* OAuth.discover(service.url).pipe(provided);
       const scope = service.scopes?.join(" ") ?? server.challengedScope;
@@ -327,6 +331,7 @@ const make = Effect.gen(function* () {
       for (const [key, pending] of pendingSignIns) {
         if (pending.expiresAt <= now) pendingSignIns.delete(key);
       }
+      latestSignIns.set(service.id, state);
       pendingSignIns.set(state, {
         serviceId: service.id,
         resource: service.url,
@@ -390,6 +395,12 @@ const make = Effect.gen(function* () {
       return yield* credentialLock.withPermits(1)(
         Effect.gen(function* () {
           const service = yield* requireService(pending.serviceId);
+          if (latestSignIns.get(service.id) !== input.state) {
+            return yield* new McpGatewayError({
+              message: "This sign-in was replaced or cancelled. Start it again.",
+            });
+          }
+          latestSignIns.delete(service.id);
           if (service.url !== pending.resource) {
             return yield* new McpGatewayError({
               message: "This service changed during sign-in. Start it again.",
@@ -401,7 +412,12 @@ const make = Effect.gen(function* () {
       );
     }),
     signOut: Effect.fn("McpGateway.signOut")(function* (id) {
-      yield* credentialLock.withPermits(1)(vault.remove(id));
+      yield* credentialLock.withPermits(1)(
+        Effect.suspend(() => {
+          latestSignIns.delete(id);
+          return vault.remove(id);
+        }),
+      );
       return yield* list;
     }),
     search: Effect.fn("McpGateway.search")(function* (input) {
@@ -494,7 +510,31 @@ const make = Effect.gen(function* () {
           ],
         });
       }
-      return yield* withSession(service, (client) => runTool(client, first.tool));
+      const approvedService = yield* requireService(input.service);
+      if (approvedService.url !== service.url) {
+        return yield* new McpGatewayError({
+          message: `${service.name} changed while waiting for approval. Nothing was changed.`,
+        });
+      }
+      const result = yield* withSession(approvedService, (client) =>
+        allowedTools(approvedService, client).pipe(
+          Effect.flatMap(
+            (
+              tools,
+            ): Effect.Effect<
+              Option.Option<McpSchema.CallToolResult>,
+              McpClientError.McpClientError
+            > => {
+              const tool = tools.find((candidate) => candidate.name === input.tool);
+              return tool === undefined
+                ? Effect.succeedNone
+                : runTool(client, tool).pipe(Effect.asSome);
+            },
+          ),
+        ),
+      );
+      if (Option.isNone(result)) return yield* noSuchTool(approvedService, input.tool);
+      return result.value;
     }),
   });
 });

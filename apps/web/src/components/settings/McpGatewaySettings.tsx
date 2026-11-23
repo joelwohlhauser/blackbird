@@ -61,6 +61,7 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
     (isElectron || isLoopbackHostname(window.location.hostname));
   const [services, setServices] = useState<ReadonlyArray<McpGatewayServiceStatus>>([]);
   const [waitingFor, setWaitingFor] = useState<string | null>(null);
+  const [signInUrl, setSignInUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -109,6 +110,7 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
     }
     setError(null);
     setWaitingFor(id);
+    setSignInUrl(result.value.authorizationUrl);
     await ensureLocalApi().shell.openExternal(result.value.authorizationUrl);
   };
 
@@ -159,6 +161,15 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
               }
               control={
                 <div className="flex items-center gap-2">
+                  {waitingFor === service.id && signInUrl !== null ? (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => void ensureLocalApi().shell.openExternal(signInUrl)}
+                    >
+                      <T>Open sign-in page</T>
+                    </Button>
+                  ) : null}
                   {service.signedIn ? (
                     <Button
                       size="xs"

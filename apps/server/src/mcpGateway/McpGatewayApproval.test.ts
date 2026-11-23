@@ -21,5 +21,9 @@ it.each([
   ["steered root", run({ rootNodeId: "new" }), request("resolved", "accept"), "abandoned"],
   ["new attempt", run({ activeAttemptId: "new" }), request("pending"), "abandoned"],
 ] as const)("%s", (_name, current, approval, expected) => {
-  assert.equal(approvalState(opened, current, approval), expected);
+  assert.equal(approvalState(opened, current, approval, false), expected);
+});
+
+it("refuses an accepted write once Stop was requested", () => {
+  assert.equal(approvalState(opened, run(), request("resolved", "accept"), true), "abandoned");
 });

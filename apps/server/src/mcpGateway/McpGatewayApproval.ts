@@ -29,8 +29,10 @@ export const approvalState = (
   opened: Pick<OrchestrationV2Run, "rootNodeId" | "activeAttemptId">,
   run: OrchestrationV2Run | undefined,
   request: OrchestrationV2RuntimeRequest | undefined,
+  interruptRequested: boolean,
 ) => {
   if (
+    interruptRequested ||
     run === undefined ||
     !ThreadManagementService.isActiveRun(run) ||
     run.rootNodeId !== opened.rootNodeId ||
@@ -117,8 +119,11 @@ export const askForWriteApproval = Effect.fn("McpGatewayApproval.askForWriteAppr
 
   const awaitAnswer = Effect.gen(function* () {
     while (true) {
-      const { runs } = yield* threads
-        .getThreadRecords(threadId, ["runs"])
+      const { runs, turnItems } = yield* threads
+        .getThreadRecords(threadId, ["runs", "turnItems"], {
+          turnItemTypes: ["run_interrupt_request"],
+          messageRoles: [],
+        })
         .pipe(Effect.mapError(toToolFailure));
       const approvalRequest = yield* projections
         .getRuntimeRequest(threadId, requestId)
@@ -127,6 +132,7 @@ export const askForWriteApproval = Effect.fn("McpGatewayApproval.askForWriteAppr
         run,
         runs.find((candidate) => candidate.id === run.id),
         approvalRequest,
+        turnItems.some((item) => item.runId === run.id),
       );
       if (state === "abandoned") yield* close;
       if (state !== "pending") return state === "approved";
