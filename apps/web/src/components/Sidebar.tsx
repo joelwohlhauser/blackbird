@@ -2322,8 +2322,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     };
     const shelfOpened =
       (snoozedShelfExpanded && !previous.snoozed) || (settledShelfExpanded && !previous.settled);
+    const shelfClosed =
+      (!snoozedShelfExpanded && previous.snoozed) || (!settledShelfExpanded && previous.settled);
     // Sliding shelf rows would travel over stationary headers below the bottom-anchored shelf.
-    const shelfMode = shelfOpened ? "reveal" : "none";
+    const shelfMode = shelfOpened ? "reveal" : shelfClosed ? "conceal" : "none";
     const mode = !listMotionPass.animate
       ? "none"
       : previous.key === shelfExpansionKey

@@ -75,4 +75,45 @@ describe("sidebar list motion", () => {
     expect(getComputedStyle(paged).opacity).toBe("0");
     expect(new DOMMatrix(getComputedStyle(paged).transform).m42).toBe(-4);
   });
+  it("fades closed shelf rows in place before the headers slide", async () => {
+    await using screen = await render(null);
+    const list = document.createElement("ul");
+    list.style.cssText =
+      "position: relative; display: flex; flex-direction: column; height: 160px; margin: 0; padding: 0; list-style: none";
+    const addRow = () => {
+      const row = document.createElement("li");
+      row.style.cssText = "height: 32px; flex-shrink: 0";
+      return row;
+    };
+    const snoozedHeader = addRow();
+    snoozedHeader.style.marginTop = "auto";
+    const closed = addRow();
+    const settledHeader = addRow();
+    list.append(snoozedHeader, closed, settledHeader);
+    screen.container.append(list);
+    const motion = createSidebarListMotion(list);
+    using _motion = { [Symbol.dispose]: () => motion.dispose() };
+    motion.update("none");
+
+    closed.remove();
+    motion.update("conceal");
+    const clone = list.lastElementChild as HTMLElement;
+    const [fade] = clone.getAnimations();
+    const [slide] = snoozedHeader.getAnimations();
+    fade!.pause();
+    fade!.currentTime = 0;
+    slide!.pause();
+    slide!.currentTime = 0;
+
+    expect(clone).not.toBe(settledHeader);
+    expect(clone.style.top).toBe("96px");
+    expect(getComputedStyle(clone).opacity).toBe("1");
+    expect(new DOMMatrix(getComputedStyle(snoozedHeader).transform).m42).toBe(-32);
+    expect(settledHeader.getAnimations()).toHaveLength(0);
+
+    fade!.finish();
+    slide!.currentTime = 60;
+
+    expect(new DOMMatrix(getComputedStyle(snoozedHeader).transform).m42).toBe(-32);
+  });
 });

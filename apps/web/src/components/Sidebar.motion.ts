@@ -1,13 +1,26 @@
 const motionTiming = { duration: 150, easing: "ease-out" };
 const revealMoveTiming = { duration: 100, easing: "ease-out" };
 const revealTiming = { duration: 120, easing: "ease-out", delay: 80, fill: "backwards" as const };
-const REVEAL_TRAVEL = 4;
+const concealTiming = { duration: 90, easing: "ease-in" };
+const concealMoveTiming = {
+  duration: 120,
+  easing: "ease-out",
+  delay: 60,
+  fill: "backwards" as const,
+};
+const SHELF_TRAVEL = 4;
 const rowTravel = (height: number) => Math.min(height, 40);
 // Fades clone removed rows and animate clones and entries; intervening layout reads force reflows.
 const MAX_FADED_ROWS_PER_UPDATE = 40;
 
+const moveTiming = {
+  slide: motionTiming,
+  reveal: revealMoveTiming,
+  conceal: concealMoveTiming,
+} satisfies Record<Exclude<SidebarListMotionMode, "none">, KeyframeAnimationOptions>;
+
 type RowPosition = { top: number; left: number; width: number; height: number };
-export type SidebarListMotionMode = "none" | "slide" | "reveal";
+export type SidebarListMotionMode = "none" | "slide" | "reveal" | "conceal";
 
 function progress(animation: Animation) {
   return animation.playState === "finished"
@@ -50,7 +63,13 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
     entering.clear();
     exiting.clear();
   };
-  const fadeOut = (node: HTMLElement, position: RowPosition, travel: number, shift: number) => {
+  const fadeOut = (
+    node: HTMLElement,
+    position: RowPosition,
+    travel: number,
+    shift: number,
+    timing: KeyframeAnimationOptions = motionTiming,
+  ) => {
     if (position.height === 0) return;
     const clone = node.cloneNode(true) as HTMLElement;
     for (const element of [clone, ...clone.querySelectorAll("*")]) {
@@ -88,7 +107,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
         { opacity: entryProgress, transform: "translateY(0px)" },
         { opacity: 0, transform: `translateY(${travel}px)` },
       ],
-      motionTiming,
+      timing,
     );
     exiting.set(clone, animation);
     animation.addEventListener(
@@ -111,7 +130,11 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
     positions = null;
     released = null;
   };
-  const move = (node: HTMLElement, offset: number, timing = motionTiming) => {
+  const move = (
+    node: HTMLElement,
+    offset: number,
+    timing: KeyframeAnimationOptions = motionTiming,
+  ) => {
     cancel(node);
     const entry = entering.get(node);
     if (entry) entry.travel = 0;
@@ -201,6 +224,10 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
         }
         for (const [node, position] of positions!) {
           if (next.has(node)) continue;
+          if (mode === "conceal") {
+            fadeOut(node, position, -SHELF_TRAVEL, shift, concealTiming);
+            continue;
+          }
           const delta = ridingDelta(oldOrder, oldOrder.indexOf(node), (n) => next.has(n));
           fadeOut(node, position, delta === undefined ? rowTravel(position.height) : -delta, shift);
         }
@@ -222,7 +249,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
             if (position.height > 0) {
               const delta =
                 mode === "reveal"
-                  ? -REVEAL_TRAVEL
+                  ? -SHELF_TRAVEL
                   : ridingDelta(nextOrder, index, (n) => positions!.has(n));
               const travel = delta === undefined ? -rowTravel(position.height) : delta;
               const animation = node.animate(
@@ -252,7 +279,7 @@ export function createSidebarListMotion(parent: HTMLUListElement) {
           // Computed progress includes easing; carry forward only our translation, never dnd-kit's
           // transforms.
           if (delta !== undefined) {
-            move(node, delta, mode === "reveal" ? revealMoveTiming : motionTiming);
+            move(node, delta, moveTiming[mode]);
           }
         }
       }
