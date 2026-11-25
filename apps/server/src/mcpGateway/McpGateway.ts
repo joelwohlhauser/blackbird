@@ -1,4 +1,5 @@
 import {
+  isSecretReference,
   McpGatewayError,
   type McpGatewayService,
   type McpGatewayServiceStatus,
@@ -18,6 +19,9 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
+import { requireSettingsSecret } from "../secrets/settingsSecretValue.ts";
+import { SECRET_REDACTED } from "../settingsSecrets.ts";
+import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpGatewayVault from "./McpGatewayVault.ts";
 import * as OAuth from "./oauth.ts";
@@ -47,6 +51,14 @@ interface PendingSignIn {
   readonly redirectUri: string;
   readonly expiresAt: number;
 }
+
+const sameSecret = (
+  left: McpGatewayService["oauthClientSecret"],
+  right: McpGatewayService["oauthClientSecret"],
+) =>
+  typeof left === "object" && typeof right === "object"
+    ? left.provider === right.provider && left.reference === right.reference
+    : left === right;
 
 const randomToken = () => NodeCrypto.randomBytes(32).toString("base64url");
 
@@ -135,6 +147,7 @@ const make = Effect.gen(function* () {
   const vault = yield* McpGatewayVault.McpGatewayVault;
   const httpClient = yield* HttpClient.HttpClient;
   const config = yield* ServerConfig.ServerConfig;
+  const secrets = yield* SecretResolver.SecretResolver;
   const credentialLock = yield* Semaphore.make(1);
   const pendingSignIns = new Map<string, PendingSignIn>();
   const latestSignIns = new Map<string, string>();
@@ -182,7 +195,10 @@ const make = Effect.gen(function* () {
       storedTokens(service).pipe(
         Effect.map(Option.isSome),
         Effect.orElseSucceed(() => false),
-        Effect.map((signedIn) => ({ ...service, signedIn })),
+        Effect.map((signedIn) => {
+          const { oauthClientSecret: _secret, ...shown } = service;
+          return { ...shown, signedIn };
+        }),
       ),
     );
   });
@@ -274,6 +290,33 @@ const make = Effect.gen(function* () {
       }),
     );
 
+  const clientFor = Effect.fn("McpGateway.clientFor")(function* (
+    service: McpGatewayService,
+    registrationEndpoint: string | undefined,
+    redirectUri: string,
+    scope: string | undefined,
+  ) {
+    if (service.oauthClientId !== undefined) {
+      const clientSecret =
+        service.oauthClientSecret === undefined
+          ? ""
+          : yield* requireSettingsSecret(secrets, service.oauthClientSecret).pipe(
+              Effect.mapError((error) => new McpGatewayError({ message: error.message })),
+            );
+      return {
+        clientId: service.oauthClientId,
+        clientSecret: clientSecret === "" ? undefined : clientSecret,
+      };
+    }
+    if (registrationEndpoint === undefined) {
+      return yield* new McpGatewayError({
+        message: `${service.name} does not support dynamic client registration. Add an OAuth client ID.`,
+      });
+    }
+    const registration = yield* OAuth.registerClient({ registrationEndpoint, redirectUri, scope });
+    return { clientId: registration.client_id, clientSecret: registration.client_secret };
+  });
+
   const noSuchTool = (service: McpGatewayService, name: string) =>
     new McpGatewayError({ message: `${service.name} has no available tool named "${name}".` });
 
@@ -290,12 +333,28 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           const current = yield* services;
           const previous = current.find((candidate) => candidate.id === service.id);
+          const sameClient =
+            previous !== undefined &&
+            previous.url === service.url &&
+            previous.oauthClientId === service.oauthClientId;
+          const keepsSecret =
+            service.oauthClientSecret === SECRET_REDACTED ||
+            (isSecretReference(service.oauthClientSecret) &&
+              sameSecret(previous?.oauthClientSecret, service.oauthClientSecret));
+          if (keepsSecret && !sameClient) {
+            return yield* new McpGatewayError({
+              message: `Enter the OAuth client secret again: ${service.name} changed.`,
+            });
+          }
           yield* writeServices(
             previous === undefined
               ? [...current, service]
               : current.map((candidate) => (candidate.id === service.id ? service : candidate)),
           );
-          if (previous !== undefined && previous.url !== service.url) {
+          const sameCredentials =
+            sameClient &&
+            (keepsSecret || sameSecret(previous.oauthClientSecret, service.oauthClientSecret));
+          if (previous !== undefined && !sameCredentials) {
             latestSignIns.delete(service.id);
             yield* vault.remove(service.id);
           }
@@ -314,20 +373,24 @@ const make = Effect.gen(function* () {
       return yield* list;
     }),
     signIn: Effect.fn("McpGateway.signIn")(function* (id) {
-      const service = yield* requireService(id);
       yield* vault.ready;
       const state = randomToken();
-      latestSignIns.set(service.id, state);
+      const service = yield* credentialLock.withPermits(1)(
+        requireService(id).pipe(
+          Effect.tap((current) => Effect.sync(() => latestSignIns.set(current.id, state))),
+        ),
+      );
       const loopbackHost = config.host === "::1" ? "[::1]" : "127.0.0.1";
       const redirectUri = `http://${loopbackHost}:${config.port}${CALLBACK_PATH}`;
       const provided = Effect.provideService(HttpClient.HttpClient, httpClient);
       const server = yield* OAuth.discover(service.url).pipe(provided);
       const scope = service.scopes?.join(" ") ?? server.challengedScope;
-      const registration = yield* OAuth.registerClient({
-        registrationEndpoint: server.registrationEndpoint,
+      const client = yield* clientFor(
+        service,
+        server.registrationEndpoint,
         redirectUri,
         scope,
-      }).pipe(provided);
+      ).pipe(provided);
       const codeVerifier = randomToken();
       const now = yield* Clock.currentTimeMillis;
       for (const [key, pending] of pendingSignIns) {
@@ -338,8 +401,8 @@ const make = Effect.gen(function* () {
         resource: service.url,
         issuer: server.issuer,
         tokenEndpoint: server.tokenEndpoint,
-        clientId: registration.client_id,
-        clientSecret: registration.client_secret,
+        clientId: client.clientId,
+        clientSecret: client.clientSecret,
         codeVerifier,
         redirectUri,
         expiresAt: now + SIGN_IN_TTL_MS,
@@ -347,7 +410,7 @@ const make = Effect.gen(function* () {
       const authorizationUrl = new URL(server.authorizationEndpoint);
       const params = authorizationUrl.searchParams;
       params.set("response_type", "code");
-      params.set("client_id", registration.client_id);
+      params.set("client_id", client.clientId);
       params.set("redirect_uri", redirectUri);
       params.set(
         "code_challenge",

@@ -1,7 +1,12 @@
 import { assert, it } from "@effect/vitest";
-import { DEFAULT_SERVER_SETTINGS, type McpGatewayService } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  type McpGatewayService,
+  SecretProviderId,
+} from "@t3tools/contracts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Checks the PKCE challenge the gateway sent.
 import * as NodeCrypto from "node:crypto";
+import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -17,6 +22,7 @@ import {
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { SECRET_REDACTED } from "../settingsSecrets.ts";
 import * as McpGateway from "./McpGateway.ts";
 import * as McpGatewayVault from "./McpGatewayVault.ts";
 
@@ -73,6 +79,7 @@ const harness = (options: {
   readonly refreshError?: string;
   readonly stalledTokenBody?: Deferred.Deferred<void>;
   readonly protocolVersion?: string;
+  readonly withoutRegistration?: boolean;
   readonly discoveryGate?: {
     armed: boolean;
     readonly started: Deferred.Deferred<void>;
@@ -92,6 +99,7 @@ const harness = (options: {
     toolCalls: [] as Array<string>,
     bearers: [] as Array<string>,
     refreshes: 0,
+    registrations: 0,
     tokenRequests: [] as Array<URLSearchParams>,
     credentialRedirectModes: [] as Array<string | undefined>,
   };
@@ -136,11 +144,16 @@ const harness = (options: {
               issuer: "https://mcp.example.test",
               authorization_endpoint: "https://mcp.example.test/authorize",
               token_endpoint: TOKEN_URL,
-              registration_endpoint: "https://mcp.example.test/register",
+              ...(options.withoutRegistration === true
+                ? {}
+                : { registration_endpoint: "https://mcp.example.test/register" }),
               code_challenge_methods_supported: ["S256"],
             });
       }
-      if (url.pathname === "/register") return json(request, { client_id: "registered" }, 201);
+      if (url.pathname === "/register") {
+        seen.registrations += 1;
+        return json(request, { client_id: "registered" }, 201);
+      }
       if (url.pathname === "/token") {
         const params = new URLSearchParams(bodyText(request));
         seen.tokenRequests.push(params);
@@ -214,6 +227,9 @@ const harness = (options: {
           get: (id) => Effect.sync(() => Option.fromNullishOr(stored.get(id))),
           set: (id, tokens) => Effect.sync(() => void stored.set(id, tokens)),
           remove: (id) => Effect.sync(() => void stored.delete(id)),
+        }),
+        Layer.mock(SecretResolver.SecretResolver)({
+          read: () => Effect.succeed(["referenced-secret"]),
         }),
         Layer.mock(ServerSettings.ServerSettingsService)({
           getSettings: Effect.sync(() => ({
@@ -466,6 +482,120 @@ it.effect("completes a PKCE sign-in once and rejects a replayed or unknown state
 
     const replay = yield* gateway.completeSignIn(callback).pipe(Effect.flip);
     assert.include(replay.message, "expired");
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("signs in with a configured client when the service has no registration", () => {
+  const service: McpGatewayService = {
+    ...SERVICE,
+    oauthClientId: "configured",
+    oauthClientSecret: "installed-app-secret",
+  };
+  const test = harness({ services: [service], withoutRegistration: true });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    const { authorizationUrl } = yield* gateway.signIn(SERVICE.id);
+    const params = new URL(authorizationUrl).searchParams;
+    assert.equal(params.get("client_id"), "configured");
+    const state = params.get("state") ?? undefined;
+    yield* gateway.completeSignIn({ state, code: "code", error: undefined, issuer: undefined });
+
+    assert.equal(test.seen.registrations, 0);
+    assert.equal(test.seen.tokenRequests[0]?.get("client_secret"), "installed-app-secret");
+    assert.equal(test.stored.get(SERVICE.id)?.clientId, "configured");
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("keeps the client secret out of the service list", () => {
+  const test = harness({
+    services: [{ ...SERVICE, oauthClientId: "configured", oauthClientSecret: "secret" }],
+  });
+  return Effect.gen(function* () {
+    const [listed] = yield* (yield* McpGateway.McpGateway).list;
+    assert.equal(listed?.oauthClientId, "configured");
+    assert.isFalse(listed !== undefined && "oauthClientSecret" in listed);
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect.each([
+  { name: "another OAuth client", change: { oauthClientId: "replacement" } },
+  { name: "a rotated client secret", change: { oauthClientSecret: "rotated" } },
+])("signs out when the service gets $name", ({ change }) => {
+  const configured = { ...SERVICE, oauthClientId: "configured", oauthClientSecret: "secret" };
+  const test = harness({ tokens: TOKENS, services: [configured] });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    yield* gateway.save({ ...configured, ...change });
+    assert.isFalse(test.stored.has(SERVICE.id));
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("rejects a sign-in that started before the client secret changed", () => {
+  const configured = { ...SERVICE, oauthClientId: "configured", oauthClientSecret: "secret" };
+  const test = harness({ services: [configured] });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    const { authorizationUrl } = yield* gateway.signIn(SERVICE.id);
+    const state = new URL(authorizationUrl).searchParams.get("state") ?? undefined;
+    yield* gateway.save({ ...configured, oauthClientSecret: "rotated" });
+    const error = yield* gateway
+      .completeSignIn({ state, code: "code", error: undefined, issuer: undefined })
+      .pipe(Effect.flip);
+    assert.include(error.message, "replaced");
+    assert.isFalse(test.stored.has(SERVICE.id));
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("keeps the grant and the saved secret when an edit keeps the client", () => {
+  const configured = { ...SERVICE, oauthClientId: "configured", oauthClientSecret: "secret" };
+  const test = harness({ tokens: TOKENS, services: [configured] });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    yield* gateway.save({ ...configured, name: "Renamed", oauthClientSecret: SECRET_REDACTED });
+    assert.isTrue(test.stored.has(SERVICE.id));
+  }).pipe(Effect.provide(test.layer));
+});
+
+const REFERENCE = { provider: SecretProviderId.make("vault"), reference: "client-secret" };
+
+it.effect.each([
+  { name: "saved secret", saved: "secret", echoed: SECRET_REDACTED },
+  { name: "secret reference", saved: REFERENCE, echoed: REFERENCE },
+])("refuses to send a $name to a changed service", ({ saved, echoed }) => {
+  const configured = { ...SERVICE, oauthClientId: "configured", oauthClientSecret: saved };
+  const test = harness({ tokens: TOKENS, services: [configured] });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    const error = yield* gateway
+      .save({ ...configured, url: "https://attacker.example.test/mcp", oauthClientSecret: echoed })
+      .pipe(Effect.flip);
+    assert.include(error.message, "client secret again");
+    assert.equal((yield* gateway.list)[0]?.url, SERVICE_URL);
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("reads a referenced client secret from its secret provider", () => {
+  const service: McpGatewayService = {
+    ...SERVICE,
+    oauthClientId: "configured",
+    oauthClientSecret: REFERENCE,
+  };
+  const test = harness({ services: [service], withoutRegistration: true });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    const { authorizationUrl } = yield* gateway.signIn(SERVICE.id);
+    const state = new URL(authorizationUrl).searchParams.get("state") ?? undefined;
+    yield* gateway.completeSignIn({ state, code: "code", error: undefined, issuer: undefined });
+    assert.equal(test.seen.tokenRequests[0]?.get("client_secret"), "referenced-secret");
+  }).pipe(Effect.provide(test.layer));
+});
+
+it.effect("explains a missing client when the service has no registration", () => {
+  const test = harness({ withoutRegistration: true });
+  return Effect.gen(function* () {
+    const gateway = yield* McpGateway.McpGateway;
+    const error = yield* gateway.signIn(SERVICE.id).pipe(Effect.flip);
+    assert.include(error.message, "OAuth client ID");
   }).pipe(Effect.provide(test.layer));
 });
 

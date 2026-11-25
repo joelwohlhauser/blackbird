@@ -130,11 +130,6 @@ export const discover = Effect.fn("McpGatewayOAuth.discover")(function* (resourc
   ) {
     return yield* new McpGatewayError({ message: "The service does not support PKCE with S256." });
   }
-  if (server.registration_endpoint === undefined) {
-    return yield* new McpGatewayError({
-      message: "The service does not support dynamic client registration.",
-    });
-  }
   return {
     issuer: server.issuer,
     authorizationEndpoint: yield* requireHttps(
@@ -142,10 +137,10 @@ export const discover = Effect.fn("McpGatewayOAuth.discover")(function* (resourc
       "authorization endpoint",
     ),
     tokenEndpoint: yield* requireHttps(server.token_endpoint, "token endpoint"),
-    registrationEndpoint: yield* requireHttps(
-      server.registration_endpoint,
-      "registration endpoint",
-    ),
+    registrationEndpoint:
+      server.registration_endpoint === undefined
+        ? undefined
+        : yield* requireHttps(server.registration_endpoint, "registration endpoint"),
     challengedScope: challengeParam(challenge, "scope"),
   };
 });

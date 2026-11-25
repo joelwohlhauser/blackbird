@@ -4,6 +4,7 @@ import {
   CloudSpeechCredentials,
   CodexSettings,
   EasDeviceHostConfig,
+  McpGatewayService,
   type ProviderInstanceConfig,
   type ServerSettings,
   type SettingsSecretValue,
@@ -51,6 +52,7 @@ const textGeneratorSecretFields = secretSettingsFields(TextGeneratorConfig);
 const voiceSecretFields = secretSettingsFields(CloudSpeechCredentials);
 const easDeviceHostSecretFields = secretSettingsFields(EasDeviceHostConfig);
 const simlockDeviceHostSecretFields = secretSettingsFields(SimlockDeviceHostConfig);
+const mcpGatewayServiceSecretFields = secretSettingsFields(McpGatewayService);
 const encode = (value: string) => Buffer.from(value, "utf8").toString("base64url");
 
 export interface SettingsSecret {
@@ -247,6 +249,17 @@ function mapSecretFieldGroups(
       ) as SimlockDeviceHostConfig,
   );
 
+  const mcpGatewayServices = settings.mcpGatewayServices.map(
+    (service) =>
+      mapFields(
+        service,
+        mcpGatewayServiceSecretFields,
+        (field, serverHost) =>
+          `mcp-gateway-service-${encode(service.id)}-${encode(field)}` +
+          (serverHost === null ? "" : `-${encode(serverHost)}`),
+      ) as McpGatewayService,
+  );
+
   return {
     ...settings,
     cloudSpeechCredentials: mapFields(
@@ -260,6 +273,7 @@ function mapSecretFieldGroups(
     textGenerators,
     easDeviceHosts,
     simlockDeviceHosts,
+    mcpGatewayServices,
   };
 }
 

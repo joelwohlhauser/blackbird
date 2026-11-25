@@ -249,6 +249,8 @@ Scheduled tasks don't start while the machine is offline, because their runs wou
 
 **Settings → Connected services** connects remote MCP services once for every agent in that environment. Add a service's URL and sign in with its own OAuth page. Blackbird stores the tokens encrypted, with the key in the macOS Keychain, and refreshes them itself, so this feature needs a macOS environment.
 
+Blackbird registers itself as an OAuth client when the service allows dynamic client registration. Services that don't, such as Google Workspace, need a client created in their console. Enter its ID and secret with the service; the secret goes to the secret store, like other credentials.
+
 Agents get three small tools instead of every service's tool list: `gateway_search`, `gateway_describe`, and `gateway_call`. Every tool a service allows runs at once, reads and writes alike, with no approval prompt. The optional allowlist is the control: agents can't see or call a tool outside it. Agents running outside Blackbird don't use this gateway.
 
 ### Linear, GitHub, and links

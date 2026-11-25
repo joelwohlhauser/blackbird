@@ -1494,6 +1494,15 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
               maxConcurrentSessions: 2,
             },
           ],
+          mcpGatewayServices: [
+            {
+              id: "workspace",
+              name: "Workspace",
+              url: "https://mcp.example.test/mcp",
+              oauthClientId: "client-id",
+              oauthClientSecret: "gateway-secret",
+            },
+          ],
         });
         const values = [
           "config-secret",
@@ -1503,6 +1512,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
           "gitcafe-secret",
           "quota-secret",
           "expo-secret",
+          "gateway-secret",
         ];
         const client = ServerSettingsModule.redactServerSettingsForClient(saved, {
           secretReferences: true,
@@ -1520,6 +1530,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
           sourceControlHosts: client.sourceControlHosts,
           usageLimitSources: client.usageLimitSources,
           easDeviceHosts: client.easDeviceHosts,
+          mcpGatewayServices: client.mcpGatewayServices,
         });
         for (const value of values) assert.include(JSON.stringify(echoed), value);
         const renamed = yield* service.updateProviderInstance({
@@ -1822,6 +1833,15 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
               maxLeaseMinutes: 60,
             },
           ],
+          mcpGatewayServices: [
+            {
+              id: "workspace",
+              name: "Workspace",
+              url: "https://mcp.example.test/mcp",
+              oauthClientId: "client-id",
+              oauthClientSecret: easReference,
+            },
+          ],
           providerInstances: {
             [antigravity]: {
               driver: ProviderDriverKind.make("antigravity"),
@@ -1847,6 +1867,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         assert.equal(legacy.textGenerators[router]?.apiKey, SECRET_REDACTED);
         assert.equal(legacy.easDeviceHosts[0]?.accessToken, SECRET_REDACTED);
         assert.equal(legacy.simlockDeviceHosts[0]?.agentToken, SECRET_REDACTED);
+        assert.equal(legacy.mcpGatewayServices[0]?.oauthClientSecret, SECRET_REDACTED);
         const configOf = (settings: ServerSettings, id: ProviderInstanceId) =>
           settings.providerInstances[id]?.config as Record<string, unknown> | undefined;
         assert.equal(configOf(legacy, antigravity)?.apiKey, SECRET_REDACTED);
@@ -1858,6 +1879,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
           textGenerators: legacy.textGenerators,
           easDeviceHosts: legacy.easDeviceHosts,
           simlockDeviceHosts: legacy.simlockDeviceHosts,
+          mcpGatewayServices: legacy.mcpGatewayServices,
           providerInstances: legacy.providerInstances,
         });
         assert.deepEqual(echoed.sourceControlHosts.bitbucket?.accessToken, reference);
@@ -1874,6 +1896,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         });
         assert.deepEqual(echoed.easDeviceHosts[0]?.accessToken, easReference);
         assert.deepEqual(echoed.simlockDeviceHosts[0]?.agentToken, simlockReference);
+        assert.deepEqual(echoed.mcpGatewayServices[0]?.oauthClientSecret, easReference);
         assert.deepEqual(configOf(echoed, antigravity)?.apiKey, antigravityReference);
         assert.deepEqual(configOf(echoed, openCode)?.serverPassword, openCodeReference);
         assert.isTrue(Option.isSome(yield* stored("github", "tokens", "ghe.acme.test")));
@@ -1991,6 +2014,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         "simlockDeviceHosts.[].agentToken",
         "usageLimitSources.*.managementKey",
         "textGenerators.*.apiKey",
+        "mcpGatewayServices.[].oauthClientSecret",
       ]);
     }),
   );

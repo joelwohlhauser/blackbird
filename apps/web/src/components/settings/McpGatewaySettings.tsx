@@ -1,4 +1,10 @@
-import type { EnvironmentId, McpGatewayServiceStatus } from "@t3tools/contracts";
+import {
+  type EnvironmentId,
+  McpGatewayError,
+  type McpGatewayServiceStatus,
+} from "@t3tools/contracts";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import * as Schema from "effect/Schema";
 import { T, useGT } from "gt-react";
 import { useEffect, useEffectEvent, useState } from "react";
 
@@ -13,6 +19,8 @@ import { Input } from "../ui/input";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { useSearchableSetting } from "./settingsSearch";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
+
+const isMcpGatewayError = Schema.is(McpGatewayError);
 
 const SIGN_IN_POLL_MS = 2_000;
 const SIGN_IN_WAIT_MS = 5 * 60 * 1_000;
@@ -77,6 +85,8 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
   const [url, setUrl] = useState("");
   const [scopes, setScopes] = useState("");
   const [tools, setTools] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
 
   const fetchServices = useEffectEvent(() => list({ environmentId, input: {} }));
 
@@ -115,7 +125,12 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
   const startSignIn = async (id: string) => {
     const result = await signIn({ environmentId, input: { id } });
     if (result._tag !== "Success") {
-      setError(gt("Could not start the sign-in. Check the service URL and try again."));
+      const failure = squashAtomCommandFailure(result);
+      setError(
+        isMcpGatewayError(failure)
+          ? failure.message
+          : gt("Could not start the sign-in. Check the service URL and try again."),
+      );
       return;
     }
     setError(null);
@@ -136,6 +151,8 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
         url: url.trim(),
         ...(scopeList.length === 0 ? {} : { scopes: scopeList }),
         ...(toolList.length === 0 ? {} : { tools: toolList }),
+        ...(clientId.trim() === "" ? {} : { oauthClientId: clientId.trim() }),
+        ...(clientSecret.trim() === "" ? {} : { oauthClientSecret: clientSecret.trim() }),
       },
     });
     if (applyList(result, gt("Could not save the service. Use a name and an https URL."))) {
@@ -143,6 +160,8 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
       setUrl("");
       setScopes("");
       setTools("");
+      setClientId("");
+      setClientSecret("");
     }
   };
 
@@ -250,6 +269,19 @@ function ConnectedServices({ environmentId }: { readonly environmentId: Environm
             placeholder={gt("Allowed tools, comma separated. Empty allows all.")}
             value={tools}
             onChange={(event) => setTools(event.target.value)}
+          />
+          <Input
+            aria-label={gt("OAuth client ID")}
+            placeholder={gt("OAuth client ID, if the service has no dynamic registration")}
+            value={clientId}
+            onChange={(event) => setClientId(event.target.value)}
+          />
+          <Input
+            type="password"
+            aria-label={gt("OAuth client secret")}
+            placeholder={gt("OAuth client secret, if the client has one")}
+            value={clientSecret}
+            onChange={(event) => setClientSecret(event.target.value)}
           />
           <div>
             <Button
