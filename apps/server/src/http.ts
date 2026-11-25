@@ -6,7 +6,10 @@ import {
 } from "@t3tools/contracts";
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
 import { injectMcpAppCookieBootstrap, injectMcpAppThemeBootstrap } from "@t3tools/shared/mcpApp";
-import { FILE_PREVIEW_SCROLL_SCRIPT } from "@t3tools/shared/htmlRender";
+import {
+  FILE_PREVIEW_SCROLL_SCRIPT,
+  HTML_RENDER_TEXT_SELECTION_SCRIPT,
+} from "@t3tools/shared/htmlRender";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as ByteSize from "effect/ByteSize";
 import * as Context from "effect/Context";
@@ -170,7 +173,7 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
     readonly fileName?: string;
     readonly mimeType?: string;
     readonly file?: OpenMediaFile;
-    readonly renderIntent?: "mcp-app" | "file-preview";
+    readonly renderIntent?: "mcp-app" | "file-preview" | "html-render";
     readonly noStore?: boolean;
   },
   rangeHeader?: string,
@@ -215,6 +218,22 @@ export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
         ? HttpServerResponse.empty({ status: 200, headers })
         : HttpServerResponse.uint8Array(body, { headers });
     }
+  }
+  if (
+    asset.renderIntent === "html-render" &&
+    !asset.download &&
+    headers["Content-Type"] === "text/html; charset=utf-8"
+  ) {
+    const fs = yield* FileSystem.FileSystem;
+    const info = yield* fs.stat(asset.path);
+    const script = new TextEncoder().encode(HTML_RENDER_TEXT_SELECTION_SCRIPT);
+    headers["Content-Length"] = String(info.size + BigInt(script.byteLength));
+    return method === "HEAD"
+      ? HttpServerResponse.empty({ status: 200, headers })
+      : HttpServerResponse.stream(Stream.concat(fs.stream(asset.path), Stream.make(script)), {
+          status: 200,
+          headers,
+        });
   }
   const mediaFile = asset.file;
   const mediaInfo = mediaFile ? yield* statMediaFile(asset.path, mediaFile) : undefined;

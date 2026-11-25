@@ -8,7 +8,10 @@ import {
   createAssistantTextSelector,
   withAssistantCitationComment,
 } from "@t3tools/shared/assistantCitations";
-import { readHtmlRenderTextSelection } from "@t3tools/shared/htmlRender";
+import {
+  htmlRenderClearSelectionMessage,
+  readHtmlRenderTextSelection,
+} from "@t3tools/shared/htmlRender";
 import { useGT } from "gt-react";
 import { QuoteIcon } from "lucide-react";
 import { use, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
@@ -65,6 +68,9 @@ export function AssistantSelectionToolbar({
   const gt = useGT();
 
   const closeComment = () => {
+    if (selection?.anchor.kind === "frame" && document.activeElement !== selection.anchor.frame) {
+      selection.anchor.frame.contentWindow?.postMessage(htmlRenderClearSelectionMessage(), "*");
+    }
     draftCommentRef.current = null;
     setSelection(null);
   };
@@ -242,11 +248,11 @@ export function AssistantSelectionToolbar({
         return;
       }
       const text = selected.text.trim();
-      const before = selected.before + selected.text.slice(0, selected.text.indexOf(text));
+      const leading = selected.text.indexOf(text);
       const selector = createAssistantTextSelector(
-        `${before}${selected.text}${selected.after}`,
-        before.length,
-        before.length + text.length,
+        `${selected.before}${selected.text}${selected.after}`,
+        selected.before.length + leading,
+        selected.before.length + leading + text.length,
       );
       if (!selector || selector.text.length > ASSISTANT_CITATION_MAX_TEXT_LENGTH) return;
       draftCommentRef.current = null;
@@ -324,7 +330,9 @@ export function AssistantSelectionToolbar({
               if (anchor.kind === "frame") {
                 const frame = anchor.frame.getBoundingClientRect();
                 const { x, y, width, height } = anchor.rect;
-                return new DOMRect(frame.left + x, frame.top + y, width, height);
+                const left = Math.min(Math.max(frame.left + x, frame.left), frame.right);
+                const right = Math.max(Math.min(frame.left + x + width, frame.right), left);
+                return new DOMRect(left, frame.top + y, right - left, height);
               }
               const { range, source } = anchor.sourceAnchor;
               const rects = range.getClientRects();

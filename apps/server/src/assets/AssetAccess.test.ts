@@ -1712,6 +1712,38 @@ describe("AssetAccess", () => {
       ).toMatchObject({ kind: "file", path: attachmentPath, download: true, noStore: true });
     }).pipe(Effect.provide(layerTest)),
   );
+
+  it.effect("marks inline HTML attachments as html-render unless mcp-app is requested", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const attachmentId = "thread-1-00000000-0000-4000-8000-000000000003-html";
+      const attachmentPath = path.join(config.attachmentsDir, `${attachmentId}.html`);
+      yield* fileSystem.makeDirectory(config.attachmentsDir, { recursive: true });
+      yield* fileSystem.writeFileString(attachmentPath, "<!doctype html><p>hi</p>");
+
+      for (const [disposition, expected] of [
+        ["inline", "html-render"],
+        ["attachment", undefined],
+      ] as const) {
+        const result = yield* issueAssetUrl({
+          resource: {
+            _tag: "attachment",
+            attachmentId,
+            fileName: "page.html",
+            mimeType: "text/html",
+            disposition,
+          },
+        });
+        const suffix = result.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+        const separator = suffix.indexOf("/");
+        const asset = yield* resolveAsset(suffix.slice(0, separator), suffix.slice(separator + 1));
+        if (asset?.kind !== "file") throw new Error("Expected attachment file");
+        expect("renderIntent" in asset ? asset.renderIntent : undefined).toBe(expected);
+      }
+    }).pipe(Effect.provide(layerTest)),
+  );
   it.effect("issues project favicon capabilities with a signed fallback", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

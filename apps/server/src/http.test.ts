@@ -31,7 +31,10 @@ import {
   MCP_APP_MAX_HTML_BYTES,
 } from "@t3tools/shared/mcpApp";
 import { ORCHESTRATION_PROTOCOL_HEADER } from "@t3tools/contracts";
-import { FILE_PREVIEW_SCROLL_SCRIPT } from "@t3tools/shared/htmlRender";
+import {
+  FILE_PREVIEW_SCROLL_SCRIPT,
+  HTML_RENDER_TEXT_SELECTION_SCRIPT,
+} from "@t3tools/shared/htmlRender";
 
 import * as ServerConfig from "./config.ts";
 
@@ -131,6 +134,44 @@ describe("workspace page preview responses", () => {
       expect(yield* read({ path: page, renderIntent: "file-preview", download: true })).toBe(html);
       expect(yield* read({ path: page })).toBe(html);
       expect(yield* read({ path: style, renderIntent: "file-preview" })).toBe("body{}");
+    }).pipe(Effect.provide(layerFileResponse)),
+  );
+
+  it.effect("appends the text-selection bridge when serving inline HTML renders", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-html-render-" });
+      const page = path.join(directory, "page.html");
+      const html = "<!doctype html><html><body>☃</body></html>";
+      yield* fs.writeFileString(page, html);
+      const read = (asset: Parameters<typeof assetFileResponse>[0]) =>
+        assetFileResponse(asset).pipe(
+          Effect.flatMap((response) =>
+            Effect.promise(() => HttpServerResponse.toWeb(response).text()),
+          ),
+        );
+      const response = HttpServerResponse.toWeb(
+        yield* assetFileResponse({
+          path: page,
+          mimeType: "text/html",
+          renderIntent: "html-render",
+        }),
+      );
+      const expected = html + HTML_RENDER_TEXT_SELECTION_SCRIPT;
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-length")).toBe(
+        String(new TextEncoder().encode(expected).byteLength),
+      );
+      expect(yield* Effect.promise(() => response.text())).toBe(expected);
+      expect(
+        yield* read({
+          path: page,
+          mimeType: "text/html",
+          renderIntent: "html-render",
+          download: true,
+        }),
+      ).toBe(html);
     }).pipe(Effect.provide(layerFileResponse)),
   );
 });

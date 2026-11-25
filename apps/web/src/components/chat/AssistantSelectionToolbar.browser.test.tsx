@@ -4,7 +4,10 @@ import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
-import { injectHtmlRenderBootstrap } from "@t3tools/shared/htmlRender";
+import {
+  HTML_RENDER_TEXT_SELECTION_SCRIPT,
+  injectHtmlRenderBootstrap,
+} from "@t3tools/shared/htmlRender";
 import { render } from "../../../test/render";
 import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
 
@@ -228,7 +231,14 @@ it("keeps the comment on screen when the cited text ends in a code block's hidde
   expect(rect.right).toBeLessThanOrEqual(window.innerWidth);
 });
 
-it("cites text selected with the mouse inside an inline HTML render", async () => {
+it("cites text selected with the mouse inside a sandboxed inline HTML render", async () => {
+  const html =
+    injectHtmlRenderBootstrap(
+      '<!doctype html><body><h1>Five sectors</h1><p id="pick">  <span>AI</span> <span>roll-ups</span> of traditional firms</p><button id="act" type="button" onclick="setTimeout(function(){parent.postMessage({type:\'action-clicked\'},\'*\')})">Action</button></body>',
+    ) + HTML_RENDER_TEXT_SELECTION_SCRIPT;
+  const src = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  using _url = { [Symbol.dispose]: () => URL.revokeObjectURL(src) };
+
   function FrameTimeline({ onCite }: { onCite: OnCite }) {
     const [viewport, setViewport] = useState<HTMLElement | null>(null);
     return (
@@ -236,12 +246,12 @@ it("cites text selected with the mouse inside an inline HTML render", async () =
         <div data-assistant-citation-source="render-item">
           <iframe
             title="Render"
-            style={{ width: 400, height: 120 }}
-            srcDoc={injectHtmlRenderBootstrap(
-              "<!doctype html><body><h1>Five sectors</h1><p id=pick>AI roll-ups of traditional firms</p></body>",
-            )}
+            sandbox="allow-scripts allow-forms"
+            style={{ width: 400, height: 140 }}
+            src={src}
           />
         </div>
+        <p data-testid="below-frame">Below frame</p>
         <AssistantSelectionToolbar viewport={viewport} threadRef={threadRef} onCite={onCite} />
       </div>
     );
@@ -249,10 +259,8 @@ it("cites text selected with the mouse inside an inline HTML render", async () =
   const onCite = vi.fn<OnCite>(() => true);
   await using screen = await render(<FrameTimeline onCite={onCite} />);
 
-  await page
-    .frameLocator(screen.getByTitle("Render"))
-    .getByText("AI roll-ups of traditional firms")
-    .tripleClick();
+  const frame = page.frameLocator(screen.getByTitle("Render"));
+  await frame.getByText("AI roll-ups of traditional firms").tripleClick();
 
   await expect.element(commentField()).toHaveFocus();
   const popup = document.querySelector<HTMLElement>('[data-slot="popover-popup"]')!;
@@ -264,7 +272,80 @@ it("cites text selected with the mouse inside an inline HTML render", async () =
   expect(onCite.mock.lastCall![0]).toMatchObject({
     messageId: "render-item",
     text: "AI roll-ups of traditional firms",
-    prefix: "Five sectors",
+    prefix: "Five sectors ",
     comment: "worth it?",
+  });
+  await expect.element(commentField()).not.toBeInTheDocument();
+
+  // Clicking a button after citing must not reopen the comment popover.
+  const buttonClicked = new Promise<void>((resolve) => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type !== "action-clicked") return;
+      window.removeEventListener("message", onMessage);
+      resolve();
+    };
+    window.addEventListener("message", onMessage);
+  });
+  await frame.getByRole("button", { name: "Action" }).click();
+  await buttonClicked;
+  await expect.element(commentField()).not.toBeInTheDocument();
+
+  // Submitting cleared the frame selection, so drag-selecting overlapping words works right away.
+  await userEvent.dragAndDrop(frame.getByText("AI"), frame.getByText("roll-ups"));
+  await expect.element(commentField()).toHaveFocus();
+  await userEvent.keyboard("second pass{Enter}");
+  expect(onCite).toHaveBeenCalledTimes(2);
+  expect(onCite.mock.lastCall![0]).toMatchObject({
+    messageId: "render-item",
+    comment: "second pass",
+  });
+});
+
+it("cites text drag-selected inside and out of a sandboxed inline HTML render", async () => {
+  const html =
+    injectHtmlRenderBootstrap(
+      "<!doctype html><body><p><span>First</span> <span>second</span> <span>third</span></p></body>",
+    ) + HTML_RENDER_TEXT_SELECTION_SCRIPT;
+  const src = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  using _url = { [Symbol.dispose]: () => URL.revokeObjectURL(src) };
+
+  function FrameTimeline({ onCite }: { onCite: OnCite }) {
+    const [viewport, setViewport] = useState<HTMLElement | null>(null);
+    return (
+      <div ref={setViewport}>
+        <div data-assistant-citation-source="render-item">
+          <iframe
+            title="Render"
+            sandbox="allow-scripts allow-forms"
+            style={{ width: 400, height: 100 }}
+            src={src}
+          />
+        </div>
+        <p data-testid="below-frame">Below frame</p>
+        <AssistantSelectionToolbar viewport={viewport} threadRef={threadRef} onCite={onCite} />
+      </div>
+    );
+  }
+  const onCite = vi.fn<OnCite>(() => true);
+  await using screen = await render(<FrameTimeline onCite={onCite} />);
+
+  const frame = page.frameLocator(screen.getByTitle("Render"));
+  await userEvent.dragAndDrop(frame.getByText("First"), frame.getByText("second"));
+  await expect.element(commentField()).toHaveFocus();
+  await userEvent.keyboard("dragged{Enter}");
+  expect(onCite).toHaveBeenCalledTimes(1);
+  expect(onCite.mock.lastCall![0]).toMatchObject({
+    messageId: "render-item",
+    comment: "dragged",
+  });
+
+  // Dragging out of the iframe and releasing below it still reports the selection.
+  await userEvent.dragAndDrop(frame.getByText("third"), page.getByTestId("below-frame"));
+  await expect.element(commentField()).toHaveFocus();
+  await userEvent.keyboard("out of frame{Enter}");
+  expect(onCite).toHaveBeenCalledTimes(2);
+  expect(onCite.mock.lastCall![0]).toMatchObject({
+    messageId: "render-item",
+    comment: "out of frame",
   });
 });
