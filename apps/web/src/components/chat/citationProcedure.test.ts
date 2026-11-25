@@ -198,6 +198,24 @@ describe("resolveCitationPhase", () => {
     ).toEqual({ _tag: "ready", rowId: messageId });
   });
 
+  it("finds an inline HTML render by its item id", () => {
+    const htmlRender = { attachmentId: "page-html", title: "Sectors", height: 400 };
+    const render: TimelineEntry = {
+      kind: "html-render",
+      id: messageId,
+      createdAt: at,
+      runId,
+      htmlRender,
+    };
+    expect(phase({ entries: [render] })).toEqual({ _tag: "expanding" });
+    expect(
+      phase({
+        entries: [render],
+        rows: [{ kind: "html-render", id: messageId, createdAt: at, htmlRender }],
+      }),
+    ).toEqual({ _tag: "ready", rowId: messageId });
+  });
+
   it("fails for a citation that names a user message", () => {
     const userEntry: TimelineEntry = {
       ...entry,

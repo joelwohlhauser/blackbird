@@ -4,7 +4,11 @@ import {
   type AssistantCitation,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { withAssistantCitationComment } from "@t3tools/shared/assistantCitations";
+import {
+  createAssistantTextSelector,
+  withAssistantCitationComment,
+} from "@t3tools/shared/assistantCitations";
+import { readHtmlRenderTextSelection } from "@t3tools/shared/htmlRender";
 import { useGT } from "gt-react";
 import { QuoteIcon } from "lucide-react";
 import { use, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
@@ -26,6 +30,18 @@ import { resolveAssistantCitationCommentDismissal } from "./assistantCitationCom
 import { observeAssistantCitationCommentSource } from "./AssistantCitationSource";
 import { BackgroundThreadContext } from "./backgroundThread";
 
+type SelectionAnchor =
+  | {
+      kind: "text";
+      sourceAnchor: AssistantCitationSourceAnchor;
+      position: SelectionActionPoint;
+    }
+  | {
+      kind: "frame";
+      frame: HTMLIFrameElement;
+      rect: { x: number; y: number; width: number; height: number };
+    };
+
 export function AssistantSelectionToolbar({
   viewport,
   threadRef,
@@ -37,8 +53,7 @@ export function AssistantSelectionToolbar({
 }) {
   const [selection, setSelection] = useState<{
     citation: AssistantCitation;
-    position: SelectionActionPoint;
-    sourceAnchor: AssistantCitationSourceAnchor;
+    anchor: SelectionAnchor;
     commenting: boolean;
   } | null>(null);
   const toolbarRef = useRef<HTMLButtonElement>(null);
@@ -80,20 +95,30 @@ export function AssistantSelectionToolbar({
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- watches the cited DOM text for removal while the comment is open
   useEffect(() => {
     if (!selection?.commenting) return;
-    return observeAssistantCitationCommentSource({
-      anchor: selection.sourceAnchor,
-      citation: selection.citation,
-      onUnavailable: onSourceUnavailable,
+    const { anchor } = selection;
+    if (anchor.kind === "text") {
+      return observeAssistantCitationCommentSource({
+        anchor: anchor.sourceAnchor,
+        citation: selection.citation,
+        onUnavailable: onSourceUnavailable,
+      });
+    }
+    if (!viewport) return;
+    const observer = new MutationObserver(() => {
+      if (!anchor.frame.isConnected) onSourceUnavailable();
     });
-  }, [selection]);
+    observer.observe(viewport, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [selection, viewport]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the toolbar DOM node and clamps its position inside the window before paint
   useLayoutEffect(() => {
     const toolbar = toolbarRef.current;
-    if (!toolbar || !selection || selection.commenting) return;
+    if (!toolbar || !selection || selection.commenting || selection.anchor.kind !== "text") return;
+    const { position } = selection.anchor;
     const rect = toolbar.getBoundingClientRect();
-    toolbar.style.left = `${Math.max(8, Math.min(selection.position.x, window.innerWidth - rect.width - 8))}px`;
-    toolbar.style.top = `${Math.max(8, Math.min(selection.position.y, window.innerHeight - rect.height - 8))}px`;
+    toolbar.style.left = `${Math.max(8, Math.min(position.x, window.innerWidth - rect.width - 8))}px`;
+    toolbar.style.top = `${Math.max(8, Math.min(position.y, window.innerHeight - rect.height - 8))}px`;
   }, [selection]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to document selectionchange and keydown to track text selections in the viewport
@@ -186,15 +211,54 @@ export function AssistantSelectionToolbar({
       }
       draftCommentRef.current = null;
       setSelection({
-        sourceAnchor,
         citation,
         commenting: commentRightAway,
-        position: resolveSelectionActionPosition({
-          bounds: viewportRect,
-          selectionRect: rects.item(rects.length - 1) ?? rect,
-          pointer: pointerOnText ? pointer : null,
-          viewport: { width: window.innerWidth, height: window.innerHeight },
-        }),
+        anchor: {
+          kind: "text",
+          sourceAnchor,
+          position: resolveSelectionActionPosition({
+            bounds: viewportRect,
+            selectionRect: rects.item(rects.length - 1) ?? rect,
+            pointer: pointerOnText ? pointer : null,
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+          }),
+        },
+      });
+    };
+    const commentOnFrameSelection = (event: MessageEvent) => {
+      const selected = readHtmlRenderTextSelection(event.data);
+      if (!selected || draftCommentRef.current?.trim()) return;
+      const frame = [...viewport.querySelectorAll("iframe")].find(
+        (candidate) => candidate.contentWindow === event.source,
+      );
+      const messageId = frame?.closest<HTMLElement>("[data-assistant-citation-source]")?.dataset
+        .assistantCitationSource;
+      if (
+        !frame ||
+        !messageId ||
+        document.activeElement !== frame ||
+        navigator.userActivation?.isActive === false
+      ) {
+        return;
+      }
+      const text = selected.text.trim();
+      const before = selected.before + selected.text.slice(0, selected.text.indexOf(text));
+      const selector = createAssistantTextSelector(
+        `${before}${selected.text}${selected.after}`,
+        before.length,
+        before.length + text.length,
+      );
+      if (!selector || selector.text.length > ASSISTANT_CITATION_MAX_TEXT_LENGTH) return;
+      draftCommentRef.current = null;
+      setSelection({
+        citation: {
+          version: 1,
+          ...threadRef,
+          messageId: MessageId.make(messageId),
+          ...selector,
+        },
+        commenting: true,
+        anchor: { kind: "frame", frame, rect: selected.rect },
       });
     };
     const actions = observeSelectionActions({
@@ -229,17 +293,19 @@ export function AssistantSelectionToolbar({
     // Tab belongs to the foreground chat; a background timeline only follows its selection.
     if (!backgroundThread) document.addEventListener("keydown", focusActions, true);
     document.addEventListener("selectionchange", actions.selectionChanged);
+    window.addEventListener("message", commentOnFrameSelection);
     return () => {
       document.removeEventListener("keydown", focusActions, true);
       document.removeEventListener("selectionchange", actions.selectionChanged);
+      window.removeEventListener("message", commentOnFrameSelection);
       actions.dispose();
       actionsRef.current = null;
     };
   }, [backgroundThread, threadRef, viewport]);
 
   if (!selection) return null;
-  if (selection.commenting) {
-    const { range, source } = selection.sourceAnchor;
+  if (selection.commenting || selection.anchor.kind === "frame") {
+    const { anchor } = selection;
     const { messageId, start, end } = selection.citation;
     return (
       <Popover
@@ -253,8 +319,14 @@ export function AssistantSelectionToolbar({
           side="bottom"
           align="end"
           anchor={{
-            contextElement: source,
+            contextElement: anchor.kind === "text" ? anchor.sourceAnchor.source : anchor.frame,
             getBoundingClientRect: () => {
+              if (anchor.kind === "frame") {
+                const frame = anchor.frame.getBoundingClientRect();
+                const { x, y, width, height } = anchor.rect;
+                return new DOMRect(frame.left + x, frame.top + y, width, height);
+              }
+              const { range, source } = anchor.sourceAnchor;
               const rects = range.getClientRects();
               const rect = rects.item(rects.length - 1) ?? range.getBoundingClientRect();
               // Code blocks and tables scroll sideways inside the message, so the cited
@@ -311,7 +383,7 @@ export function AssistantSelectionToolbar({
       disabled={tooLong}
       aria-label={tooLong ? gt("Selection is too long to cite") : gt("Cite selection in composer")}
       className="fixed z-50 max-w-[calc(100vw-1rem)]"
-      style={{ left: selection.position.x, top: selection.position.y }}
+      style={{ left: selection.anchor.position.x, top: selection.anchor.position.y }}
       onPointerDown={(event) => event.preventDefault()}
       onClick={cite}
       onKeyDown={(event) => {

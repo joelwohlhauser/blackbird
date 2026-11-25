@@ -244,6 +244,8 @@ const SIZE_CHANGED_METHOD = "ui/notifications/size-changed";
 const SHORTCUTS_METHOD = "t3/notifications/shortcuts";
 const KEY_DOWN_METHOD = "t3/notifications/keydown";
 const OPEN_IMAGE_METHOD = "t3/notifications/open-image";
+const TEXT_SELECTED_METHOD = "t3/notifications/text-selected";
+const TEXT_SELECTION_CONTEXT_LENGTH = 200;
 // Not part of MCP Apps: a page, such as an interview form, sends text as the
 // reader's next message in the thread that shows it, or only puts it into
 // that thread's composer.
@@ -348,6 +350,48 @@ export function readHtmlRenderMessage(
     : undefined;
 }
 
+export interface HtmlRenderTextSelection {
+  readonly text: string;
+  readonly before: string;
+  readonly after: string;
+  readonly rect: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+}
+
+export function readHtmlRenderTextSelection(data: unknown): HtmlRenderTextSelection | undefined {
+  if (typeof data !== "object" || data === null) return undefined;
+  const { jsonrpc, method, params } = data as Record<string, unknown>;
+  if (jsonrpc !== "2.0" || method !== TEXT_SELECTED_METHOD) return undefined;
+  if (typeof params !== "object" || params === null) return undefined;
+  const { text, before, after, rect } = params as Record<string, unknown>;
+  if (
+    typeof text !== "string" ||
+    !text.trim() ||
+    text.length > MAX_COMPOSER_TEXT_LENGTH ||
+    typeof before !== "string" ||
+    typeof after !== "string" ||
+    typeof rect !== "object" ||
+    rect === null
+  ) {
+    return undefined;
+  }
+  const { x, y, width, height } = rect as Record<string, unknown>;
+  const numbers = [x, y, width, height];
+  if (!numbers.every((value) => typeof value === "number" && Number.isFinite(value))) {
+    return undefined;
+  }
+  return {
+    text,
+    before: before.slice(-TEXT_SELECTION_CONTEXT_LENGTH),
+    after: after.slice(0, TEXT_SELECTION_CONTEXT_LENGTH),
+    rect: { x: x as number, y: y as number, width: width as number, height: height as number },
+  };
+}
+
 export function readHtmlRenderKeyDown(data: unknown):
   | {
       readonly key: string;
@@ -439,7 +483,7 @@ const CONTAINED_SCROLL_INTO_VIEW = `Element.prototype.scrollIntoView=function(v)
 
 // Apply overridable theme CSS before paint and strip the fragment before routing; framed navigation uses the client.
 // Forward shortcuts after page handlers; text fields retain their keys.
-const BOOTSTRAP_SCRIPT = `(function(){var s=document.getElementById("t3-theme"),n=0,P=/[#&]${CONTAIN_SCROLL_FRAGMENT_KEY}(?:&|$)/.test(location.hash);if(!s)return;var b=${JSON.stringify(BASE_CSS)};function a(t){if(!t||typeof t!=="object"||!t.variables||typeof t.variables!=="object")return;var c=":root{color-scheme:"+(t.appearance==="light"?"light":"dark")+";";for(var k in t.variables){if(/^--[a-z0-9-]+$/.test(k))c+=k+":"+String(t.variables[k]).replace(/[;{}<>]/g,"")+";";}s.textContent=c+"}"+b;}try{var m=/[#&]${THEME_FRAGMENT_KEY}=([^&]*)/.exec(location.hash);if(m){a(JSON.parse(decodeURIComponent(m[1])));history.replaceState(history.state,"",location.pathname+location.search);}}catch(e){}window.addEventListener("message",function(e){var d=e.data,p=d&&d.params;if(d&&d.jsonrpc==="2.0"&&d.method===${JSON.stringify(HOST_CONTEXT_CHANGED_METHOD)}&&p&&p.styles)a({appearance:p.theme,variables:p.styles.variables});});document.addEventListener("click",function(e){var l=e.isTrusted?e.composedPath().find(function(t){return t&&t.matches&&t.matches("a[href]");}):null,u;if(!l)return;try{u=new URL(l.getAttribute("href"),document.baseURI);}catch(x){return;}if(!/^https?:$/.test(u.protocol)||u.href.split("#")[0]===location.href.split("#")[0])return;if(window.parent!==window){e.preventDefault();window.parent.postMessage({jsonrpc:"2.0",id:"t3-link-"+(++n),method:${JSON.stringify(OPEN_LINK_METHOD)},params:{url:u.href,metaKey:e.metaKey,ctrlKey:e.ctrlKey}},"*");}else{l.setAttribute("target","_blank");l.setAttribute("rel","noopener");}},true);document.addEventListener("click",function(e){var t=e.composedPath()[0],l=t&&t.closest?t.closest("label,a[href],button,input,select,textarea"):null,c=l&&l.tagName==="LABEL"?l.control:null;if(e.isTrusted&&c&&document.activeElement!==c)c.focus({preventScroll:true});},true);if(window.parent!==window){if(P){${CONTAINED_SCROLL_INTO_VIEW}}var h,o,z=function(){var r=document.documentElement,v=Math.ceil(r.scrollHeight>r.clientHeight?r.scrollHeight:r.getBoundingClientRect().height);if(v===h)return;h=v;window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(SIZE_CHANGED_METHOD)},params:{height:v}},"*");};if(window.ResizeObserver){o=new ResizeObserver(z);o.observe(document.documentElement);}document.addEventListener("DOMContentLoaded",function(){if(o&&document.body)o.observe(document.body);z();});window.addEventListener("load",z);window.addEventListener("click",function(e){var t=e.composedPath()[0],u;if(!e.isTrusted||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||!t||t.tagName!=="IMG"||t.closest("a[href],button"))return;u=t.currentSrc||t.src;if(u)setTimeout(function(){var g=[],i=-1;if(e.defaultPrevented)return;Array.prototype.forEach.call(document.images,function(m){var v=m.currentSrc||m.src;if(!v||m.closest("a[href],button"))return;if(m===t)i=g.length;g.push({src:v,name:m.alt||m.title||""});});window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(OPEN_IMAGE_METHOD)},params:{src:u,name:t.alt||t.title||"",images:g,index:i}},"*");});});var K=[],B=[],C=${JSON.stringify(EVENT_CODE_SHORTCUT_KEYS)};window.addEventListener("message",function(e){var d=e.data,p=d&&d.params;if(e.source===window.parent&&d&&d.jsonrpc==="2.0"&&d.method===${JSON.stringify(SHORTCUTS_METHOD)}&&p&&Array.isArray(p.shortcuts)&&Array.isArray(p.blocked)){K=p.shortcuts;B=p.blocked;}});window.addEventListener("keydown",function(e){var t=e.composedPath()[0],c=e.code||"",l=e.key.toLowerCase(),x=/^[a-z]$/.test(l)?[l]:[l,/^Key[A-Z]$/.test(c)?c.slice(3).toLowerCase():"",l==="+"&&!e.shiftKey&&!e.altKey&&!/^Digit/.test(c)?"":C.hasOwnProperty(c)?C[c]:""],f,m=function(s){return s&&s.metaKey===e.metaKey&&s.ctrlKey===e.ctrlKey&&s.shiftKey===e.shiftKey&&s.altKey===e.altKey&&x.indexOf(s.key)>-1;};if(!e.isTrusted||e.isComposing||e.getModifierState("AltGraph")&&!/^[a-z0-9]$/i.test(e.key)||t&&(t.isContentEditable||/^(?:INPUT|TEXTAREA|SELECT)$/.test(t.tagName))||!K.some(m)||B.some(m))return;f=function(v){window.removeEventListener("keydown",f);if(v!==e||e.defaultPrevented)return;e.preventDefault();window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(KEY_DOWN_METHOD)},params:{key:e.key,code:e.code,metaKey:e.metaKey,ctrlKey:e.ctrlKey,shiftKey:e.shiftKey,altKey:e.altKey,repeat:e.repeat}},"*");};window.addEventListener("keydown",f);setTimeout(function(){window.removeEventListener("keydown",f);});},true);}})();`;
+const BOOTSTRAP_SCRIPT = `(function(){var s=document.getElementById("t3-theme"),n=0,P=/[#&]${CONTAIN_SCROLL_FRAGMENT_KEY}(?:&|$)/.test(location.hash);if(!s)return;var b=${JSON.stringify(BASE_CSS)};function a(t){if(!t||typeof t!=="object"||!t.variables||typeof t.variables!=="object")return;var c=":root{color-scheme:"+(t.appearance==="light"?"light":"dark")+";";for(var k in t.variables){if(/^--[a-z0-9-]+$/.test(k))c+=k+":"+String(t.variables[k]).replace(/[;{}<>]/g,"")+";";}s.textContent=c+"}"+b;}try{var m=/[#&]${THEME_FRAGMENT_KEY}=([^&]*)/.exec(location.hash);if(m){a(JSON.parse(decodeURIComponent(m[1])));history.replaceState(history.state,"",location.pathname+location.search);}}catch(e){}window.addEventListener("message",function(e){var d=e.data,p=d&&d.params;if(d&&d.jsonrpc==="2.0"&&d.method===${JSON.stringify(HOST_CONTEXT_CHANGED_METHOD)}&&p&&p.styles)a({appearance:p.theme,variables:p.styles.variables});});document.addEventListener("click",function(e){var l=e.isTrusted?e.composedPath().find(function(t){return t&&t.matches&&t.matches("a[href]");}):null,u;if(!l)return;try{u=new URL(l.getAttribute("href"),document.baseURI);}catch(x){return;}if(!/^https?:$/.test(u.protocol)||u.href.split("#")[0]===location.href.split("#")[0])return;if(window.parent!==window){e.preventDefault();window.parent.postMessage({jsonrpc:"2.0",id:"t3-link-"+(++n),method:${JSON.stringify(OPEN_LINK_METHOD)},params:{url:u.href,metaKey:e.metaKey,ctrlKey:e.ctrlKey}},"*");}else{l.setAttribute("target","_blank");l.setAttribute("rel","noopener");}},true);document.addEventListener("click",function(e){var t=e.composedPath()[0],l=t&&t.closest?t.closest("label,a[href],button,input,select,textarea"):null,c=l&&l.tagName==="LABEL"?l.control:null;if(e.isTrusted&&c&&document.activeElement!==c)c.focus({preventScroll:true});},true);if(window.parent!==window){if(P){${CONTAINED_SCROLL_INTO_VIEW}}var h,o,z=function(){var r=document.documentElement,v=Math.ceil(r.scrollHeight>r.clientHeight?r.scrollHeight:r.getBoundingClientRect().height);if(v===h)return;h=v;window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(SIZE_CHANGED_METHOD)},params:{height:v}},"*");};if(window.ResizeObserver){o=new ResizeObserver(z);o.observe(document.documentElement);}document.addEventListener("DOMContentLoaded",function(){if(o&&document.body)o.observe(document.body);z();});window.addEventListener("load",z);window.addEventListener("click",function(e){var t=e.composedPath()[0],u;if(!e.isTrusted||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||!t||t.tagName!=="IMG"||t.closest("a[href],button"))return;u=t.currentSrc||t.src;if(u)setTimeout(function(){var g=[],i=-1;if(e.defaultPrevented)return;Array.prototype.forEach.call(document.images,function(m){var v=m.currentSrc||m.src;if(!v||m.closest("a[href],button"))return;if(m===t)i=g.length;g.push({src:v,name:m.alt||m.title||""});});window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(OPEN_IMAGE_METHOD)},params:{src:u,name:t.alt||t.title||"",images:g,index:i}},"*");});});var K=[],B=[],C=${JSON.stringify(EVENT_CODE_SHORTCUT_KEYS)};window.addEventListener("message",function(e){var d=e.data,p=d&&d.params;if(e.source===window.parent&&d&&d.jsonrpc==="2.0"&&d.method===${JSON.stringify(SHORTCUTS_METHOD)}&&p&&Array.isArray(p.shortcuts)&&Array.isArray(p.blocked)){K=p.shortcuts;B=p.blocked;}});window.addEventListener("keydown",function(e){var t=e.composedPath()[0],c=e.code||"",l=e.key.toLowerCase(),x=/^[a-z]$/.test(l)?[l]:[l,/^Key[A-Z]$/.test(c)?c.slice(3).toLowerCase():"",l==="+"&&!e.shiftKey&&!e.altKey&&!/^Digit/.test(c)?"":C.hasOwnProperty(c)?C[c]:""],f,m=function(s){return s&&s.metaKey===e.metaKey&&s.ctrlKey===e.ctrlKey&&s.shiftKey===e.shiftKey&&s.altKey===e.altKey&&x.indexOf(s.key)>-1;};if(!e.isTrusted||e.isComposing||e.getModifierState("AltGraph")&&!/^[a-z0-9]$/i.test(e.key)||t&&(t.isContentEditable||/^(?:INPUT|TEXTAREA|SELECT)$/.test(t.tagName))||!K.some(m)||B.some(m))return;f=function(v){window.removeEventListener("keydown",f);if(v!==e||e.defaultPrevented)return;e.preventDefault();window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(KEY_DOWN_METHOD)},params:{key:e.key,code:e.code,metaKey:e.metaKey,ctrlKey:e.ctrlKey,shiftKey:e.shiftKey,altKey:e.altKey,repeat:e.repeat}},"*");};window.addEventListener("keydown",f);setTimeout(function(){window.removeEventListener("keydown",f);});},true);var S=0;document.addEventListener("selectionchange",function(){S=1;});window.addEventListener("pointerdown",function(e){if(e.isTrusted)S=0;},true);window.addEventListener("pointerup",function(e){if(!e.isTrusted||e.button!==0)return;setTimeout(function(){var g=getSelection(),d=document.body,f=document.activeElement,r,q,c,t,a;if(!S||!d||!g||g.isCollapsed||g.rangeCount!==1||f&&(f.isContentEditable||/^(?:INPUT|TEXTAREA|SELECT)$/.test(f.tagName)))return;S=0;r=g.getRangeAt(0);t=g.toString();if(!t.trim()||!d.contains(r.commonAncestorContainer))return;q=document.createRange();q.selectNodeContents(d);q.setEnd(r.startContainer,r.startOffset);a=q.toString().slice(-${TEXT_SELECTION_CONTEXT_LENGTH});q.selectNodeContents(d);q.setStart(r.endContainer,r.endOffset);c=r.getClientRects();c=c[c.length-1]||r.getBoundingClientRect();window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(TEXT_SELECTED_METHOD)},params:{text:t,before:a,after:q.toString().slice(0,${TEXT_SELECTION_CONTEXT_LENGTH}),rect:{x:c.left,y:c.top,width:c.width,height:c.height}}},"*");});},true);}})();`;
 
 function bootstrapMarkup(markup: string): string {
   const dark = htmlRenderTheme(T3_CODE_DARK_THEME_COLORS, "dark");

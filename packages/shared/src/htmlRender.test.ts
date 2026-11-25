@@ -5,6 +5,7 @@ import {
   readHtmlRenderMessage,
   readHtmlRenderImageRequest,
   readHtmlRenderLinkRequest,
+  readHtmlRenderTextSelection,
 } from "./htmlRender.ts";
 import { htmlRenderFromToolItem } from "./toolOutput.ts";
 
@@ -187,6 +188,37 @@ describe("readHtmlRenderMessage", () => {
       readHtmlRenderMessage({ method: "t3/notifications/send-message", params: { text: "x" } }),
     ).toBeUndefined();
     expect(readHtmlRenderMessage(notify("ui/message", { text: "x" }))).toBeUndefined();
+  });
+});
+
+describe("readHtmlRenderTextSelection", () => {
+  const selected = (params: unknown) => ({
+    jsonrpc: "2.0",
+    method: "t3/notifications/text-selected",
+    params,
+  });
+  const rect = { x: 10, y: 20, width: 100, height: 18 };
+
+  it("reads the selected text, its surrounding text and its last line", () => {
+    expect(
+      readHtmlRenderTextSelection(
+        selected({ text: "roll-ups", before: "x".repeat(300) + "AI ", after: " of firms", rect }),
+      ),
+    ).toEqual({ text: "roll-ups", before: "x".repeat(197) + "AI ", after: " of firms", rect });
+  });
+
+  it("rejects blank text and malformed geometry", () => {
+    expect(
+      readHtmlRenderTextSelection(selected({ text: " \n", before: "", after: "", rect })),
+    ).toBeUndefined();
+    expect(
+      readHtmlRenderTextSelection(
+        selected({ text: "a", before: "", after: "", rect: { ...rect, x: Number.NaN } }),
+      ),
+    ).toBeUndefined();
+    expect(
+      readHtmlRenderTextSelection({ method: "t3/notifications/text-selected", params: {} }),
+    ).toBeUndefined();
   });
 });
 

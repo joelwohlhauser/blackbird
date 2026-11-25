@@ -4,6 +4,7 @@ import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
+import { injectHtmlRenderBootstrap } from "@t3tools/shared/htmlRender";
 import { render } from "../../../test/render";
 import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
 
@@ -225,4 +226,45 @@ it("keeps the comment on screen when the cited text ends in a code block's hidde
   const rect = popup.getBoundingClientRect();
   expect(rect.left).toBeGreaterThanOrEqual(0);
   expect(rect.right).toBeLessThanOrEqual(window.innerWidth);
+});
+
+it("cites text selected with the mouse inside an inline HTML render", async () => {
+  function FrameTimeline({ onCite }: { onCite: OnCite }) {
+    const [viewport, setViewport] = useState<HTMLElement | null>(null);
+    return (
+      <div ref={setViewport}>
+        <div data-assistant-citation-source="render-item">
+          <iframe
+            title="Render"
+            style={{ width: 400, height: 120 }}
+            srcDoc={injectHtmlRenderBootstrap(
+              "<!doctype html><body><h1>Five sectors</h1><p id=pick>AI roll-ups of traditional firms</p></body>",
+            )}
+          />
+        </div>
+        <AssistantSelectionToolbar viewport={viewport} threadRef={threadRef} onCite={onCite} />
+      </div>
+    );
+  }
+  const onCite = vi.fn<OnCite>(() => true);
+  await using screen = await render(<FrameTimeline onCite={onCite} />);
+
+  await page
+    .frameLocator(screen.getByTitle("Render"))
+    .getByText("AI roll-ups of traditional firms")
+    .tripleClick();
+
+  await expect.element(commentField()).toHaveFocus();
+  const popup = document.querySelector<HTMLElement>('[data-slot="popover-popup"]')!;
+  const frameRect = screen.getByTitle("Render").element().getBoundingClientRect();
+  expect(popup.getBoundingClientRect().top).toBeGreaterThan(frameRect.top);
+  await userEvent.keyboard("worth it?{Enter}");
+
+  expect(onCite).toHaveBeenCalledTimes(1);
+  expect(onCite.mock.lastCall![0]).toMatchObject({
+    messageId: "render-item",
+    text: "AI roll-ups of traditional firms",
+    prefix: "Five sectors",
+    comment: "worth it?",
+  });
 });
