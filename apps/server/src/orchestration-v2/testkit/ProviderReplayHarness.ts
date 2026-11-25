@@ -542,6 +542,7 @@ export function layerWithRegistry<Error>(
       execute: Effect.fn("ThreadTitleRegenerationService.execute")(function () {
         return Effect.void;
       }),
+      refineAfterFirstRun: () => Effect.void,
     }),
   );
   const layerOrchestratorProvided = Orchestrator.layer.pipe(

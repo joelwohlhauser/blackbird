@@ -167,6 +167,7 @@ function layerExecutorFor(input: {
       ThreadTitleRegenerationService.ThreadTitleRegenerationService,
       ThreadTitleRegenerationService.ThreadTitleRegenerationService.of({
         execute: () => Effect.void,
+        refineAfterFirstRun: () => Effect.void,
       }),
     ),
   );

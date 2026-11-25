@@ -601,6 +601,21 @@ export const layerExecutor: Layer.Layer<
                     completedRunId: effect.request.runId,
                   }),
                 ),
+                Effect.andThen(
+                  threadTitleRegeneration
+                    .refineAfterFirstRun({
+                      threadId: effect.threadId,
+                      runId: effect.request.runId,
+                    })
+                    .pipe(
+                      Effect.catch((cause) =>
+                        Effect.logWarning("Failed to refine the thread title after its first run", {
+                          effectId: effect.id,
+                          cause,
+                        }),
+                      ),
+                    ),
+                ),
                 Effect.mapError(
                   (cause) =>
                     new OrchestrationEffectExecutionError({

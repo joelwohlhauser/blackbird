@@ -167,6 +167,24 @@ export const threadTitleEvaluationCases = [
     rubric:
       'Use the user\'s "Owner: what it does (model effort)" shape with all three parts, even past the default 8-word, 40-character limit. A bare short title fails.',
   },
+  {
+    id: "linear-issue-id",
+    source: "Maintainer report of Linear issue IDs in generated thread titles",
+    request: "Question whether an issue's E2E test suite is still needed on every PR.",
+    previousTitle: "ENG-1912 E2E Test Suite Necessity",
+    messages: [
+      {
+        role: "user",
+        text: "ENG-1912: what's the point of this? I mean we don't really need the E2E test anymore? And I don't want to run them on every PR.",
+      },
+      {
+        role: "assistant",
+        text: "The E2E suite only covers the signup flow, which the integration tests already cover. Running it on every PR adds about 9 minutes to CI.",
+      },
+    ],
+    rubric:
+      "Name whether the E2E tests are still needed on every PR. Never include the issue ID ENG-1912, and replace the previous title that leads with it.",
+  },
 ] satisfies ReadonlyArray<{
   id: string;
   source: string;

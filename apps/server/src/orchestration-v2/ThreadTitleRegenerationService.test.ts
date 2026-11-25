@@ -5,6 +5,7 @@ import {
   ChatAttachmentId,
   type ChatAttachment,
   EventId,
+  GitRefName,
   MessageId,
   ProjectId,
   ProviderDriverKind,
@@ -125,6 +126,7 @@ function createThread(input: {
   readonly command: string;
   readonly thread: string;
   readonly worktreePath?: string;
+  readonly branch?: string;
 }) {
   return Effect.gen(function* () {
     const threads = yield* ThreadManagement.ThreadManagementService;
@@ -138,7 +140,7 @@ function createThread(input: {
       modelSelection,
       runtimeMode: "full-access",
       interactionMode: "default",
-      branch: null,
+      branch: input.branch === undefined ? null : GitRefName.make(input.branch),
       worktreePath: input.worktreePath ?? null,
       createdBy: "user",
       creationSource: "web",
@@ -572,6 +574,103 @@ describe("ThreadTitleRegenerationService", () => {
         const renamed = yield* threads.getThreadProjection(threadId);
         assert.equal(renamed.thread.title, "Manual title");
         assert.isNotOk(renamed.thread.titleRegeneration);
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  );
+
+  it.effect("arms a regeneration once the thread's first run completes", () =>
+    Effect.gen(function* () {
+      const harness = makeHarness();
+      yield* Effect.gen(function* () {
+        const threads = yield* ThreadManagement.ThreadManagementService;
+        const outbox = yield* EffectOutbox.EffectOutboxV2;
+        const titleRegeneration = yield* ThreadTitleRegeneration.ThreadTitleRegenerationService;
+        const threadId = yield* createThread({
+          command: "command:title:first-run:create",
+          thread: "thread:title:first-run",
+        });
+        const firstRunId = RunId.make("thread:title:first-run:run:1");
+        const secondRunId = RunId.make("thread:title:first-run:run:2");
+        yield* recordRun({
+          threadId,
+          runId: firstRunId,
+          ordinal: 1,
+          user: "Look at this",
+          assistant: "The login redirect drops the return URL.",
+        });
+        yield* recordRun({
+          threadId,
+          runId: secondRunId,
+          ordinal: 2,
+          user: "Fix it",
+          assistant: "Done.",
+        });
+
+        yield* titleRegeneration.refineAfterFirstRun({ threadId, runId: secondRunId });
+        assert.isNotOk((yield* threads.getThreadProjection(threadId)).thread.titleRegeneration);
+
+        yield* titleRegeneration.refineAfterFirstRun({ threadId, runId: firstRunId });
+        const requestId = CommandId.make(`command:title-after-first-run:${firstRunId}`);
+        const armed = yield* threads.getThreadProjection(threadId);
+        assert.equal(armed.thread.titleRegeneration?.requestId, requestId);
+        assert.deepEqual(
+          (yield* outbox.listByCommandId(requestId)).map((effect) => effect.request),
+          [{ type: "thread-title.generate", kind: { type: "regenerate" } }],
+        );
+
+        const renamedThreadId = yield* createThread({
+          command: "command:title:first-run:renamed:create",
+          thread: "thread:title:first-run:renamed",
+        });
+        yield* threads.dispatch({
+          type: "thread.metadata.update",
+          commandId: CommandId.make("command:title:first-run:renamed:rename"),
+          threadId: renamedThreadId,
+          title: "Chosen title",
+        });
+        const renamedRunId = RunId.make("thread:title:first-run:renamed:run:1");
+        yield* recordRun({
+          threadId: renamedThreadId,
+          runId: renamedRunId,
+          ordinal: 1,
+          user: "Look at this",
+          assistant: "Done.",
+        });
+        yield* titleRegeneration.refineAfterFirstRun({
+          threadId: renamedThreadId,
+          runId: renamedRunId,
+        });
+        assert.isNotOk(
+          (yield* threads.getThreadProjection(renamedThreadId)).thread.titleRegeneration,
+        );
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  );
+
+  it.effect("leaves the thread's Linear issue IDs out of a generated title", () =>
+    Effect.gen(function* () {
+      const harness = makeHarness({
+        generateTitle: () => Effect.succeed({ title: "[AI-123] Fix UTF-8 login redirect" }),
+      });
+      yield* Effect.gen(function* () {
+        const threads = yield* ThreadManagement.ThreadManagementService;
+        const titleRegeneration = yield* ThreadTitleRegeneration.ThreadTitleRegenerationService;
+        const threadId = yield* createThread({
+          command: "command:title:issue-id:create",
+          thread: "thread:title:issue-id",
+          branch: "user/ai-123-fix-login-redirect",
+        });
+        yield* dispatchUserMessage({
+          command: "command:title:issue-id:message",
+          threadId,
+          text: "Work on AI-123",
+        });
+        const requestId = yield* armRegeneration({ command: "command:title:issue-id:1", threadId });
+
+        yield* titleRegeneration.execute({ threadId, requestId, kind: { type: "regenerate" } });
+
+        const projection = yield* threads.getThreadProjection(threadId);
+        assert.equal(projection.thread.title, "Fix UTF-8 login redirect");
       }).pipe(Effect.provide(harness.layer));
     }),
   );

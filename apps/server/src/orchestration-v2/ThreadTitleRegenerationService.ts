@@ -3,6 +3,9 @@ import { isAttachmentOnlyBootstrapPrompt } from "@t3tools/shared/composerContext
 import {
   CommandId,
   type ChatAttachment,
+  LINEAR_ISSUE_TRACKER,
+  linearIssueIdFromBranch,
+  linearIssueIdsFromTags,
   type MessageId,
   type OrchestrationV2AppThread,
   type OrchestrationV2ConversationMessage,
@@ -47,6 +50,13 @@ export class ThreadTitleRegenerationService extends Context.Service<
       | ServerSettingsError
       | ThreadManagementService.ThreadManagementProviderInstanceDisabledError
     >;
+    readonly refineAfterFirstRun: (input: {
+      readonly threadId: ThreadId;
+      readonly runId: RunId;
+    }) => Effect.Effect<
+      void,
+      OrchestratorV2Error | ThreadManagementService.ThreadManagementProviderInstanceDisabledError
+    >;
   }
 >()("t3/orchestration-v2/ThreadTitleRegenerationService") {}
 
@@ -58,6 +68,26 @@ type Outcome =
 const MAX_FAILURE_MESSAGE_LENGTH = 300;
 const isTextGenerationError = Schema.is(TextGenerationError);
 const isProjectionStoreThreadNotFoundError = Schema.is(ProjectionStoreThreadNotFoundError);
+
+const ISSUE_ID = /[[(]?\b([A-Za-z][A-Za-z0-9]*-\d+)\b[\])]?:?/g;
+const EDGE_SEPARATORS = /^[\s:|·–—-]+|[\s:|·–—-]+$/g;
+
+function linkedLinearIssueIds(thread: OrchestrationV2AppThread): ReadonlySet<string> {
+  return new Set([
+    ...linearIssueIdsFromTags(thread.tags),
+    ...(linearIssueIdFromBranch(thread.branch) ?? []),
+    ...(thread.issues ?? []).flatMap((issue) =>
+      issue.tracker === LINEAR_ISSUE_TRACKER ? [issue.displayKey.toUpperCase()] : [],
+    ),
+  ]);
+}
+
+function withoutIssueIds(title: string, issueIds: ReadonlySet<string>): string {
+  return title
+    .replace(ISSUE_ID, (match, id: string) => (issueIds.has(id.toUpperCase()) ? " " : match))
+    .replace(/\s+/g, " ")
+    .replace(EDGE_SEPARATORS, "");
+}
 
 function failureMessage(cause: Cause.Cause<unknown>): string {
   const error = Cause.squash(cause);
@@ -229,11 +259,15 @@ const make = Effect.gen(function* () {
         modelSelection: settings.textGenerationModelSelection,
         projectId: projection.thread.projectId,
       });
-      const generatedTitle = result.title.trim();
-      return generatedTitle === "New thread" ||
+      const generatedTitle = withoutIssueIds(
+        result.title.trim(),
+        linkedLinearIssueIds(projection.thread),
+      );
+      return generatedTitle.length === 0 ||
+        generatedTitle === "New thread" ||
         (input.kind.type === "regenerate" && generatedTitle === projection.thread.title.trim())
         ? { status: "unchanged" as const }
-        : { status: "renamed" as const, title: result.title };
+        : { status: "renamed" as const, title: generatedTitle };
     }).pipe(
       Effect.retry({
         times: input.kind.type === "initial" ? 2 : 0,
@@ -256,7 +290,22 @@ const make = Effect.gen(function* () {
     yield* complete({ ...input, outcome });
   });
 
-  return ThreadTitleRegenerationService.of({ execute });
+  const refineAfterFirstRun: ThreadTitleRegenerationService["Service"]["refineAfterFirstRun"] =
+    Effect.fn("ThreadTitleRegenerationService.refineAfterFirstRun")(function* (input) {
+      const { thread, runs } = yield* threads.getThreadRecords(input.threadId, ["runs"], {
+        runIds: [input.runId],
+      });
+      const run = runs[0];
+      if (run?.status !== "completed" || run.ordinal !== 1 || thread.titleRenamed === true) return;
+      yield* threads.dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make(`command:title-after-first-run:${input.runId}`),
+        threadId: input.threadId,
+        regenerateTitle: true,
+      });
+    });
+
+  return ThreadTitleRegenerationService.of({ execute, refineAfterFirstRun });
 });
 
 export const layer = Layer.effect(ThreadTitleRegenerationService, make);

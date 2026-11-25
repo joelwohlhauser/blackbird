@@ -415,7 +415,8 @@ ${avoidRule(projectTitle, "quotes, labels, filler, and trailing punctuation")}
 - Use attached images as primary context for UI issues.
 - When a URL or attachment is the only source of the subject, use available tools to inspect it directly.
 - Local git history is not evidence of what a linked PR or issue is about. Never title the thread after branch names, commit messages, or merged commits found in the checkout.
-- If a linked PR or issue cannot be read, fall back to the user's stated action plus its number, such as "Take Over PR 8588". This is the one case where a PR or issue number belongs in the title.`;
+- If a linked PR cannot be read, fall back to the user's stated action plus its number, such as "Take Over PR 8588". This is the one case where a PR number belongs in the title.
+- Never include issue IDs such as ENG-123, even when the message starts with one. Name the issue's subject, or the user's stated action when the issue cannot be read.`;
 }
 
 function regenerateThreadTitlePrompt(
@@ -450,7 +451,8 @@ ${avoidRule(projectTitle, "PR numbers, quotes, labels, filler, and trailing punc
 - Use attached images as primary context for UI issues.
 - When a URL or attachment is the only source of the subject, use available tools to inspect it directly.
 - Local git history is not evidence of what a linked PR or issue is about. Never title the thread after branch names, commit messages, or merged commits found in the checkout.
-- If a linked PR or issue cannot be read, fall back to the user's stated action plus its number, such as "Take Over PR 8588". This is the one case where a PR or issue number belongs in the title.
+- If a linked PR cannot be read, fall back to the user's stated action plus its number, such as "Take Over PR 8588". This is the one case where a PR number belongs in the title.
+- Never include issue IDs such as ENG-123, even when the message starts with one. Name the issue's subject, or the user's stated action when the issue cannot be read.
 - Keep the previous title unchanged if it is already accurate. Otherwise return a meaningfully improved title, not a cosmetic paraphrase.
 
 Examples of the distinction:
