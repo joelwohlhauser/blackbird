@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { createPortal } from "react-dom";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { observeResize } from "~/lib/observeResize";
@@ -27,6 +27,9 @@ export interface SidebarSpacesHandle {
 }
 
 const SCROLL_END_FALLBACK_MS = 140;
+// Commit as soon as the swipe lands on the next space instead of waiting up to a second for
+// macOS trackpad momentum and Chromium's scrollend event to finish.
+const LANDING_EPSILON = 0.04;
 const LIVE_PAGE_KEY = "__active_space_live__";
 
 const scrollViewport = (root: ParentNode | null) =>
@@ -71,6 +74,12 @@ export function SidebarSpaces({
   const pillRef = useRef<HTMLSpanElement>(null);
   const scrollTopBySpaceRef = useRef(new Map<string, number>());
   const pendingTargetIndexRef = useRef<number | null>(null);
+  const pendingSmoothScrollRef = useRef<{
+    readonly fromLeft: number;
+    readonly targetIndex: number;
+  } | null>(null);
+  const committedFromScrollRef = useRef<string | null>(null);
+  const lastCommittedSpaceIdRef = useRef(activeSpaceId);
   const scrollFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastWidthRef = useRef(0);
   const [jumpRange, setJumpRange] = useState<readonly [number, number] | null>(null);
@@ -95,6 +104,16 @@ export function SidebarSpaces({
     if (viewport) scrollTopBySpaceRef.current.set(activeSpaceId, viewport.scrollTop);
   });
 
+  const commitSpaceIndex = useStableCallback((targetIndex: number) => {
+    const target = spaces[targetIndex];
+    if (!target || target.id === lastCommittedSpaceIdRef.current) return false;
+    saveActiveScrollTop();
+    lastCommittedSpaceIdRef.current = target.id;
+    committedFromScrollRef.current = target.id;
+    onCommit(target.id);
+    return true;
+  });
+
   const settleScroll = useStableCallback(() => {
     clearTimeout(scrollFallbackTimerRef.current);
     scrollFallbackTimerRef.current = undefined;
@@ -103,45 +122,61 @@ export function SidebarSpaces({
     const width = pager.clientWidth;
     if (width <= 0) return;
     const landedIndex = clampIndex(Math.round(pager.scrollLeft / width), spaces.length);
+    // Ignore stray scrollend events emitted by an instant scrollLeft re-anchor before a smooth glide finishes.
+    if (pendingTargetIndexRef.current !== null && landedIndex !== pendingTargetIndexRef.current) {
+      return;
+    }
     pendingTargetIndexRef.current = null;
+    pendingSmoothScrollRef.current = null;
     setJumpRange(null);
     setPillPosition(landedIndex);
-    const target = spaces[landedIndex];
-    if (target && target.id !== activeSpaceId) {
-      saveActiveScrollTop();
-      onCommit(target.id);
-    }
+    commitSpaceIndex(landedIndex);
   });
 
   const scrollToIndex = useStableCallback((rawIndex: number) => {
     const targetIndex = clampIndex(rawIndex, spaces.length);
     const target = spaces[targetIndex];
     if (!target) return;
-    if (targetIndex === activeIndex && pendingTargetIndexRef.current === null) return;
     const pager = pagerRef.current;
     const width = pager?.clientWidth ?? 0;
     const targetLeft = targetIndex * width;
+    if (
+      targetIndex === activeIndex &&
+      pendingTargetIndexRef.current === null &&
+      (!pager || Math.abs(pager.scrollLeft - targetLeft) < 1)
+    ) {
+      return;
+    }
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (!pager || width <= 1 || reducedMotion || Math.abs(pager.scrollLeft - targetLeft) < 1) {
       clearTimeout(scrollFallbackTimerRef.current);
       scrollFallbackTimerRef.current = undefined;
       pendingTargetIndexRef.current = null;
+      pendingSmoothScrollRef.current = null;
       setJumpRange(null);
       if (pager && width > 1) pager.scrollLeft = targetLeft;
       setPillPosition(targetIndex);
-      if (target.id !== activeSpaceId) {
-        saveActiveScrollTop();
-        onCommit(target.id);
-      }
+      commitSpaceIndex(targetIndex);
       return;
     }
 
+    const startLeft = pager.scrollLeft;
     pendingTargetIndexRef.current = targetIndex;
-    if (Math.abs(targetIndex - activeIndex) > 1) {
-      flushSync(() =>
-        setJumpRange([Math.min(activeIndex, targetIndex), Math.max(activeIndex, targetIndex)]),
-      );
+    const visualFloor = clampIndex(Math.floor(startLeft / width), spaces.length);
+    const visualCeil = clampIndex(Math.ceil(startLeft / width), spaces.length);
+    const minIndex = Math.min(visualFloor, activeIndex, targetIndex);
+    const maxIndex = Math.max(visualCeil, activeIndex, targetIndex);
+    if (maxIndex - minIndex > 1) {
+      setJumpRange([minIndex, maxIndex]);
+    }
+    // Commit immediately so the target space's chat opens with zero delay while the sidebar glides.
+    if (target.id !== lastCommittedSpaceIdRef.current) {
+      // Pause snap while React moves LIVE_PAGE_KEY into the target slot so Chromium does not teleport scrollLeft.
+      pager.style.scrollSnapType = "none";
+      pendingSmoothScrollRef.current = { fromLeft: startLeft, targetIndex };
+      commitSpaceIndex(targetIndex);
+      return;
     }
     pager.scrollTo({ left: targetLeft, behavior: "smooth" });
     if (!("onscrollend" in window)) {
@@ -157,10 +192,11 @@ export function SidebarSpaces({
     },
   }));
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- restores per-space vertical scroll offsets and aligns the native scroll-snap pager before paint when the active space changes
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- restores per-space vertical scroll offsets and aligns or starts smooth scroll on the native scroll-snap pager before paint when the active space changes
   useLayoutEffect(() => {
     const pager = pagerRef.current;
     if (!pager) return;
+    lastCommittedSpaceIdRef.current = activeSpaceId;
     for (const space of spaces) {
       const page = pager.querySelector<HTMLElement>(`[data-space-page="${CSS.escape(space.id)}"]`);
       const viewport = scrollViewport(page);
@@ -169,18 +205,40 @@ export function SidebarSpaces({
       if (viewport.scrollTop !== savedTop) viewport.scrollTop = savedTop;
     }
     const width = pager.clientWidth;
+    const smoothTarget = pendingSmoothScrollRef.current;
+    pendingSmoothScrollRef.current = null;
+    const fromScroll = committedFromScrollRef.current === activeSpaceId;
+    committedFromScrollRef.current = null;
+
     if (width > 0) {
       lastWidthRef.current = width;
-      const expectedLeft = activeIndex * width;
-      if (Math.abs(pager.scrollLeft - expectedLeft) > 1) {
-        clearTimeout(scrollFallbackTimerRef.current);
-        scrollFallbackTimerRef.current = undefined;
-        pendingTargetIndexRef.current = null;
-        pager.scrollLeft = expectedLeft;
+      if (smoothTarget !== null) {
+        if (Math.abs(pager.scrollLeft - smoothTarget.fromLeft) > 1) {
+          pager.scrollLeft = smoothTarget.fromLeft;
+        }
+        pager.scrollTo({ left: smoothTarget.targetIndex * width, behavior: "smooth" });
+        pager.style.scrollSnapType = "";
+        if (!("onscrollend" in window)) {
+          clearTimeout(scrollFallbackTimerRef.current);
+          scrollFallbackTimerRef.current = setTimeout(settleScroll, SCROLL_END_FALLBACK_MS);
+        }
+        return;
       }
+      pager.style.scrollSnapType = "";
+      if (!fromScroll) {
+        const expectedLeft = activeIndex * width;
+        if (Math.abs(pager.scrollLeft - expectedLeft) > 1) {
+          clearTimeout(scrollFallbackTimerRef.current);
+          scrollFallbackTimerRef.current = undefined;
+          pendingTargetIndexRef.current = null;
+          pager.scrollLeft = expectedLeft;
+        }
+        setPillPosition(activeIndex);
+      }
+      return;
     }
     setPillPosition(activeIndex);
-  }, [activeIndex, setPillPosition, spaces]);
+  }, [activeIndex, activeSpaceId, setPillPosition, settleScroll, spaces]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to native pager scroll/scrollend and observeResize, and marks the sidebar surface for HistorySwipeNavigation
   useEffect(() => {
@@ -199,13 +257,29 @@ export function SidebarSpaces({
       if (width <= 0) return;
       const position = Math.min(spaces.length - 1, Math.max(0, pager.scrollLeft / width));
       setPillPosition(position);
+      if (pendingTargetIndexRef.current === null) {
+        const nearestIndex = clampIndex(Math.round(position), spaces.length);
+        if (Math.abs(position - nearestIndex) <= LANDING_EPSILON) {
+          commitSpaceIndex(nearestIndex);
+        }
+      }
       if (!supportsScrollEnd) {
         clearTimeout(scrollFallbackTimerRef.current);
         scrollFallbackTimerRef.current = setTimeout(settleScroll, SCROLL_END_FALLBACK_MS);
       }
     };
 
+    const onWheel = (event: WheelEvent) => {
+      if (
+        pendingTargetIndexRef.current !== null &&
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ) {
+        pendingTargetIndexRef.current = null;
+      }
+    };
+
     pager.addEventListener("scroll", onScroll, { passive: true });
+    pager.addEventListener("wheel", onWheel, { passive: true });
     if (supportsScrollEnd) {
       pager.addEventListener("scrollend", settleScroll, { passive: true });
     }
@@ -227,11 +301,13 @@ export function SidebarSpaces({
       clearTimeout(scrollFallbackTimerRef.current);
       scrollFallbackTimerRef.current = undefined;
       stopObservingResize();
+      pager.style.scrollSnapType = "";
       pager.removeEventListener("scroll", onScroll);
+      pager.removeEventListener("wheel", onWheel);
       if (supportsScrollEnd) pager.removeEventListener("scrollend", settleScroll);
       surface?.removeAttribute("data-space-swipe");
     };
-  }, [readActiveIndex, setPillPosition, settleScroll, spaces.length]);
+  }, [commitSpaceIndex, readActiveIndex, setPillPosition, settleScroll, spaces.length]);
 
   return (
     <div ref={rootRef} className="flex min-h-0 flex-1 flex-col">

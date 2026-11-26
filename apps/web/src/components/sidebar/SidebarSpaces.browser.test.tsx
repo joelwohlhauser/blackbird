@@ -88,7 +88,7 @@ describe("SidebarSpaces (native scroll-snap)", () => {
     expect(personalPage.inert).toBe(false);
   });
 
-  it("commits the landed space on scrollend and preserves per-space scrollTop", async () => {
+  it("commits as soon as the swipe lands without waiting for scrollend, and preserves scrollTop", async () => {
     const committed: string[] = [];
     await using screen = await render(<Harness onCommit={(id) => committed.push(id)} />);
     const pager = screen.container.querySelector<HTMLElement>("[data-space-pager]")!;
@@ -100,14 +100,33 @@ describe("SidebarSpaces (native scroll-snap)", () => {
     workViewport.scrollTop = 180;
     workViewport.dispatchEvent(new Event("scroll", { bubbles: false }));
 
-    // Simulate swiping horizontally to Personal (index 1) and landing.
+    // Pause mandatory snap briefly so synthetic scrollLeft assignments simulate mid-drag positions.
+    pager.style.scrollSnapType = "none";
+
+    // Mid-swipe (55% across) must not commit prematurely.
+    await act(async () => {
+      pager.scrollLeft = 132;
+      pager.dispatchEvent(new Event("scroll"));
+    });
+    expect(committed).toEqual([]);
+
+    // Reaching within 4% of Personal commits immediately—before scrollend fires.
+    await act(async () => {
+      pager.scrollLeft = 232;
+      pager.dispatchEvent(new Event("scroll"));
+    });
+    expect(committed).toEqual(["personal"]);
+
+    pager.style.scrollSnapType = "";
+
+    // Trailing momentum scroll events and eventual scrollend must not re-commit.
     await act(async () => {
       pager.scrollLeft = 240;
       pager.dispatchEvent(new Event("scroll"));
       pager.dispatchEvent(new Event("scrollend"));
     });
-
     expect(committed).toEqual(["personal"]);
+
     // Live slot moves in place without remounting the active ScrollArea DOM node.
     const livePersonal = screen.container.querySelector<HTMLElement>(
       '[data-testid="viewport-live:personal"]',
@@ -141,7 +160,7 @@ describe("SidebarSpaces (native scroll-snap)", () => {
     expect(personalPreview.scrollTop).toBe(95);
   });
 
-  it("steps between spaces via handle and dock buttons, including multi-space jumps", async () => {
+  it("commits immediately on dock click and handle step while smoothly scrolling", async () => {
     const handleRef = createRef<SidebarSpacesHandle>();
     const committed: string[] = [];
     await using screen = await render(
@@ -151,15 +170,20 @@ describe("SidebarSpaces (native scroll-snap)", () => {
 
     // Click the Reading dock button (index 3, multi-space jump from index 0).
     await screen.getByRole("button", { name: "Reading" }).click();
+    // Commits immediately without waiting for smooth scrollend, while still gliding smoothly (not jumping).
+    expect(committed).toEqual(["reading"]);
+    expect(pager.scrollLeft).toBeLessThan(720);
     await expect.poll(() => Math.round(pager.scrollLeft)).toBe(720);
-    await expect.poll(() => committed).toEqual(["reading"]);
+    expect(committed).toEqual(["reading"]);
 
     // Step backward via imperative handle (Option+Command+Left).
     await act(() => {
       handleRef.current?.step(-1);
     });
+    expect(committed).toEqual(["reading", "lab"]);
+    expect(pager.scrollLeft).toBeGreaterThan(480);
     await expect.poll(() => Math.round(pager.scrollLeft)).toBe(480);
-    await expect.poll(() => committed).toEqual(["reading", "lab"]);
+    expect(committed).toEqual(["reading", "lab"]);
   });
 
   it("aligns scrollLeft when activeSpaceId changes externally without re-committing", async () => {
