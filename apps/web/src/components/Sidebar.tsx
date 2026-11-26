@@ -49,6 +49,7 @@ import { foldSearchQuery, rankMessageMatches } from "@t3tools/shared/paletteSear
 import { findForMessageMatch, openThreadFindOnQuery } from "./chat/threadFindStore";
 import {
   threadRuntimeCanArchive,
+  type EnvironmentProject,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
 import {
@@ -60,8 +61,11 @@ import {
 import {
   AuthOrchestrationOperateScope,
   type ContextMenuSource,
+  type EnvironmentMachineKind,
   ProjectId,
   type ScopedThreadRef,
+  type TimestampFormat,
+  type SidebarSpace,
   type ThreadId,
 } from "@t3tools/contracts";
 import {
@@ -71,6 +75,7 @@ import {
 
 import { CheckIcon, FolderIcon, FolderPlusIcon, PlusIcon, SettingsIcon } from "lucide-react";
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useReducer,
@@ -267,6 +272,8 @@ import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarSpaces, type SidebarSpacesHandle } from "./sidebar/SidebarSpaces";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
+import { CollapsibleSectionHeader } from "./ui/collapsible-section-header";
+import { ScrollArea } from "./ui/scroll-area";
 import { TooltipProvider } from "./ui/tooltip";
 import {
   composerDraftHasUserContent,
@@ -277,6 +284,7 @@ import {
 import { useShownThreadRouteTarget } from "../hooks/useShownThreadRouteTarget";
 import {
   SidebarSearchResultRow,
+  SidebarThreadRow,
   SortableThreadRow,
   type SidebarProviderEntry,
   type SidebarSweepAction,
@@ -349,6 +357,8 @@ const sidebarProviderEntriesAtom = Atom.make((get) => {
 const EMPTY_PROVIDER_ENTRIES: ReadonlyMap<string, SidebarProviderEntry> = new Map();
 const EMPTY_THREADS: readonly EnvironmentThreadShell[] = [];
 const EMPTY_DRAFT_IDS: readonly DraftId[] = [];
+const SPACE_PREVIEW_NOOP = () => undefined;
+const SPACE_PREVIEW_READ_FALSE = () => false;
 
 const SETTLED_TAIL_INITIAL_COUNT = 10;
 const SETTLED_TAIL_PAGE_COUNT = 25;
@@ -445,6 +455,378 @@ function routeThreadOnly(
   const routeThread = threads.find((thread) => threadShellKey(thread) === routeThreadKey);
   return routeThread === undefined ? EMPTY_THREADS : [routeThread];
 }
+
+interface SidebarSpacePreviewProps {
+  readonly space: SidebarSpace;
+  readonly spaces: readonly SidebarSpace[];
+  readonly projectSpaces: Readonly<Record<string, string>>;
+  readonly sharedProjectKeys: ReadonlySet<string>;
+  readonly projectGroups: readonly SidebarProjectSnapshot[];
+  readonly projectGroupByRef: ReadonlyMap<string, SidebarProjectSnapshot>;
+  readonly hasProjects: boolean;
+  readonly threads: readonly EnvironmentThreadShell[];
+  readonly placedDraftSpaces: Readonly<Record<string, string>>;
+  readonly placedThreadSpaces: Readonly<Record<string, string>>;
+  readonly delegatedUnderParent: ReadonlySet<string>;
+  readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
+  readonly connectedEnvironmentIds: readonly EnvironmentId[];
+  readonly workingShelfEnabled: boolean;
+  readonly workingShelfExpanded: boolean;
+  readonly snoozedShelfExpanded: boolean;
+  readonly settledShelfExpanded: boolean;
+  readonly boringSidebarEnabled: boolean;
+  readonly folderRowsMultiline: boolean;
+  readonly projectExpandedById: Readonly<Record<string, boolean>>;
+  readonly snoozeNow: string;
+  readonly routeRowThreadKey: string | null;
+  readonly routeThreadKey: string | null;
+  readonly routeDraftIdForRows: DraftId | null;
+  readonly draftTerminalLabels: ReadonlyMap<string, string>;
+  readonly environmentLabelById: ReadonlyMap<EnvironmentId, string>;
+  readonly environmentMachineById: ReadonlyMap<EnvironmentId, EnvironmentMachineKind>;
+  readonly projectByKey: ReadonlyMap<string, EnvironmentProject>;
+  readonly projectDisplayNameByKey: ReadonlyMap<string, string>;
+  readonly providerEntriesByEnvironment: ReadonlyMap<
+    string,
+    ReadonlyMap<string, SidebarProviderEntry>
+  >;
+  readonly timestampFormat: TimestampFormat;
+  readonly showDetails: boolean;
+}
+
+const SidebarSpacePreview = memo(function SidebarSpacePreview(props: SidebarSpacePreviewProps) {
+  const gt = useGT();
+  const messages = useMessages();
+  const {
+    space,
+    spaces,
+    projectSpaces,
+    sharedProjectKeys,
+    projectGroups,
+    projectGroupByRef,
+    hasProjects,
+    threads,
+    placedDraftSpaces,
+    placedThreadSpaces,
+    delegatedUnderParent,
+    serverConfigs,
+    connectedEnvironmentIds,
+    workingShelfEnabled,
+    workingShelfExpanded,
+    snoozedShelfExpanded,
+    settledShelfExpanded,
+    boringSidebarEnabled,
+    folderRowsMultiline,
+    projectExpandedById,
+    snoozeNow,
+    routeRowThreadKey,
+    routeThreadKey,
+    routeDraftIdForRows,
+    draftTerminalLabels,
+    environmentLabelById,
+    environmentMachineById,
+    projectByKey,
+    projectDisplayNameByKey,
+    providerEntriesByEnvironment,
+    timestampFormat,
+    showDetails,
+  } = props;
+
+  const previewProjectGroups = projectGroupsInSpace(
+    projectGroups,
+    spaces,
+    projectSpaces,
+    sharedProjectKeys,
+    space.id,
+  );
+  const previewScopeKeys = new Set(projectRefKeys(previewProjectGroups));
+  const isThreadInPreviewSpace = (
+    thread: Pick<EnvironmentThreadShell, "environmentId" | "id" | "projectId" | "source">,
+  ) => {
+    const group = projectGroupByRef.get(`${thread.environmentId}:${thread.projectId}`);
+    if (group === undefined) return false;
+    const projectSpaceId = groupSpaceId(group, spaces, projectSpaces);
+    const resolved = !sharedProjectKeys.has(group.projectKey)
+      ? projectSpaceId
+      : (sharedThreadSpaceId(
+          spaces,
+          thread.source.tags,
+          placedThreadSpaces[threadShellKey(thread)],
+        ) ?? projectSpaceId);
+    return resolved === space.id;
+  };
+  const isDraftInPreviewSpace = (
+    draftId: string,
+    draft: { readonly environmentId: string; readonly projectId: string },
+  ) => {
+    const group = projectGroupByRef.get(`${draft.environmentId}:${draft.projectId}`);
+    if (group === undefined) return false;
+    const projectSpaceId = groupSpaceId(group, spaces, projectSpaces);
+    const resolved = !sharedProjectKeys.has(group.projectKey)
+      ? projectSpaceId
+      : (sharedThreadSpaceId(spaces, undefined, placedDraftSpaces[draftId]) ?? projectSpaceId);
+    return resolved === space.id;
+  };
+  const { draftIds, routeDraftComposer } = useSidebarDrafts(
+    previewScopeKeys,
+    routeDraftIdForRows,
+    draftTerminalLabels,
+    isDraftInPreviewSpace,
+  );
+  const preview = partitionSidebarThreads({
+    threads,
+    scopedProjectKeys: previewScopeKeys,
+    isThreadInSpace: isThreadInPreviewSpace,
+    delegatedUnderParent,
+    serverConfigs,
+    connectedEnvironmentIds,
+    optimisticDrop: null,
+    workingShelfEnabled,
+    sortActiveBySend: boringSidebarEnabled,
+    clockKey: snoozeNow,
+  });
+  const previewPickable = pickableProjectGroups(previewProjectGroups);
+  const previewFolders = boringSidebarEnabled
+    ? groupSidebarThreadsByProject(
+        [...previewPickable, ...previewProjectGroups.filter((project) => project.archived)],
+        preview.activeThreads,
+        (group) => group.pinned && !group.archived,
+      ).map((folder) => {
+        const collapsed = !resolveProjectExpanded(
+          projectExpandedById,
+          sidebarFolderExpansionKeys(folder.group),
+        );
+        return {
+          group: folder.group,
+          collapsed,
+          threads: collapsed ? routeThreadOnly(folder.threads, routeRowThreadKey) : folder.threads,
+          hiddenThreads: collapsed
+            ? folder.threads.filter((thread) => threadShellKey(thread) !== routeRowThreadKey)
+            : EMPTY_THREADS,
+        };
+      })
+    : null;
+  const previewHasFolders = previewFolders !== null && previewFolders.length > 0;
+  const previewWorking = workingShelfExpanded
+    ? preview.workingThreads
+    : routeThreadOnly(preview.workingThreads, routeRowThreadKey);
+  const previewSnoozed = snoozedShelfExpanded
+    ? preview.snoozedThreads
+    : routeThreadOnly(preview.snoozedThreads, routeRowThreadKey);
+  const previewSettled = settledShelfExpanded
+    ? preview.settledThreads.slice(0, SETTLED_TAIL_INITIAL_COUNT)
+    : routeThreadOnly(preview.settledThreads, routeRowThreadKey);
+  const previewIsEmpty =
+    !previewHasFolders &&
+    draftIds.length === 0 &&
+    preview.pinnedThreads.length +
+      preview.activeThreads.length +
+      preview.workingThreads.length +
+      preview.snoozedThreads.length +
+      preview.settledThreads.length ===
+      0;
+
+  const renderPreviewRow = (
+    thread: EnvironmentThreadShell,
+    section: SidebarSection,
+    folderRow?: string,
+  ) => {
+    const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+    const isCard = section === "active" || section === "pinned" || section === "working";
+    const rowVariant = folderRow
+      ? folderRowsMultiline
+        ? "folder-multiline"
+        : "folder"
+      : isCard
+        ? "card"
+        : "slim";
+    return (
+      <SidebarThreadRow
+        key={threadKey}
+        thread={thread}
+        variant={rowVariant}
+        variantAction={
+          section === "snoozed" ? "unsnooze" : section === "settled" ? "unsettle" : "settle"
+        }
+        settlementSupported={serverConfigs.has(thread.environmentId)}
+        snoozeSupported={serverConfigs.has(thread.environmentId)}
+        pinningSupported={serverConfigs.has(thread.environmentId)}
+        isPinned={thread.pinnedAt != null}
+        dropVerb={null}
+        dragOverPinned={false}
+        sweepAction={null}
+        snoozeWakeLabelText={
+          section === "snoozed" && thread.snoozedUntil != null
+            ? snoozeWakeLabel(thread.snoozedUntil, { now: preview.snoozeNow }, messages)
+            : null
+        }
+        wokeAt={threadWokeAt(thread, { now: preview.snoozeNow })}
+        isActive={routeRowThreadKey === threadKey}
+        isRouteThread={routeThreadKey === threadKey}
+        readOpensPullRequestsInRightPanel={SPACE_PREVIEW_READ_FALSE}
+        environmentLabel={environmentLabelById.get(thread.environmentId) ?? null}
+        environmentMachine={environmentMachineById.get(thread.environmentId) ?? "server"}
+        project={projectByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null}
+        projectDisplayName={
+          projectDisplayNameByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null
+        }
+        providerEntryByInstanceId={
+          providerEntriesByEnvironment.get(thread.environmentId) ?? EMPTY_PROVIDER_ENTRIES
+        }
+        timestampFormat={timestampFormat}
+        showDetails={showDetails}
+        onThreadClick={SPACE_PREVIEW_NOOP}
+        onThreadActivate={SPACE_PREVIEW_NOOP}
+        onStartRename={SPACE_PREVIEW_NOOP}
+        onRenameTitleChange={SPACE_PREVIEW_NOOP}
+        onCommitRename={SPACE_PREVIEW_NOOP}
+        onCancelRename={SPACE_PREVIEW_NOOP}
+        isRenaming={false}
+        renamingTitle=""
+        onContextMenu={SPACE_PREVIEW_NOOP}
+        onSettle={SPACE_PREVIEW_NOOP}
+        onActionSweepStart={SPACE_PREVIEW_NOOP}
+        onUnsettle={SPACE_PREVIEW_NOOP}
+        onSnooze={SPACE_PREVIEW_NOOP}
+        onUnsnooze={SPACE_PREVIEW_NOOP}
+        onUnpin={SPACE_PREVIEW_NOOP}
+        onAcknowledgeWoke={SPACE_PREVIEW_NOOP}
+      />
+    );
+  };
+
+  return (
+    <ScrollArea
+      hideScrollbars
+      scrollFade
+      scrollFadePadding={false}
+      viewportTabIndex={-1}
+      className="h-auto min-h-0 flex-1 [&>[data-slot=scroll-area-viewport]]:[--fade-size:0.75rem]"
+    >
+      <div className="flex min-h-full w-full min-w-0 flex-col [overflow-anchor:none] [&>[data-sidebar=group]:first-child]:pt-0">
+        <SidebarGroup className="flex-1" role="presentation">
+          {previewIsEmpty ? (
+            <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
+              {!hasProjects ? (
+                <>
+                  <span>
+                    <T>No projects yet</T>
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground"
+                  >
+                    <PlusIcon className="-mx-0.5 size-3" />
+                    <T>Add project</T>
+                  </button>
+                </>
+              ) : (
+                <T>No threads yet</T>
+              )}
+            </div>
+          ) : (
+            <ul role="presentation" className="relative flex flex-1 flex-col gap-px">
+              <SidebarDraftBlock
+                draftIds={draftIds}
+                routeDraftComposer={routeDraftComposer}
+                terminalLabels={draftTerminalLabels}
+                projectByKey={projectByKey}
+                projectDisplayNameByKey={projectDisplayNameByKey}
+                routeDraftId={routeDraftIdForRows}
+                onNavigateToDraft={SPACE_PREVIEW_NOOP}
+                onDraftContextMenu={SPACE_PREVIEW_NOOP}
+              />
+              {preview.pinnedThreads.map((thread) => renderPreviewRow(thread, "pinned"))}
+              {previewFolders !== null
+                ? previewFolders.flatMap((folder) => [
+                    <SidebarProjectFolderHeader
+                      key={`project-folder:${folder.group.projectKey}`}
+                      group={folder.group}
+                      collapsed={folder.collapsed}
+                      hiddenThreads={folder.hiddenThreads}
+                      onToggle={SPACE_PREVIEW_NOOP}
+                      onNewThread={SPACE_PREVIEW_NOOP}
+                      onContextMenu={SPACE_PREVIEW_NOOP}
+                    />,
+                    ...folder.threads.map((thread) =>
+                      renderPreviewRow(
+                        thread,
+                        "active",
+                        sidebarFolderRowId(folder.group.projectKey),
+                      ),
+                    ),
+                  ])
+                : preview.activeThreads.map((thread) => renderPreviewRow(thread, "active"))}
+              {preview.workingThreads.length > 0 ? (
+                <>
+                  <li className="relative mx-0.5 mt-auto h-8 list-none">
+                    <CollapsibleSectionHeader
+                      onClick={SPACE_PREVIEW_NOOP}
+                      expanded={workingShelfExpanded}
+                      tone="muted"
+                      accessory={
+                        <span className="font-normal tabular-nums">
+                          {preview.workingThreads.length}
+                        </span>
+                      }
+                    >
+                      {gt("Working", { $context: "sidebar section" })}
+                    </CollapsibleSectionHeader>
+                  </li>
+                  {previewWorking.map((thread) => renderPreviewRow(thread, "working"))}
+                </>
+              ) : null}
+              {preview.snoozedThreads.length > 0 ? (
+                <>
+                  <li
+                    className={cn(
+                      "relative mx-0.5 h-8 list-none",
+                      preview.workingThreads.length === 0 && "mt-auto",
+                    )}
+                  >
+                    <CollapsibleSectionHeader
+                      onClick={SPACE_PREVIEW_NOOP}
+                      expanded={snoozedShelfExpanded}
+                      tone="muted"
+                      accessory={
+                        <span className="font-normal tabular-nums">
+                          {preview.snoozedThreads.length}
+                        </span>
+                      }
+                    >
+                      {gt("Snoozed", { $context: "sidebar section" })}
+                    </CollapsibleSectionHeader>
+                  </li>
+                  {previewSnoozed.map((thread) => renderPreviewRow(thread, "snoozed"))}
+                </>
+              ) : null}
+              <li
+                className={cn(
+                  "relative mx-0.5 h-8 list-none",
+                  preview.workingThreads.length + preview.snoozedThreads.length === 0 && "mt-auto",
+                )}
+              >
+                <CollapsibleSectionHeader
+                  onClick={SPACE_PREVIEW_NOOP}
+                  expanded={settledShelfExpanded}
+                  tone="muted"
+                  accessory={
+                    <span className="font-normal tabular-nums">
+                      {preview.settledThreads.length}
+                    </span>
+                  }
+                >
+                  {gt("Settled", { $context: "sidebar section" })}
+                </CollapsibleSectionHeader>
+              </li>
+              {previewSettled.map((thread) => renderPreviewRow(thread, "settled"))}
+            </ul>
+          )}
+        </SidebarGroup>
+      </div>
+    </ScrollArea>
+  );
+});
 
 // Separate hooks cache maps independently of later Sidebar hooks and preserve dnd-kit inputs.
 function useSidebarThreads(input: {
@@ -1057,12 +1439,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const placedThreadSpaces = useSentThreadSpaces((store) => store.placed);
   const placeDraftInSpace = useDraftSpaces((store) => store.place);
   const [storedSpaceId, setStoredSpaceId] = useLocalStorage(ACTIVE_SPACE_KEY, null, ActiveSpaceId);
-  const [previewSpaceId, setPreviewSpaceId] = useState<string | null>(null);
   const { moveThreadToSpace } = useThreadSpaceTags();
   const spacesRef = useRef<SidebarSpacesHandle>(null);
   const [spacesFooterSlot, setSpacesFooterSlot] = useState<HTMLDivElement | null>(null);
-  const previewPathRef = useRef<string | null>(null);
   const spaceDraftIdsRef = useRef(new Map<string, DraftId>());
+  const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
     reduceSidebarProjectScopeMenuState,
     { open: false, query: "" },
@@ -1196,7 +1577,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     filterSidebarV2VisibleThreads([pendingRevealThread], null, delegatedUnderParent).length === 0
       ? null
       : threadSpaceId(pendingRevealThread);
-  const activeSpaceId = resolveSpaceId(spaces, previewSpaceId ?? revealSpaceId ?? storedSpaceId);
+  const activeSpaceId = resolveSpaceId(spaces, revealSpaceId ?? storedSpaceId);
   const isDraftInSpace = (
     draftId: string,
     draft: { readonly environmentId: string; readonly projectId: string },
@@ -1205,10 +1586,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     activeSpaceId === null || threadSpaceId(thread) === activeSpaceId;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a route opened from outside the sidebar moves the persisted space to the thread's space
   useEffect(() => {
-    if (previewSpaceId === null && revealSpaceId !== null && revealSpaceId !== storedSpaceId) {
+    if (revealSpaceId !== null && revealSpaceId !== storedSpaceId) {
       setStoredSpaceId(revealSpaceId);
     }
-  }, [previewSpaceId, revealSpaceId, setStoredSpaceId, storedSpaceId]);
+  }, [revealSpaceId, setStoredSpaceId, storedSpaceId]);
   const routeDraftId = routeTarget?.kind === "draft" ? routeTarget.draftId : null;
   const routeDraftHasContent = useComposerDraftStore(
     (store) =>
@@ -1252,18 +1633,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       observedRoute.item === routeItem &&
       observedRoute.spaceId !== null &&
       observedRoute.spaceId !== routeSpaceId;
-    if (
-      (openedDraft || routeItemMoved) &&
-      previewSpaceId === null &&
-      routeSpaceId !== storedSpaceId
-    ) {
+    if ((openedDraft || routeItemMoved) && routeSpaceId !== storedSpaceId) {
       setStoredSpaceId(routeSpaceId);
     }
   }, [
     observedDraftIdRef,
     observedRouteSpaceRef,
     placeDraftInSpace,
-    previewSpaceId,
     routeDraftHasContent,
     routeDraftId,
     routeDraftIsShared,
@@ -1680,21 +2056,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     });
   };
 
-  const routeMovedDuringSlide = () => router.history.location.pathname !== previewPathRef.current;
-  const previewSpace = (spaceId: string | null) => {
-    if (spaceId !== null) {
-      previewPathRef.current = router.history.location.pathname;
-    } else if (routeMovedDuringSlide() && routeSpaceId !== null) {
-      setStoredSpaceId(routeSpaceId);
-    }
-    setPreviewSpaceId(spaceId);
-  };
   const commitSpace = (spaceId: string) => {
-    setPreviewSpaceId(null);
-    setStoredSpaceId(routeMovedDuringSlide() ? (routeSpaceId ?? spaceId) : spaceId);
+    setStoredSpaceId(spaceId);
     clearSelection();
     setPersistedProjectScopeKeys([]);
-    if (routeMovedDuringSlide()) return;
     completeSidebarRouteReveal(routeReveal);
     const spaceDraftId = spaceDraftIdsRef.current.get(spaceId);
     const spaceDraft =
@@ -3338,6 +3703,43 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     openCommandPalette({ open: "new-thread-in" });
   };
 
+  const renderSpacePreview = (space: SidebarSpace): ReactNode => (
+    <SidebarSpacePreview
+      space={space}
+      spaces={spaces}
+      projectSpaces={projectSpaces}
+      sharedProjectKeys={sharedProjectKeys}
+      projectGroups={projectGroups}
+      projectGroupByRef={projectGroupByRef}
+      hasProjects={projects.length > 0}
+      threads={listedThreads}
+      placedDraftSpaces={placedDraftSpaces}
+      placedThreadSpaces={placedThreadSpaces}
+      delegatedUnderParent={delegatedUnderParent}
+      serverConfigs={serverConfigs}
+      connectedEnvironmentIds={connectedEnvironmentIds}
+      workingShelfEnabled={workingShelfEnabled}
+      workingShelfExpanded={workingShelfExpanded}
+      snoozedShelfExpanded={snoozedShelfExpanded}
+      settledShelfExpanded={settledShelfExpanded}
+      boringSidebarEnabled={boringSidebarEnabled}
+      folderRowsMultiline={folderRowsMultiline}
+      projectExpandedById={projectExpandedById}
+      snoozeNow={snoozeNow}
+      routeRowThreadKey={routeRowThreadKey}
+      routeThreadKey={routeThreadKey}
+      routeDraftIdForRows={routeDraftIdForRows}
+      draftTerminalLabels={draftTerminalLabels}
+      environmentLabelById={environmentLabelById}
+      environmentMachineById={environmentMachineById}
+      projectByKey={projectByKey}
+      projectDisplayNameByKey={projectDisplayNameByKey}
+      providerEntriesByEnvironment={providerEntriesByEnvironment}
+      timestampFormat={timestampFormat}
+      showDetails={sidebarShowThreadDetails}
+    />
+  );
+
   const newThreadShortcutLabel = shortcutLabelForCommand(keybindings, "chat.new");
   return (
     <SidebarFolderDrop>
@@ -3355,8 +3757,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   activeSpaceId={activeSpaceId}
                   disabled={dragState !== null}
                   navContainer={spacesFooterSlot}
-                  onPreview={previewSpace}
                   onCommit={commitSpace}
+                  renderPage={renderSpacePreview}
                 >
                   {scrollArea}
                 </SidebarSpaces>

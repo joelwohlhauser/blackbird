@@ -671,7 +671,7 @@ function ThreadRenameInput(props: {
   );
 }
 
-const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
+export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
   const gt = useGT();
   const messages = useMessages();
   const {
