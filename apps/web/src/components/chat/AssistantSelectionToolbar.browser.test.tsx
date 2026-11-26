@@ -349,3 +349,70 @@ it("cites text drag-selected inside and out of a sandboxed inline HTML render", 
     comment: "out of frame",
   });
 });
+
+it("highlights the cited frame text while commenting and closes when clicking inside the frame", async () => {
+  const html =
+    injectHtmlRenderBootstrap(
+      '<!doctype html><body><p id="other">Other text</p><h1><span>Anthropic</span></h1><script>window.addEventListener("message",function(e){if(e.data&&e.data.type==="probe-highlight"){parent.postMessage({type:"highlight-state",active:Boolean(window.CSS&&CSS.highlights&&CSS.highlights.has("t3-assistant-citation-comment")),nativeEmpty:Boolean(getSelection()&&getSelection().isCollapsed)},"*");}});</script></body>',
+    ) + HTML_RENDER_TEXT_SELECTION_SCRIPT;
+  const src = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  using _url = { [Symbol.dispose]: () => URL.revokeObjectURL(src) };
+
+  function FrameTimeline({ onCite }: { onCite: OnCite }) {
+    const [viewport, setViewport] = useState<HTMLElement | null>(null);
+    return (
+      <div ref={setViewport}>
+        <div data-assistant-citation-source="render-item">
+          <iframe
+            title="Render"
+            sandbox="allow-scripts allow-forms"
+            style={{ width: 400, height: 120 }}
+            src={src}
+          />
+        </div>
+        <AssistantSelectionToolbar viewport={viewport} threadRef={threadRef} onCite={onCite} />
+      </div>
+    );
+  }
+  const onCite = vi.fn<OnCite>(() => true);
+  await using screen = await render(<FrameTimeline onCite={onCite} />);
+
+  const frameEl = screen.getByTitle("Render").element() as HTMLIFrameElement;
+  const probeHighlight = () =>
+    new Promise<{ active: boolean; nativeEmpty: boolean }>((resolve) => {
+      const onMessage = (event: MessageEvent) => {
+        if (event.data?.type !== "highlight-state") return;
+        window.removeEventListener("message", onMessage);
+        resolve({ active: event.data.active, nativeEmpty: event.data.nativeEmpty });
+      };
+      window.addEventListener("message", onMessage);
+      frameEl.contentWindow?.postMessage({ type: "probe-highlight" }, "*");
+    });
+
+  const frame = page.frameLocator(screen.getByTitle("Render"));
+  await frame.getByText("Anthropic").dblClick();
+
+  await expect.element(commentField()).toHaveFocus();
+  await vi.waitFor(async () => {
+    expect(await probeHighlight()).toEqual({ active: true, nativeEmpty: true });
+  });
+
+  // Clicking elsewhere inside the iframe unselects and closes an empty comment popover.
+  await frame.getByText("Other text").click();
+  await expect.element(commentField()).not.toBeInTheDocument();
+  expect(await probeHighlight()).toEqual({ active: false, nativeEmpty: true });
+  expect(onCite).not.toHaveBeenCalled();
+
+  // Clicking inside the iframe after typing a comment saves it and closes the popover.
+  await frame.getByText("Anthropic").dblClick();
+  await expect.element(commentField()).toHaveFocus();
+  await userEvent.keyboard("check this");
+  await frame.getByText("Other text").click();
+  await expect.element(commentField()).not.toBeInTheDocument();
+  expect(onCite).toHaveBeenCalledTimes(1);
+  expect(onCite.mock.lastCall![0]).toMatchObject({
+    messageId: "render-item",
+    text: "Anthropic",
+    comment: "check this",
+  });
+});

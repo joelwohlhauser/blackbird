@@ -245,7 +245,9 @@ const SHORTCUTS_METHOD = "t3/notifications/shortcuts";
 const KEY_DOWN_METHOD = "t3/notifications/keydown";
 const OPEN_IMAGE_METHOD = "t3/notifications/open-image";
 const TEXT_SELECTED_METHOD = "t3/notifications/text-selected";
+const HIGHLIGHT_SELECTION_METHOD = "t3/notifications/highlight-selection";
 const CLEAR_SELECTION_METHOD = "t3/notifications/clear-selection";
+const SELECTION_DISMISS_METHOD = "t3/notifications/selection-dismiss";
 const TEXT_SELECTION_CONTEXT_LENGTH = 200;
 // Not part of MCP Apps: a page, such as an interview form, sends text as the
 // reader's next message in the thread that shows it, or only puts it into
@@ -443,8 +445,21 @@ export function htmlRenderResult(id: string | number) {
   return { jsonrpc: "2.0", id, result: {} } as const;
 }
 
+export function htmlRenderHighlightSelectionMessage() {
+  return { jsonrpc: "2.0", method: HIGHLIGHT_SELECTION_METHOD } as const;
+}
+
 export function htmlRenderClearSelectionMessage() {
   return { jsonrpc: "2.0", method: CLEAR_SELECTION_METHOD } as const;
+}
+
+export function isHtmlRenderSelectionDismiss(data: unknown): boolean {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    (data as Record<string, unknown>).jsonrpc === "2.0" &&
+    (data as Record<string, unknown>).method === SELECTION_DISMISS_METHOD
+  );
 }
 
 const THEME_FRAGMENT_KEY = "t3-theme";
@@ -494,7 +509,7 @@ const BOOTSTRAP_SCRIPT = `(function(){var s=document.getElementById("t3-theme"),
  * Appended when serving an inline HTML render attachment so every render — including pages
  * published before this bridge existed — reports mouse text selections to the host chat.
  */
-export const HTML_RENDER_TEXT_SELECTION_SCRIPT = `<script>(function(){if(window.parent===window)return;var S=0,P=0,B=null;function snap(){var g=getSelection(),r;if(!g||g.isCollapsed||g.rangeCount!==1)return null;r=g.getRangeAt(0);return[r.startContainer,r.startOffset,r.endContainer,r.endOffset];}function same(a,b){return!!(a&&b&&a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2]&&a[3]===b[3]);}window.addEventListener("message",function(e){var d=e.data,g;if(e.source===window.parent&&d&&d.jsonrpc==="2.0"&&d.method===${JSON.stringify(CLEAR_SELECTION_METHOD)}){g=getSelection();if(g)g.removeAllRanges();S=0;B=null;}});document.addEventListener("selectionchange",function(){S=1;});window.addEventListener("pointerdown",function(e){if(e.isTrusted&&e.button===0){S=0;P=1;B=snap();}},true);function finish(e){if(!e.isTrusted||e.button!==0||!P)return;P=0;setTimeout(function(){var g=getSelection(),d=document.body||document.documentElement,f=document.activeElement,r,n,q,c,l,i,t,a,k;if(!d||!g||g.isCollapsed||g.rangeCount!==1||f&&(f.isContentEditable||/^(?:INPUT|TEXTAREA|SELECT)$/.test(f.tagName)))return;n=snap();if(!S&&same(B,n))return;S=0;B=n;r=g.getRangeAt(0);t=g.toString();if(!t.trim()||!document.documentElement.contains(r.commonAncestorContainer))return;k=d.contains(r.commonAncestorContainer)?d:document.documentElement;q=document.createRange();q.selectNodeContents(k);q.setEnd(r.startContainer,r.startOffset);a=q.toString().slice(-${TEXT_SELECTION_CONTEXT_LENGTH});q.selectNodeContents(k);q.setStart(r.endContainer,r.endOffset);c=r.getClientRects();l=null;for(i=c.length-1;i>=0;i--)if(c[i].width>0&&c[i].height>0){l=c[i];break;}c=l||r.getBoundingClientRect();window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(TEXT_SELECTED_METHOD)},params:{text:t,before:a,after:q.toString().slice(0,${TEXT_SELECTION_CONTEXT_LENGTH}),rect:{x:c.left,y:c.top,width:c.width,height:c.height}}},"*");});}window.addEventListener("pointerup",finish,true);window.addEventListener("mouseup",finish,true);})();</script>`;
+export const HTML_RENDER_TEXT_SELECTION_SCRIPT = `<style>::highlight(t3-assistant-citation-comment){background-color:color-mix(in oklab,var(--primary,#346bf1) 45%,transparent)}</style><script>(function(){if(window.parent===window)return;var H="t3-assistant-citation-comment",S=0,P=0,B=null,R=null;function snap(){var g=getSelection(),r;if(!g||g.isCollapsed||g.rangeCount!==1)return null;r=g.getRangeAt(0);return[r.startContainer,r.startOffset,r.endContainer,r.endOffset];}function same(a,b){return!!(a&&b&&a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2]&&a[3]===b[3]);}function unhi(){if(typeof CSS!=="undefined"&&CSS.highlights)CSS.highlights.delete(H);}window.addEventListener("message",function(e){var d=e.data,g;if(e.source!==window.parent||!d||d.jsonrpc!=="2.0")return;if(d.method===${JSON.stringify(HIGHLIGHT_SELECTION_METHOD)}){if(R&&typeof Highlight!=="undefined"&&typeof CSS!=="undefined"&&CSS.highlights){CSS.highlights.set(H,new Highlight(R));g=getSelection();if(g)g.removeAllRanges();S=0;B=null;}return;}if(d.method===${JSON.stringify(CLEAR_SELECTION_METHOD)}){unhi();R=null;g=getSelection();if(g)g.removeAllRanges();S=0;B=null;}});document.addEventListener("selectionchange",function(){S=1;});window.addEventListener("pointerdown",function(e){if(!e.isTrusted)return;unhi();R=null;window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(SELECTION_DISMISS_METHOD)}},"*");if(e.button===0){S=0;P=1;B=snap();}},true);function finish(e){if(!e.isTrusted||e.button!==0||!P)return;P=0;setTimeout(function(){var g=getSelection(),d=document.body||document.documentElement,f=document.activeElement,r,n,q,c,l,i,t,a,k;if(!d||!g||g.isCollapsed||g.rangeCount!==1||f&&(f.isContentEditable||/^(?:INPUT|TEXTAREA|SELECT)$/.test(f.tagName)))return;n=snap();if(!S&&same(B,n))return;S=0;B=n;r=g.getRangeAt(0);t=g.toString();if(!t.trim()||!document.documentElement.contains(r.commonAncestorContainer))return;R=r.cloneRange();k=d.contains(r.commonAncestorContainer)?d:document.documentElement;q=document.createRange();q.selectNodeContents(k);q.setEnd(r.startContainer,r.startOffset);a=q.toString().slice(-${TEXT_SELECTION_CONTEXT_LENGTH});q.selectNodeContents(k);q.setStart(r.endContainer,r.endOffset);c=r.getClientRects();l=null;for(i=c.length-1;i>=0;i--)if(c[i].width>0&&c[i].height>0){l=c[i];break;}c=l||r.getBoundingClientRect();window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(TEXT_SELECTED_METHOD)},params:{text:t,before:a,after:q.toString().slice(0,${TEXT_SELECTION_CONTEXT_LENGTH}),rect:{x:c.left,y:c.top,width:c.width,height:c.height}}},"*");});}window.addEventListener("pointerup",finish,true);window.addEventListener("mouseup",finish,true);})();</script>`;
 
 function bootstrapMarkup(markup: string): string {
   const dark = htmlRenderTheme(T3_CODE_DARK_THEME_COLORS, "dark");

@@ -10,6 +10,8 @@ import {
 } from "@t3tools/shared/assistantCitations";
 import {
   htmlRenderClearSelectionMessage,
+  htmlRenderHighlightSelectionMessage,
+  isHtmlRenderSelectionDismiss,
   readHtmlRenderTextSelection,
 } from "@t3tools/shared/htmlRender";
 import { useGT } from "gt-react";
@@ -68,9 +70,6 @@ export function AssistantSelectionToolbar({
   const gt = useGT();
 
   const closeComment = () => {
-    if (selection?.anchor.kind === "frame" && document.activeElement !== selection.anchor.frame) {
-      selection.anchor.frame.contentWindow?.postMessage(htmlRenderClearSelectionMessage(), "*");
-    }
     draftCommentRef.current = null;
     setSelection(null);
   };
@@ -98,6 +97,9 @@ export function AssistantSelectionToolbar({
   const onSourceUnavailable = useEffectEvent(() => {
     settleComment("none");
   });
+  const onFrameDismiss = useEffectEvent(() => {
+    if (selection?.commenting) settleComment("outside-press");
+  });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- watches the cited DOM text for removal while the comment is open
   useEffect(() => {
     if (!selection?.commenting) return;
@@ -109,12 +111,21 @@ export function AssistantSelectionToolbar({
         onUnavailable: onSourceUnavailable,
       });
     }
-    if (!viewport) return;
+    anchor.frame.contentWindow?.postMessage(htmlRenderHighlightSelectionMessage(), "*");
+    const clearFrameHighlight = () => {
+      if (document.activeElement !== anchor.frame) {
+        anchor.frame.contentWindow?.postMessage(htmlRenderClearSelectionMessage(), "*");
+      }
+    };
+    if (!viewport) return clearFrameHighlight;
     const observer = new MutationObserver(() => {
       if (!anchor.frame.isConnected) onSourceUnavailable();
     });
     observer.observe(viewport, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      clearFrameHighlight();
+    };
   }, [selection, viewport]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the toolbar DOM node and clamps its position inside the window before paint
@@ -232,6 +243,13 @@ export function AssistantSelectionToolbar({
       });
     };
     const commentOnFrameSelection = (event: MessageEvent) => {
+      if (isHtmlRenderSelectionDismiss(event.data)) {
+        const fromViewportFrame = [...viewport.querySelectorAll("iframe")].some(
+          (candidate) => candidate.contentWindow === event.source,
+        );
+        if (fromViewportFrame) onFrameDismiss();
+        return;
+      }
       const selected = readHtmlRenderTextSelection(event.data);
       if (!selected || draftCommentRef.current?.trim()) return;
       const frame = [...viewport.querySelectorAll("iframe")].find(

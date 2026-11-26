@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  htmlRenderClearSelectionMessage,
+  htmlRenderHighlightSelectionMessage,
   injectHtmlRenderBootstrap,
+  isHtmlRenderSelectionDismiss,
   readHtmlRenderMessage,
   readHtmlRenderImageRequest,
   readHtmlRenderLinkRequest,
@@ -219,6 +222,26 @@ describe("readHtmlRenderTextSelection", () => {
     expect(
       readHtmlRenderTextSelection({ method: "t3/notifications/text-selected", params: {} }),
     ).toBeUndefined();
+  });
+
+  it("recognizes selection dismiss notifications and builds highlight/clear messages", () => {
+    expect(
+      isHtmlRenderSelectionDismiss({
+        jsonrpc: "2.0",
+        method: "t3/notifications/selection-dismiss",
+      }),
+    ).toBe(true);
+    expect(isHtmlRenderSelectionDismiss({ method: "t3/notifications/selection-dismiss" })).toBe(
+      false,
+    );
+    expect(htmlRenderHighlightSelectionMessage()).toEqual({
+      jsonrpc: "2.0",
+      method: "t3/notifications/highlight-selection",
+    });
+    expect(htmlRenderClearSelectionMessage()).toEqual({
+      jsonrpc: "2.0",
+      method: "t3/notifications/clear-selection",
+    });
   });
 });
 
