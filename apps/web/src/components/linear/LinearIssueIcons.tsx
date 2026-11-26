@@ -1,9 +1,12 @@
-import { LINEAR_PRIORITY_ORDER, type IssueState, type IssueSummary } from "@t3tools/contracts";
+import {
+  LINEAR_PRIORITY_ORDER,
+  type IssueState,
+  type IssueSummary,
+  type LinearPriority,
+} from "@t3tools/contracts";
 import { msg, useGT, useMessages } from "gt-react";
 
 import { cn } from "../../lib/utils";
-
-type LinearPriority = (typeof LINEAR_PRIORITY_ORDER)[number];
 
 const MUTED_COLOR = "#999a9c";
 
@@ -74,9 +77,11 @@ export function LinearStatusIcon({ state, className }: { state: IssueState; clas
 export function LinearPriorityIcon({
   priority,
   closed = false,
+  className,
 }: {
   priority: LinearPriority;
   closed?: boolean;
+  className?: string;
 }) {
   const gt = useGT();
   const messages = useMessages();
@@ -84,7 +89,7 @@ export function LinearPriorityIcon({
   return (
     <svg
       viewBox="0 0 16 16"
-      className="size-3.5 shrink-0"
+      className={cn("size-3.5 shrink-0", className)}
       fill="currentColor"
       style={{ color: priority === 1 && !closed ? "#ff6b26" : MUTED_COLOR }}
       role="img"

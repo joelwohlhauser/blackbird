@@ -31,8 +31,7 @@ The left sidebar includes:
 - Command+N on the new-chat page opens the project picker. Blackbird does not offer repository initialization; add an existing Git repository to use Git actions;
 - upstream T3 Code's Pinned, Active, Working, Snoozed, and Settled sections, with drag-and-drop between and within them (the server saves the order). Quick chats appear there like any other chat;
 - the Labs **Boring sidebar** mode, which groups chats into project folders (Quick chats get their own folder), with local and remote copies grouped under the human folder name rather than a GitHub `owner/repo` name;
-- an optional compact mode (Settings → General → Thread details) that hides
-  each chat's third row with the worktree, branch, PR, and agent;
+- an optional compact mode (Settings → General → Thread details) that hides each chat's third row with the worktree, branch, PR, and agent, and instead shows the highest priority of the chat's linked Linear issues as Linear's priority icon before the project name;
 - a desktop update indicator with download progress and an explicit restart action;
 - persistent open/closed state;
 - resizing while docked or while temporarily overlaid;

@@ -8,7 +8,13 @@ import {
 } from "@t3tools/client-runtime/state/issues";
 import { useAtomValue } from "@effect/atom-react";
 import { selectEnvironmentQueryData } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId, IssueState, ThreadIssueLink } from "@t3tools/contracts";
+import {
+  mostUrgentLinearPriority,
+  type EnvironmentId,
+  type IssueState,
+  type LinearPriority,
+  type ThreadIssueLink,
+} from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
@@ -41,6 +47,9 @@ export function useLinkedIssueDetail(
   ).data;
 }
 
+const sidebarIssueDetail = (environmentId: EnvironmentId, link: ThreadIssueLink) =>
+  issueEnvironment.detail({ environmentId, input: linkedIssueRef(link) }, "sidebar");
+
 const emptySidebarIssueState = Atom.make<IssueState | null>(null);
 
 export function useSidebarLinkedIssueState(
@@ -53,14 +62,7 @@ export function useSidebarLinkedIssueState(
       ? Atom.make((get): IssueState | null => {
           const states = links.map(
             (link) =>
-              selectEnvironmentQueryData(
-                get(
-                  issueEnvironment.detail(
-                    { environmentId, input: linkedIssueRef(link) },
-                    "sidebar",
-                  ),
-                ),
-              )?.state,
+              selectEnvironmentQueryData(get(sidebarIssueDetail(environmentId, link)))?.state,
           );
           const open = states.find((state) => state?.category === "open");
           if (open !== undefined) return open;
@@ -72,6 +74,27 @@ export function useSidebarLinkedIssueState(
           );
         })
       : emptySidebarIssueState;
+  return useAtomValue(aggregate);
+}
+
+const emptySidebarIssuePriority = Atom.make<LinearPriority | null>(null);
+
+export function useSidebarLinkedIssuePriority(
+  environmentId: EnvironmentId,
+  links: ReadonlyArray<ThreadIssueLink> | undefined,
+) {
+  const configs = useServerConfigs();
+  const aggregate =
+    links?.length && configs.get(environmentId)?.environment.capabilities.issues === true
+      ? Atom.make((get) =>
+          mostUrgentLinearPriority(
+            links.map(
+              (link) =>
+                selectEnvironmentQueryData(get(sidebarIssueDetail(environmentId, link)))?.priority,
+            ),
+          ),
+        )
+      : emptySidebarIssuePriority;
   return useAtomValue(aggregate);
 }
 

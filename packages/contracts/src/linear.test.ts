@@ -4,6 +4,7 @@ import {
   linearIssueIdFromBranch,
   linearIssueIdsFromTags,
   linearIssueTag,
+  mostUrgentLinearPriority,
   withBranchLinearIssueTag,
 } from "./linear.ts";
 
@@ -36,5 +37,20 @@ describe("Linear issue links", () => {
     const linked = ["linear:APP-123"];
     expect(withBranchLinearIssueTag(linked, "app-123-again")).toBe(linked);
     expect(withBranchLinearIssueTag(linked, "main")).toBe(linked);
+  });
+});
+
+describe("mostUrgentLinearPriority", () => {
+  it.each([
+    [[3, 1, 2], 1],
+    [[4, 2, 3], 2],
+    [[0, 4], 4],
+    [[undefined, 3], 3],
+  ])("picks the most urgent of %j", (priorities, expected) => {
+    expect(mostUrgentLinearPriority(priorities)).toBe(expected);
+  });
+
+  it.each([[[]], [[0, 0]], [[undefined]]])("has none for %j", (priorities) => {
+    expect(mostUrgentLinearPriority(priorities)).toBeNull();
   });
 });

@@ -80,7 +80,8 @@ import { useThreadSelectionStore } from "../../threadSelectionStore";
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { useNowSecond } from "../../hooks/useNowSecond";
 import { vcsEnvironment, vcsBranchRevalidation } from "../../state/vcs";
-import { useSidebarLinkedIssueState } from "../../state/issues";
+import { useSidebarLinkedIssuePriority, useSidebarLinkedIssueState } from "../../state/issues";
+import { LinearPriorityIcon } from "../linear/LinearIssueIcons";
 import { useEnvironmentQuery } from "../../state/query";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
 import { formatRelativeTime, parseTimestampDate } from "../../timestampFormat";
@@ -1129,6 +1130,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     thread.environmentId,
     leaseLiveStatus ? thread.issues : undefined,
   );
+  const issuePriority = useSidebarLinkedIssuePriority(
+    thread.environmentId,
+    leaseLiveStatus && !props.showDetails ? thread.issues : undefined,
+  );
   const issueStatus = issueState === null ? null : issueStatePresentation(issueState);
   const IssueIcon = issueStatus?.Icon ?? IssueGlyph.issue;
   const issueLabel =
@@ -1552,6 +1557,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               {/* Left of the status slot, the pin would slide when hover swaps the
                 label for the wider row controls. */}
               {pinIndicator}
+              {issuePriority === null ? null : (
+                <LinearPriorityIcon
+                  priority={issuePriority}
+                  closed={issueState?.category === "closed"}
+                  className="size-3"
+                />
+              )}
               {props.projectDisplayName ? (
                 <span
                   className={cn("min-w-0 flex-1 truncate font-normal text-secondary-label text-xs")}
