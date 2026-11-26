@@ -791,6 +791,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("notification toast popup completion input approval failure")],
   },
   {
+    id: "shortcut-tips",
+    title: msg("Daily shortcut tips"),
+    to: "/settings/general",
+    searchTerms: [msg("keyboard shortcut tip hint learn keybinding daily card")],
+  },
+  {
     id: "language",
     title: msg("Language"),
     to: "/settings/general",

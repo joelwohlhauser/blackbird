@@ -635,6 +635,7 @@ export const ClientSettingsSchema = Schema.Struct({
   // Third row of each sidebar thread (worktree, branch, PR, diff, agent).
   // Off gives a two-row, more compact sidebar.
   sidebarShowThreadDetails: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  shortcutTipsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   timestampFormat: TimestampFormat.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
   ),
@@ -2263,6 +2264,7 @@ export const ClientSettingsPatch = Schema.Struct({
   ),
   sidebarSharedProjects: Schema.optionalKey(Schema.Array(TrimmedNonEmptyString)),
   sidebarShowThreadDetails: Schema.optionalKey(Schema.Boolean),
+  shortcutTipsEnabled: Schema.optionalKey(Schema.Boolean),
   timestampFormat: Schema.optionalKey(TimestampFormat),
   voiceMicrophone: Schema.optionalKey(Schema.String),
   voiceMicrophones: Schema.optionalKey(Schema.Array(VoiceMicrophoneEntry)),

@@ -147,6 +147,8 @@ Useful shortcuts on macOS:
 - Command+W closes the active workspace tab. On the chat tab, it settles the
   thread and opens a fresh thread in the same project or Quick chats.
 
+Once a day, at a random daytime moment at least 20 minutes into a session, a **shortcut tip** card in the bottom-right corner teaches one keyboard shortcut. Tips use your own keybindings and the current platform's key symbols, and cycle through every shortcut before repeating one. Dismiss the card with its close button, or turn tips off from the card or in Settings → General → Daily shortcut tips.
+
 ### Git worktree workflow
 
 Blackbird incorporates the worktree workflow originally developed in Joel's

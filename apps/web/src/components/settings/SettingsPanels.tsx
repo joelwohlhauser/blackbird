@@ -380,6 +380,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.inAppNotificationsEnabled !== DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled
       ? [gt("In-app notifications")]
       : []),
+    ...(settings.shortcutTipsEnabled !== DEFAULT_UNIFIED_SETTINGS.shortcutTipsEnabled
+      ? [gt("Daily shortcut tips")]
+      : []),
     ...(settings.sidebarProjectGroupingMode !== DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode
       ? [gt("Project Grouping")]
       : []),
@@ -574,6 +577,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       externalLinkOpenMode: DEFAULT_UNIFIED_SETTINGS.externalLinkOpenMode,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
+      shortcutTipsEnabled: DEFAULT_UNIFIED_SETTINGS.shortcutTipsEnabled,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       persistComposerContextStrip: DEFAULT_UNIFIED_SETTINGS.persistComposerContextStrip,
       diffFilesCollapsed: DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed,
@@ -731,6 +735,19 @@ export function GeneralSettingsPanel() {
               checked={settings.inAppNotificationsEnabled}
               onCheckedChange={(checked) => updateSettings({ inAppNotificationsEnabled: checked })}
               aria-label={gt("In-app notifications")}
+            />
+          }
+        />
+        <SettingsRow
+          {...setting("shortcut-tips")}
+          description={gt(
+            "Show one keyboard shortcut a day in the corner, at a random time while you work.",
+          )}
+          control={
+            <Switch
+              checked={settings.shortcutTipsEnabled}
+              onCheckedChange={(checked) => updateSettings({ shortcutTipsEnabled: checked })}
+              aria-label={gt("Daily shortcut tips")}
             />
           }
         />
