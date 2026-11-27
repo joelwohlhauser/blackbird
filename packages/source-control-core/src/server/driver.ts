@@ -1,6 +1,8 @@
 import type {
   SourceControlAppAccess,
+  SourceControlMergedPullRequests,
   SourceControlProviderKind,
+  SourceControlRepositoryError,
   SourceControlSignInError,
   SourceControlSignInPrompt,
   SourceControlSignInResult,
@@ -73,6 +75,11 @@ export interface SourceControlDriverInstance {
   readonly isRepositoryStarred?: (host: string, repository: string) => Effect.Effect<boolean>;
   /** Stars `repository` as the server's account on `host`; false when the forge refused. */
   readonly starRepository?: (host: string, repository: string) => Effect.Effect<boolean>;
+  readonly listMergedPullRequests?: (
+    host: string,
+    sinceDay: string,
+    checkoutPaths: ReadonlyArray<string>,
+  ) => Effect.Effect<SourceControlMergedPullRequests, SourceControlRepositoryError>;
 }
 
 /** What the server gives every driver. A driver builds anything else it needs itself. */

@@ -1,5 +1,8 @@
 import {
   type SourceControlAppAccess,
+  type SourceControlMergedPullRequests,
+  type SourceControlMergedPullRequestsInput,
+  SourceControlRepositoryError,
   type SourceControlAppAccessInput,
   SourceControlSignInError,
   type SourceControlSignInInput,
@@ -8,6 +11,7 @@ import {
   type SourceControlStarredInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -29,8 +33,14 @@ export class SourceControlSignIn extends Context.Service<
     readonly access: (input: SourceControlAppAccessInput) => Effect.Effect<SourceControlAppAccess>;
     readonly starred: (input: SourceControlStarredInput) => Effect.Effect<boolean>;
     readonly star: (input: SourceControlStarredInput) => Effect.Effect<boolean>;
+    readonly mergedPullRequests: (
+      input: SourceControlMergedPullRequestsInput,
+      checkoutPaths: ReadonlyArray<string>,
+    ) => Effect.Effect<SourceControlMergedPullRequests, SourceControlRepositoryError>;
   }
 >()("t3/sourceControl/SourceControlSignIn") {}
+
+const MERGED_PULL_REQUEST_DAYS = 35;
 
 const make = Effect.gen(function* () {
   const drivers = yield* SourceControlBuiltInDrivers.SourceControlDrivers;
@@ -76,6 +86,24 @@ const make = Effect.gen(function* () {
         .starRepository;
       return star === undefined ? false : yield* star(input.host, input.repository);
     }),
+    mergedPullRequests: Effect.fn("SourceControlSignIn.mergedPullRequests")(
+      function* (input, checkoutPaths) {
+        const list = drivers.find(({ driver }) => driver.kind === input.provider)?.instance
+          .listMergedPullRequests;
+        if (list === undefined) {
+          return yield* new SourceControlRepositoryError({
+            provider: input.provider,
+            operation: "mergedPullRequests",
+            detail: `This server cannot list merged pull requests on ${input.provider}.`,
+          });
+        }
+        const now = yield* DateTime.now;
+        const sinceDay = DateTime.formatIsoDate(
+          DateTime.subtract(now, { days: MERGED_PULL_REQUEST_DAYS }),
+        );
+        return yield* list(input.host, sinceDay, checkoutPaths);
+      },
+    ),
   });
 });
 

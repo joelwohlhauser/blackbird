@@ -1,4 +1,8 @@
-import { GitCommandError, OrchestrationDispatchCommandError } from "@t3tools/contracts";
+import {
+  GitCommandError,
+  OrchestrationDispatchCommandError,
+  repositoryGroupingKeyOf,
+} from "@t3tools/contracts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- A synchronous digest inside the pure provider mapping.
 import * as NodeCrypto from "node:crypto";
 import * as FeatureFlags from "@t3tools/shared/FeatureFlags";
@@ -2867,6 +2871,31 @@ export const layerWsRpc = (
         [WS_METHODS.sourceControlSignInCancel]: (input) => sourceControlSignIn.cancel(input),
         [WS_METHODS.sourceControlAppAccess]: (input) => sourceControlSignIn.access(input),
         [WS_METHODS.sourceControlStarred]: (input) => sourceControlSignIn.starred(input),
+        [WS_METHODS.sourceControlMergedPullRequests]: (input) =>
+          projectStore.listShells().pipe(
+            Effect.orElseSucceed(() => []),
+            Effect.flatMap((projects) =>
+              Effect.forEach(
+                projects,
+                (project) =>
+                  Effect.map(
+                    project.repositoryIdentity == null
+                      ? repositoryIdentityResolver.resolve(project.workspaceRoot)
+                      : Effect.succeed(project.repositoryIdentity),
+                    (identity) =>
+                      identity?.provider === input.provider
+                        ? [[repositoryGroupingKeyOf(identity), project.workspaceRoot] as const]
+                        : [],
+                  ),
+                { concurrency: 8 },
+              ),
+            ),
+            Effect.flatMap((checkouts) =>
+              sourceControlSignIn.mergedPullRequests(input, [
+                ...new Map(checkouts.flat()).values(),
+              ]),
+            ),
+          ),
         [WS_METHODS.sourceControlStar]: (input) => sourceControlSignIn.star(input),
         [WS_METHODS.projectCloneStart]: (input) =>
           projectCloneTracker.start(input, {

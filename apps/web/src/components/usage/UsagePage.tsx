@@ -78,6 +78,13 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { UsageLimitsSection } from "./UsageLimits";
+import {
+  UsagePullRequestFilters,
+  UsagePullRequestsSection,
+  useMergedPullRequests,
+} from "./UsagePullRequests";
+import type { PullRequestScope } from "./pullRequestStats";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import { UsagePriceOverrides } from "./UsagePriceOverrides";
 import { UsageProviderChart } from "./UsageProviderChart";
 import { SpeedPremium, UsageModelDialog } from "./UsageModelDialog";
@@ -201,6 +208,13 @@ export function UsagePage() {
   }));
   const metric = preferences.metric;
   const showingLimits = metric === "limits";
+  const showingPullRequests = metric === "pullRequests";
+  const showingPeriod = metric === "cost" || metric === "tokens";
+  const pullRequests = useMergedPullRequests(usePrimaryEnvironmentId(), showingPullRequests);
+  const [pullRequestScope, setPullRequestScope] = useState<PullRequestScope>({
+    organization: null,
+    repository: null,
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [limitsNow, setLimitsNow] = useState(() => Date.now());
   const refreshingRef = useRef(false);
@@ -289,7 +303,7 @@ export function UsagePage() {
     event.preventDefault();
     event.stopPropagation();
     if (metricOption) selectMetric(metricOption.value);
-    if (periodOption && !showingLimits) selectWindow(periodOption.days);
+    if (periodOption && showingPeriod) selectWindow(periodOption.days);
   });
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- window capture keydown listener for usage metric and period shortcuts
@@ -301,6 +315,10 @@ export function UsagePage() {
   const refreshWindow = () => {
     if (refreshingRef.current) return;
 
+    if (showingPullRequests) {
+      pullRequests.refresh();
+      return;
+    }
     if (showingLimits) {
       refreshingRef.current = true;
       setIsRefreshing(true);
@@ -369,6 +387,12 @@ export function UsagePage() {
         });
   const windowOptionLabel = WINDOW_OPTIONS.find((option) => option.days === windowDays)?.label;
   const metricOptionLabel = METRIC_OPTIONS.find((option) => option.value === metric)?.label;
+  const refreshBusy = showingPullRequests ? pullRequests.isPending : isRefreshing;
+  const refreshLabel = showingPullRequests
+    ? gt("Refresh pull requests")
+    : showingLimits
+      ? gt("Refresh limits")
+      : gt("Refresh usage");
   const topbarContent = (
     <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-2 @4xl/usage-header:flex">
       <WorkspaceBreadcrumb ariaLabel={gt("Usage breadcrumb")} className="min-w-0">
@@ -378,29 +402,39 @@ export function UsagePage() {
           </h1>
         </WorkspaceBreadcrumbItem>
         <WorkspaceBreadcrumbSeparator />
-        <WorkspaceBreadcrumbItem className="min-w-10 shrink">
-          <UsageEnvironmentFilter
-            environments={environments}
-            selectedEnvironments={selectedEnvironments}
-            selectedEnvironmentIds={selectedEnvironmentIds}
-            onSelectionChange={setSelectedEnvironmentIds}
-            showUsageStatus={!showingLimits}
-            refreshing={refreshingUsage}
-            isPartial={isPartial}
-            duplicateSources={merged.duplicateSources}
-            contractMismatches={merged.contractMismatches}
-            onOpenModelPrices={() => setPriceDialog({})}
+        {showingPullRequests ? (
+          <UsagePullRequestFilters
+            query={pullRequests}
+            scope={pullRequestScope}
+            onScopeChange={setPullRequestScope}
           />
-        </WorkspaceBreadcrumbItem>
-        <WorkspaceBreadcrumbSeparator />
-        <WorkspaceBreadcrumbItem current className="min-w-10">
-          <UsageProviderFilter
-            hiddenProviders={hiddenProviders}
-            onChange={(next) => updatePreferences({ hiddenProviders: next })}
-          />
-        </WorkspaceBreadcrumbItem>
+        ) : (
+          <>
+            <WorkspaceBreadcrumbItem className="min-w-10 shrink">
+              <UsageEnvironmentFilter
+                environments={environments}
+                selectedEnvironments={selectedEnvironments}
+                selectedEnvironmentIds={selectedEnvironmentIds}
+                onSelectionChange={setSelectedEnvironmentIds}
+                showUsageStatus={!showingLimits}
+                refreshing={refreshingUsage}
+                isPartial={isPartial}
+                duplicateSources={merged.duplicateSources}
+                contractMismatches={merged.contractMismatches}
+                onOpenModelPrices={() => setPriceDialog({})}
+              />
+            </WorkspaceBreadcrumbItem>
+            <WorkspaceBreadcrumbSeparator />
+            <WorkspaceBreadcrumbItem current className="min-w-10">
+              <UsageProviderFilter
+                hiddenProviders={hiddenProviders}
+                onChange={(next) => updatePreferences({ hiddenProviders: next })}
+              />
+            </WorkspaceBreadcrumbItem>
+          </>
+        )}
       </WorkspaceBreadcrumb>
-      {!showingLimits ? (
+      {showingPeriod ? (
         <span className="hidden min-w-0 truncate text-xs text-muted-foreground @7xl/usage-header:block">
           {windowLabel}
         </span>
@@ -408,7 +442,7 @@ export function UsagePage() {
       <div className="ms-auto hidden shrink-0 items-center justify-end gap-2 @4xl/usage-header:flex">
         {/* Limits are always current, so they have no period. The period sits before the metric
             tabs so dropping it never moves them. */}
-        {showingLimits ? null : (
+        {showingPeriod ? (
           <ToggleGroup
             aria-label={gt("Usage period")}
             variant="segmented"
@@ -424,7 +458,7 @@ export function UsagePage() {
               </Toggle>
             ))}
           </ToggleGroup>
-        )}
+        ) : null}
         <ToggleGroup
           aria-label={gt("Usage metric")}
           variant="segmented"
@@ -442,17 +476,17 @@ export function UsagePage() {
         </ToggleGroup>
         <Button
           onClick={refreshWindow}
-          aria-label={showingLimits ? gt("Refresh limits") : gt("Refresh usage")}
-          aria-busy={isRefreshing}
-          disabled={isRefreshing || (!showingLimits && !canReadDiagnostics)}
+          aria-label={refreshLabel}
+          aria-busy={refreshBusy}
+          disabled={refreshBusy || (showingPeriod && !canReadDiagnostics)}
           size="icon-sm"
           variant="ghost"
         >
-          <RefreshIcon size="sm" refreshing={isRefreshing} />
+          <RefreshIcon size="sm" refreshing={refreshBusy} />
         </Button>
       </div>
       <div className="ms-auto flex shrink-0 items-center justify-end gap-1 @4xl/usage-header:hidden">
-        {showingLimits ? null : (
+        {showingPeriod ? (
           <Select value={String(windowDays)} onValueChange={(value) => selectWindow(Number(value))}>
             <SelectTrigger
               aria-label={gt("Usage period")}
@@ -474,7 +508,7 @@ export function UsagePage() {
               ))}
             </SelectPopup>
           </Select>
-        )}
+        ) : null}
         <Select
           value={metric}
           onValueChange={(value) => {
@@ -499,13 +533,13 @@ export function UsagePage() {
         </Select>
         <Button
           onClick={refreshWindow}
-          aria-label={showingLimits ? gt("Refresh limits") : gt("Refresh usage")}
-          aria-busy={isRefreshing}
-          disabled={isRefreshing || (!showingLimits && !canReadDiagnostics)}
+          aria-label={refreshLabel}
+          aria-busy={refreshBusy}
+          disabled={refreshBusy || (showingPeriod && !canReadDiagnostics)}
           size="icon-sm"
           variant="ghost"
         >
-          <RefreshIcon size="sm" refreshing={isRefreshing} />
+          <RefreshIcon size="sm" refreshing={refreshBusy} />
         </Button>
       </div>
     </div>
@@ -521,7 +555,14 @@ export function UsagePage() {
 
         <ScrollArea className="min-h-0 flex-1" observeContent>
           <WorkspacePageContainer width="wide">
-            {selectedEnvironments.length === 0 ? (
+            {showingPullRequests ? (
+              <UsagePullRequestsSection
+                query={pullRequests}
+                scope={pullRequestScope}
+                onScopeChange={setPullRequestScope}
+                hour12={hour12}
+              />
+            ) : selectedEnvironments.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {environments.length === 0
                   ? showingLimits
@@ -571,7 +612,7 @@ export function UsagePage() {
           </WorkspacePageContainer>
         </ScrollArea>
       </div>
-      {showingLimits ? null : (
+      {showingPeriod ? (
         <UsageModelDialogHost
           models={merged.models}
           environments={selectedEnvironments}
@@ -586,7 +627,7 @@ export function UsagePage() {
           }}
           onSetPrice={(model) => setPriceDialog({ model })}
         />
-      )}
+      ) : null}
       {priceDialog ? (
         <UsagePriceOverrides
           usage={environments}

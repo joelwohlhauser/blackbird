@@ -52,7 +52,7 @@ release workflow's code-signing step makes this possible; see Development and de
 
 ### Shared project settings and multiple machines
 
-Settings → Projects supports defaults across projects and connected machines, with per-project overrides for models, workspaces, automatic pulls, browser access, and actions. New chats can automatically choose among eligible connected machines using load balancing. Usage limits can be pooled across provider accounts and machines, and `/usage-limits` opens the usage view.
+Settings → Projects supports defaults across projects and connected machines, with per-project overrides for models, workspaces, automatic pulls, browser access, and actions. New chats can automatically choose among eligible connected machines using load balancing. Usage limits can be pooled across provider accounts and machines, and `/usage-limits` opens the usage view. The usage view's PRs tab counts the pull requests you and your agents merged today, this week, and this month across every GitHub organization, with organization and repository filters; it searches once per distinct `gh` token found in your projects' checkouts, so per-organization tokens are covered.
 
 Async agent questions accept file attachments and can be dismissed without sending an answer. Dropping files onto a sidebar chat opens it and adds the files to its composer without sending. On mobile, several new-task drafts can coexist, pending messages stay visible while attachments upload, and new chats can start on an existing branch.
 

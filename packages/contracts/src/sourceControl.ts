@@ -233,6 +233,28 @@ export const SourceControlStarredInput = Schema.Struct({
 });
 export type SourceControlStarredInput = typeof SourceControlStarredInput.Type;
 
+export const SourceControlMergedPullRequestsInput = Schema.Struct({
+  provider: SourceControlProviderKind,
+  host: TrimmedNonEmptyString,
+});
+export type SourceControlMergedPullRequestsInput = typeof SourceControlMergedPullRequestsInput.Type;
+
+export const SourceControlMergedPullRequest = Schema.Struct({
+  repository: Schema.String,
+  number: PositiveInt,
+  title: Schema.String,
+  url: Schema.String,
+  mergedAt: Schema.String,
+});
+export type SourceControlMergedPullRequest = typeof SourceControlMergedPullRequest.Type;
+
+export const SourceControlMergedPullRequests = Schema.Struct({
+  since: Schema.String,
+  pullRequests: Schema.Array(SourceControlMergedPullRequest),
+  truncated: Schema.Boolean,
+});
+export type SourceControlMergedPullRequests = typeof SourceControlMergedPullRequests.Type;
+
 export class SourceControlSignInError extends Schema.TaggedError<SourceControlSignInError>()(
   "SourceControlSignInError",
   {

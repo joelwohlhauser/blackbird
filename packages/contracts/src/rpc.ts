@@ -489,6 +489,8 @@ import {
   SourceControlAppAccess,
   SourceControlAppAccessInput,
   SourceControlStarredInput,
+  SourceControlMergedPullRequestsInput,
+  SourceControlMergedPullRequests,
   SourceControlSignInError,
   SourceControlSignInInput,
   SourceControlSignInPrompt,
@@ -738,6 +740,7 @@ export const WS_METHODS = {
   sourceControlSignInCancel: "sourceControl.signInCancel",
   sourceControlAppAccess: "sourceControl.appAccess",
   sourceControlStarred: "sourceControl.starred",
+  sourceControlMergedPullRequests: "sourceControl.mergedPullRequests",
   sourceControlStar: "sourceControl.star",
   projectCloneStart: "projectClone.start",
   projectCloneCancel: "projectClone.cancel",
@@ -1650,6 +1653,12 @@ const WsSourceControlStarredRpc = Rpc.make(WS_METHODS.sourceControlStarred, {
   payload: SourceControlStarredInput,
   success: Schema.Boolean,
   error: EnvironmentAuthorizationError,
+});
+
+const WsSourceControlMergedPullRequestsRpc = Rpc.make(WS_METHODS.sourceControlMergedPullRequests, {
+  payload: SourceControlMergedPullRequestsInput,
+  success: SourceControlMergedPullRequests,
+  error: Schema.Union([SourceControlRepositoryError, EnvironmentAuthorizationError]),
 });
 
 // Stars the repository as the server's forge account. False when the forge refused or cannot star.
@@ -2680,6 +2689,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSourceControlSignInCancelRpc,
   WsSourceControlAppAccessRpc,
   WsSourceControlStarredRpc,
+  WsSourceControlMergedPullRequestsRpc,
   WsSourceControlStarRpc,
   WsProjectCloneStartRpc,
   WsProjectCloneCancelRpc,

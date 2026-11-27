@@ -1,4 +1,4 @@
-import { WS_METHODS } from "@t3tools/contracts";
+import { SourceControlMergedPullRequests, WS_METHODS } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
 import {
@@ -9,6 +9,7 @@ import {
 } from "./runtime.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import * as Persistence from "../platform/persistence.ts";
+import { persistQuery } from "./queryPersistence.ts";
 import { vcsCommandConcurrency, vcsCommandScheduler } from "./vcsCommandScheduler.ts";
 import { invalidateCachedVcsRefs } from "./vcsRefInvalidation.ts";
 
@@ -37,6 +38,12 @@ export function createSourceControlEnvironmentAtoms<R, E>(
     star: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:source-control:star",
       tag: WS_METHODS.sourceControlStar,
+    }),
+    mergedPullRequests: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:source-control:merged-pull-requests",
+      tag: WS_METHODS.sourceControlMergedPullRequests,
+      persistence: persistQuery(SourceControlMergedPullRequests),
+      staleTimeMs: 60_000,
     }),
     repository: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:source-control:repository",
