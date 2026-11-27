@@ -1,10 +1,15 @@
 import { clipboard } from "electron";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 import { PREVIEW_AGENT_POINTER_DOWN_CHANNEL } from "../ipc/channels.ts";
 
 export interface GuestInputTab {
   readonly webContents: Electron.WebContents;
   readonly debugger: Electron.Debugger;
+  /** Whether the person at this window is annotating the page, whose overlay is theirs alone. */
+  readonly annotating?: () => boolean;
+  readonly shown?: () => boolean;
 }
 
 export interface GuestInput {
@@ -14,7 +19,16 @@ export interface GuestInput {
     params: Record<string, unknown>,
     sessionId: string | undefined,
   ) => Promise<unknown>;
+  readonly detach: () => void;
 }
+
+export const ANNOTATING_MESSAGE =
+  "This page is being annotated in the desktop app. Input resumes when the annotation ends.";
+
+const FRAME_GONE_MESSAGE =
+  "The frame under the pointer went away before it took this input. Check the page before retrying.";
+
+const ROUTE_DEADLINE = "1 second";
 
 interface InputTarget {
   readonly sessionId: string | undefined;
@@ -269,6 +283,15 @@ export function makeGuestInput(
   const { webContents: guest, debugger: debuggee } = tab;
   const editedKeyCodes = new Set<string>();
   const frameSessions = new Map<string, string>();
+  const frameDetachListeners = new Map<string, Set<() => void>>();
+  let mouseQueue: Promise<unknown> = Promise.resolve();
+
+  // Asked again right before dispatch: an annotation can start while the input waits its turn.
+  const refuseAnnotated = (method: string) => {
+    if (method.startsWith("Input.") && tab.annotating?.() === true) {
+      throw new Error(ANNOTATING_MESSAGE);
+    }
+  };
 
   const command = (method: string, params: object, sessionId: string | undefined) =>
     sessionId === undefined
@@ -278,6 +301,105 @@ export function makeGuestInput(
   const notifyHost = (active: boolean) => {
     const host = guest.hostWebContents;
     if (host && !host.isDestroyed()) host.send(PREVIEW_AGENT_POINTER_DOWN_CHANNEL, active);
+  };
+
+  const releaseFrame = (sessionId: string) => {
+    const listeners = frameDetachListeners.get(sessionId);
+    frameDetachListeners.delete(sessionId);
+    for (const listener of listeners ?? []) listener();
+  };
+
+  // Chromium can drop the reply to input on a frame that detaches before acknowledging it.
+  const sendToFrame = (method: string, params: object, sessionId: string) =>
+    new Promise<unknown>((resolve, reject) => {
+      if (![...frameSessions.values()].includes(sessionId)) {
+        reject(new Error(FRAME_GONE_MESSAGE));
+        return;
+      }
+      const onDetach = () => reject(new Error(FRAME_GONE_MESSAGE));
+      const listeners = frameDetachListeners.get(sessionId) ?? new Set();
+      frameDetachListeners.set(sessionId, listeners);
+      listeners.add(onDetach);
+      command(method, params, sessionId)
+        .then(resolve, reject)
+        .finally(() => {
+          listeners.delete(onDetach);
+          if (listeners.size === 0 && frameDetachListeners.get(sessionId) === listeners) {
+            frameDetachListeners.delete(sessionId);
+          }
+        });
+    });
+
+  // Chromium hit-tests what the window composites, so on a guest the window does not show, a
+  // press over a cross-site frame lands on the page; that frame's session takes it instead.
+  const locateFrame = async (params: Record<string, unknown>) => {
+    let { x, y } = params;
+    if (typeof x !== "number" || typeof y !== "number") return null;
+    let sessionId: string | undefined;
+    for (let depth = 0; depth < MAX_FRAME_DEPTH; depth++) {
+      try {
+        const metrics = await command("Page.getLayoutMetrics", {}, sessionId);
+        const scroll = readParam(metrics, "cssLayoutViewport");
+        const pageX = readParam(scroll, "pageX");
+        const pageY = readParam(scroll, "pageY");
+        if (typeof pageX !== "number" || typeof pageY !== "number") break;
+        // The lookup takes whole document pixels; the event and box model use the viewport.
+        const located = await command(
+          "DOM.getNodeForLocation",
+          { x: Math.round(x + pageX), y: Math.round(y + pageY), includeUserAgentShadowDOM: true },
+          sessionId,
+        );
+        const backendNodeId = readParam(located, "backendNodeId");
+        if (typeof backendNodeId !== "number") break;
+        const described = await command("DOM.describeNode", { backendNodeId }, sessionId);
+        const frameId = readParam(readParam(described, "node"), "frameId");
+        const frameSession = typeof frameId === "string" ? frameSessions.get(frameId) : undefined;
+        if (frameSession === undefined || frameSession === sessionId) break;
+        const box = await command("DOM.getBoxModel", { backendNodeId }, sessionId);
+        const content = readParam(readParam(box, "model"), "content");
+        if (!Array.isArray(content)) break;
+        const xs = content.filter((_, index) => index % 2 === 0);
+        const ys = content.filter((_, index) => index % 2 === 1);
+        const left = Math.min(...xs);
+        const top = Math.min(...ys);
+        // The frame owner's border and padding belong to the page.
+        if (x < left || x >= Math.max(...xs) || y < top || y >= Math.max(...ys)) break;
+        x -= left;
+        y -= top;
+        sessionId = frameSession;
+      } catch {
+        break;
+      }
+    }
+    return sessionId === undefined ? null : { params: { ...params, x, y }, sessionId };
+  };
+
+  const routeMouse = async (params: Record<string, unknown>) => {
+    // A wheel over a frame that cannot scroll would no longer reach the page behind it.
+    if (tab.shown?.() !== false || params["type"] === "mouseWheel" || frameSessions.size === 0) {
+      return null;
+    }
+    // Chromium never answers a lookup on a frame that detaches mid-navigation; the page takes it.
+    return Effect.runPromise(
+      Effect.promise(() => locateFrame(params)).pipe(
+        Effect.timeoutOption(ROUTE_DEADLINE),
+        Effect.map(Option.getOrNull),
+      ),
+    );
+  };
+
+  const dispatchMouse = (method: string, params: Record<string, unknown>) => {
+    const current = mouseQueue
+      .catch(() => {})
+      .then(async () => {
+        const routed = await routeMouse(params);
+        refuseAnnotated(method);
+        return routed
+          ? sendToFrame(method, routed.params, routed.sessionId)
+          : command(method, params, undefined);
+      });
+    mouseQueue = current;
+    return current;
   };
 
   const focusedFrame = async (): Promise<InputTarget> => {
@@ -344,6 +466,7 @@ export function makeGuestInput(
     const code = readString(params, "code");
     if (type === "keyUp" && editedKeyCodes.delete(code)) return {};
     const target = await focusedFrame();
+    refuseAnnotated("Input.dispatchKeyEvent");
     if (target.sessionId !== undefined) {
       return command("Input.dispatchKeyEvent", params, target.sessionId);
     }
@@ -358,6 +481,7 @@ export function makeGuestInput(
 
   const insertText = async (params: Record<string, unknown>) => {
     const target = await focusedFrame();
+    refuseAnnotated("Input.insertText");
     if (target.sessionId !== undefined) {
       return command("Input.insertText", params, target.sessionId);
     }
@@ -372,7 +496,9 @@ export function makeGuestInput(
   ) => {
     notifyHost(true);
     try {
-      return await command(method, params, sessionId);
+      return await (method === "Input.dispatchMouseEvent" && sessionId === undefined
+        ? dispatchMouse(method, params)
+        : command(method, params, sessionId));
     } finally {
       notifyHost(false);
     }
@@ -389,10 +515,20 @@ export function makeGuestInput(
         for (const [targetId, frameSession] of frameSessions) {
           if (frameSession === child) frameSessions.delete(targetId);
         }
+        releaseFrame(child);
       }
     },
-    send: (method, params, sessionId) => {
+    detach: () => {
+      // A route resolved after this finds no session and goes to the page.
+      frameSessions.clear();
+      for (const sessionId of frameDetachListeners.keys()) releaseFrame(sessionId);
+    },
+    send: async (method, params, sessionId) => {
+      refuseAnnotated(method);
       if (isPointerDown(method, params)) return pointerDown(method, params, sessionId);
+      if (method === "Input.dispatchMouseEvent" && sessionId === undefined) {
+        return dispatchMouse(method, params);
+      }
       if (sessionId !== undefined) return command(method, params, sessionId);
       if (FOCUS_ROUTED_INPUT.has(method) && guest.focusedFrame) {
         return command(method, params, undefined);

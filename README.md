@@ -60,9 +60,6 @@ Desktop window capture is available in Settings → SnapShots and is off by defa
 
 ### Code and diff presentation
 
-Changed files in chat start as a single summary row. Expand the left chevron
-to see the files, or use **Open diff** to open the full diff.
-
 Code rendering follows the VS Code **Dark Modern** look: matching typography,
 spacing, syntax colors, editor background, line highlighting, and diff
 semantics rather than the original high-contrast renderer. The code font stays

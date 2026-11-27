@@ -24,7 +24,6 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     sidebarProjectScopeKeys: [],
     threadLastVisitedAtById: {},
     threadOrderByProjectKey: {},
-    threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
     pullRequestMergeMethod: "merge",
     ...overrides,
@@ -118,10 +117,9 @@ describe("uiStateStore pure functions", () => {
     expect(reorderThreads(next, "project-a", ["thread-1"], "missing", "thread-1")).toBe(next);
   });
 
-  it("removes a thread's visit marker, changed-files expansion, and manual order", () => {
+  it("removes a thread's visit marker and manual order", () => {
     const state = makeUiState({
       threadLastVisitedAtById: { "env:thread-1": "2026-01-01T00:00:00.000Z", "env:thread-2": "x" },
-      threadChangedFilesExpandedById: { "env:thread-1": { "run-1": true } },
       threadOrderByProjectKey: {
         "project-a": ["env:thread-2", "env:thread-1"],
         "project-b": ["env:thread-3"],
@@ -131,7 +129,6 @@ describe("uiStateStore pure functions", () => {
     const next = removeThreadState(state, "env:thread-1");
 
     expect(next.threadLastVisitedAtById).toEqual({ "env:thread-2": "x" });
-    expect(next.threadChangedFilesExpandedById).toEqual({});
     expect(next.threadOrderByProjectKey).toEqual({
       "project-a": ["env:thread-2"],
       "project-b": ["env:thread-3"],
@@ -157,13 +154,6 @@ describe("parsePersistedState", () => {
         invalid: "no" as unknown as string[],
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
-      threadChangedFilesExpansionVersion: 3,
-      threadChangedFilesExpandedById: {
-        "environment:thread-1": {
-          "turn-1": false,
-          "turn-2": true,
-        },
-      },
     });
 
     expect(parsed).toEqual({
@@ -180,12 +170,6 @@ describe("parsePersistedState", () => {
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarProjectScopeKeys: [],
       pullRequestMergeMethod: "merge",
-      threadChangedFilesExpandedById: {
-        "environment:thread-1": {
-          "turn-1": false,
-          "turn-2": true,
-        },
-      },
     });
   });
 
@@ -193,19 +177,6 @@ describe("parsePersistedState", () => {
     expect(
       parsePersistedState({ pullRequestMergeMethod: "fast-forward" }).pullRequestMergeMethod,
     ).toBe("fast-forward");
-  });
-
-  it.each([undefined, 1, 2])("ignores changed-file expansion version %s", (version) => {
-    const parsed = parsePersistedState({
-      ...(version === undefined ? {} : { threadChangedFilesExpansionVersion: version }),
-      threadChangedFilesExpandedById: {
-        "environment:thread-1": {
-          "turn-1": false,
-        },
-      },
-    });
-
-    expect(parsed.threadChangedFilesExpandedById).toEqual({});
   });
 
   it("migrates legacy CWD project preferences into local alias keys", () => {
@@ -269,12 +240,6 @@ describe("uiStateStore persistence", () => {
       threadOrderByProjectKey: {
         logical: ["environment:thread-2", "environment:thread-1"],
       },
-      threadChangedFilesExpandedById: {
-        "environment:thread-1": {
-          "turn-1": false,
-          "turn-2": true,
-        },
-      },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
     });
 
@@ -297,13 +262,6 @@ describe("uiStateStore persistence", () => {
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarProjectScopeKeys: [],
       sidebarProjectScopeKey: null,
-      threadChangedFilesExpansionVersion: 3,
-      threadChangedFilesExpandedById: {
-        "environment:thread-1": {
-          "turn-1": false,
-          "turn-2": true,
-        },
-      },
       pullRequestMergeMethod: "merge",
     });
     expect(parsePersistedState(persisted)).toEqual({

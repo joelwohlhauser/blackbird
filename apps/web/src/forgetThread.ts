@@ -45,7 +45,6 @@ export function persistedThreadIds(environmentId: EnvironmentId): ReadonlyArray<
     ...useClosedViewStore.getState().entries.map((entry) => scopedThreadKey(entry.threadRef)),
     ...Object.keys(useBrowserHistoryStore.getState().projectKeyByThreadKey),
     ...Object.keys(uiState.threadLastVisitedAtById),
-    ...Object.keys(uiState.threadChangedFilesExpandedById),
     ...Object.values(uiState.threadOrderByProjectKey).flat(),
   ];
   const draftThreadIds = new Set(

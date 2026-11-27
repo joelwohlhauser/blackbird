@@ -17,7 +17,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import { createCdpRelayConnection, type CdpRelayConnection } from "./CdpRelay.ts";
-import { makeGuestInput, type GuestInput } from "./GuestInput.ts";
+import { ANNOTATING_MESSAGE, makeGuestInput, type GuestInput } from "./GuestInput.ts";
 
 const encodeEvent = Schema.encodeSync(Schema.fromJsonString(DesktopBrowserEvent));
 const decodeCommand = Schema.decodeUnknownOption(Schema.fromJsonString(DesktopBrowserCommand));
@@ -52,6 +52,8 @@ export interface DesktopBrowserTabDebugger {
   readonly debugger: Electron.Debugger;
   /** Runs after the server clears the tab's cookies, so state kept beside them goes too. */
   readonly cookiesCleared?: () => Promise<void>;
+  /** Whether the person at this window is annotating the page, whose overlay is theirs alone. */
+  readonly annotating?: () => boolean;
 }
 
 const keyOf = ({ threadId, tabId }: DesktopBrowserTabKey) => `${threadId}\u0000${tabId}`;
@@ -438,6 +440,10 @@ export const make = Effect.gen(function* () {
   const relayFor = (tab: AttachedTab) => {
     if (tab.relay) return tab.relay;
     const { webContents, debugger: debuggee, cookiesCleared } = tab.debuggee;
+    // The annotation overlay lives in the guest and takes any input sent there as the
+    // person's at this window, so relayed input waits until they finish.
+    const annotated = (method: string) =>
+      method.startsWith("Input.") && tab.debuggee.annotating?.() === true;
     const send = async (method: string, params: Record<string, unknown>, sessionId?: string) => {
       const result = await tab.input.send(method, params, sessionId);
       if (method === "Network.clearBrowserCookies") await cookiesCleared?.();
@@ -464,6 +470,7 @@ export const make = Effect.gen(function* () {
             syncPainting(tab);
             if (tab.screencasts.size > 0) return Promise.resolve({});
           }
+          if (annotated(method)) return Promise.reject(new Error(ANNOTATING_MESSAGE));
           // A person's input through a viewer, or Playwright's own housekeeping, is not the agent's.
           if (AGENT_INPUT_METHOD.test(method)) {
             if (owner === undefined || !streamingOwners.has(owner)) {
@@ -596,6 +603,7 @@ export const make = Effect.gen(function* () {
     tab.relay = null;
     tab.debuggee.debugger.off("message", tab.onMessage);
     tab.debuggee.webContents.off("did-navigate", tab.onNewDocument);
+    tab.input.detach();
     syncPainting(tab);
     if (announced) emit({ type: "detached", ...key });
   };
@@ -607,7 +615,10 @@ export const make = Effect.gen(function* () {
     const tab: AttachedTab = {
       key,
       debuggee,
-      input: makeGuestInput(debuggee),
+      input: makeGuestInput({
+        ...debuggee,
+        shown: () => shownTabs.get(keyOf(key)) === true,
+      }),
       relay: null,
       screenshotTurn: null,
       waitingScreenshots: [],

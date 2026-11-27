@@ -451,6 +451,7 @@ const make = Effect.gen(function* () {
     const nextCursors: Record<string, string> = {};
 
     const involvement = input.involvement ?? "all";
+    const sort = input.sort ?? "updated";
     // Only a narrowed listing compares against the signed-in account; `all` never reads it.
     const viewerRequests = new Map<string, Effect.Effect<string, IssueTrackerError>>();
     for (const project of involvement === "all" ? [] : scopes.values()) {
@@ -525,7 +526,7 @@ const make = Effect.gen(function* () {
                 query: input.query,
                 labels: input.labels,
                 assignee: input.assignee,
-                sort: input.sort ?? "updated",
+                sort,
                 cursor,
                 refinement: input.standalone,
                 refresh: input.refresh,
@@ -583,7 +584,17 @@ const make = Effect.gen(function* () {
     }
     // One standalone scope keeps the tracker's own order, which may be by priority.
     if (input.standalone === undefined) {
-      entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      const sortField = sort === "created" ? "createdAt" : "updatedAt";
+      const parseSortTime = (iso: string) => {
+        const time = Date.parse(iso);
+        return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+      };
+      entries.sort((a, b) => {
+        const aTime = parseSortTime(a[sortField]);
+        const bTime = parseSortTime(b[sortField]);
+        if (aTime !== bTime) return bTime > aTime ? 1 : -1;
+        return b[sortField].localeCompare(a[sortField]);
+      });
     }
     return {
       viewers: Object.fromEntries(viewers),

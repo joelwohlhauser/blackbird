@@ -5,6 +5,7 @@ import {
   type TaskFolderError,
   MessageId,
   ProjectId,
+  type OrchestrationV2LinkOrigin,
   type Project,
   type VcsCreateWorktreeInput,
   WorktreeMcpFailure,
@@ -89,6 +90,7 @@ interface CreateWorktreePlan {
     readonly projectStart: { readonly refName: string; readonly baseRefName: string };
     readonly baseBranch: string | undefined;
     readonly startFromOrigin: boolean;
+    readonly projectCommands: boolean;
   } | null;
 }
 
@@ -273,9 +275,13 @@ const make = Effect.gen(function* () {
 
   const resolveWorkspace = Effect.fn("WorktreeMcpService.resolveWorkspace")(function* (
     scope: McpThreadInvocationScope,
-    threadProjectId: ProjectId,
+    thread: {
+      readonly projectId: ProjectId;
+      readonly linkOrigin?: OrchestrationV2LinkOrigin | undefined;
+    },
     input: WorkspaceTarget,
   ) {
+    const threadProjectId = thread.projectId;
     const inQuickChat = isQuickChatsProjectId(threadProjectId);
     if (input.repositoryPath === undefined && (inQuickChat || input.branch === undefined)) {
       return yield* failure(
@@ -298,12 +304,19 @@ const make = Effect.gen(function* () {
         ? sourceProject
         : yield* findOrCreateProject(destination.projectRoot, ids.projectId, ids.projectCommandId);
     const projectCwd = project.workspaceRoot;
+    const projectCommands = TaskFolders.linkRunsProjectCommands(thread.linkOrigin);
 
     const localStatus = yield* gitWorkflow
       .localStatus({ cwd: input.branch === undefined ? destination.folder : projectCwd })
       .pipe(asOperationFailed("Unable to read git status"));
 
-    const plan = yield* planWorktree(project, destination.folder, localStatus, input);
+    const plan = yield* planWorktree(
+      project,
+      destination.folder,
+      localStatus,
+      input,
+      projectCommands,
+    );
     return { ids, project, projectCwd, localStatus, plan };
   });
 
@@ -312,6 +325,7 @@ const make = Effect.gen(function* () {
     folder: string,
     localStatus: { readonly isRepo: boolean; readonly refName: string | null },
     input: WorkspaceTarget,
+    projectCommands: boolean,
   ) {
     const projectCwd = project.workspaceRoot;
     const branch = input.branch;
@@ -415,7 +429,14 @@ const make = Effect.gen(function* () {
       taskFolder:
         taskPlan === null
           ? null
-          : { plan: taskPlan, branch, projectStart, baseBranch: input.baseRef, startFromOrigin },
+          : {
+              plan: taskPlan,
+              branch,
+              projectStart,
+              baseBranch: input.baseRef,
+              startFromOrigin,
+              projectCommands,
+            },
     } satisfies WorktreePlan;
   });
 
@@ -439,6 +460,7 @@ const make = Effect.gen(function* () {
               projectStart: plan.taskFolder.projectStart,
               baseBranch: plan.taskFolder.baseBranch,
               startFromOrigin: plan.taskFolder.startFromOrigin,
+              projectCommands: plan.taskFolder.projectCommands,
             })
             .pipe(
               Effect.map((result) => ({
@@ -507,7 +529,7 @@ const make = Effect.gen(function* () {
     }
     const { ids, project, projectCwd, localStatus, plan } = yield* resolveWorkspace(
       scope,
-      projection.thread.projectId,
+      projection.thread,
       input,
     );
 
@@ -545,6 +567,8 @@ const make = Effect.gen(function* () {
                       root: createdWorktree.taskFolder,
                       force: true,
                       forget: true,
+                      projectCommands:
+                        plan.type === "create" && plan.taskFolder?.projectCommands === true,
                       deleteBranch: createdWorktree.refName,
                     })
                   : gitWorkflow
@@ -684,7 +708,7 @@ const make = Effect.gen(function* () {
     yield* requireCapability(callerScope);
     const scope = yield* requireThreadScope(callerScope);
     const projection = yield* loadThread(scope);
-    const { project, plan } = yield* resolveWorkspace(scope, projection.thread.projectId, input);
+    const { project, plan } = yield* resolveWorkspace(scope, projection.thread, input);
     if (plan.type === "reuse") return { path: plan.path, branch: input.branch, created: false };
     // Uninterruptible once the worktree exists so a client cancel cannot skip its setup.
     return yield* Effect.uninterruptibleMask((restore) =>

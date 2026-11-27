@@ -511,13 +511,15 @@ const BOOTSTRAP_SCRIPT = `(function(){var s=document.getElementById("t3-theme"),
  */
 export const HTML_RENDER_TEXT_SELECTION_SCRIPT = `<style>::highlight(t3-assistant-citation-comment){background-color:color-mix(in oklab,var(--primary,#346bf1) 45%,transparent)}</style><script>(function(){if(window.parent===window)return;var H="t3-assistant-citation-comment",S=0,P=0,B=null,R=null;function snap(){var g=getSelection(),r;if(!g||g.isCollapsed||g.rangeCount!==1)return null;r=g.getRangeAt(0);return[r.startContainer,r.startOffset,r.endContainer,r.endOffset];}function same(a,b){return!!(a&&b&&a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2]&&a[3]===b[3]);}function unhi(){if(typeof CSS!=="undefined"&&CSS.highlights)CSS.highlights.delete(H);}window.addEventListener("message",function(e){var d=e.data,g;if(e.source!==window.parent||!d||d.jsonrpc!=="2.0")return;if(d.method===${JSON.stringify(HIGHLIGHT_SELECTION_METHOD)}){if(R&&typeof Highlight!=="undefined"&&typeof CSS!=="undefined"&&CSS.highlights){CSS.highlights.set(H,new Highlight(R));g=getSelection();if(g)g.removeAllRanges();S=0;B=null;}return;}if(d.method===${JSON.stringify(CLEAR_SELECTION_METHOD)}){unhi();R=null;g=getSelection();if(g)g.removeAllRanges();S=0;B=null;}});document.addEventListener("selectionchange",function(){S=1;});window.addEventListener("pointerdown",function(e){if(!e.isTrusted)return;unhi();R=null;window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(SELECTION_DISMISS_METHOD)}},"*");if(e.button===0){S=0;P=1;B=snap();}},true);function finish(e){if(!e.isTrusted||e.button!==0||!P)return;P=0;setTimeout(function(){var g=getSelection(),d=document.body||document.documentElement,f=document.activeElement,r,n,q,c,l,i,t,a,k;if(!d||!g||g.isCollapsed||g.rangeCount!==1||f&&(f.isContentEditable||/^(?:INPUT|TEXTAREA|SELECT)$/.test(f.tagName)))return;n=snap();if(!S&&same(B,n))return;S=0;B=n;r=g.getRangeAt(0);t=g.toString();if(!t.trim()||!document.documentElement.contains(r.commonAncestorContainer))return;R=r.cloneRange();k=d.contains(r.commonAncestorContainer)?d:document.documentElement;q=document.createRange();q.selectNodeContents(k);q.setEnd(r.startContainer,r.startOffset);a=q.toString().slice(-${TEXT_SELECTION_CONTEXT_LENGTH});q.selectNodeContents(k);q.setStart(r.endContainer,r.endOffset);c=r.getClientRects();l=null;for(i=c.length-1;i>=0;i--)if(c[i].width>0&&c[i].height>0){l=c[i];break;}c=l||r.getBoundingClientRect();window.parent.postMessage({jsonrpc:"2.0",method:${JSON.stringify(TEXT_SELECTED_METHOD)},params:{text:t,before:a,after:q.toString().slice(0,${TEXT_SELECTION_CONTEXT_LENGTH}),rect:{x:c.left,y:c.top,width:c.width,height:c.height}}},"*");});}window.addEventListener("pointerup",finish,true);window.addEventListener("mouseup",finish,true);})();</script>`;
 
+// The tag patterns below stop at the next `<` outside a quoted value, so matching stays linear in
+// the length of the document.
 function bootstrapMarkup(markup: string): string {
   const dark = htmlRenderTheme(T3_CODE_DARK_THEME_COLORS, "dark");
   const light = htmlRenderTheme(T3_CODE_LIGHT_THEME_COLORS, "light");
   const defaultCss = `${rootRule(dark)}@media (prefers-color-scheme: light){${rootRule(light)}}${BASE_CSS}`;
   return [
-    /<meta\s[^>]*charset/i.test(markup.slice(0, 4096)) ? "" : '<meta charset="utf-8">',
-    /<meta\s[^>]*name\s*=\s*["']?viewport/i.test(markup)
+    /<meta\s[^<>]*charset/i.test(markup.slice(0, 4096)) ? "" : '<meta charset="utf-8">',
+    /<meta\s(?:[^"'<>]|"[^"]*"|'[^']*')*name\s*=\s*["']?viewport/i.test(markup)
       ? ""
       : '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<style id="t3-theme">${defaultCss}</style>`,
@@ -535,7 +537,7 @@ const blankNonMarkup = (html: string) => {
   let depth = 0;
   let start = 0;
   let at = 0;
-  for (const match of scan.matchAll(/<(\/?)template(?:\s[^>]*)?\/?>/gi)) {
+  for (const match of scan.matchAll(/<(\/?)template(?:\s(?:[^"'<>]|"[^"]*"|'[^']*')*)?\/?>/gi)) {
     if (!match[1]) {
       if (depth++ === 0) start = match.index;
     } else if (depth > 0 && --depth === 0) {
@@ -555,12 +557,12 @@ const blankNonMarkup = (html: string) => {
 export function injectHtmlRenderBootstrap(html: string): string {
   const scan = blankNonMarkup(html);
   const markup = bootstrapMarkup(scan);
-  const headOpen = /<head(?:\s(?:[^"'>]|"[^"]*"|'[^']*')*)?>/i.exec(scan);
+  const headOpen = /<head(?:\s(?:[^"'<>]|"[^"]*"|'[^']*')*)?>/i.exec(scan);
   if (headOpen) {
     const at = headOpen.index + headOpen[0].length;
     return html.slice(0, at) + markup + html.slice(at);
   }
-  const htmlOpen = /<html(?:\s(?:[^"'>]|"[^"]*"|'[^']*')*)?>/i.exec(scan);
+  const htmlOpen = /<html(?:\s(?:[^"'<>]|"[^"]*"|'[^']*')*)?>/i.exec(scan);
   if (htmlOpen) {
     const at = htmlOpen.index + htmlOpen[0].length;
     return `${html.slice(0, at)}<head>${markup}</head>${html.slice(at)}`;

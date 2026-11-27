@@ -3,11 +3,19 @@ import { describe, expect, it, vi } from "vite-plus/test";
 vi.mock("electron", () => ({ clipboard: { read: async () => [] } }));
 
 import { PREVIEW_AGENT_POINTER_DOWN_CHANNEL } from "../ipc/channels.ts";
-import { makeGuestInput } from "./GuestInput.ts";
+import { ANNOTATING_MESSAGE, makeGuestInput } from "./GuestInput.ts";
 
 type Command = { method: string; params: Record<string, unknown>; sessionId?: string };
 
-const makeTab = (options: { focusedFrameSession?: string; focused?: boolean } = {}) => {
+const makeTab = (
+  options: {
+    focusedFrameSession?: string;
+    focused?: boolean;
+    shown?: boolean;
+    annotating?: boolean;
+    hangFrameInput?: boolean;
+  } = {},
+) => {
   const commands: Array<Command> = [];
   const nativeEvents: Array<Electron.KeyboardInputEvent> = [];
   const insertedText: Array<string> = [];
@@ -28,6 +36,14 @@ const makeTab = (options: { focusedFrameSession?: string; focused?: boolean } = 
           : { result: {} };
       }
       if (method === "DOM.describeNode") return { node: { frameId: "FRAME-1" } };
+      if (method === "Page.getLayoutMetrics") return { cssLayoutViewport: { pageX: 0, pageY: 5 } };
+      if (method === "DOM.getNodeForLocation") return { backendNodeId: 7 };
+      if (method === "DOM.getBoxModel") {
+        return { model: { content: [10, 20, 110, 20, 110, 120, 10, 120] } };
+      }
+      if (options.hangFrameInput && method.startsWith("Input.") && sessionId !== undefined) {
+        return new Promise(() => {});
+      }
       return {};
     },
   };
@@ -47,6 +63,10 @@ const makeTab = (options: { focusedFrameSession?: string; focused?: boolean } = 
     {
       webContents: webContents as unknown as Electron.WebContents,
       debugger: debuggee as unknown as Electron.Debugger,
+      ...(options.shown === undefined ? {} : { shown: () => options.shown === true }),
+      ...(options.annotating === undefined
+        ? {}
+        : { annotating: () => options.annotating === true }),
     },
     async () => [{ type: "text/plain", data: "pasted" }],
   );
@@ -176,5 +196,68 @@ describe("GuestInput", () => {
       [PREVIEW_AGENT_POINTER_DOWN_CHANNEL, false],
     ]);
     expect(sentToDebugger(tab.commands, "Input.dispatchMouseEvent")).toHaveLength(1);
+  });
+
+  it("sends a hidden guest's click over a cross-site frame to that frame's session", async () => {
+    const tab = makeTab({ focusedFrameSession: "frame-session", shown: false });
+    await tab.input.send(
+      "Input.dispatchMouseEvent",
+      { type: "mousePressed", x: 30, y: 35, button: "left" },
+      undefined,
+    );
+
+    expect(sentToDebugger(tab.commands, "Input.dispatchMouseEvent")).toEqual([
+      {
+        method: "Input.dispatchMouseEvent",
+        params: { type: "mousePressed", x: 20, y: 15, button: "left" },
+        sessionId: "frame-session",
+      },
+    ]);
+  });
+
+  it("leaves a shown guest's clicks to Chromium's own hit-testing", async () => {
+    const tab = makeTab({ focusedFrameSession: "frame-session", shown: true });
+    await tab.input.send(
+      "Input.dispatchMouseEvent",
+      { type: "mousePressed", x: 30, y: 35, button: "left" },
+      undefined,
+    );
+
+    expect(sentToDebugger(tab.commands, "Input.dispatchMouseEvent")).toEqual([
+      {
+        method: "Input.dispatchMouseEvent",
+        params: { type: "mousePressed", x: 30, y: 35, button: "left" },
+      },
+    ]);
+    expect(sentToDebugger(tab.commands, "DOM.getNodeForLocation")).toEqual([]);
+  });
+
+  it("fails a click whose frame detaches before it answers", async () => {
+    const tab = makeTab({
+      focusedFrameSession: "frame-session",
+      shown: false,
+      hangFrameInput: true,
+    });
+    const click = tab.input.send(
+      "Input.dispatchMouseEvent",
+      { type: "mouseReleased", x: 30, y: 35, button: "left" },
+      undefined,
+    );
+    await vi.waitFor(() =>
+      expect(sentToDebugger(tab.commands, "Input.dispatchMouseEvent")).toHaveLength(1),
+    );
+    tab.input.event("Target.detachedFromTarget", { sessionId: "frame-session" });
+
+    await expect(click).rejects.toThrow("went away");
+  });
+
+  it("holds back input while the page is annotated", async () => {
+    const tab = makeTab({ annotating: true });
+
+    await expect(tab.input.send("Input.insertText", { text: "x" }, undefined)).rejects.toThrow(
+      ANNOTATING_MESSAGE,
+    );
+    expect(tab.commands).toEqual([]);
+    expect(tab.insertedText).toEqual([]);
   });
 });

@@ -234,6 +234,7 @@ import {
   nodeToPlainText,
 } from "./chat/MarkdownCodeBlock.logic";
 import { reportMarkdownActionFailure } from "./chat/markdownActionFailure";
+import { isElectron } from "../env";
 
 const isAssetNotFoundError = Schema.is(AssetWorkspaceAssetNotFoundError);
 
@@ -1430,6 +1431,20 @@ const CHAT_MARKDOWN_COMPONENTS = {
             }
             if (href && openIssueLink(event, href, environmentId ?? undefined, issueTrackers))
               return;
+            // Editor links go over IPC: the desktop popup handler only passes web links.
+            if (isElectron && href && isLocalEditorFileHref(href)) {
+              event.preventDefault();
+              event.stopPropagation();
+              void readLocalApi()
+                ?.shell.openExternal(href)
+                .catch((cause) =>
+                  reportMarkdownActionFailure(
+                    { operation: "open-link-external", target: href },
+                    cause,
+                  ),
+                );
+              return;
+            }
             if (!href || !faviconHost) return;
             event.preventDefault();
             event.stopPropagation();
@@ -1457,6 +1472,19 @@ const CHAT_MARKDOWN_COMPONENTS = {
                 reportMarkdownActionFailure({ operation, target: href }, cause);
               },
             });
+          }}
+          onAuxClick={(event) => {
+            // A middle-click raises no click event, and the desktop popup handler only passes web links.
+            if (!isElectron || event.button !== 1 || !href || !isLocalEditorFileHref(href)) return;
+            event.preventDefault();
+            void readLocalApi()
+              ?.shell.openExternal(href)
+              .catch((cause) =>
+                reportMarkdownActionFailure(
+                  { operation: "open-link-external", target: href },
+                  cause,
+                ),
+              );
           }}
           onKeyDown={(event) => {
             if (href && faviconHost) openContextMenuFromKeyboard(event);
